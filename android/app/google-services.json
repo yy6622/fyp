@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1020854066179",
+    "project_id": "voya-f69f0",
+    "storage_bucket": "voya-f69f0.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1020854066179:android:03f2aa6779f87a96208236",
+        "android_client_info": {
+          "package_name": "my.fyp.voya"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCvXPu-JELI5GnC_xcfZx4uKLc8sR9FD9A"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

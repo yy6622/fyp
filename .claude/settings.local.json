@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls \"C:\\\\Users\\\\Admin\\\\Desktop\\\\FYP\\\\Travel\\\\image\\\\\" 2>&1 | head -100)",
+      "Bash(python -c ' *)"
+    ]
+  }
+}
