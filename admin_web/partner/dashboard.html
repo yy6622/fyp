@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Dashboard — Voya Insurance Partner</title>
+<link rel="stylesheet" href="../css/tokens.css" />
+<link rel="stylesheet" href="../css/base.css" />
+<link rel="stylesheet" href="../css/layout.css" />
+<link rel="stylesheet" href="../css/components.css" />
+</head>
+<body>
+<div class="shell">
+  <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-brand">Voya</div>
+    <div class="sidebar-user">
+      <div class="name" id="sbUserName">Loading…</div>
+      <div class="role" id="sbUserRole">Partner workspace</div>
+    </div>
+    <nav class="nav" id="sidebarNav"></nav>
+    <button class="sidebar-logout" id="logoutBtn"><span data-icon="log-out"></span>Log out</button>
+  </aside>
+
+  <main class="content">
+    <div class="topbar">
+      <div>
+        <button class="menu-toggle" id="menuToggle"><span data-icon="menu"></span></button>
+        <h1 class="h1">Dashboard</h1>
+        <p class="subtitle">Your plans, sales, and claims at a glance</p>
+      </div>
+    </div>
+
+    <div class="dev-tool-bar" id="pendingBar" style="display:none;">
+      <span><strong>Pending approval.</strong> An admin needs to approve your organization before you can publish plans or handle claims. You can still explore the console.</span>
+    </div>
+    <div class="dev-tool-bar" id="devBar" style="display:none;">
+      <span>New here? Seed some demo plans, transactions and claims to see how the console works.</span>
+      <button class="btn btn-outline btn-sm" id="seedBtn"><span data-icon="refresh" data-icon-size="14"></span>Seed demo data</button>
+    </div>
+
+    <div class="stat-grid" id="statGrid"><div class="skeleton" style="height:90px;grid-column:1/-1;"></div></div>
+
+    <div style="display:grid;grid-template-columns:1.6fr 1fr;gap:20px;align-items:start;" class="detail-grid">
+      <div class="card card-pad">
+        <h3 class="h3" style="margin-bottom:18px;">Premium Trend</h3>
+        <div class="bars" id="chartBars"></div>
+        <div class="bars-labels" id="chartLabels"></div>
+      </div>
+      <div class="card card-pad">
+        <h3 class="h3" style="margin-bottom:14px;">Recent claims</h3>
+        <div id="recentClaims"></div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script type="module">
+import { requireRole } from "../js/auth-guard.js";
+import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js";
+import { mountIcons } from "../js/icons.js";
+import { listTransactions, listClaims, listPlans } from "../js/data.js";
+import { seedPartnerDemoData } from "../js/seed.js";
+import { money, moneyExact, number, statusBadge, escapeHtml, timeAgo, toast, setBusy } from "../js/ui.js";
+
+mountSidebarNav({ role: "partner", active: "dashboard" });
+const session = await requireRole("partner", "login.html");
+
+if (session) {
+  setSidebarUser({ displayName: session.profile.companyName || "Partner", roleLabel: `${session.profile.companyName || "Insurance"} · Insurance Partner` });
+  if (session.profile.status !== "approved") document.getElementById("pendingBar").style.display = "flex";
+  const params = new URLSearchParams(location.search);
+  if (params.get("welcome")) toast("Welcome to Voya! Your organization is now in the queue for admin approval.", "success");
+  await load();
+}
+
+function statCard(label, value, icon) {
+  return `<div class="card stat-card"><div class="stat-top"><div class="stat-icon"><span data-icon="${icon}"></span></div><div class="stat-label">${label}</div></div><div class="stat-value">${value}</div><div class="stat-delta">↑ 2.4% from last month</div></div>`;
+}
+
+async function load() {
+  const [txns, claims, plans] = await Promise.all([
+    listTransactions(session.uid), listClaims(session.uid), listPlans(session.uid),
+  ]);
+  document.getElementById("devBar").style.display = (!txns.length && !claims.length && !plans.length) ? "flex" : "none";
+
+  const paid = txns.filter((t) => t.status === "paid");
+  const gross = paid.reduce((s, t) => s + (Number(t.premium) || 0), 0);
+  const pending = claims.filter((c) => c.status === "new" || c.status === "under_review").length;
+  const approved = claims.filter((c) => c.status === "approved").length;
+  const rate = claims.length ? Math.round((approved / claims.length) * 1000) / 10 : 0;
+
+  document.getElementById("statGrid").innerHTML = [
+    statCard("Gross premium", money(gross), "coin"),
+    statCard("Policies sold", number(paid.length), "shield-check"),
+    statCard("Pending claims", number(pending), "clock"),
+    statCard("Approval rate", `${rate}%`, "percent"),
+  ].join("");
+
+  const months = [];
+  const now = new Date();
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    months.push({ label: d.toLocaleDateString("en-MY", { month: "short" }), key: `${d.getFullYear()}-${d.getMonth()}`, revenue: 0 });
+  }
+  paid.forEach((t) => {
+    if (!t.createdAt?.toDate) return;
+    const d = t.createdAt.toDate();
+    const key = `${d.getFullYear()}-${d.getMonth()}`;
+    const m = months.find((m) => m.key === key);
+    if (m) m.revenue += Number(t.premium) || 0;
+  });
+  const max = Math.max(1, ...months.map((m) => m.revenue));
+  document.getElementById("chartBars").innerHTML = months.map((m, i) => `<div class="bar-col"><div class="bar${i % 2 ? " alt" : ""}" style="height:${Math.max(6, (m.revenue / max) * 100)}%"></div></div>`).join("");
+  document.getElementById("chartLabels").innerHTML = months.map((m) => `<span>${m.label}</span>`).join("");
+
+  const recent = claims.slice(0, 5);
+  document.getElementById("recentClaims").innerHTML = recent.length
+    ? recent.map((c) => `
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:11px 0;border-top:1px solid var(--border);">
+          <div>
+            <div style="font-weight:700;font-size:13.5px;color:var(--text-900);">${escapeHtml(c.policyholderName || "—")}</div>
+            <div class="muted small">${escapeHtml(c.claimRef)} · ${timeAgo(c.createdAt)}</div>
+          </div>
+          ${statusBadge(c.status)}
+        </div>`).join("")
+    : `<p class="muted small">No claims yet.</p>`;
+
+  mountIcons(document);
+}
+
+document.getElementById("seedBtn")?.addEventListener("click", async (e) => {
+  setBusy(e.currentTarget, true, "Seeding…");
+  try {
+    const notes = await seedPartnerDemoData(session.uid, session.profile.companyName || "Your organization");
+    toast(notes.join(" · "), "success");
+    await load();
+  } catch (err) {
+    toast(err.message || "Couldn't seed data.", "error");
+  } finally {
+    setBusy(e.currentTarget, false);
+  }
+});
+</script>
+</body>
+</html>

@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 
 import '../../controllers/saved_items_controller.dart';
 import '../../repositories/catalog_repository.dart';
+import '../../services/currency_service.dart';
 import '../../theme.dart';
 import '../detail/detail_page_attraction.dart';
 import '../detail/detail_page_flight.dart';
 import '../detail/detail_page_hotel.dart';
 import '../detail/detail_page_restaurant.dart';
+import '../shared/translated_text.dart';
 
 enum _SavedTab { flights, hotels, attractions, restaurants }
 
@@ -47,7 +49,7 @@ class _SavedItemsPageState extends State<SavedItemsPage> {
               children: [
                 Expanded(child: _tabButton('Flights', _SavedTab.flights)),
                 Expanded(child: _tabButton('Hotels', _SavedTab.hotels)),
-                Expanded(child: _tabButton('Places', _SavedTab.attractions)),
+                Expanded(child: _tabButton('Attractions', _SavedTab.attractions)),
                 Expanded(child: _tabButton('Food', _SavedTab.restaurants)),
               ],
             ),
@@ -94,7 +96,7 @@ class _SavedItemsPageState extends State<SavedItemsPage> {
         );
       case _SavedTab.attractions:
         if (controller.loadingAttractions) return const Center(child: CircularProgressIndicator(color: AppColors.primary));
-        if (controller.attractions.isEmpty) return _empty('No places saved for this trip yet.');
+        if (controller.attractions.isEmpty) return _empty('No attractions saved for this trip yet.');
         return ListView.separated(
           padding: const EdgeInsets.fromLTRB(20, 14, 20, 20),
           itemCount: controller.attractions.length,
@@ -122,6 +124,24 @@ class _SavedItemsPageState extends State<SavedItemsPage> {
     );
   }
 
+  /// Attractions/restaurants now come from OpenStreetMap, which often has
+  /// no photo for a given place (unlike the old seeded catalogue's fixed
+  /// Unsplash URLs) — so a plain `Image.network` would just show a
+  /// broken-image glyph for those. Falls back to an icon on a neutral
+  /// background instead, same convention used on Explore's own cards.
+  Widget _cardImage(String url, IconData icon) {
+    if (url.isEmpty) {
+      return Container(width: 56, height: 56, color: AppColors.chipGrey, child: Icon(icon, color: AppColors.textGrey, size: 22));
+    }
+    return Image.network(
+      url,
+      width: 56,
+      height: 56,
+      fit: BoxFit.cover,
+      errorBuilder: (_, __, ___) => Container(width: 56, height: 56, color: AppColors.chipGrey, child: Icon(icon, color: AppColors.textGrey, size: 22)),
+    );
+  }
+
   Widget _card({required Widget child, required VoidCallback onTap}) {
     return InkWell(
       borderRadius: BorderRadius.circular(16),
@@ -139,6 +159,7 @@ class _SavedItemsPageState extends State<SavedItemsPage> {
   }
 
   Widget _flightCard(CatalogFlight flight) {
+    final price = flight.displayPrice(CurrencyService.instance.lastKnownUserCurrency);
     return _card(
       onTap: () => Navigator.of(context).push(MaterialPageRoute(
         builder: (_) => DetailPageFlight(
@@ -148,8 +169,10 @@ class _SavedItemsPageState extends State<SavedItemsPage> {
           arrTime: flight.arrTime,
           duration: flight.duration,
           stops: flight.stops,
-          price: flight.price,
+          price: price,
           priceSuffix: flight.fareType,
+          airlineLogoUrl: flight.airlineLogoUrl,
+          tripId: widget.tripId,
         ),
       )),
       child: Row(
@@ -162,7 +185,7 @@ class _SavedItemsPageState extends State<SavedItemsPage> {
                 const SizedBox(height: 4),
                 Text('${flight.depTime} - ${flight.arrTime} · ${flight.stops}', style: const TextStyle(fontSize: 11, color: AppColors.textGrey)),
                 const SizedBox(height: 4),
-                Text(flight.price, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.primary)),
+                Text(price, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.primary)),
               ],
             ),
           ),
@@ -176,31 +199,35 @@ class _SavedItemsPageState extends State<SavedItemsPage> {
   }
 
   Widget _hotelCard(CatalogHotel hotel) {
+    final price = hotel.displayPrice(CurrencyService.instance.lastKnownUserCurrency);
     return _card(
       onTap: () => Navigator.of(context).push(MaterialPageRoute(
         builder: (_) => DetailPageHotel(
+          hotelId: hotel.id,
           name: hotel.name,
           location: hotel.location,
           ratingLabel: '${hotel.rating}(${hotel.reviews})',
-          pricePerNight: hotel.price,
+          pricePerNight: price,
+          image: hotel.image,
+          tripId: widget.tripId,
         ),
       )),
       child: Row(
         children: [
           ClipRRect(
             borderRadius: BorderRadius.circular(10),
-            child: Image.network(hotel.image, width: 56, height: 56, fit: BoxFit.cover),
+            child: _cardImage(hotel.image, Icons.hotel_outlined),
           ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(hotel.name, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold, color: AppColors.navy)),
+                TranslatedText(hotel.name, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold, color: AppColors.navy)),
                 const SizedBox(height: 4),
                 Text(hotel.location, style: const TextStyle(fontSize: 11, color: AppColors.textGrey)),
                 const SizedBox(height: 4),
-                Text('${hotel.price} per night', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.primary)),
+                Text('$price per night', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.primary)),
               ],
             ),
           ),
@@ -226,14 +253,14 @@ class _SavedItemsPageState extends State<SavedItemsPage> {
         children: [
           ClipRRect(
             borderRadius: BorderRadius.circular(10),
-            child: Image.network(attraction.image, width: 56, height: 56, fit: BoxFit.cover),
+            child: _cardImage(attraction.image, Icons.attractions_outlined),
           ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(attraction.name, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold, color: AppColors.navy)),
+                TranslatedText(attraction.name, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold, color: AppColors.navy)),
                 const SizedBox(height: 4),
                 Text(attraction.category, style: const TextStyle(fontSize: 11, color: AppColors.textGrey)),
                 const SizedBox(height: 4),
@@ -263,14 +290,14 @@ class _SavedItemsPageState extends State<SavedItemsPage> {
         children: [
           ClipRRect(
             borderRadius: BorderRadius.circular(10),
-            child: Image.network(restaurant.image, width: 56, height: 56, fit: BoxFit.cover),
+            child: _cardImage(restaurant.image, Icons.restaurant_outlined),
           ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(restaurant.name, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold, color: AppColors.navy)),
+                TranslatedText(restaurant.name, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold, color: AppColors.navy)),
                 const SizedBox(height: 4),
                 Text(restaurant.cuisineLabel, style: const TextStyle(fontSize: 11, color: AppColors.textGrey)),
                 const SizedBox(height: 4),

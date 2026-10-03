@@ -37,6 +37,12 @@ class GroupSettingController extends ChangeNotifier {
   Trip? _trip;
   Trip? get trip => _trip;
 
+  String get _uid => AuthService.instance.currentUser?.uid ?? '';
+
+  /// Real-Time Location affects every member's privacy, not just the
+  /// toggler's own — so only the trip owner may flip it.
+  bool get isOwner => _trip != null && _trip!.ownerId.isNotEmpty && _trip!.ownerId == _uid;
+
   final TextEditingController nameController = TextEditingController();
   final TextEditingController aboutController = TextEditingController();
 
@@ -45,10 +51,12 @@ class GroupSettingController extends ChangeNotifier {
   bool get muteChat => _trip?.muteChat ?? false;
   bool get pinChat => _trip?.pinChat ?? false;
   bool get realTimeLocation => _trip?.realTimeLocation ?? false;
+  String get notificationOption => _trip?.notificationOption ?? 'All Messages';
 
   void setMuteChat(bool v) => TripRepository.instance.updateSettings(tripId, muteChat: v);
   void setPinChat(bool v) => TripRepository.instance.updateSettings(tripId, pinChat: v);
   void setRealTimeLocation(bool v) => TripRepository.instance.updateSettings(tripId, realTimeLocation: v);
+  void setNotificationOption(String v) => TripRepository.instance.updateSettings(tripId, notificationOption: v);
 
   Future<void> saveName(String name) {
     if (name.trim().isEmpty) return Future.value();
@@ -57,6 +65,10 @@ class GroupSettingController extends ChangeNotifier {
 
   Future<void> saveAbout(String about) {
     return TripRepository.instance.updateSettings(tripId, about: about.trim());
+  }
+
+  Future<void> saveCoverImage(String url) {
+    return TripRepository.instance.updateSettings(tripId, coverImage: url);
   }
 
   Future<void> leaveGroup() {

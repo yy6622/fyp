@@ -6,6 +6,7 @@ import '../repositories/booking_repository.dart';
 import '../repositories/friends_repository.dart';
 import '../repositories/user_repository.dart';
 import '../services/auth_service.dart';
+import '../services/location_service.dart';
 
 /// Controller for [ProfilePage] — loads/streams the signed-in user's
 /// Firestore profile doc.
@@ -171,27 +172,6 @@ class ChatSettingController extends ChangeNotifier {
   }
 }
 
-/// Plans available to pick from on [SelectPlanPage], and each one's own
-/// [TravelPreferencesPage] values.
-const List<String> travelPlans = ['Japan Trips', 'Korea Trips'];
-
-const Map<String, Map<String, String>> travelPreferencesByPlan = {
-  'Japan Trips': {
-    'Travel Style': 'Adventure',
-    'Budget': 'RM 2,000 - RM 5,000',
-    'Accommodation': 'Hotel',
-    'Food Preference': 'No restrictions',
-    'Interests': 'Culture, Food, Nature',
-  },
-  'Korea Trips': {
-    'Travel Style': 'Relaxation',
-    'Budget': 'RM 1,500 - RM 3,500',
-    'Accommodation': 'Homestay',
-    'Food Preference': 'Halal',
-    'Interests': 'Shopping, K-Pop, Food',
-  },
-};
-
 /// Which tab of [HistoryPage] is showing.
 enum HistoryTab { flight, hotel, insurance }
 
@@ -281,25 +261,66 @@ class ReportAttractionController extends ChangeNotifier {
   }
 }
 
-/// Controller for [PrivacySecurityPage].
+/// Controller for [PrivacySecurityPage]. [shareLocation] is real — it
+/// streams `users/{uid}.shareLocation` and flipping it on captures one
+/// real device position (see [LocationService.getCurrentPosition]) so
+/// Group Info > Member Location has something to show right away instead
+/// of an empty "last updated: never". [profileVisible]/[twoFactor] stay
+/// local UI state — this project has no follow-graph or 2FA flow to
+/// actually back them with.
 class PrivacySecurityController extends ChangeNotifier {
+  String get _uid => AuthService.instance.currentUser?.uid ?? '';
+
   bool _profileVisible = true;
   bool get profileVisible => _profileVisible;
 
-  bool _shareLocation = true;
+  bool _shareLocation = false;
   bool get shareLocation => _shareLocation;
+  bool _locationLoading = true;
+  bool get locationLoading => _locationLoading;
 
   bool _twoFactor = false;
   bool get twoFactor => _twoFactor;
+
+  StreamSubscription<AppUser?>? _sub;
+
+  PrivacySecurityController() {
+    final uid = AuthService.instance.currentUser?.uid;
+    if (uid != null) {
+      _sub = UserRepository.instance.watchProfile(uid).listen((user) {
+        _shareLocation = user?.shareLocation ?? false;
+        _locationLoading = false;
+        notifyListeners();
+      });
+    } else {
+      _locationLoading = false;
+    }
+  }
 
   void setProfileVisible(bool v) {
     _profileVisible = v;
     notifyListeners();
   }
 
-  void setShareLocation(bool v) {
+  Future<void> setShareLocation(bool v) async {
+    final uid = _uid;
+    if (uid.isEmpty) return;
+    // Optimistic — the Firestore stream above will reconcile this once
+    // the write lands, same as every other switch in this app.
     _shareLocation = v;
     notifyListeners();
+    await UserRepository.instance.setShareLocation(uid, v);
+    if (!v) return;
+    final position = await LocationService.instance.getCurrentPosition();
+    if (position != null) {
+      await UserRepository.instance.updateLocation(uid, position.latitude, position.longitude);
+    }
+  }
+
+  @override
+  void dispose() {
+    _sub?.cancel();
+    super.dispose();
   }
 
   void setTwoFactor(bool v) {

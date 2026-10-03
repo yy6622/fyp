@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../controllers/vote_controller.dart';
 import '../../theme.dart';
+import '../shared/nice_pickers.dart';
 
 // ---------------------------------------------------------------------
 // Create Vote
@@ -70,6 +71,10 @@ class _CreateVotePageState extends State<CreateVotePage> {
                   const SizedBox(height: 20),
                   _switchRow('Allow members to add options', controller.allowAddOptions, controller.setAllowAddOptions),
                   _switchRow('Allow multiple choice', controller.allowMultipleChoice, controller.setAllowMultipleChoice),
+                  const SizedBox(height: 12),
+                  const Text('Deadline (optional)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.black)),
+                  const SizedBox(height: 8),
+                  _deadlineField(),
                 ],
               ),
             ),
@@ -93,6 +98,59 @@ class _CreateVotePageState extends State<CreateVotePage> {
         ),
       ),
     );
+  }
+
+  Widget _deadlineField() {
+    final deadline = controller.deadline;
+    return InkWell(
+      onTap: _pickDeadline,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+        decoration: BoxDecoration(border: Border.all(color: const Color(0xFFECECEC)), borderRadius: BorderRadius.circular(12)),
+        child: Row(
+          children: [
+            const Icon(Icons.event_outlined, size: 18, color: AppColors.textGrey),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                deadline == null ? 'No deadline — tap to set one' : _formatDeadline(deadline),
+                style: TextStyle(fontSize: 12.5, color: deadline == null ? AppColors.textGrey : Colors.black),
+              ),
+            ),
+            if (deadline != null)
+              IconButton(
+                icon: const Icon(Icons.close, size: 18, color: AppColors.textGrey),
+                onPressed: () => controller.setDeadline(null),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _formatDeadline(DateTime d) {
+    const months = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    final hour12 = d.hour % 12 == 0 ? 12 : d.hour % 12;
+    final period = d.hour < 12 ? 'AM' : 'PM';
+    return 'Closes ${d.day} ${months[d.month]}, $hour12:${d.minute.toString().padLeft(2, '0')} $period';
+  }
+
+  Future<void> _pickDeadline() async {
+    final now = DateTime.now();
+    final date = await showVoyaDatePicker(
+      context: context,
+      initialDate: controller.deadline ?? now,
+      firstDate: now,
+      lastDate: now.add(const Duration(days: 730)),
+      title: 'Vote Deadline',
+    );
+    if (date == null || !mounted) return;
+    final initialTime = controller.deadline != null
+        ? TimeOfDay(hour: controller.deadline!.hour, minute: controller.deadline!.minute)
+        : const TimeOfDay(hour: 23, minute: 59);
+    final time = await showVoyaTimePicker(context: context, initialTime: initialTime, title: 'Deadline Time');
+    if (time == null) return;
+    controller.setDeadline(DateTime(date.year, date.month, date.day, time.hour, time.minute));
   }
 
   Widget _boxField(TextEditingController textController, {required String hint}) {

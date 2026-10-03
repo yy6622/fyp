@@ -20,20 +20,22 @@ service cloud.firestore {
       }
       match /bookings/{bookingId} {
         allow read, create: if isOwner(uid);
-        allow update: if false;
-        // TEMP DEBUG: lets the dev-seed feature delete only the fake
-        // bookings it created (tagged isFakeSeed: true) — real purchase
-        // history is untouched since no real write path ever sets that
-        // field. Remove this exception together with dev_seed_service.dart.
-        allow delete: if isOwner(uid) && resource.data.isFakeSeed == true;
+        // Only `documents` (attaching an uploaded doc's URL — see
+        // BookingRepository.setBookingDocument/BookingDocumentService)
+        // can change after creation; every other field is the original
+        // purchase record and stays as written.
+        allow update: if isOwner(uid) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['documents']);
+        allow delete: if false;
       }
     }
 
-    // TEMP DEBUG: registry doc for the "Seed/Clear Test Data" debug
-    // feature (see lib/services/dev_seed_service.dart) — remove this block
-    // together with that feature.
-    match /dev_seed_registry/{uid} {
-      allow read, write: if isOwner(uid);
+    // Shared cache of Duffel's "popular destinations" flight/hotel
+    // search results (see CatalogRepository.getPopularFlights/
+    // getPopularStays) — refreshed by whichever signed-in user's Explore
+    // next finds it stale, and read by everyone. Not user-specific data,
+    // so any signed-in user may read or refresh it.
+    match /app_cache/{key} {
+      allow read, write: if isSignedIn();
     }
 
     match /posts/{postId} {
@@ -47,12 +49,42 @@ service cloud.firestore {
           .hasOnly(['likedBy', 'savedBy', 'ratings'])
       );
       allow delete: if isSignedIn() && request.auth.uid == resource.data.authorId;
+
+      // A post's written reviews — separate from the quick 1-tap star
+      // rating above (that's the 'ratings' map on the post doc itself).
+      // No aggregate to bump here since a post's star average already
+      // comes from 'ratings', not from these.
+      match /reviews/{reviewId} {
+        allow read: if isSignedIn();
+        allow create: if isSignedIn() && request.resource.data.authorId == request.auth.uid;
+        allow update, delete: if false;
+      }
     }
 
     // ---------------- Group trips (Plan / Group Trip / Vote / Expenses) ----
     function isTripMember(tripId) {
       return isSignedIn() &&
         request.auth.uid in get(/databases/$(database)/documents/trips/$(tripId)).data.memberIds;
+    }
+
+    // A non-member joining themselves via an invite link/QR code (see
+    // TripRepository.joinByInviteCode) — the one write a stranger with a
+    // valid trip id is allowed to make. Only true when the write does
+    // nothing but append their own uid to memberIds (nothing removed,
+    // nothing reordered, no one else added) alongside their own
+    // memberNames entry and the lastActivityAt bump; anything else about
+    // the trip stays untouchable until they're actually a member.
+    function isSelfJoin() {
+      return isSignedIn() &&
+        !(request.auth.uid in resource.data.memberIds) &&
+        request.resource.data.memberIds == resource.data.memberIds + [request.auth.uid] &&
+        // memberIds alone being an allowed top-level key isn't enough — a
+        // crafted write could legitimately append the joiner's own uid
+        // there while replacing the whole memberNames map with anything.
+        // This pins memberNames down further: the ONLY key allowed to
+        // change inside it is the joiner's own.
+        request.resource.data.memberNames.diff(resource.data.memberNames).affectedKeys().hasOnly([request.auth.uid]) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberIds', 'memberNames', 'lastActivityAt']);
     }
 
     match /trips/{tripId} {
@@ -62,31 +94,24 @@ service cloud.firestore {
         request.auth.uid in request.resource.data.memberIds;
       // Any member can update (add activities, vote, tweak settings); only
       // the owner can remove someone else, so membership itself is guarded
-      // by requiring the editor to already be a member.
-      allow update: if isSignedIn() && request.auth.uid in resource.data.memberIds;
+      // by requiring the editor to already be a member — except for
+      // isSelfJoin() above, which lets a non-member join via invite
+      // link/QR without being able to touch anything else.
+      allow update: if isSignedIn() && (request.auth.uid in resource.data.memberIds || isSelfJoin());
       allow delete: if isSignedIn() && request.auth.uid == resource.data.ownerId;
 
-      // TEMP DEBUG: votes/expenses/messages below normally can never be
-      // deleted (delete: if false) — each adds one narrow exception so the
-      // dev-seed feature can clean up a trip it created (tagged
-      // isFakeSeed: true on the trip doc itself). A real trip's
-      // subcollection docs stay undeletable. Remove the isFakeSeed check
-      // (reverting to plain `if false`) together with dev_seed_service.dart.
       match /votes/{voteId} {
         allow read, create, update: if isTripMember(tripId);
-        allow delete: if isTripMember(tripId) &&
-          get(/databases/$(database)/documents/trips/$(tripId)).data.isFakeSeed == true;
+        allow delete: if false;
       }
       match /expenses/{expenseId} {
         allow read, create, update: if isTripMember(tripId);
-        allow delete: if isTripMember(tripId) &&
-          get(/databases/$(database)/documents/trips/$(tripId)).data.isFakeSeed == true;
+        allow delete: if false;
       }
       match /messages/{messageId} {
         allow read, create: if isTripMember(tripId);
         allow update: if false;
-        allow delete: if isTripMember(tripId) &&
-          get(/databases/$(database)/documents/trips/$(tripId)).data.isFakeSeed == true;
+        allow delete: if false;
       }
     }
 
@@ -105,25 +130,135 @@ service cloud.firestore {
     match /catalog_hotels/{id} {
       allow read: if isSignedIn();
       allow create: if isSignedIn();
-      allow update: if isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['favoritedBy']);
+      // 'ratingSum'/'ratingCount' are the two aggregate fields a real
+      // review bumps (see the nested /reviews rule below) — added
+      // alongside 'favoritedBy' rather than replacing it, so favoriting
+      // still works exactly as before.
+      allow update: if isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['favoritedBy', 'ratingSum', 'ratingCount']);
       allow delete: if false;
+
+      // Real, written reviews. Anyone signed in can read; a review can
+      // only be created by its own author and is immutable afterwards
+      // (no update/delete) — same "write once" simplicity as a
+      // Community post's like/save, kept small on purpose for a review.
+      match /reviews/{reviewId} {
+        allow read: if isSignedIn();
+        allow create: if isSignedIn() && request.resource.data.authorId == request.auth.uid;
+        allow update, delete: if false;
+      }
     }
+    // Content fields (name/category/openingHours/address/...) are written
+    // by CatalogRepository.refreshAttractions — a live re-fetch from
+    // OpenStreetMap every ~20 minutes per destination — in addition to
+    // favoritedBy/ratingSum/ratingCount, so `update` can no longer be
+    // restricted to just those three keys the way it could back when
+    // this collection was a one-time seed. Any signed-in user could
+    // already rewrite favoritedBy/ratingSum/ratingCount freely with no
+    // ownership check, so allowing the rest of a POI's public metadata
+    // too isn't a new trust boundary, just the same level applied to
+    // more fields.
     match /catalog_attractions/{id} {
       allow read: if isSignedIn();
-      allow create: if isSignedIn();
-      allow update: if isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['favoritedBy']);
+      allow create, update: if isSignedIn();
       allow delete: if false;
+
+      match /reviews/{reviewId} {
+        allow read: if isSignedIn();
+        allow create: if isSignedIn() && request.resource.data.authorId == request.auth.uid;
+        allow update, delete: if false;
+      }
     }
     match /catalog_restaurants/{id} {
       allow read: if isSignedIn();
-      allow create: if isSignedIn();
-      allow update: if isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['favoritedBy']);
+      allow create, update: if isSignedIn();
+      allow delete: if false;
+
+      match /reviews/{reviewId} {
+        allow read: if isSignedIn();
+        allow create: if isSignedIn() && request.resource.data.authorId == request.auth.uid;
+        allow update, delete: if false;
+      }
+    }
+
+    // ---------------- Insurance (admin_web partner console + Flutter app) --
+    // Plans are authored in the admin/partner web console (admin_web/); the
+    // Flutter app only ever reads them. admins/{uid} and
+    // insurance_partners/{uid} are role-marker docs — the same pattern
+    // admin_web's requireRole() already assumes (a doc keyed by the
+    // signed-in user's own uid means they hold that role).
+    function isAdmin() {
+      return isSignedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+    function isInsurancePartner() {
+      return isSignedIn() && exists(/databases/$(database)/documents/insurance_partners/$(request.auth.uid));
+    }
+
+    match /admins/{uid} {
+      allow read: if isSignedIn();
+      // No self-serve admin signup — an admin marker doc can only be
+      // created by an existing admin (the very first one is provisioned
+      // directly in Firebase Console, outside client rules).
+      allow create, update: if isAdmin();
       allow delete: if false;
     }
-    match /catalog_places/{id} {
+
+    match /insurance_partners/{uid} {
       allow read: if isSignedIn();
-      allow create: if isSignedIn();
-      allow update: if false;
+      // A partner signs themselves up (registerWithRole creates their own
+      // marker doc); only they or an admin can edit it afterwards (e.g. an
+      // admin approving/suspending via setPartnerStatus).
+      allow create: if isOwner(uid);
+      allow update: if isOwner(uid) || isAdmin();
+      allow delete: if false;
+    }
+
+    match /insurance_plans/{id} {
+      // Any signed-in user (Flutter app riders, or the console) can read
+      // plans; only the owning partner or an admin may write one.
+      allow read: if isSignedIn();
+      allow create: if isAdmin() ||
+        (isInsurancePartner() && request.resource.data.partnerId == request.auth.uid);
+      // update also pins request.resource.data.partnerId to the existing
+      // owner, so an owning partner can't reassign a plan to someone else
+      // by editing its partnerId field mid-update.
+      allow update: if isAdmin() ||
+        (isInsurancePartner() && resource.data.partnerId == request.auth.uid &&
+          request.resource.data.partnerId == request.auth.uid);
+      allow delete: if isAdmin() || (isInsurancePartner() && resource.data.partnerId == request.auth.uid);
+    }
+
+    match /insurance_transactions/{id} {
+      // A purchase record: the mobile app's buyer creates their own
+      // (Flutter's InsuranceRepository.recordPurchase, tagged with their
+      // own buyerId), or a partner/admin logs one directly from the
+      // console (admin_web's createTransaction — those never set
+      // buyerId, e.g. a walk-in customer with no Voya account). Readable
+      // by the buyer, the owning partner, or an admin; only the
+      // partner/admin can move its status afterwards.
+      allow read: if isSignedIn() && (
+        resource.data.buyerId == request.auth.uid || isAdmin() ||
+        (isInsurancePartner() && resource.data.partnerId == request.auth.uid)
+      );
+      allow create: if isSignedIn() && (
+        request.resource.data.buyerId == request.auth.uid || isAdmin() || isInsurancePartner()
+      );
+      allow update: if isAdmin() ||
+        (isInsurancePartner() && resource.data.partnerId == request.auth.uid);
+      allow delete: if false;
+    }
+
+    match /claims/{id} {
+      // Same shape as insurance_transactions above — a rider files their
+      // own claim, or a partner/admin logs one on the console.
+      allow read: if isSignedIn() && (
+        resource.data.buyerId == request.auth.uid || isAdmin() ||
+        (isInsurancePartner() && resource.data.partnerId == request.auth.uid)
+      );
+      allow create: if isSignedIn() && (
+        request.resource.data.buyerId == request.auth.uid || isAdmin() || isInsurancePartner()
+      );
+      allow update: if isAdmin() ||
+        (isInsurancePartner() && resource.data.partnerId == request.auth.uid);
       allow delete: if false;
     }
   }

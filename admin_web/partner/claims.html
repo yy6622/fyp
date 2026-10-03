@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Refunds & Claims — Voya Insurance Partner</title>
+<link rel="stylesheet" href="../css/tokens.css" />
+<link rel="stylesheet" href="../css/base.css" />
+<link rel="stylesheet" href="../css/layout.css" />
+<link rel="stylesheet" href="../css/components.css" />
+</head>
+<body>
+<div class="shell">
+  <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-brand">Voya</div>
+    <div class="sidebar-user">
+      <div class="name" id="sbUserName">Loading…</div>
+      <div class="role" id="sbUserRole">Partner workspace</div>
+    </div>
+    <nav class="nav" id="sidebarNav"></nav>
+    <button class="sidebar-logout" id="logoutBtn"><span data-icon="log-out"></span>Log out</button>
+  </aside>
+
+  <main class="content">
+    <div class="topbar">
+      <div>
+        <button class="menu-toggle" id="menuToggle"><span data-icon="menu"></span></button>
+        <h1 class="h1">Refunds & Claims</h1>
+        <p class="subtitle">Manage and review claim submissions</p>
+      </div>
+      <div class="inline-flex">
+        <button class="btn btn-outline" id="newClaimBtn"><span data-icon="plus"></span>New claim</button>
+        <button class="btn btn-primary" id="exportBtn"><span data-icon="download"></span>Export</button>
+      </div>
+    </div>
+
+    <div class="stat-grid" id="statGrid"><div class="skeleton" style="height:90px;grid-column:1/-1;"></div></div>
+
+    <div class="filter-bar">
+      <div class="search-input-wrap"><span data-icon="search"></span><input class="input" id="searchInput" placeholder="Search…" /></div>
+      <select class="select" id="statusFilter">
+        <option value="">All status</option>
+        <option value="new">New</option>
+        <option value="under_review">Under review</option>
+        <option value="approved">Approved</option>
+        <option value="rejected">Rejected</option>
+      </select>
+    </div>
+
+    <div class="table-wrap scroll-x">
+      <table class="data-table">
+        <thead><tr><th>Claim ID</th><th>Policyholder</th><th>Plan</th><th>Amount</th><th>Status</th></tr></thead>
+        <tbody id="tableBody"><tr><td colspan="5"><div class="skeleton" style="height:40px;"></div></td></tr></tbody>
+      </table>
+      <div class="empty-state" id="emptyState" style="display:none;">
+        <span data-icon="doc-text" class="icon-lg"></span>
+        <div class="h3">No claims yet</div>
+        <p class="small">Claims submitted for your plans will show up here.</p>
+      </div>
+    </div>
+    <div class="table-foot">
+      <p class="small muted" id="resultsLabel"></p>
+      <div class="pagination" id="pagination"></div>
+    </div>
+  </main>
+</div>
+
+<div class="modal-backdrop" id="newModal">
+  <div class="modal">
+    <div class="modal-head"><h3 class="h2">New claim</h3><button class="modal-close" data-close><span data-icon="x"></span></button></div>
+    <p class="muted small" style="margin-bottom:18px;">The mobile app doesn't have a claim-submission flow yet, so file one here on a policyholder's behalf (e.g. when they call or email support).</p>
+    <div class="form-grid">
+      <div class="field"><label>Policyholder name</label><input class="input" id="nName" /></div>
+      <div class="field"><label>Policyholder email</label><input class="input" id="nEmail" type="email" /></div>
+      <div class="field"><label>Plan</label><input class="input" id="nPlan" placeholder="e.g. Health Shield Gold" /></div>
+      <div class="field"><label>Category</label>
+        <select class="select" id="nCategory"><option>Medical</option><option>Trip Cancellation</option><option>Baggage Loss</option><option>Flight Delay</option></select>
+      </div>
+      <div class="field" style="grid-column:1/-1;"><label>Amount claimed (RM)</label><input class="input" id="nAmount" type="number" /></div>
+    </div>
+    <div class="form-actions">
+      <button class="btn btn-outline" data-close>Cancel</button>
+      <button class="btn btn-primary" id="saveNewBtn">Submit claim</button>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import { requireRole } from "../js/auth-guard.js";
+import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js";
+import { mountIcons } from "../js/icons.js";
+import { listClaims, createClaim } from "../js/data.js";
+import { number, moneyExact, statusBadge, escapeHtml, paginate, toast, setBusy, openModal, closeModal, wireModalDismiss } from "../js/ui.js";
+
+mountSidebarNav({ role: "partner", active: "claims" });
+const session = await requireRole("partner", "login.html");
+let items = [], filtered = [], page = 1;
+const PAGE_SIZE = 8;
+
+if (session) {
+  setSidebarUser({ displayName: session.profile.companyName || "Partner", roleLabel: `${session.profile.companyName || "Insurance"} · Insurance Partner` });
+  wireModalDismiss();
+  await load();
+}
+
+function statCard(label, value, icon) {
+  return `<div class="card stat-card"><div class="stat-top"><div class="stat-icon"><span data-icon="${icon}"></span></div><div class="stat-label">${label}</div></div><div class="stat-value">${value}</div><div class="stat-delta">↑ 2.4% from last month</div></div>`;
+}
+
+async function load() {
+  items = await listClaims(session.uid);
+  document.getElementById("statGrid").innerHTML = [
+    statCard("New claims", number(items.filter((c) => c.status === "new").length), "flag"),
+    statCard("Under review", number(items.filter((c) => c.status === "under_review").length), "clock"),
+    statCard("Approved", number(items.filter((c) => c.status === "approved").length), "check-circle"),
+    statCard("Rejected", number(items.filter((c) => c.status === "rejected").length), "x-circle"),
+  ].join("");
+  applyFilters();
+  mountIcons(document);
+}
+
+function applyFilters() {
+  const q = document.getElementById("searchInput").value.trim().toLowerCase();
+  const status = document.getElementById("statusFilter").value;
+  filtered = items.filter((c) => (!q || (c.policyholderName || "").toLowerCase().includes(q) || (c.claimRef || "").toLowerCase().includes(q)) && (!status || c.status === status));
+  page = 1;
+  renderTable();
+}
+
+function renderTable() {
+  const { pageItems, pages, total } = paginate(filtered, page, PAGE_SIZE);
+  const body = document.getElementById("tableBody");
+  const empty = document.getElementById("emptyState");
+  if (!pageItems.length) { body.innerHTML = ""; empty.style.display = "block"; }
+  else {
+    empty.style.display = "none";
+    body.innerHTML = pageItems.map((c) => `
+      <tr style="cursor:pointer;" data-open="${c.id}">
+        <td class="cell-strong">${escapeHtml(c.claimRef)}</td>
+        <td>${escapeHtml(c.policyholderName || "—")}</td>
+        <td class="muted">${escapeHtml(c.planName || "—")}</td>
+        <td class="muted">${moneyExact(c.amount)}</td>
+        <td>${statusBadge(c.status)}</td>
+      </tr>`).join("");
+    body.querySelectorAll("[data-open]").forEach((row) => row.addEventListener("click", () => { location.href = `claim-detail.html?id=${row.dataset.open}`; }));
+  }
+  document.getElementById("resultsLabel").textContent = total
+    ? `Showing ${(page - 1) * PAGE_SIZE + 1} to ${Math.min(page * PAGE_SIZE, total)} of ${total} results` : "No results";
+  const pager = document.getElementById("pagination");
+  let html = `<button class="page-btn" ${page === 1 ? "disabled" : ""} id="prevPage"><span data-icon="chevron-left" data-icon-size="14"></span></button>`;
+  for (let i = 1; i <= pages; i++) html += `<button class="page-btn${i === page ? " active" : ""}" data-page="${i}">${i}</button>`;
+  html += `<button class="page-btn" ${page === pages ? "disabled" : ""} id="nextPage"><span data-icon="chevron-right" data-icon-size="14"></span></button>`;
+  pager.innerHTML = html;
+  pager.querySelectorAll("[data-page]").forEach((b) => b.addEventListener("click", (e) => { e.stopPropagation(); page = Number(b.dataset.page); renderTable(); }));
+  document.getElementById("prevPage")?.addEventListener("click", () => { page--; renderTable(); });
+  document.getElementById("nextPage")?.addEventListener("click", () => { page++; renderTable(); });
+  mountIcons(document);
+}
+
+document.getElementById("searchInput").addEventListener("input", applyFilters);
+document.getElementById("statusFilter").addEventListener("change", applyFilters);
+document.getElementById("newClaimBtn").addEventListener("click", () => openModal("newModal"));
+
+document.getElementById("saveNewBtn").addEventListener("click", async () => {
+  const policyholderName = document.getElementById("nName").value.trim();
+  if (!policyholderName) { toast("Policyholder name is required.", "error"); return; }
+  const btn = document.getElementById("saveNewBtn");
+  setBusy(btn, true, "Submitting…");
+  try {
+    await createClaim({
+      partnerId: session.uid,
+      providerName: session.profile.companyName || "Partner",
+      policyholderName,
+      policyholderEmail: document.getElementById("nEmail").value.trim(),
+      planName: document.getElementById("nPlan").value.trim(),
+      category: document.getElementById("nCategory").value,
+      amount: Number(document.getElementById("nAmount").value) || 0,
+      documents: [],
+      assignee: { name: session.profile.contact?.fullName || "Unassigned", role: "Claims Officer" },
+      status: "new",
+    });
+    closeModal("newModal");
+    toast("Claim submitted.", "success");
+    await load();
+  } catch (err) {
+    toast(err.message || "Couldn't submit claim.", "error");
+  } finally {
+    setBusy(btn, false);
+  }
+});
+
+document.getElementById("exportBtn").addEventListener("click", () => {
+  if (!filtered.length) return;
+  const rows = [["Claim ID", "Policyholder", "Plan", "Amount (RM)", "Status"]];
+  filtered.forEach((c) => rows.push([c.claimRef, c.policyholderName || "", c.planName || "", (Number(c.amount) || 0).toFixed(2), c.status || ""]));
+  const csv = rows.map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `voya-claims-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+});
+</script>
+</body>
+</html>

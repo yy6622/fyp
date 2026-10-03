@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../controllers/expenses_controller.dart';
 import '../../theme.dart';
-import 'expense_details_form_page.dart';
+import '../shared/nice_dialog.dart';
 import 'friend_picker_dialog.dart';
 
 /// Lets the payer type in each line of a receipt (label + price) and pick
@@ -25,7 +25,7 @@ class _ItemizedSplitPageState extends State<ItemizedSplitPage> {
       builder: (context, _) => Scaffold(
         backgroundColor: Colors.white,
         appBar: const VoyaAppBar(
-          title: Text('Itemized Receipt', style: TextStyle(color: AppColors.navy, fontWeight: FontWeight.bold, fontSize: 19)),
+          title: Text('Split With', style: TextStyle(color: AppColors.navy, fontWeight: FontWeight.bold, fontSize: 19)),
         ),
         body: Column(
           children: [
@@ -70,12 +70,9 @@ class _ItemizedSplitPageState extends State<ItemizedSplitPage> {
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                   ),
-                  onPressed: widget.controller.items.isEmpty
+                  onPressed: widget.controller.items.isEmpty || widget.controller.items.any((i) => i.assigneeUids.isEmpty)
                       ? null
-                      : () {
-                          widget.controller.setSplitEqually(false);
-                          Navigator.of(context).push(MaterialPageRoute(builder: (_) => ExpenseDetailsFormPage(controller: widget.controller)));
-                        },
+                      : () => Navigator.of(context).maybePop(),
                   child: const Text('Continue', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
                 ),
               ),
@@ -126,23 +123,14 @@ class _ItemizedSplitPageState extends State<ItemizedSplitPage> {
   Future<void> _addItemDialog() async {
     final label = TextEditingController();
     final price = TextEditingController();
-    final result = await showDialog<bool>(
+    final result = await showNiceFormDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Add Item', style: TextStyle(color: AppColors.navy, fontWeight: FontWeight.bold)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(controller: label, decoration: const InputDecoration(labelText: 'Item')),
-            TextField(controller: price, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Price (RM)')),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
-          TextButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text('Add')),
-        ],
-      ),
+      title: 'Add Item',
+      headerIcon: Icons.receipt_long_outlined,
+      fieldsBuilder: (ctx, setState) => [
+        niceDialogField(label, 'Item', icon: Icons.label_outline, autofocus: true),
+        niceDialogField(price, 'Price (RM)', icon: Icons.payments_outlined, keyboardType: const TextInputType.numberWithOptions(decimal: true)),
+      ],
     );
     final priceValue = double.tryParse(price.text.trim());
     if (result == true && label.text.trim().isNotEmpty && priceValue != null && priceValue > 0) {

@@ -1,9 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../controllers/explore_controller.dart';
+import '../../controllers/filter_controller.dart';
+import '../../models/duffel_models.dart';
 import '../../models/explore_models.dart';
 import '../../repositories/catalog_repository.dart';
 import '../../services/auth_service.dart';
+import '../../services/currency_service.dart';
+import '../../services/format_utils.dart';
 import '../../theme.dart';
 import '../detail/detail_page_attraction.dart';
 import '../detail/detail_page_flight.dart';
@@ -12,6 +17,7 @@ import '../detail/detail_page_restaurant.dart';
 import '../detail/detail_widgets.dart' show tagChip;
 import '../filter/filter_page.dart';
 import '../near_by/near_by_page.dart';
+import '../shared/translated_text.dart';
 import 'saved_items_page.dart';
 
 class ExplorePage extends StatefulWidget {
@@ -23,35 +29,57 @@ class ExplorePage extends StatefulWidget {
 
 class _ExplorePageState extends State<ExplorePage> {
   final ExploreController controller = ExploreController();
+  final TextEditingController _searchController = TextEditingController();
+  // Shared with FilterPage (see _openFilterSheet) so a selection made
+  // there actually changes what's shown here instead of just closing the
+  // sheet — kept alive for the page's lifetime (not recreated per sheet
+  // open) so filters chosen for one category stay applied when the sheet
+  // is reopened.
+  final FilterController filterController = FilterController();
 
   @override
   void dispose() {
+    _searchController.dispose();
     controller.dispose();
+    filterController.dispose();
     super.dispose();
   }
+
+  void _runTopBarSearch() => controller.searchFromTopBar(_searchController.text);
 
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: controller,
+      // Listens to both — a filter selection only calls filterController's
+      // notifyListeners(), not controller's, so without this the list
+      // behind the sheet would never actually re-filter.
+      listenable: Listenable.merge([controller, filterController]),
       builder: (context, _) => Scaffold(
-        backgroundColor: const Color(0xFFF7F8FA),
+        backgroundColor: AppColors.scaffoldBackground,
         body: SafeArea(
           child: Stack(
             children: [
-              Column(
-                children: [
-                  const SizedBox(height: 4),
-                  _buildHeader(),
-                  const SizedBox(height: 16),
-                  _buildTripCard(),
-                  const SizedBox(height: 16),
-                  _buildSearchBar(),
-                  const SizedBox(height: 14),
-                  _buildCategoryChips(),
-                  const SizedBox(height: 10),
-                  Expanded(child: _buildBody()),
-                ],
+              // Whole page scrolls as one — the header/trip card/search
+              // bar/category chips used to sit in a plain Column above an
+              // Expanded(ListView), so only that bottom list could scroll
+              // and everything above it was pinned in place. Now it's all
+              // one SingleChildScrollView, with each category's own list
+              // (_buildBody()) laid out inline (shrinkWrap, no scrolling
+              // of its own) instead of independently scrollable.
+              SingleChildScrollView(
+                child: Column(
+                  children: [
+                    _buildHeader(),
+                    const SizedBox(height: 16),
+                    _buildTripCard(),
+                    const SizedBox(height: 16),
+                    _buildSearchBar(),
+                    const SizedBox(height: 14),
+                    _buildCategoryChips(),
+                    const SizedBox(height: 10),
+                    _buildBody(),
+                  ],
+                ),
               ),
               if (controller.showTripSwitcher) _buildTripSwitcherOverlay(),
             ],
@@ -88,17 +116,17 @@ class _ExplorePageState extends State<ExplorePage> {
           ),
           Row(
             children: [
-              _circleIconButton(
+              HeaderIconButton(
                 icon: Icons.favorite_border,
                 onTap: _openSavedItems,
               ),
               // "All" is a mixed discovery feed across every category, so
               // there's no single filter sheet that applies to it — the
               // filter button only makes sense once a specific category
-              // (Flights/Hotels/Places/Restaurants) is selected.
+              // (Flights/Hotels/Attractions/Restaurants) is selected.
               if (controller.selectedCategory != ExploreCategory.all) ...[
                 const SizedBox(width: 10),
-                _circleIconButton(
+                HeaderIconButton(
                   icon: Icons.tune,
                   onTap: _openFilterSheet,
                 ),
@@ -110,26 +138,11 @@ class _ExplorePageState extends State<ExplorePage> {
     );
   }
 
-  Widget _circleIconButton({required IconData icon, required VoidCallback onTap}) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 40,
-        height: 40,
-        decoration: const BoxDecoration(
-          color: AppColors.primary,
-          shape: BoxShape.circle,
-        ),
-        child: Icon(icon, color: Colors.white, size: 18),
-      ),
-    );
-  }
-
   void _openSavedItems() {
     final trip = controller.selectedTrip;
     if (trip == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Create a plan first to save flights, hotels and places to it.')),
+        const SnackBar(content: Text('Create a plan first to save flights, hotels and attractions to it.')),
       );
       return;
     }
@@ -143,8 +156,131 @@ class _ExplorePageState extends State<ExplorePage> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => FilterPage(type: controller.selectedCategory.filterType),
+      builder: (_) => FilterPage(type: controller.selectedCategory.filterType, controller: filterController),
     );
+  }
+
+  // ---------------- Filtering ----------------
+  // Applies filterController's current selections (set from the Filter
+  // sheet opened above) to whichever list the active category is showing.
+  // Values with no real backing field on the result (hotel amenities and
+  // property type — Duffel/RollingGo's parsed stay result doesn't carry
+  // either) are left out of the match rather than compared against
+  // fabricated data; every other field here is a real one already on the
+  // result/catalogue object.
+
+  List<int> _numbersIn(String text) => RegExp(r'\d+').allMatches(text).map((m) => int.parse(m.group(0)!)).toList();
+
+  bool _priceTextMatchesBucket(String priceText, String bucket) {
+    final lower = priceText.toLowerCase();
+    if (bucket == 'Free') return lower.contains('free');
+    if (lower.contains('free')) return false;
+    final numbers = _numbersIn(priceText);
+    if (numbers.isEmpty) return false;
+    final lo = numbers.first;
+    final hi = numbers.length > 1 ? numbers.last : numbers.first;
+    switch (bucket) {
+      case 'RM0 - 20':
+      case 'RM0 - 50':
+        return lo <= (bucket == 'RM0 - 20' ? 20 : 50);
+      case 'RM20 - 50':
+        return hi >= 20 && lo <= 50;
+      case 'RM50 - 100':
+        return hi >= 50 && lo <= 100;
+      case 'RM50 - 150':
+        return hi >= 50 && lo <= 150;
+      case 'RM100+':
+        return hi >= 100;
+      case 'RM150+':
+        return hi >= 150;
+      default:
+        return true;
+    }
+  }
+
+  List<DuffelFlightOffer> get _visibleFlights {
+    final f = filterController;
+    return controller.flightResults.where((flight) {
+      final amount = CurrencyService.instance.convert(flight.totalAmount, from: flight.totalCurrency, to: 'MYR') ?? flight.totalAmount;
+      if (amount < f.priceRange.start || amount > f.priceRange.end) return false;
+      if (f.stops.isNotEmpty) {
+        final bucket = flight.stops == 0 ? 'Direct' : (flight.stops == 1 ? '1 Stop' : '2+ Stops');
+        if (!f.stops.contains(bucket)) return false;
+      }
+      if (f.departureTimes.isNotEmpty) {
+        final hour = flight.departureAt.hour;
+        final bucket = hour < 6
+            ? 'Early Morning'
+            : hour < 12
+                ? 'Morning'
+                : hour < 17
+                    ? 'Afternoon'
+                    : hour < 21
+                        ? 'Evening'
+                        : 'Night';
+        if (!f.departureTimes.contains(bucket)) return false;
+      }
+      if (f.airlines.isNotEmpty && !f.airlines.contains(flight.airlineName)) return false;
+      final hours = flight.flightDuration.inMinutes / 60.0;
+      if (hours < f.durationRange.start || hours > f.durationRange.end) return false;
+      return true;
+    }).toList();
+  }
+
+  List<DuffelStayResult> get _visibleHotels {
+    final f = filterController;
+    return controller.hotelResults.where((hotel) {
+      final amount = CurrencyService.instance.convert(hotel.cheapestTotalAmount, from: hotel.cheapestCurrency, to: 'MYR') ?? hotel.cheapestTotalAmount;
+      if (amount < f.priceRange.start || amount > f.priceRange.end) return false;
+      if (f.starRatings.isNotEmpty) {
+        final star = hotel.rating?.round();
+        if (star == null || !f.starRatings.contains('$star★')) return false;
+      }
+      if (f.guestRating != 'Any') {
+        // RollingGo never returns a guest reviewScore, only the official
+        // star rating — falling back to that (same as everywhere else
+        // this value is shown) instead of silently excluding every
+        // RollingGo hotel whenever this filter is used.
+        final score = hotel.reviewScore != null ? hotel.reviewScore! / 2 : hotel.rating;
+        final threshold = double.tryParse(f.guestRating.replaceAll('+', '')) ?? 0;
+        if (score == null || score < threshold) return false;
+      }
+      // Property Type / Amenities: no matching field on DuffelStayResult
+      // yet — not filtered on, see note above.
+      return true;
+    }).toList();
+  }
+
+  List<CatalogAttraction> get _visibleAttractions {
+    final f = filterController;
+    return controller.attractions.where((item) {
+      if (f.attractionCategories.isNotEmpty) {
+        final tags = item.categories.isNotEmpty ? item.categories : [item.category];
+        if (!f.attractionCategories.any(tags.contains)) return false;
+      }
+      if (f.attractionPrice != 'Any' && !_priceTextMatchesBucket(item.price, f.attractionPrice)) return false;
+      if (f.ratingStars > 0) {
+        final rating = double.tryParse(item.rating) ?? 0;
+        if (rating.round() < f.ratingStars) return false;
+      }
+      // Duration: recommendedDuration isn't consistently structured
+      // across every attraction yet, so that chip stays display-only
+      // rather than guessing at a match.
+      return true;
+    }).toList();
+  }
+
+  List<CatalogRestaurant> get _visibleRestaurants {
+    final f = filterController;
+    return controller.restaurants.where((item) {
+      if (f.restaurantCuisines.isNotEmpty && !f.restaurantCuisines.any(item.cuisineTags.contains)) return false;
+      if (f.restaurantPrice != 'Any' && !_priceTextMatchesBucket(item.priceRange, f.restaurantPrice)) return false;
+      if (f.ratingStars > 0) {
+        final rating = double.tryParse(item.rating) ?? 0;
+        if (rating.round() < f.ratingStars) return false;
+      }
+      return true;
+    }).toList();
   }
 
   // ---------------- Current trip card ----------------
@@ -197,7 +333,7 @@ class _ExplorePageState extends State<ExplorePage> {
             left: 14,
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 6),
-              color: const Color(0xFFF7F8FA),
+              color: AppColors.scaffoldBackground,
               child: Text(
                 trip.name,
                 style: const TextStyle(
@@ -214,12 +350,20 @@ class _ExplorePageState extends State<ExplorePage> {
   }
 
   // ---------------- Trip switcher popup ----------------
+  // Per the user's own reference mockup: each trip in the list is styled
+  // as a smaller version of the current-trip bar above it (_tripInfoItem
+  // reused as-is) — trip name as a header, then the same
+  // Destination/Date/Travellers/Budget four-column row with the same thin
+  // vertical dividers — instead of the icon+stacked-text row this popup
+  // had before. The selected trip gets the bar's own teal border; the
+  // rest get a light grey outline. Same real trip data throughout, only
+  // the card styling changed.
   Widget _buildTripSwitcherOverlay() {
     return Positioned.fill(
       child: GestureDetector(
         onTap: () => controller.closeTripSwitcher(),
         child: Container(
-          color: Colors.black.withValues(alpha: 0.4),
+          color: Colors.black.withValues(alpha: 0.45),
           child: Align(
             alignment: Alignment.topCenter,
             child: Padding(
@@ -228,42 +372,52 @@ class _ExplorePageState extends State<ExplorePage> {
                 onTap: () {},
                 child: Container(
                   margin: const EdgeInsets.symmetric(horizontal: 20),
-                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
                     color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(20),
                     boxShadow: [
-                      BoxShadow(color: Colors.black.withValues(alpha: 0.15), blurRadius: 12, offset: const Offset(0, 4)),
+                      BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 24, offset: const Offset(0, 10)),
                     ],
                   ),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: List.generate(controller.trips.length, (i) {
                       final trip = controller.trips[i];
-                      return InkWell(
-                        onTap: () => controller.selectTrip(i),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                          decoration: BoxDecoration(
-                            border: i < controller.trips.length - 1
-                                ? const Border(bottom: BorderSide(color: Color(0xFFF0F0F0)))
-                                : null,
-                          ),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
+                      final selected = i == controller.selectedTripIndex;
+                      return Padding(
+                        padding: EdgeInsets.only(bottom: i < controller.trips.length - 1 ? 10 : 0),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(14),
+                          onTap: () => controller.selectTrip(i),
+                          child: Container(
+                            padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(
+                                color: selected ? AppColors.primary : const Color(0xFFE2E6E9),
+                                width: selected ? 1.6 : 1,
+                              ),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(trip.name, style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.bold, color: AppColors.navy)),
+                                const SizedBox(height: 10),
+                                Row(
                                   children: [
-                                    Text(trip.name, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.navy)),
-                                    const SizedBox(height: 4),
-                                    Text('Destination: ${trip.destination}', style: const TextStyle(fontSize: 9, color: AppColors.textGrey)),
-                                    Text('Travellers: ${trip.memberIds.length}', style: const TextStyle(fontSize: 9, color: AppColors.textGrey)),
-                                    Text('Budget: RM ${trip.budgetPerPerson.toStringAsFixed(0)}', style: const TextStyle(fontSize: 9, color: AppColors.textGrey)),
+                                    _tripInfoItem('Destination', trip.destination.isEmpty ? '-' : trip.destination),
+                                    _verticalDivider(),
+                                    _tripInfoItem('Date', trip.startDate == null ? '-' : trip.dateRangeLabel.split(' · ').first),
+                                    _verticalDivider(),
+                                    _tripInfoItem('Travellers', '${trip.memberIds.length} Travellers'),
+                                    _verticalDivider(),
+                                    _tripInfoItem('Budget', 'RM ${trip.budgetPerPerson.toStringAsFixed(0)}'),
                                   ],
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
                         ),
                       );
@@ -320,12 +474,18 @@ class _ExplorePageState extends State<ExplorePage> {
         ),
         child: Row(
           children: [
-            const Icon(Icons.search, color: AppColors.textGrey, size: 20),
+            GestureDetector(
+              onTap: _runTopBarSearch,
+              child: const Icon(Icons.search, color: AppColors.textGrey, size: 20),
+            ),
             const SizedBox(width: 8),
-            const Expanded(
+            Expanded(
               child: TextField(
-                decoration: InputDecoration(
-                  hintText: 'Search destination, flight, hotel, place, ...',
+                controller: _searchController,
+                textInputAction: TextInputAction.search,
+                onSubmitted: (_) => _runTopBarSearch(),
+                decoration: const InputDecoration(
+                  hintText: 'Search destination, flight, hotel, attraction, ...',
                   hintStyle: TextStyle(color: AppColors.textGrey, fontSize: 12.5),
                   border: InputBorder.none,
                   isDense: true,
@@ -403,6 +563,8 @@ class _ExplorePageState extends State<ExplorePage> {
   // ================= ALL (mixed / discovery view) =================
   Widget _buildAllView() {
     return ListView(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
       padding: const EdgeInsets.only(bottom: 24),
       children: [
         _buildExploreBanner(),
@@ -415,7 +577,7 @@ class _ExplorePageState extends State<ExplorePage> {
         const SizedBox(height: 12),
         _buildHotelHorizontalList(),
         const SizedBox(height: 22),
-        _buildSectionHeader(Icons.place_outlined, 'Top Places', ExploreCategory.attractions),
+        _buildSectionHeader(Icons.attractions_outlined, 'Top Attractions', ExploreCategory.attractions),
         const SizedBox(height: 12),
         _buildAttractionHorizontalList(),
         const SizedBox(height: 22),
@@ -558,382 +720,443 @@ class _ExplorePageState extends State<ExplorePage> {
     );
   }
 
-  // ================= FLIGHTS =================
+  // ================= FLIGHTS (real Duffel search results) =================
+  // No more seeded/placeholder flight data — every card below comes from
+  // controller.flightResults, which is either a trip-driven search, the
+  // cached "popular destinations" default, or the person's own manual
+  // search (see ExploreController). "Favorite" here means "save this
+  // real result into the trip's saved items" — a one-way action per
+  // result (see controller.savedFlightIds); unsaving happens from the
+  // Saved Items page like any other saved catalogue item.
   Widget _buildFlightHorizontalList() {
+    if (controller.loadingFlights) return const SizedBox(height: 148, child: Center(child: CircularProgressIndicator(color: AppColors.primary)));
+    if (controller.flightError != null) return _searchErrorBox(controller.flightError!);
+    if (_visibleFlights.isEmpty) return _searchEmptyBox('No flights found.');
     return SizedBox(
       height: 148,
       child: ListView.separated(
         padding: const EdgeInsets.symmetric(horizontal: 20),
         scrollDirection: Axis.horizontal,
-        itemCount: controller.flights.length,
+        itemCount: _visibleFlights.length,
         separatorBuilder: (_, __) => const SizedBox(width: 12),
-        itemBuilder: (context, index) => _buildFlightCompactCard(controller.flights[index]),
+        itemBuilder: (context, index) => _buildFlightCompactCard(_visibleFlights[index]),
       ),
     );
   }
 
-  Widget _buildFlightCompactCard(CatalogFlight flight) {
-    final favorited = flight.isSavedForTrip(AuthService.instance.currentUser?.uid ?? '', controller.selectedTrip?.id);
+  Widget _buildFlightCompactCard(DuffelFlightOffer flight) {
+    final saved = controller.savedFlightIds.contains(flight.id);
     return GestureDetector(
-      onTap: () => Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => _flightDetailFor(flight)),
-      ),
+      onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => _flightDetailFor(flight))),
       child: Container(
-      width: 145,
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFECECEC)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Container(
-                width: 26,
-                height: 26,
-                decoration: const BoxDecoration(
-                  color: Color(0xFFE4372A),
-                  shape: BoxShape.circle,
-                ),
-                child: const Center(
-                  child: Text(
-                    'AA',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 8,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ),
-              GestureDetector(
-                onTap: () => controller.toggleFlightFavorite(flight),
-                child: Icon(favorited ? Icons.favorite : Icons.favorite_border,
-                    size: 16, color: favorited ? Colors.redAccent : AppColors.textGrey),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Text(
-            '${flight.from} → ${flight.to}',
-            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.navy),
-            overflow: TextOverflow.ellipsis,
-          ),
-          const SizedBox(height: 4),
-          Text('${flight.depTime} | ${flight.fareType}', style: const TextStyle(fontSize: 10, color: AppColors.textGrey)),
-          const SizedBox(height: 10),
-          Text(
-            flight.price,
-            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.primary),
-          ),
-        ],
-      ),
-      ),
-    );
-  }
-
-  DetailPageFlight _flightDetailFor(CatalogFlight flight) => DetailPageFlight(
-        fromCode: flight.from,
-        toCode: flight.to,
-        depTime: flight.depTime,
-        arrTime: flight.arrTime,
-        duration: flight.duration,
-        stops: flight.stops,
-        price: flight.price,
-        priceSuffix: flight.fareType,
-      );
-
-  Widget _buildFlightListView() {
-    return ListView.separated(
-      padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-      itemCount: controller.flights.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 12),
-      itemBuilder: (context, index) => _buildFlightRowCard(controller.flights[index]),
-    );
-  }
-
-  Widget _buildFlightRowCard(CatalogFlight flight) {
-    final favorited = flight.isSavedForTrip(AuthService.instance.currentUser?.uid ?? '', controller.selectedTrip?.id);
-    return GestureDetector(
-      onTap: () => Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => _flightDetailFor(flight)),
-      ),
-      child: Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFECECEC)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 46,
-            height: 46,
-            decoration: const BoxDecoration(
-              color: AppColors.chipGrey,
-              shape: BoxShape.circle,
-            ),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+        width: 155,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFECECEC)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
               children: [
-                Row(
-                  children: [
-                    Text(
-                      flight.depTime,
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.navy,
-                      ),
-                    ),
-                    Expanded(
-                      child: Column(
-                        children: [
-                          Text(
-                            flight.duration,
-                            style: const TextStyle(fontSize: 9, color: AppColors.textGrey),
-                          ),
-                          Container(
-                            margin: const EdgeInsets.symmetric(horizontal: 6),
-                            height: 1,
-                            color: const Color(0xFFD9D9D9),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Text(
-                      flight.arrTime,
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.navy,
-                      ),
-                    ),
-                  ],
+                _airlineLogo(flight.airlineLogoUrl, size: 22, iconSize: 12),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(flight.airlineName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600, color: AppColors.navy)),
                 ),
-                const SizedBox(height: 4),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(flight.from, style: const TextStyle(fontSize: 10.5, color: AppColors.textGrey)),
-                    Text(flight.stops, style: const TextStyle(fontSize: 10.5, color: AppColors.textGrey)),
-                    Text(flight.to, style: const TextStyle(fontSize: 10.5, color: AppColors.textGrey)),
-                  ],
+                GestureDetector(
+                  onTap: () => controller.saveFlightResult(flight),
+                  child: Icon(saved ? Icons.favorite : Icons.favorite_border, size: 16, color: saved ? Colors.redAccent : AppColors.textGrey),
                 ),
               ],
             ),
-          ),
-          const SizedBox(width: 10),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                flight.price,
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.primary,
-                ),
-              ),
-              Text(flight.fareType, style: const TextStyle(fontSize: 9, color: AppColors.textGrey)),
-            ],
-          ),
-          const SizedBox(width: 8),
-          GestureDetector(
-            onTap: () => controller.toggleFlightFavorite(flight),
-            child: Icon(favorited ? Icons.favorite : Icons.favorite_border, size: 18, color: favorited ? Colors.redAccent : AppColors.textGrey),
-          ),
-        ],
-      ),
+            const SizedBox(height: 10),
+            Text(
+              '${flight.originCode} → ${flight.destinationCode}',
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.navy),
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 4),
+            Text('${flight.durationLabel} · ${flight.stopsLabel}', style: const TextStyle(fontSize: 10, color: AppColors.textGrey)),
+            const SizedBox(height: 10),
+            Text(
+              controller.formatPrice(flight.totalAmount, flight.totalCurrency),
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.primary),
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  // ================= ACCOMMODATION =================
+  DetailPageFlight _flightDetailFor(DuffelFlightOffer flight) => DetailPageFlight(
+        airline: flight.airlineName,
+        fromCode: flight.originCode,
+        toCode: flight.destinationCode,
+        flightNo: flight.flightNumber,
+        date: formatLongDate(flight.departureAt),
+        depTime: _hhmm(flight.departureAt),
+        arrTime: _hhmm(flight.arrivalAt),
+        duration: flight.durationLabel,
+        stops: flight.stopsLabel,
+        price: controller.formatPrice(flight.totalAmount, flight.totalCurrency),
+        priceSuffix: 'Economy',
+        airlineLogoUrl: flight.airlineLogoUrl,
+        tripId: controller.selectedTrip?.id ?? '',
+      );
+
+  String _hhmm(DateTime dt) => '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+
+  /// Duffel's real airline logos (`carrier.logo_symbol_url`/
+  /// `logo_lockup_url`, see [DuffelFlightOffer.airlineLogoUrl]) are
+  /// published as SVG (confirmed against Duffel's own API schema docs) —
+  /// a plain `Image.network` can't decode that, which is why wiring the
+  /// real URL straight into an `Image.network` threw "Invalid image data"
+  /// on every single card. Renders with [SvgPicture.network] instead, and
+  /// falls back to a plain flight icon whenever there's no logo URL at
+  /// all, it's still loading, or it fails to load.
+  ///
+  /// Real airlines' logos come in very different native shapes — a
+  /// square/circular "symbol" mark for some, a wide wordmark for others
+  /// (e.g. VietJet's). A fixed-size circle with `BoxFit.cover` cropped
+  /// those wide ones unpredictably and let them visually overflow the
+  /// card. [size] is instead a fixed outer box every logo is scaled to
+  /// fit *inside* (`BoxFit.contain`, via `FittedBox`) — so every logo
+  /// renders at the exact same, consistent footprint regardless of its
+  /// own aspect ratio, never cropped and never overflowing it.
+  Widget _airlineLogo(String? logoUrl, {required double size, required double iconSize}) {
+    Widget fallback() => Icon(Icons.flight, size: iconSize, color: AppColors.textGrey);
+    return Container(
+      width: size,
+      height: size,
+      padding: EdgeInsets.all(size * 0.14),
+      decoration: BoxDecoration(color: AppColors.chipGrey, borderRadius: BorderRadius.circular(size * 0.3)),
+      alignment: Alignment.center,
+      child: logoUrl == null
+          ? fallback()
+          : FittedBox(
+              fit: BoxFit.contain,
+              child: SvgPicture.network(
+                logoUrl,
+                placeholderBuilder: (_) => fallback(),
+                errorBuilder: (_, __, ___) => fallback(),
+              ),
+            ),
+    );
+  }
+
+  Widget _buildFlightListView() => _buildFlightListBody();
+
+  Widget _buildFlightListBody() {
+    if (controller.loadingFlights) {
+      return const SizedBox(height: 200, child: Center(child: CircularProgressIndicator(color: AppColors.primary)));
+    }
+    if (controller.flightError != null) return _searchErrorBox(controller.flightError!, padded: true);
+    if (_visibleFlights.isEmpty) return _searchEmptyBox('No flights found — try a different search.', padded: true);
+    return ListView.separated(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+      itemCount: _visibleFlights.length,
+      separatorBuilder: (_, __) => const SizedBox(height: 12),
+      itemBuilder: (context, index) => _buildFlightRowCard(_visibleFlights[index]),
+    );
+  }
+
+  Widget _buildFlightRowCard(DuffelFlightOffer flight) {
+    final saved = controller.savedFlightIds.contains(flight.id);
+    return GestureDetector(
+      onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => _flightDetailFor(flight))),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFECECEC)),
+        ),
+        child: Row(
+          children: [
+            _airlineLogo(flight.airlineLogoUrl, size: 46, iconSize: 18),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(flight.airlineName, style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: AppColors.navy)),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Text(_hhmm(flight.departureAt), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.navy)),
+                      Expanded(
+                        child: Column(
+                          children: [
+                            Text(flight.durationLabel, style: const TextStyle(fontSize: 9, color: AppColors.textGrey)),
+                            Container(margin: const EdgeInsets.symmetric(horizontal: 6), height: 1, color: const Color(0xFFD9D9D9)),
+                          ],
+                        ),
+                      ),
+                      Text(_hhmm(flight.arrivalAt), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.navy)),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(flight.originCode, style: const TextStyle(fontSize: 10.5, color: AppColors.textGrey)),
+                      Text(flight.stopsLabel, style: const TextStyle(fontSize: 10.5, color: AppColors.textGrey)),
+                      Text(flight.destinationCode, style: const TextStyle(fontSize: 10.5, color: AppColors.textGrey)),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 10),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(controller.formatPrice(flight.totalAmount, flight.totalCurrency),
+                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.primary)),
+              ],
+            ),
+            const SizedBox(width: 8),
+            GestureDetector(
+              onTap: () => controller.saveFlightResult(flight),
+              child: Icon(saved ? Icons.favorite : Icons.favorite_border, size: 18, color: saved ? Colors.redAccent : AppColors.textGrey),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ================= ACCOMMODATION (real Duffel Stays results) ================
   Widget _buildHotelHorizontalList() {
+    if (controller.loadingHotels) return const SizedBox(height: 190, child: Center(child: CircularProgressIndicator(color: AppColors.primary)));
+    if (controller.hotelError != null) return _searchErrorBox(controller.hotelError!);
+    if (_visibleHotels.isEmpty) return _searchEmptyBox('No hotels found.');
     return SizedBox(
       height: 190,
       child: ListView.separated(
         padding: const EdgeInsets.symmetric(horizontal: 20),
         scrollDirection: Axis.horizontal,
-        itemCount: controller.hotels.length,
+        itemCount: _visibleHotels.length,
         separatorBuilder: (_, __) => const SizedBox(width: 12),
-        itemBuilder: (context, index) => _buildHotelCompactCard(controller.hotels[index]),
+        itemBuilder: (context, index) => _buildHotelCompactCard(_visibleHotels[index]),
       ),
     );
   }
 
-  Widget _buildHotelCompactCard(CatalogHotel hotel) {
-    final favorited = hotel.isSavedForTrip(AuthService.instance.currentUser?.uid ?? '', controller.selectedTrip?.id);
+  DetailPageHotel _hotelDetailFor(DuffelStayResult hotel) => DetailPageHotel(
+        // Not saved yet — no catalog id, so the detail page's Reviews
+        // section shows its "not available yet" state until this
+        // result is saved (see DetailPageHotel's own doc comment).
+        name: hotel.name,
+        location: hotel.address,
+        // Same RollingGo-has-no-reviewScore fallback as CatalogRepository.
+        // saveDuffelStay — shows the real star rating instead of nothing.
+        ratingLabel: hotel.reviewScore != null
+            ? '${(hotel.reviewScore! / 2).toStringAsFixed(1)}(${hotel.reviewCount ?? 0})'
+            : (hotel.rating != null ? hotel.rating!.toStringAsFixed(1) : ''),
+        pricePerNight: controller.formatPrice(hotel.cheapestTotalAmount, hotel.cheapestCurrency),
+        image: hotel.photoUrl ?? '',
+        tripId: controller.selectedTrip?.id ?? '',
+        checkIn: controller.lastHotelCheckIn != null ? formatLongDate(controller.lastHotelCheckIn!) : '',
+        checkOut: controller.lastHotelCheckOut != null ? formatLongDate(controller.lastHotelCheckOut!) : '',
+      );
+
+  Widget _buildHotelCompactCard(DuffelStayResult hotel) {
+    final saved = controller.savedStayIds.contains(hotel.searchResultId);
     return GestureDetector(
-      onTap: () => Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => DetailPageHotel(name: hotel.name, location: hotel.location, ratingLabel: '${hotel.rating}(${hotel.reviews})', pricePerNight: hotel.price)),
-      ),
+      onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => _hotelDetailFor(hotel))),
       child: Container(
-      width: 145,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFECECEC)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Stack(
-            children: [
-              ClipRRect(
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-                child: Image.network(
-                  hotel.image,
-                  height: 95,
-                  width: double.infinity,
-                  fit: BoxFit.cover,
-                ),
-              ),
-              Positioned(
-                top: 8,
-                right: 8,
-                child: GestureDetector(
-                  onTap: () => controller.toggleHotelFavorite(hotel),
-                  child: Container(
-                    padding: const EdgeInsets.all(5),
-                    decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-                    child: Icon(favorited ? Icons.favorite : Icons.favorite_border, size: 12, color: favorited ? Colors.redAccent : AppColors.textGrey),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          Padding(
-            padding: const EdgeInsets.all(10),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+        width: 155,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFECECEC)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Stack(
               children: [
-                Text(
-                  hotel.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.navy),
+                ClipRRect(
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                  child: hotel.photoUrl == null
+                      ? Container(height: 95, width: double.infinity, color: AppColors.chipGrey, child: const Icon(Icons.hotel_outlined, color: AppColors.textGrey))
+                      : Image.network(hotel.photoUrl!, height: 95, width: double.infinity, fit: BoxFit.cover),
                 ),
-                const SizedBox(height: 6),
-                Row(
-                  children: [
-                    const Icon(Icons.star, size: 12, color: AppColors.orange),
-                    const SizedBox(width: 4),
-                    Text('${hotel.rating} (${hotel.reviews})', style: const TextStyle(fontSize: 10, color: AppColors.textGrey)),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                RichText(
-                  text: TextSpan(
-                    children: [
-                      TextSpan(
-                        text: '${hotel.price} ',
-                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.primary),
-                      ),
-                      const TextSpan(
-                        text: 'per night',
-                        style: TextStyle(fontSize: 9, color: AppColors.textGrey),
-                      ),
-                    ],
+                Positioned(
+                  top: 8,
+                  right: 8,
+                  child: GestureDetector(
+                    onTap: () => controller.saveHotelResult(hotel),
+                    child: Container(
+                      padding: const EdgeInsets.all(5),
+                      decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                      child: Icon(saved ? Icons.favorite : Icons.favorite_border, size: 12, color: saved ? Colors.redAccent : AppColors.textGrey),
+                    ),
                   ),
                 ),
               ],
             ),
-          ),
-        ],
-      ),
+            Padding(
+              padding: const EdgeInsets.all(10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(hotel.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.navy)),
+                  const SizedBox(height: 6),
+                  if (hotel.reviewScore != null || hotel.rating != null)
+                    Row(children: [
+                      const Icon(Icons.star, size: 12, color: AppColors.orange),
+                      const SizedBox(width: 4),
+                      Text(
+                        hotel.reviewScore != null
+                            ? '${(hotel.reviewScore! / 2).toStringAsFixed(1)} (${hotel.reviewCount ?? 0})'
+                            : hotel.rating!.toStringAsFixed(1),
+                        style: const TextStyle(fontSize: 10, color: AppColors.textGrey),
+                      ),
+                    ]),
+                  const SizedBox(height: 6),
+                  RichText(
+                    text: TextSpan(children: [
+                      TextSpan(text: '${controller.formatPrice(hotel.cheapestTotalAmount, hotel.cheapestCurrency)} ', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.primary)),
+                      const TextSpan(text: 'per night', style: TextStyle(fontSize: 9, color: AppColors.textGrey)),
+                    ]),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildHotelListView() {
+  Widget _buildHotelListView() => _buildHotelListBody();
+
+  Widget _buildHotelListBody() {
+    if (controller.loadingHotels) {
+      return const SizedBox(height: 200, child: Center(child: CircularProgressIndicator(color: AppColors.primary)));
+    }
+    if (controller.hotelError != null) return _searchErrorBox(controller.hotelError!, padded: true);
+    if (_visibleHotels.isEmpty) return _searchEmptyBox('No hotels found — try a different search.', padded: true);
     return ListView.separated(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-      itemCount: controller.hotels.length,
+      itemCount: _visibleHotels.length,
       separatorBuilder: (_, __) => const SizedBox(height: 12),
-      itemBuilder: (context, index) => _buildHotelRowCard(controller.hotels[index]),
+      itemBuilder: (context, index) => _buildHotelRowCard(_visibleHotels[index]),
     );
   }
 
-  Widget _buildHotelRowCard(CatalogHotel hotel) {
-    final favorited = hotel.isSavedForTrip(AuthService.instance.currentUser?.uid ?? '', controller.selectedTrip?.id);
+  Widget _buildHotelRowCard(DuffelStayResult hotel) {
+    final saved = controller.savedStayIds.contains(hotel.searchResultId);
     return GestureDetector(
-      onTap: () => Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => DetailPageHotel(name: hotel.name, location: hotel.location, ratingLabel: '${hotel.rating}(${hotel.reviews})', pricePerNight: hotel.price)),
-      ),
+      onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => _hotelDetailFor(hotel))),
       child: Container(
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFECECEC)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(12),
-            child: Image.network(
-              hotel.image,
-              width: 80,
-              height: 80,
-              fit: BoxFit.cover,
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFECECEC)),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: hotel.photoUrl == null
+                  ? Container(width: 80, height: 80, color: AppColors.chipGrey, child: const Icon(Icons.hotel_outlined, color: AppColors.textGrey))
+                  : Image.network(hotel.photoUrl!, width: 80, height: 80, fit: BoxFit.cover),
             ),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  hotel.name,
-                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.navy),
-                ),
-                const SizedBox(height: 6),
-                Row(
-                  children: [
-                    const Icon(Icons.star, size: 14, color: AppColors.orange),
-                    const SizedBox(width: 4),
-                    Text('${hotel.rating}(${hotel.reviews})',
-                        style: const TextStyle(fontSize: 11, color: AppColors.textGrey)),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Text(hotel.location, style: const TextStyle(fontSize: 11, color: AppColors.textGrey)),
-                const SizedBox(height: 6),
-                RichText(
-                  text: TextSpan(
-                    children: [
-                      TextSpan(
-                        text: '${hotel.price} ',
-                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.primary),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  TranslatedText(hotel.name, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.navy)),
+                  const SizedBox(height: 6),
+                  if (hotel.reviewScore != null || hotel.rating != null)
+                    Row(children: [
+                      const Icon(Icons.star, size: 14, color: AppColors.orange),
+                      const SizedBox(width: 4),
+                      Text(
+                        hotel.reviewScore != null
+                            ? '${(hotel.reviewScore! / 2).toStringAsFixed(1)}(${hotel.reviewCount ?? 0})'
+                            : hotel.rating!.toStringAsFixed(1),
+                        style: const TextStyle(fontSize: 11, color: AppColors.textGrey),
                       ),
-                      const TextSpan(
-                        text: 'per night',
-                        style: TextStyle(fontSize: 10, color: AppColors.textGrey),
-                      ),
-                    ],
+                    ]),
+                  const SizedBox(height: 4),
+                  Text(hotel.address, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11, color: AppColors.textGrey)),
+                  const SizedBox(height: 6),
+                  RichText(
+                    text: TextSpan(children: [
+                      TextSpan(text: '${controller.formatPrice(hotel.cheapestTotalAmount, hotel.cheapestCurrency)} ', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.primary)),
+                      const TextSpan(text: 'per night', style: TextStyle(fontSize: 10, color: AppColors.textGrey)),
+                    ]),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-          GestureDetector(
-            onTap: () => controller.toggleHotelFavorite(hotel),
-            child: Icon(favorited ? Icons.favorite : Icons.favorite_border, size: 18, color: favorited ? Colors.redAccent : AppColors.textGrey),
-          ),
-        ],
+            GestureDetector(
+              onTap: () => controller.saveHotelResult(hotel),
+              child: Icon(saved ? Icons.favorite : Icons.favorite_border, size: 18, color: saved ? Colors.redAccent : AppColors.textGrey),
+            ),
+          ],
+        ),
       ),
-      ),
+    );
+  }
+
+  Widget _searchErrorBox(String message, {bool padded = false}) {
+    final child = Container(
+      padding: const EdgeInsets.all(16),
+      margin: padded ? const EdgeInsets.symmetric(horizontal: 20) : EdgeInsets.zero,
+      decoration: BoxDecoration(color: const Color(0xFFFFF1F0), borderRadius: BorderRadius.circular(12)),
+      child: Row(children: [
+        const Icon(Icons.error_outline, size: 18, color: Colors.redAccent),
+        const SizedBox(width: 10),
+        Expanded(child: Text(message, style: const TextStyle(fontSize: 11.5, color: AppColors.navy))),
+      ]),
+    );
+    return padded ? Padding(padding: const EdgeInsets.only(top: 8), child: child) : Padding(padding: const EdgeInsets.symmetric(horizontal: 20), child: child);
+  }
+
+  Widget _searchEmptyBox(String message, {bool padded = false}) {
+    final child = Text(message, style: const TextStyle(fontSize: 12, color: AppColors.textGrey));
+    return Padding(
+      padding: padded ? const EdgeInsets.symmetric(horizontal: 20, vertical: 24) : const EdgeInsets.symmetric(horizontal: 20),
+      child: child,
+    );
+  }
+
+  /// Attractions/restaurants now come from OpenStreetMap (see
+  /// CatalogRepository.refreshAttractions/refreshRestaurants) instead of
+  /// a hand-picked seeded catalogue, and OSM entries frequently have no
+  /// photo at all — so unlike the old fixed Unsplash URLs, [url] here is
+  /// often empty or can fail to load. A plain `Image.network` has no
+  /// fallback for either case; this does, matching the icon-on-chipGrey
+  /// placeholder Near By's place cards already use for the same reason.
+  Widget _placeCardImage(String url, {required double height, required double width, required IconData icon}) {
+    if (url.isEmpty) {
+      return Container(height: height, width: width, color: AppColors.chipGrey, child: Icon(icon, color: AppColors.textGrey, size: height * 0.35));
+    }
+    return Image.network(
+      url,
+      height: height,
+      width: width,
+      fit: BoxFit.cover,
+      errorBuilder: (_, __, ___) =>
+          Container(height: height, width: width, color: AppColors.chipGrey, child: Icon(icon, color: AppColors.textGrey, size: height * 0.35)),
     );
   }
 
@@ -944,9 +1167,9 @@ class _ExplorePageState extends State<ExplorePage> {
       child: ListView.separated(
         padding: const EdgeInsets.symmetric(horizontal: 20),
         scrollDirection: Axis.horizontal,
-        itemCount: controller.attractions.length,
+        itemCount: _visibleAttractions.length,
         separatorBuilder: (_, __) => const SizedBox(width: 12),
-        itemBuilder: (context, index) => _buildAttractionCompactCard(controller.attractions[index]),
+        itemBuilder: (context, index) => _buildAttractionCompactCard(_visibleAttractions[index]),
       ),
     );
   }
@@ -969,7 +1192,7 @@ class _ExplorePageState extends State<ExplorePage> {
             children: [
               ClipRRect(
                 borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-                child: Image.network(item.image, height: 95, width: double.infinity, fit: BoxFit.cover),
+                child: _placeCardImage(item.image, height: 95, width: double.infinity, icon: Icons.attractions_outlined),
               ),
               Positioned(
                 top: 8,
@@ -990,7 +1213,7 @@ class _ExplorePageState extends State<ExplorePage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
+                TranslatedText(
                   item.name,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -1005,7 +1228,7 @@ class _ExplorePageState extends State<ExplorePage> {
                   ],
                 ),
                 const SizedBox(height: 6),
-                Text(item.price, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.primary)),
+                Text(item.price, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.primary)),
               ],
             ),
           ),
@@ -1028,10 +1251,12 @@ class _ExplorePageState extends State<ExplorePage> {
 
   Widget _buildAttractionListView() {
     return ListView.separated(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-      itemCount: controller.attractions.length,
+      itemCount: _visibleAttractions.length,
       separatorBuilder: (_, __) => const SizedBox(height: 12),
-      itemBuilder: (context, index) => _buildAttractionRowCard(controller.attractions[index]),
+      itemBuilder: (context, index) => _buildAttractionRowCard(_visibleAttractions[index]),
     );
   }
 
@@ -1051,14 +1276,14 @@ class _ExplorePageState extends State<ExplorePage> {
         children: [
           ClipRRect(
             borderRadius: BorderRadius.circular(12),
-            child: Image.network(item.image, width: 80, height: 80, fit: BoxFit.cover),
+            child: _placeCardImage(item.image, width: 80, height: 80, icon: Icons.attractions_outlined),
           ),
           const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
+                TranslatedText(
                   item.name,
                   style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.navy),
                 ),
@@ -1080,7 +1305,7 @@ class _ExplorePageState extends State<ExplorePage> {
                   ],
                 ),
                 const SizedBox(height: 4),
-                Text(item.price, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: AppColors.primary)),
+                Text(item.price, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.primary)),
               ],
             ),
           ),
@@ -1101,9 +1326,9 @@ class _ExplorePageState extends State<ExplorePage> {
       child: ListView.separated(
         padding: const EdgeInsets.symmetric(horizontal: 20),
         scrollDirection: Axis.horizontal,
-        itemCount: controller.restaurants.length,
+        itemCount: _visibleRestaurants.length,
         separatorBuilder: (_, __) => const SizedBox(width: 12),
-        itemBuilder: (context, index) => _buildRestaurantCompactCard(controller.restaurants[index]),
+        itemBuilder: (context, index) => _buildRestaurantCompactCard(_visibleRestaurants[index]),
       ),
     );
   }
@@ -1137,7 +1362,7 @@ class _ExplorePageState extends State<ExplorePage> {
             children: [
               ClipRRect(
                 borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-                child: Image.network(item.image, height: 95, width: double.infinity, fit: BoxFit.cover),
+                child: _placeCardImage(item.image, height: 95, width: double.infinity, icon: Icons.restaurant_outlined),
               ),
               Positioned(
                 top: 8,
@@ -1158,7 +1383,7 @@ class _ExplorePageState extends State<ExplorePage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
+                TranslatedText(
                   item.name,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -1173,7 +1398,7 @@ class _ExplorePageState extends State<ExplorePage> {
                   ],
                 ),
                 const SizedBox(height: 6),
-                Text(item.priceRange, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.primary)),
+                Text(item.priceRange, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.primary)),
               ],
             ),
           ),
@@ -1185,10 +1410,12 @@ class _ExplorePageState extends State<ExplorePage> {
 
   Widget _buildRestaurantListView() {
     return ListView.separated(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-      itemCount: controller.restaurants.length,
+      itemCount: _visibleRestaurants.length,
       separatorBuilder: (_, __) => const SizedBox(height: 12),
-      itemBuilder: (context, index) => _buildRestaurantRowCard(controller.restaurants[index]),
+      itemBuilder: (context, index) => _buildRestaurantRowCard(_visibleRestaurants[index]),
     );
   }
 
@@ -1208,14 +1435,14 @@ class _ExplorePageState extends State<ExplorePage> {
         children: [
           ClipRRect(
             borderRadius: BorderRadius.circular(12),
-            child: Image.network(item.image, width: 80, height: 80, fit: BoxFit.cover),
+            child: _placeCardImage(item.image, width: 80, height: 80, icon: Icons.restaurant_outlined),
           ),
           const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
+                TranslatedText(
                   item.name,
                   style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.navy),
                 ),
@@ -1232,7 +1459,7 @@ class _ExplorePageState extends State<ExplorePage> {
                 const SizedBox(height: 4),
                 Text(item.location, style: const TextStyle(fontSize: 11, color: AppColors.textGrey)),
                 const SizedBox(height: 4),
-                Text(item.priceRange, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: AppColors.primary)),
+                Text(item.priceRange, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.primary)),
               ],
             ),
           ),

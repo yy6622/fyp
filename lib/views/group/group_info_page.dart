@@ -5,8 +5,13 @@ import '../../repositories/friends_repository.dart';
 import '../../repositories/trip_repository.dart';
 import '../../services/auth_service.dart';
 import '../../theme.dart';
+import '../explore/saved_items_page.dart';
+import '../shared/nice_dialog.dart';
+import 'emergency_page.dart';
 import 'export_itinerary_page.dart';
 import 'group_setting_page.dart';
+import 'invite_qr_page.dart';
+import 'member_location_page.dart';
 
 // ---------------------------------------------------------------------
 // Group Info
@@ -34,8 +39,35 @@ class GroupInfoPage extends StatelessWidget {
               padding: EdgeInsets.zero,
               children: [
                 Stack(
+                  // The banner reserves only 168px of scroll space (190 - the
+                  // 22px the card below overlaps it by), but still *paints*
+                  // the full 190px image via OverflowBox — clipBehavior.none
+                  // lets that extra 22px paint past the Stack's own box
+                  // without being clipped. This achieves the "card floats up
+                  // over the banner" look without any negative padding/
+                  // margin, both of which assert non-negative in Flutter
+                  // (a `Padding.only(top: -22)` here used to crash with
+                  // "padding.isNonNegative is not true").
+                  clipBehavior: Clip.none,
                   children: [
-                    AppImage('assets/images/adventure_bg.jpg', height: 190, width: double.infinity, fit: BoxFit.cover),
+                    SizedBox(
+                      height: 168,
+                      width: double.infinity,
+                      child: OverflowBox(
+                        maxHeight: 190,
+                        alignment: Alignment.topCenter,
+                        child: trip.coverImage.isEmpty
+                            ? AppImage('assets/images/adventure_bg.jpg', height: 190, width: double.infinity, fit: BoxFit.cover)
+                            : Image.network(
+                                trip.coverImage,
+                                height: 190,
+                                width: double.infinity,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) =>
+                                    AppImage('assets/images/adventure_bg.jpg', height: 190, width: double.infinity, fit: BoxFit.cover),
+                              ),
+                      ),
+                    ),
                     Positioned(
                       top: 8,
                       left: 8,
@@ -50,10 +82,7 @@ class GroupInfoPage extends StatelessWidget {
                   ],
                 ),
                 Padding(
-                  // Container's `margin` asserts non-negative, so the -22
-                  // top overlap (card floats up over the banner image) has
-                  // to go on a plain Padding instead — Padding allows it.
-                  padding: const EdgeInsets.only(top: -22, left: 16, right: 16),
+                  padding: const EdgeInsets.only(left: 16, right: 16),
                   child: Container(
                   padding: const EdgeInsets.all(18),
                   decoration: BoxDecoration(
@@ -79,14 +108,17 @@ class GroupInfoPage extends StatelessWidget {
                               members.length,
                               (i) => Padding(
                                 padding: const EdgeInsets.only(right: 8),
-                                child: Tooltip(
-                                  message: members[i].value,
-                                  child: CircleAvatar(
-                                    radius: 18,
-                                    backgroundColor: Colors.primaries[i % Colors.primaries.length],
-                                    child: Text(
-                                      members[i].value.isEmpty ? '?' : members[i].value[0].toUpperCase(),
-                                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                                child: GestureDetector(
+                                  onTap: () => _onMemberTap(context, trip, members[i].key, members[i].value),
+                                  child: Tooltip(
+                                    message: members[i].value,
+                                    child: CircleAvatar(
+                                      radius: 18,
+                                      backgroundColor: Colors.primaries[i % Colors.primaries.length],
+                                      child: Text(
+                                        members[i].value.isEmpty ? '?' : members[i].value[0].toUpperCase(),
+                                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -118,22 +150,28 @@ class GroupInfoPage extends StatelessWidget {
                     children: [
                       _menuGroup([
                         GroupMenuEntry(Icons.warning_amber_outlined, 'Emergency',
-                            () => ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Emergency contacts and hotlines for this trip')))),
-                        GroupMenuEntry(Icons.volunteer_activism_outlined, 'Saved List',
-                            () => ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Showing places this group has saved')))),
+                            () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => EmergencyPage(tripId: trip.id)))),
+                        GroupMenuEntry(
+                          Icons.volunteer_activism_outlined,
+                          'Saved List',
+                          () => Navigator.of(context).push(
+                              MaterialPageRoute(builder: (_) => SavedItemsPage(tripId: trip.id, tripName: trip.name))),
+                        ),
                         GroupMenuEntry(
                           Icons.location_on_outlined,
                           'Member Location',
-                          () => ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                              content: Text(trip.realTimeLocation
-                                  ? 'Member locations are shared for this trip'
-                                  : 'Member Location needs Real-Time Location turned on in Group Setting'))),
+                          () => Navigator.of(context)
+                              .push(MaterialPageRoute(builder: (_) => MemberLocationPage(tripId: trip.id))),
                         ),
                       ]),
                       const SizedBox(height: 14),
                       _menuGroup([
+                        GroupMenuEntry(
+                          Icons.qr_code_2_outlined,
+                          'Invite via QR / Code',
+                          () => Navigator.of(context)
+                              .push(MaterialPageRoute(builder: (_) => InviteQrPage(tripId: trip.id, tripName: trip.name))),
+                        ),
                         GroupMenuEntry(Icons.settings_outlined, 'Group Setting',
                             () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => GroupSettingPage(tripId: tripId)))),
                         GroupMenuEntry(Icons.ios_share_outlined, 'Export Itinerary',
@@ -200,6 +238,24 @@ class GroupInfoPage extends StatelessWidget {
         },
       ),
     );
+  }
+
+  /// Only the trip owner can remove a member, and never the owner
+  /// themselves — a tap from anyone else, or on the owner's own avatar, is
+  /// a plain no-op (their name is already shown via the [Tooltip]).
+  Future<void> _onMemberTap(BuildContext context, Trip trip, String memberUid, String memberName) async {
+    if (trip.ownerId.isEmpty || _uid != trip.ownerId || memberUid == trip.ownerId) return;
+    final confirmed = await showNiceConfirmDialog(
+      context: context,
+      title: 'Remove member',
+      message: "Remove $memberName from this trip? They'll lose access to its plan, chat and expenses.",
+      confirmLabel: 'Remove',
+      icon: Icons.person_remove_outlined,
+      destructive: true,
+    );
+    if (confirmed) {
+      await TripRepository.instance.removeMember(trip.id, memberUid);
+    }
   }
 
   Widget _menuGroup(List<GroupMenuEntry> entries) {

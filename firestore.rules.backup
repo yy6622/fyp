@@ -1,0 +1,130 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() { return request.auth != null; }
+    function isOwner(uid) { return isSignedIn() && request.auth.uid == uid; }
+
+    match /users/{uid} {
+      // Any signed-in user can look someone up (Add Friend searches by
+      // email/name); only the account owner can create/update their own doc.
+      allow read: if isSignedIn();
+      allow create: if isOwner(uid);
+      allow update: if isOwner(uid);
+      allow delete: if false;
+
+      match /friends/{friendId} {
+        allow read, write: if isOwner(uid);
+      }
+      match /blocked/{blockedId} {
+        allow read, write: if isOwner(uid);
+      }
+      match /bookings/{bookingId} {
+        allow read, create: if isOwner(uid);
+        allow update: if false;
+        // TEMP DEBUG: lets the dev-seed feature delete only the fake
+        // bookings it created (tagged isFakeSeed: true) — real purchase
+        // history is untouched since no real write path ever sets that
+        // field. Remove this exception together with dev_seed_service.dart.
+        allow delete: if isOwner(uid) && resource.data.isFakeSeed == true;
+      }
+    }
+
+    // TEMP DEBUG: registry doc for the "Seed/Clear Test Data" debug
+    // feature (see lib/services/dev_seed_service.dart) — remove this block
+    // together with that feature.
+    match /dev_seed_registry/{uid} {
+      allow read, write: if isOwner(uid);
+    }
+
+    match /posts/{postId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.authorId == request.auth.uid;
+      // The author can change anything; anyone else signed in may only
+      // touch likedBy/savedBy/ratings (liking, saving, rating a post).
+      allow update: if isSignedIn() && (
+        request.auth.uid == resource.data.authorId ||
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['likedBy', 'savedBy', 'ratings'])
+      );
+      allow delete: if isSignedIn() && request.auth.uid == resource.data.authorId;
+    }
+
+    // ---------------- Group trips (Plan / Group Trip / Vote / Expenses) ----
+    function isTripMember(tripId) {
+      return isSignedIn() &&
+        request.auth.uid in get(/databases/$(database)/documents/trips/$(tripId)).data.memberIds;
+    }
+
+    match /trips/{tripId} {
+      allow read: if isSignedIn() && request.auth.uid in resource.data.memberIds;
+      allow create: if isSignedIn() &&
+        request.auth.uid == request.resource.data.ownerId &&
+        request.auth.uid in request.resource.data.memberIds;
+      // Any member can update (add activities, vote, tweak settings); only
+      // the owner can remove someone else, so membership itself is guarded
+      // by requiring the editor to already be a member.
+      allow update: if isSignedIn() && request.auth.uid in resource.data.memberIds;
+      allow delete: if isSignedIn() && request.auth.uid == resource.data.ownerId;
+
+      // TEMP DEBUG: votes/expenses/messages below normally can never be
+      // deleted (delete: if false) — each adds one narrow exception so the
+      // dev-seed feature can clean up a trip it created (tagged
+      // isFakeSeed: true on the trip doc itself). A real trip's
+      // subcollection docs stay undeletable. Remove the isFakeSeed check
+      // (reverting to plain `if false`) together with dev_seed_service.dart.
+      match /votes/{voteId} {
+        allow read, create, update: if isTripMember(tripId);
+        allow delete: if isTripMember(tripId) &&
+          get(/databases/$(database)/documents/trips/$(tripId)).data.isFakeSeed == true;
+      }
+      match /expenses/{expenseId} {
+        allow read, create, update: if isTripMember(tripId);
+        allow delete: if isTripMember(tripId) &&
+          get(/databases/$(database)/documents/trips/$(tripId)).data.isFakeSeed == true;
+      }
+      match /messages/{messageId} {
+        allow read, create: if isTripMember(tripId);
+        allow update: if false;
+        allow delete: if isTripMember(tripId) &&
+          get(/databases/$(database)/documents/trips/$(tripId)).data.isFakeSeed == true;
+      }
+    }
+
+    // ---------------- Explore / Near By catalogue ----------------------
+    // There's no real flights/hotels/places API wired into this project, so
+    // this catalogue is seeded once (by whichever signed-in user opens
+    // Explore first) instead of being hardcoded in the app. Everyone signed
+    // in can read it and toggle their own favorite; nothing else about it
+    // can be edited from the client.
+    match /catalog_flights/{id} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['favoritedBy']);
+      allow delete: if false;
+    }
+    match /catalog_hotels/{id} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['favoritedBy']);
+      allow delete: if false;
+    }
+    match /catalog_attractions/{id} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['favoritedBy']);
+      allow delete: if false;
+    }
+    match /catalog_restaurants/{id} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['favoritedBy']);
+      allow delete: if false;
+    }
+    match /catalog_places/{id} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update: if false;
+      allow delete: if false;
+    }
+  }
+}

@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>User Management — Voya Admin</title>
+<link rel="stylesheet" href="../css/tokens.css" />
+<link rel="stylesheet" href="../css/base.css" />
+<link rel="stylesheet" href="../css/layout.css" />
+<link rel="stylesheet" href="../css/components.css" />
+</head>
+<body>
+<div class="shell">
+  <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-brand">Voya</div>
+    <div class="sidebar-user">
+      <div class="name" id="sbUserName">Loading…</div>
+      <div class="role" id="sbUserRole">Administrator</div>
+    </div>
+    <nav class="nav" id="sidebarNav"></nav>
+    <button class="sidebar-logout" id="logoutBtn"><span data-icon="log-out"></span>Log out</button>
+  </aside>
+
+  <main class="content">
+    <div class="topbar">
+      <div>
+        <button class="menu-toggle" id="menuToggle"><span data-icon="menu"></span></button>
+        <h1 class="h1">User Management</h1>
+        <p class="subtitle">Manage users, roles, and access permissions</p>
+      </div>
+      <button class="btn btn-primary" id="addUserBtn"><span data-icon="plus"></span>Add user</button>
+    </div>
+
+    <div class="stat-grid" id="statGrid"><div class="skeleton" style="height:90px;grid-column:1/-1;"></div></div>
+
+    <div class="filter-bar">
+      <div class="search-input-wrap"><span data-icon="search"></span><input class="input" id="searchInput" placeholder="Search…" /></div>
+      <select class="select" id="statusFilter">
+        <option value="">All status</option>
+        <option value="active">Active</option>
+        <option value="pending">Pending</option>
+        <option value="suspended">Suspended</option>
+      </select>
+    </div>
+
+    <div class="table-wrap scroll-x">
+      <table class="data-table">
+        <thead><tr><th>User</th><th>Email</th><th>Role</th><th>Joined</th><th>Status</th><th></th></tr></thead>
+        <tbody id="tableBody"><tr><td colspan="6"><div class="skeleton" style="height:40px;"></div></td></tr></tbody>
+      </table>
+      <div class="empty-state" id="emptyState" style="display:none;">
+        <span data-icon="user" class="icon-lg"></span>
+        <div class="h3">No users found</div>
+        <p class="small">Try a different search or filter.</p>
+      </div>
+    </div>
+    <div class="table-foot">
+      <p class="small muted" id="resultsLabel"></p>
+      <div class="pagination" id="pagination"></div>
+    </div>
+  </main>
+</div>
+
+<div class="modal-backdrop" id="editModal">
+  <div class="modal">
+    <div class="modal-head"><h3 class="h2">Manage user</h3><button class="modal-close" data-close><span data-icon="x"></span></button></div>
+    <p class="muted small" id="editUserMeta" style="margin-bottom:18px;"></p>
+    <div class="field" style="margin-bottom:16px;">
+      <label>Role</label>
+      <select class="select" id="roleSelect">
+        <option value="user">User</option>
+        <option value="editor">Editor</option>
+        <option value="manager">Manager</option>
+        <option value="admin">Admin</option>
+      </select>
+    </div>
+    <div class="field" style="margin-bottom:6px;">
+      <label>Status</label>
+      <select class="select" id="statusSelect">
+        <option value="active">Active</option>
+        <option value="pending">Pending</option>
+        <option value="suspended">Suspended</option>
+      </select>
+    </div>
+    <div class="form-actions">
+      <button class="btn btn-outline" data-close>Cancel</button>
+      <button class="btn btn-primary" id="saveUserBtn">Save changes</button>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import { requireRole } from "../js/auth-guard.js";
+import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js";
+import { mountIcons } from "../js/icons.js";
+import { listUsers, setUserRoleStatus } from "../js/data.js";
+import { number, shortDate, statusBadge, initials, escapeHtml, paginate, toast, setBusy } from "../js/ui.js";
+import { openModal, closeModal, wireModalDismiss } from "../js/ui.js";
+
+mountSidebarNav({ role: "admin", active: "users" });
+const session = await requireRole("admin", "login.html");
+let users = [];
+let filtered = [];
+let page = 1;
+const PAGE_SIZE = 8;
+let editingUid = null;
+
+if (session) {
+  setSidebarUser({ displayName: session.profile.name || "Admin", roleLabel: "Administrator" });
+  wireModalDismiss();
+  await load();
+}
+
+function statCard(label, value, icon) {
+  return `<div class="card stat-card"><div class="stat-top"><div class="stat-icon"><span data-icon="${icon}"></span></div><div class="stat-label">${label}</div></div><div class="stat-value">${value}</div><div class="stat-delta">↑ 2.4% from last month</div></div>`;
+}
+
+async function load() {
+  users = await listUsers();
+  users.forEach((u) => { u.status = u.status || "active"; u.role = u.role || "user"; });
+  renderStats();
+  applyFilters();
+}
+
+function renderStats() {
+  const active = users.filter((u) => u.status === "active").length;
+  const pending = users.filter((u) => u.status === "pending").length;
+  const suspended = users.filter((u) => u.status === "suspended").length;
+  document.getElementById("statGrid").innerHTML = [
+    statCard("Total users", number(users.length), "user"),
+    statCard("Active", number(active), "sparkle"),
+    statCard("Pending", number(pending), "user-check"),
+    statCard("Suspended", number(suspended), "user-x"),
+  ].join("");
+  mountIcons(document);
+}
+
+function applyFilters() {
+  const q = document.getElementById("searchInput").value.trim().toLowerCase();
+  const status = document.getElementById("statusFilter").value;
+  filtered = users.filter((u) => {
+    const matchesQ = !q || (u.name || "").toLowerCase().includes(q) || (u.email || "").toLowerCase().includes(q);
+    const matchesStatus = !status || u.status === status;
+    return matchesQ && matchesStatus;
+  });
+  page = 1;
+  renderTable();
+}
+
+function renderTable() {
+  const { pageItems, pages, total } = paginate(filtered, page, PAGE_SIZE);
+  const body = document.getElementById("tableBody");
+  const empty = document.getElementById("emptyState");
+  if (!pageItems.length) {
+    body.innerHTML = "";
+    empty.style.display = "block";
+  } else {
+    empty.style.display = "none";
+    body.innerHTML = pageItems.map((u) => `
+      <tr>
+        <td>
+          <div class="inline-flex">
+            <div class="avatar-fallback">${initials(u.name)}</div>
+            <span class="cell-strong">${escapeHtml(u.name || "Unnamed")}</span>
+          </div>
+        </td>
+        <td class="muted">${escapeHtml(u.email || "—")}</td>
+        <td>${escapeHtml((u.role || "user").replace(/^\w/, (c) => c.toUpperCase()))}</td>
+        <td class="muted">${shortDate(u.createdAt)}</td>
+        <td>${statusBadge(u.status)}</td>
+        <td><div class="row-actions"><button class="btn btn-outline btn-sm" data-edit="${u.id}"><span data-icon="edit" data-icon-size="14"></span>Manage</button></div></td>
+      </tr>`).join("");
+    body.querySelectorAll("[data-edit]").forEach((btn) => btn.addEventListener("click", () => openEdit(btn.dataset.edit)));
+  }
+  document.getElementById("resultsLabel").textContent = total
+    ? `Showing ${(page - 1) * PAGE_SIZE + 1} to ${Math.min(page * PAGE_SIZE, total)} of ${total} results`
+    : "No results";
+  const pager = document.getElementById("pagination");
+  let html = `<button class="page-btn" ${page === 1 ? "disabled" : ""} id="prevPage"><span data-icon="chevron-left" data-icon-size="14"></span></button>`;
+  for (let i = 1; i <= pages; i++) {
+    if (pages > 7 && Math.abs(i - page) > 2 && i !== 1 && i !== pages) {
+      if (i === 2 || i === pages - 1) html += `<span class="muted" style="padding:0 4px;">…</span>`;
+      continue;
+    }
+    html += `<button class="page-btn${i === page ? " active" : ""}" data-page="${i}">${i}</button>`;
+  }
+  html += `<button class="page-btn" ${page === pages ? "disabled" : ""} id="nextPage"><span data-icon="chevron-right" data-icon-size="14"></span></button>`;
+  pager.innerHTML = html;
+  pager.querySelectorAll("[data-page]").forEach((b) => b.addEventListener("click", () => { page = Number(b.dataset.page); renderTable(); }));
+  document.getElementById("prevPage")?.addEventListener("click", () => { page--; renderTable(); });
+  document.getElementById("nextPage")?.addEventListener("click", () => { page++; renderTable(); });
+  mountIcons(document);
+}
+
+function openEdit(uid) {
+  const u = users.find((x) => x.id === uid);
+  if (!u) return;
+  editingUid = uid;
+  document.getElementById("editUserMeta").textContent = `${u.name || "Unnamed"} · ${u.email || "—"}`;
+  document.getElementById("roleSelect").value = u.role || "user";
+  document.getElementById("statusSelect").value = u.status || "active";
+  openModal("editModal");
+}
+
+document.getElementById("addUserBtn").addEventListener("click", () => {
+  toast("New travellers sign up from the Voya mobile app. Edit an existing row below to change their role or status.");
+});
+document.getElementById("saveUserBtn").addEventListener("click", async () => {
+  if (!editingUid) return;
+  const btn = document.getElementById("saveUserBtn");
+  setBusy(btn, true, "Saving…");
+  try {
+    const role = document.getElementById("roleSelect").value;
+    const status = document.getElementById("statusSelect").value;
+    await setUserRoleStatus(editingUid, { role, status });
+    const u = users.find((x) => x.id === editingUid);
+    if (u) { u.role = role; u.status = status; }
+    closeModal("editModal");
+    renderStats();
+    renderTable();
+    toast("User updated.", "success");
+  } catch (err) {
+    toast(err.message || "Couldn't save changes.", "error");
+  } finally {
+    setBusy(btn, false);
+  }
+});
+
+document.getElementById("searchInput").addEventListener("input", applyFilters);
+document.getElementById("statusFilter").addEventListener("change", applyFilters);
+</script>
+</body>
+</html>

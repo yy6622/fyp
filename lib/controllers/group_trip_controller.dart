@@ -81,16 +81,35 @@ class GroupTripController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> addActivity(int dayIndex, {required String time, required String label, required String iconKey}) {
-    return TripRepository.instance.addActivity(tripId, dayIndex, time: time, label: label, iconKey: iconKey);
+  Future<void> addActivity(
+    int dayIndex, {
+    required String time,
+    required String label,
+    required String iconKey,
+    String location = '',
+  }) {
+    return TripRepository.instance
+        .addActivity(tripId, dayIndex, time: time, label: label, iconKey: iconKey, location: location);
   }
 
   Future<void> toggleActivityVote(int dayIndex, ActivityItem item) {
     return TripRepository.instance.toggleActivityVote(tripId, dayIndex, item.id, _uid, !item.votedByMe);
   }
 
+  Future<void> removeActivity(int dayIndex, String itemId) {
+    return TripRepository.instance.removeActivity(tripId, dayIndex, itemId);
+  }
+
   Future<void> addFlight(TripFlight flight) => TripRepository.instance.addFlight(tripId, flight);
+  Future<void> removeFlight(String flightId) => TripRepository.instance.removeFlight(tripId, flightId);
   Future<void> addHotelStay(TripHotelStay stay) => TripRepository.instance.addHotelStay(tripId, stay);
+  Future<void> removeHotelStay(String stayId) => TripRepository.instance.removeHotelStay(tripId, stayId);
+
+  Future<void> setDestination(String destination) => TripRepository.instance.updateSettings(tripId, destination: destination);
+  Future<void> setDates(DateTime start, DateTime end) =>
+      TripRepository.instance.updateSettings(tripId, startDate: start, endDate: end);
+  Future<void> setBudget(double budgetPerPerson) =>
+      TripRepository.instance.updateSettings(tripId, budgetPerPerson: budgetPerPerson);
 
   Future<void> sendMessage() async {
     final text = messageController.text.trim();

@@ -3,8 +3,11 @@ import 'package:flutter/material.dart';
 import '../../controllers/insurance_controller.dart';
 import '../../models/insurance_models.dart';
 import '../../repositories/booking_repository.dart';
+import '../../repositories/insurance_repository.dart';
+import '../../repositories/trip_repository.dart';
 import '../../services/auth_service.dart';
 import '../../theme.dart';
+import '../shared/nice_dialog.dart';
 import 'insurance_widgets.dart';
 
 // ---------------------------------------------------------------------
@@ -13,7 +16,12 @@ import 'insurance_widgets.dart';
 class PaymentMethodPage extends StatefulWidget {
   final InsurancePlan plan;
   final int travellerCount;
-  const PaymentMethodPage({super.key, required this.plan, required this.travellerCount});
+  // See [InsurancePlanCard.tripId] — when set, the confirmed purchase is
+  // also written onto `trips/{tripId}.insurance` so the trip's Overview
+  // tab immediately reflects a real bought plan instead of staying stuck
+  // on "no insurance yet".
+  final String? tripId;
+  const PaymentMethodPage({super.key, required this.plan, required this.travellerCount, this.tripId});
 
   @override
   State<PaymentMethodPage> createState() => _PaymentMethodPageState();
@@ -108,8 +116,10 @@ class _PaymentMethodPageState extends State<PaymentMethodPage> {
   }
 
   Future<void> _confirmPayment() async {
-    final uid = AuthService.instance.currentUser?.uid;
-    if (uid != null) {
+    final user = AuthService.instance.currentUser;
+    final uid = user?.uid;
+    if (uid == null) return;
+    try {
       final policyNumber = 'INS-${DateTime.now().millisecondsSinceEpoch}';
       await BookingRepository.instance.addBooking(
         uid: uid,
@@ -118,37 +128,42 @@ class _PaymentMethodPageState extends State<PaymentMethodPage> {
         subtitle: 'Policy #$policyNumber',
         trailing: 'RM ${controller.subtotal.toStringAsFixed(2)}',
       );
+      // Also lands in the partner console's Transactions list (see
+      // InsuranceRepository.recordPurchase) so a purchase made here is
+      // visible on the business side too, not just the rider's own
+      // booking history.
+      await InsuranceRepository.instance.recordPurchase(
+        plan: widget.plan,
+        buyerId: uid,
+        customerName: user?.displayName?.trim().isNotEmpty == true ? user!.displayName!.trim() : (user?.email ?? 'Voya user'),
+        customerEmail: user?.email ?? '',
+        premium: controller.subtotal,
+      );
+      if (widget.tripId != null && widget.tripId!.isNotEmpty) {
+        await TripRepository.instance.setInsurance(
+          widget.tripId!,
+          TripInsurance(
+            planName: widget.plan.name,
+            coverage: widget.plan.coverage,
+            price: 'RM ${controller.subtotal.toStringAsFixed(2)}',
+            policyNumber: policyNumber,
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Payment could not be completed: $e')),
+      );
+      return;
     }
     if (!mounted) return;
-    showDialog(
+    showNiceInfoDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        icon: const Icon(Icons.check_circle, color: Colors.green, size: 40),
-        title: const Text('Payment Successful', style: TextStyle(color: AppColors.navy, fontWeight: FontWeight.bold)),
-        content: Text(
-          'Your ${widget.plan.name} plan for ${widget.travellerCount} traveller(s) is confirmed. '
+      title: 'Payment Successful',
+      message: 'Your ${widget.plan.name} plan for ${widget.travellerCount} traveller(s) is confirmed. '
           'A copy of your policy has been sent to your email.',
-          textAlign: TextAlign.center,
-          style: const TextStyle(color: AppColors.textGrey),
-        ),
-        actions: [
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primary,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-              onPressed: () {
-                Navigator.of(ctx).pop();
-                Navigator.of(context).popUntil((route) => route.isFirst);
-              },
-              child: const Text('Done', style: TextStyle(color: Colors.white)),
-            ),
-          ),
-        ],
-      ),
+      onDone: () => Navigator.of(context).popUntil((route) => route.isFirst),
     );
   }
 

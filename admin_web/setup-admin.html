@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Voya — Admin bootstrap</title>
+<link rel="stylesheet" href="css/tokens.css" />
+<link rel="stylesheet" href="css/base.css" />
+<link rel="stylesheet" href="css/components.css" />
+<link rel="stylesheet" href="css/auth.css" />
+</head>
+<body>
+<div class="auth-shell">
+  <div class="auth-side">
+    <div class="brand">Voya</div>
+    <h1>Create the first admin account.</h1>
+    <p class="lede">This page is for one-time setup only. Anyone who can open it can create an admin
+      account, so remove it (or restrict access to it) once your team's admin accounts exist.</p>
+  </div>
+  <div class="auth-main">
+    <div class="auth-card">
+      <h2>Admin bootstrap</h2>
+      <p class="lede" id="statusLine">Checking existing admins…</p>
+      <div class="auth-error" id="authError"></div>
+      <div id="banner" class="dev-tool-bar" style="display:none;"></div>
+      <form id="setupForm">
+        <div class="auth-field">
+          <label for="name">Full name</label>
+          <input class="input" id="name" placeholder="Your name" required />
+        </div>
+        <div class="auth-field">
+          <label for="email">Email</label>
+          <input class="input" type="email" id="email" placeholder="admin@voya.app" required autocomplete="username" />
+        </div>
+        <div class="auth-field">
+          <label for="password">Password</label>
+          <input class="input" type="password" id="password" placeholder="At least 6 characters" required minlength="6" autocomplete="new-password" />
+        </div>
+        <button class="btn btn-primary btn-block" type="submit" id="submitBtn">Create admin account</button>
+      </form>
+      <p class="auth-foot-link">Already have an admin account? <a href="admin/login.html">Go to log in</a></p>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import { registerWithRole, authErrorMessage } from "./js/auth-guard.js";
+import { isFirstAdminNeeded } from "./js/data.js";
+import { setBusy } from "./js/ui.js";
+import { auth } from "./js/firebase-config.js";
+import { signOut } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
+
+const statusLine = document.getElementById("statusLine");
+const banner = document.getElementById("banner");
+isFirstAdminNeeded().then((needed) => {
+  if (needed) {
+    statusLine.textContent = "No admin account exists yet — create the first one below.";
+  } else {
+    statusLine.textContent = "Admin accounts already exist for this project.";
+    banner.style.display = "flex";
+    banner.textContent = "Heads up: this still lets you create another admin account with no login required. Keep this page private.";
+  }
+});
+
+const errBox = document.getElementById("authError");
+document.getElementById("setupForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  errBox.classList.remove("show");
+  await signOut(auth).catch(() => {});
+  const name = document.getElementById("name").value.trim();
+  const email = document.getElementById("email").value;
+  const password = document.getElementById("password").value;
+  const btn = document.getElementById("submitBtn");
+  setBusy(btn, true, "Creating…");
+  try {
+    await registerWithRole("admin", email, password, { name });
+    await signOut(auth);
+    location.href = "admin/login.html";
+  } catch (err) {
+    errBox.textContent = authErrorMessage(err);
+    errBox.classList.add("show");
+    setBusy(btn, false);
+  }
+});
+</script>
+</body>
+</html>

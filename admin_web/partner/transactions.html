@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Transactions — Voya Insurance Partner</title>
+<link rel="stylesheet" href="../css/tokens.css" />
+<link rel="stylesheet" href="../css/base.css" />
+<link rel="stylesheet" href="../css/layout.css" />
+<link rel="stylesheet" href="../css/components.css" />
+</head>
+<body>
+<div class="shell">
+  <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-brand">Voya</div>
+    <div class="sidebar-user">
+      <div class="name" id="sbUserName">Loading…</div>
+      <div class="role" id="sbUserRole">Partner workspace</div>
+    </div>
+    <nav class="nav" id="sidebarNav"></nav>
+    <button class="sidebar-logout" id="logoutBtn"><span data-icon="log-out"></span>Log out</button>
+  </aside>
+
+  <main class="content">
+    <div class="topbar">
+      <div>
+        <button class="menu-toggle" id="menuToggle"><span data-icon="menu"></span></button>
+        <h1 class="h1">Transactions</h1>
+        <p class="subtitle">Every policy sold through Voya</p>
+      </div>
+      <button class="btn btn-primary" id="exportBtn"><span data-icon="download"></span>Export</button>
+    </div>
+
+    <div class="stat-grid" id="statGrid"><div class="skeleton" style="height:90px;grid-column:1/-1;"></div></div>
+
+    <div class="filter-bar">
+      <div class="search-input-wrap"><span data-icon="search"></span><input class="input" id="searchInput" placeholder="Search…" /></div>
+      <select class="select" id="statusFilter">
+        <option value="">All status</option>
+        <option value="paid">Paid</option>
+        <option value="pending">Pending</option>
+        <option value="rejected">Rejected</option>
+      </select>
+    </div>
+
+    <div class="table-wrap scroll-x">
+      <table class="data-table">
+        <thead><tr><th>Reference</th><th>Customer</th><th>Destination</th><th>Premium</th><th>Status</th></tr></thead>
+        <tbody id="tableBody"><tr><td colspan="5"><div class="skeleton" style="height:40px;"></div></td></tr></tbody>
+      </table>
+      <div class="empty-state" id="emptyState" style="display:none;">
+        <span data-icon="swap" class="icon-lg"></span>
+        <div class="h3">No transactions yet</div>
+        <p class="small">Sales made through Voya will show up here.</p>
+      </div>
+    </div>
+    <div class="table-foot">
+      <p class="small muted" id="resultsLabel"></p>
+      <div class="pagination" id="pagination"></div>
+    </div>
+  </main>
+</div>
+
+<script type="module">
+import { requireRole } from "../js/auth-guard.js";
+import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js";
+import { mountIcons } from "../js/icons.js";
+import { listTransactions } from "../js/data.js";
+import { money, moneyExact, number, statusBadge, escapeHtml, paginate } from "../js/ui.js";
+
+mountSidebarNav({ role: "partner", active: "transactions" });
+const session = await requireRole("partner", "login.html");
+let items = [], filtered = [], page = 1;
+const PAGE_SIZE = 8;
+
+if (session) {
+  setSidebarUser({ displayName: session.profile.companyName || "Partner", roleLabel: `${session.profile.companyName || "Insurance"} · Insurance Partner` });
+  await load();
+}
+
+function statCard(label, value, icon) {
+  return `<div class="card stat-card"><div class="stat-top"><div class="stat-icon"><span data-icon="${icon}"></span></div><div class="stat-label">${label}</div></div><div class="stat-value">${value}</div><div class="stat-delta">↑ 2.4% from last month</div></div>`;
+}
+
+async function load() {
+  items = await listTransactions(session.uid);
+  const paid = items.filter((t) => t.status === "paid");
+  const pending = items.filter((t) => t.status === "pending");
+  const gross = paid.reduce((s, t) => s + (Number(t.premium) || 0), 0);
+  document.getElementById("statGrid").innerHTML = [
+    statCard("Total transactions", number(items.length), "swap"),
+    statCard("Paid", number(paid.length), "check-circle"),
+    statCard("Pending", number(pending.length), "clock"),
+    statCard("Gross premium", money(gross), "coin"),
+  ].join("");
+  applyFilters();
+  mountIcons(document);
+}
+
+function applyFilters() {
+  const q = document.getElementById("searchInput").value.trim().toLowerCase();
+  const status = document.getElementById("statusFilter").value;
+  filtered = items.filter((t) => (!q || (t.customerName || "").toLowerCase().includes(q) || (t.txnRef || "").toLowerCase().includes(q)) && (!status || t.status === status));
+  page = 1;
+  renderTable();
+}
+
+function renderTable() {
+  const { pageItems, pages, total } = paginate(filtered, page, PAGE_SIZE);
+  const body = document.getElementById("tableBody");
+  const empty = document.getElementById("emptyState");
+  if (!pageItems.length) { body.innerHTML = ""; empty.style.display = "block"; }
+  else {
+    empty.style.display = "none";
+    body.innerHTML = pageItems.map((t) => `
+      <tr>
+        <td class="cell-strong">${escapeHtml(t.txnRef || t.id)}</td>
+        <td>${escapeHtml(t.customerName || "—")}</td>
+        <td class="muted">${escapeHtml(t.destination || "—")}</td>
+        <td class="muted">${moneyExact(t.premium)}</td>
+        <td>${statusBadge(t.status)}</td>
+      </tr>`).join("");
+  }
+  document.getElementById("resultsLabel").textContent = total
+    ? `Showing ${(page - 1) * PAGE_SIZE + 1} to ${Math.min(page * PAGE_SIZE, total)} of ${total} results` : "No results";
+  const pager = document.getElementById("pagination");
+  let html = `<button class="page-btn" ${page === 1 ? "disabled" : ""} id="prevPage"><span data-icon="chevron-left" data-icon-size="14"></span></button>`;
+  for (let i = 1; i <= pages; i++) html += `<button class="page-btn${i === page ? " active" : ""}" data-page="${i}">${i}</button>`;
+  html += `<button class="page-btn" ${page === pages ? "disabled" : ""} id="nextPage"><span data-icon="chevron-right" data-icon-size="14"></span></button>`;
+  pager.innerHTML = html;
+  pager.querySelectorAll("[data-page]").forEach((b) => b.addEventListener("click", () => { page = Number(b.dataset.page); renderTable(); }));
+  document.getElementById("prevPage")?.addEventListener("click", () => { page--; renderTable(); });
+  document.getElementById("nextPage")?.addEventListener("click", () => { page++; renderTable(); });
+  mountIcons(document);
+}
+
+document.getElementById("searchInput").addEventListener("input", applyFilters);
+document.getElementById("statusFilter").addEventListener("change", applyFilters);
+document.getElementById("exportBtn").addEventListener("click", () => {
+  if (!filtered.length) return;
+  const rows = [["Reference", "Customer", "Destination", "Premium (RM)", "Status"]];
+  filtered.forEach((t) => rows.push([t.txnRef || t.id, t.customerName || "", t.destination || "", (Number(t.premium) || 0).toFixed(2), t.status || ""]));
+  const csv = rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `voya-transactions-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+});
+</script>
+</body>
+</html>

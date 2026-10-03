@@ -1,12 +1,42 @@
 import 'package:flutter/material.dart';
 
 // ---------------------------------------------------------------------
-// Shared insurance plan data — used by both the Home page preview row
-// and the full Insurance list page, so there's a single source of truth.
+// Shared insurance plan data — read live from Firestore's
+// `insurance_plans` collection (authored in the admin/partner web
+// console, admin_web/partner/plans.html), not hardcoded. See
+// InsuranceRepository.watchPlans() for how a Firestore doc becomes one
+// of these.
 // ---------------------------------------------------------------------
-enum InsuranceCategory { singleTrip, family }
+enum InsuranceCategory { singleTrip, annual, family }
+
+/// Maps to/from the `tripType` string the partner console's plan form
+/// writes — see admin_web/partner/plans.html's
+/// `<select id="fType"><option>Single Trip</option><option>Annual</option><option>Family</option></select>`.
+String insuranceCategoryToTripType(InsuranceCategory c) {
+  switch (c) {
+    case InsuranceCategory.singleTrip:
+      return 'Single Trip';
+    case InsuranceCategory.annual:
+      return 'Annual';
+    case InsuranceCategory.family:
+      return 'Family';
+  }
+}
+
+InsuranceCategory insuranceCategoryFromTripType(String tripType) {
+  switch (tripType) {
+    case 'Annual':
+      return InsuranceCategory.annual;
+    case 'Family':
+      return InsuranceCategory.family;
+    default:
+      return InsuranceCategory.singleTrip;
+  }
+}
 
 class InsurancePlan {
+  final String id;
+  final String partnerId;
   final String provider;
   final String logoText;
   final Color logoColor;
@@ -15,6 +45,8 @@ class InsurancePlan {
   final String price;
   final InsuranceCategory category;
   const InsurancePlan({
+    required this.id,
+    required this.partnerId,
     required this.provider,
     required this.logoText,
     required this.logoColor,
@@ -24,42 +56,3 @@ class InsurancePlan {
     required this.category,
   });
 }
-
-const List<InsurancePlan> insurancePlans = [
-  InsurancePlan(
-    provider: 'Allianz Travel',
-    logoText: 'A',
-    logoColor: Color(0xFF0B3B8C),
-    name: 'Allianz Travel',
-    coverage: 'Medical Coverage up to RM 100,000',
-    price: 'RM 53',
-    category: InsuranceCategory.singleTrip,
-  ),
-  InsurancePlan(
-    provider: 'AIG Travel Guard',
-    logoText: 'AIG',
-    logoColor: Color(0xFF1E88C7),
-    name: 'AIG Travel Guard',
-    coverage: 'Medical Coverage up to RM 100,000',
-    price: 'RM 49',
-    category: InsuranceCategory.singleTrip,
-  ),
-  InsurancePlan(
-    provider: 'Allianz Travel',
-    logoText: 'A',
-    logoColor: Color(0xFF0B3B8C),
-    name: 'Allianz Travel',
-    coverage: 'Medical Coverage up to RM 100,000',
-    price: 'RM 50',
-    category: InsuranceCategory.singleTrip,
-  ),
-  InsurancePlan(
-    provider: 'Allianz Travel',
-    logoText: 'A',
-    logoColor: Color(0xFF0B3B8C),
-    name: 'Family Travel Cover',
-    coverage: 'Medical Coverage up to RM 300,000 (family)',
-    price: 'RM 150',
-    category: InsuranceCategory.family,
-  ),
-];

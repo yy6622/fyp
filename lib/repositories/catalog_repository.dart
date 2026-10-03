@@ -1,16 +1,29 @@
+import 'dart:math';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../data/popular_destinations.dart';
+import '../models/duffel_models.dart';
 import '../models/explore_models.dart';
 import '../models/nearby_models.dart';
+import '../models/review_models.dart';
+import '../services/currency_service.dart';
+import '../services/duffel_api_service.dart';
+import '../services/format_utils.dart';
+import '../services/places_api_service.dart';
+import '../services/rollinggo_api_service.dart';
+import 'review_helpers.dart';
 
 /// Explore/Near By show a catalogue of flights, hotels, attractions and
-/// nearby places. A real app would pull this from a travel-inventory or
-/// maps API; this project doesn't have one wired up, so the catalogue is
-/// instead seeded once into Firestore (`catalog_flights` / `catalog_hotels`
-/// / `catalog_attractions` / `catalog_places`) and read from there like any
-/// other real data — nothing is hardcoded in the app itself, and favoriting
-/// an item is a real, persisted action. (`catalog_restaurants` joined the
-/// same pattern once Explore grew a Restaurants category.)
+/// nearby places. Flights/hotels come live from Duffel/RollingGo.
+/// Attractions/restaurants/near-by-places come live from OpenStreetMap
+/// (see [PlacesApiService] — Nominatim for geocoding a destination,
+/// Overpass for the actual POIs), fetched into `catalog_attractions` /
+/// `catalog_restaurants` / Near By's live query and read from there like
+/// any other real data — this used to be a fixed seeded catalogue baked
+/// into the app, which is exactly the "it's all the same hardcoded Tokyo
+/// data regardless of what you search" problem a live source fixes.
+/// Favoriting an item is a real, persisted action either way.
 ///
 /// Saving ("favoriting") an item is scoped to whichever trip/plan is
 /// selected on Explore when you tap the heart — not a single global
@@ -32,7 +45,20 @@ class CatalogRepository {
       FirebaseFirestore.instance.collection('catalog_attractions');
   CollectionReference<Map<String, dynamic>> get _restaurants =>
       FirebaseFirestore.instance.collection('catalog_restaurants');
-  CollectionReference<Map<String, dynamic>> get _places => FirebaseFirestore.instance.collection('catalog_places');
+  CollectionReference<Map<String, dynamic>> get _appCache => FirebaseFirestore.instance.collection('app_cache');
+
+  // ---------------- Short-lived per-user search cache ----------------
+  // Separate from the `app_cache` Firestore doc above (that one is a
+  // single shared "popular destinations" snapshot, refreshed every few
+  // hours for everyone). This one is in-memory only, keyed by uid so one
+  // person's search never answers from another's, and expires quickly —
+  // it only exists to avoid re-hitting Duffel/RollingGo when the same
+  // person repeats the same search within a short window (e.g. flipping
+  // between Explore tabs), not to keep results fresh across a session.
+  static const Duration _searchCacheTtl = Duration(minutes: 3);
+  final Map<String, _CachedSearch<DuffelFlightOffer>> _flightSearchCache = {};
+  final Map<String, _CachedSearch<DuffelStayResult>> _staySearchCache = {};
+  String _dateKey(DateTime d) => '${d.year}-${d.month}-${d.day}';
 
   // ---------------- Flights ----------------
   // [favoritedBy], despite the name kept for symmetry with hotels/attractions,
@@ -52,12 +78,108 @@ class CatalogRepository {
               stops: (d.data()['stops'] as String?) ?? '',
               price: (d.data()['price'] as String?) ?? '',
               fareType: (d.data()['fareType'] as String?) ?? '',
+              airline: (d.data()['airline'] as String?) ?? '',
+              priceAmount: (d.data()['priceAmount'] as num?)?.toDouble(),
+              priceCurrency: d.data()['priceCurrency'] as String?,
+              airlineLogoUrl: d.data()['airlineLogoUrl'] as String?,
             ))
         .toList());
   }
 
   Future<void> toggleFlightFavorite(String id, String uid, String tripId, bool fav) =>
       _toggleFav(_flights, id, '$uid#$tripId', fav);
+
+  /// A flight found via a live Duffel search isn't in the seeded
+  /// catalogue yet — saving ("favoriting") one from a search result
+  /// writes it into this same collection, tagged `source: 'duffel'`, so
+  /// it immediately behaves like any other catalogue flight (shows in
+  /// Saved Items, has a real detail page, etc.) without a second,
+  /// parallel data model. Returns the new doc's id.
+  Future<String> saveDuffelFlight(DuffelFlightOffer offer, {required String uid, required String tripId}) async {
+    final doc = await _flights.add({
+      'source': 'duffel',
+      'duffelOfferId': offer.id,
+      'depTime': _timeLabel(offer.departureAt),
+      'arrTime': _timeLabel(offer.arrivalAt),
+      'duration': offer.durationLabel,
+      'from': offer.originCode,
+      'to': offer.destinationCode,
+      'stops': offer.stopsLabel,
+      // 'price' stays the pre-formatted fallback shown if conversion
+      // ever isn't possible (see CatalogFlight.displayPrice); the raw
+      // amount/currency alongside it are what actually drive showing
+      // this in the saver's own chosen currency rather than freezing it
+      // in whatever currency Duffel quoted at save time.
+      'price': '${offer.totalCurrency} ${offer.totalAmount.toStringAsFixed(0)}',
+      'priceAmount': offer.totalAmount,
+      'priceCurrency': offer.totalCurrency,
+      'fareType': 'Economy',
+      'airline': offer.airlineName,
+      'airlineLogoUrl': offer.airlineLogoUrl,
+      'favoritedBy': ['$uid#$tripId'],
+    });
+    return doc.id;
+  }
+
+  String _timeLabel(DateTime dt) => '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+
+  /// Runs a live one-way search for [origin]→[destination] on
+  /// [departureDate] — used directly by an explicit search in Explore, or
+  /// with [kDefaultHomeAirport] + a selected trip's destination/dates.
+  /// Short-lived, per-user cache (see [_searchCacheTtl]): the same person
+  /// repeating the same search within a few minutes (switching tabs back
+  /// and forth, re-opening a trip) gets the cached result instead of
+  /// re-hitting Duffel; a different [uid] or different search params
+  /// always misses. See [getPopularFlights] for the separate, much
+  /// longer-lived "nothing to search with yet" default.
+  Future<List<DuffelFlightOffer>> searchFlights({
+    required String uid,
+    required String origin,
+    required String destination,
+    required DateTime departureDate,
+  }) async {
+    final key = 'f|$uid|$origin|$destination|${_dateKey(departureDate)}';
+    final cached = _flightSearchCache[key];
+    if (cached != null && DateTime.now().difference(cached.fetchedAt) < _searchCacheTtl) {
+      return cached.results;
+    }
+    final results =
+        await DuffelApiService.instance.searchFlights(origin: origin, destination: destination, departureDate: departureDate);
+    _flightSearchCache[key] = _CachedSearch(DateTime.now(), results);
+    return results;
+  }
+
+  /// A small, fixed set of popular destinations, searched from
+  /// [kDefaultHomeAirport] ~30 days out — the real-data default shown
+  /// when Explore has no selected trip and nothing has been searched yet
+  /// (see class doc: there is no placeholder/seeded flight data anymore).
+  /// Cached in a single shared `app_cache` doc for [_popularCacheTtl] so
+  /// opening Explore doesn't re-hit Duffel on every load — refreshed by
+  /// whichever user's Explore next finds it stale.
+  Future<List<MapEntry<String, DuffelFlightOffer>>> getPopularFlights() async {
+    final cached = await _readPopularCache('popular_flights');
+    if (cached != null) {
+      return cached.map((m) => MapEntry(m['destinationLabel'] as String, DuffelFlightOffer.fromCacheMap(m))).toList();
+    }
+
+    final departureDate = DateTime.now().add(const Duration(days: 30));
+    final results = <MapEntry<String, DuffelFlightOffer>>[];
+    for (final dest in kPopularDestinations) {
+      try {
+        final offers = await DuffelApiService.instance
+            .searchFlights(origin: kDefaultHomeAirport, destination: dest.flightIataCode, departureDate: departureDate);
+        if (offers.isNotEmpty) results.add(MapEntry(dest.label, offers.first));
+      } catch (_) {
+        // One destination failing (no route available, sandbox gap,
+        // temporary Duffel error, ...) shouldn't blank out the rest.
+      }
+    }
+    await _writePopularCache(
+      'popular_flights',
+      results.map((e) => {'destinationLabel': e.key, ...e.value.toCacheMap()}).toList(),
+    );
+    return results;
+  }
 
   // ---------------- Hotels ----------------
   Stream<List<CatalogHotel>> watchHotels({String? favoritedBy}) {
@@ -68,10 +190,12 @@ class CatalogRepository {
               favoritedBy: _favBy(d),
               name: (d.data()['name'] as String?) ?? '',
               location: (d.data()['location'] as String?) ?? '',
-              rating: (d.data()['rating'] as String?) ?? '',
-              reviews: (d.data()['reviews'] as String?) ?? '',
+              rating: _ratingLabel(d.data()),
+              reviews: _reviewCountLabel(d.data()),
               price: (d.data()['price'] as String?) ?? '',
               image: (d.data()['image'] as String?) ?? '',
+              priceAmount: (d.data()['priceAmount'] as num?)?.toDouble(),
+              priceCurrency: d.data()['priceCurrency'] as String?,
             ))
         .toList());
   }
@@ -79,17 +203,143 @@ class CatalogRepository {
   Future<void> toggleHotelFavorite(String id, String uid, String tripId, bool fav) =>
       _toggleFav(_hotels, id, '$uid#$tripId', fav);
 
+  Stream<List<PlaceReview>> watchHotelReviews(String hotelId) => watchReviewsFor(_hotels.doc(hotelId));
+
+  Future<void> addHotelReview(String hotelId, {required String authorId, required String authorName, required int rating, required String comment}) =>
+      addReviewFor(_hotels.doc(hotelId), authorId: authorId, authorName: authorName, rating: rating, comment: comment);
+
+  /// Same idea as [saveDuffelFlight] — persists a real hotel search
+  /// result the user favorited into `catalog_hotels`, tagged
+  /// `source: 'rollinggo'` (Hotels' real data source — see
+  /// [searchStays]). `rating`/`reviews` are seeded from that search
+  /// result's own review data when it has any, so the card shows
+  /// something sensible even before this hotel gets its first in-app
+  /// review (see [_ratingLabel]/[_reviewCountLabel]). RollingGo results
+  /// never carry a guest `reviewScore` (only the official star
+  /// classification in `rating`) — falling back to that keeps the stored
+  /// rating real instead of always blank, while `reviews` (a *count*) has
+  /// no such fallback and stays honestly empty.
+  Future<String> saveDuffelStay(DuffelStayResult stay, {required String uid, required String tripId}) async {
+    final ratingLabel = stay.reviewScore != null
+        ? (stay.reviewScore! / 2).toStringAsFixed(1)
+        : (stay.rating != null ? stay.rating!.toStringAsFixed(1) : '');
+    final doc = await _hotels.add({
+      'source': 'rollinggo',
+      'hotelAccommodationId': stay.accommodationId,
+      'hotelSearchResultId': stay.searchResultId,
+      'name': stay.name,
+      'location': stay.address,
+      'rating': ratingLabel,
+      'reviews': stay.reviewCount != null ? compactCount(stay.reviewCount!) : '',
+      // Same "fallback string + raw amount/currency" split as
+      // saveDuffelFlight above — see CatalogHotel.displayPrice.
+      'price': '${stay.cheapestCurrency} ${stay.cheapestTotalAmount.toStringAsFixed(0)}',
+      'priceAmount': stay.cheapestTotalAmount,
+      'priceCurrency': stay.cheapestCurrency,
+      'image': stay.photoUrl ?? '',
+      'favoritedBy': ['$uid#$tripId'],
+    });
+    return doc.id;
+  }
+
+  /// Live hotel search for [destinationQuery] — used directly by an
+  /// explicit search in Explore, or with a selected trip's
+  /// destination/dates. Same short-lived per-user cache as [searchFlights]
+  /// — see [_searchCacheTtl]. Backed by RollingGo, not Duffel — see
+  /// [RollingGoApiService]'s doc comment for why Hotels and Flights use
+  /// two different providers.
+  Future<List<DuffelStayResult>> searchStays({
+    required String uid,
+    required String destinationQuery,
+    required DateTime checkIn,
+    required DateTime checkOut,
+  }) async {
+    final key = 'h|$uid|$destinationQuery|${_dateKey(checkIn)}|${_dateKey(checkOut)}';
+    final cached = _staySearchCache[key];
+    if (cached != null && DateTime.now().difference(cached.fetchedAt) < _searchCacheTtl) {
+      return cached.results;
+    }
+    final results =
+        await RollingGoApiService.instance.searchStays(destinationQuery: destinationQuery, checkIn: checkIn, checkOut: checkOut);
+    _staySearchCache[key] = _CachedSearch(DateTime.now(), results);
+    return results;
+  }
+
+  /// Same pattern as [getPopularFlights], for hotels — a 4-night stay
+  /// ~30 days out in each of [kPopularDestinations].
+  Future<List<MapEntry<String, DuffelStayResult>>> getPopularStays() async {
+    final cached = await _readPopularCache('popular_hotels');
+    if (cached != null) {
+      return cached.map((m) => MapEntry(m['destinationLabel'] as String, DuffelStayResult.fromCacheMap(m))).toList();
+    }
+
+    final checkIn = DateTime.now().add(const Duration(days: 30));
+    final checkOut = checkIn.add(const Duration(days: 4));
+    final results = <MapEntry<String, DuffelStayResult>>[];
+    for (final dest in kPopularDestinations) {
+      try {
+        final stays = await RollingGoApiService.instance
+            .searchStays(destinationQuery: dest.hotelPlaceQuery, checkIn: checkIn, checkOut: checkOut);
+        if (stays.isNotEmpty) results.add(MapEntry(dest.label, stays.first));
+      } catch (_) {
+        // one destination failing shouldn't blank out the rest
+      }
+    }
+    await _writePopularCache(
+      'popular_hotels',
+      results.map((e) => {'destinationLabel': e.key, ...e.value.toCacheMap()}).toList(),
+    );
+    return results;
+  }
+
+  static const Duration _popularCacheTtl = Duration(hours: 6);
+
+  /// Returns the cached item list for [cacheKey] if it's fresh enough,
+  /// else null (meaning: go fetch live and call [_writePopularCache]).
+  /// Never throws — a cache read failing (offline, rules not deployed
+  /// yet, permission hiccup, ...) should fall back to a live fetch, not
+  /// blow up the whole popular-destinations search.
+  Future<List<Map<String, dynamic>>?> _readPopularCache(String cacheKey) async {
+    try {
+      final doc = await _appCache.doc(cacheKey).get();
+      if (!doc.exists) return null;
+      final data = doc.data();
+      final updatedAt = (data?['updatedAt'] as Timestamp?)?.toDate();
+      if (updatedAt == null || DateTime.now().difference(updatedAt) > _popularCacheTtl) return null;
+      final items = (data?['items'] as List?) ?? const [];
+      return items.map((e) => (e as Map).cast<String, dynamic>()).toList();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Never throws — the live results were already fetched by the time
+  /// this is called, so a failure to cache them (e.g. `app_cache`'s
+  /// Firestore rule not deployed yet) shouldn't stop those results from
+  /// being returned to the person; it just means next time re-fetches
+  /// live too, instead of hitting the cache.
+  Future<void> _writePopularCache(String cacheKey, List<Map<String, dynamic>> items) async {
+    try {
+      await _appCache.doc(cacheKey).set({'updatedAt': Timestamp.now(), 'items': items});
+    } catch (_) {
+      // see doc comment above
+    }
+  }
+
   // ---------------- Attractions ----------------
-  Stream<List<CatalogAttraction>> watchAttractions({String? favoritedBy}) {
+  // [destination] scopes results to whichever place they were fetched for
+  // (see [refreshAttractions]) — needed now that this collection holds
+  // real POIs for whatever city each trip/search actually asked about,
+  // not one fixed Tokyo seed shown to everyone regardless of context.
+  Stream<List<CatalogAttraction>> watchAttractions({String? favoritedBy, String? destination}) {
     return _attractions.snapshots().map((snap) => snap.docs
         .where((d) => favoritedBy == null || _favBy(d).contains(favoritedBy))
+        .where((d) => destination == null || (d.data()['destinationQuery'] as String?) == _normalizeDestination(destination))
         .map((d) => CatalogAttraction(
               id: d.id,
               favoritedBy: _favBy(d),
               name: (d.data()['name'] as String?) ?? '',
               category: (d.data()['category'] as String?) ?? '',
-              rating: (d.data()['rating'] as String?) ?? '',
-              reviews: (d.data()['reviews'] as String?) ?? '',
               price: (d.data()['price'] as String?) ?? '',
               image: (d.data()['image'] as String?) ?? '',
               location: (d.data()['location'] as String?) ?? '',
@@ -101,9 +351,12 @@ class CatalogRepository {
               highlights: List<String>.from(d.data()['highlights'] as List? ?? const []),
               phone: (d.data()['phone'] as String?) ?? '',
               website: (d.data()['website'] as String?) ?? '',
+              rating: _ratingLabel(d.data()),
+              reviews: _reviewCountLabel(d.data()),
               recommendedDuration: (d.data()['recommendedDuration'] as String?) ?? '',
               images: List<String>.from(d.data()['images'] as List? ?? const []),
               fees: _feesFrom(d.data()['fees'] as Map<String, dynamic>?),
+              description: (d.data()['description'] as String?) ?? '',
             ))
         .toList());
   }
@@ -120,21 +373,31 @@ class CatalogRepository {
   Future<void> toggleAttractionFavorite(String id, String uid, String tripId, bool fav) =>
       _toggleFav(_attractions, id, '$uid#$tripId', fav);
 
+  Stream<List<PlaceReview>> watchAttractionReviews(String attractionId) => watchReviewsFor(_attractions.doc(attractionId));
+
+  Future<void> addAttractionReview(String attractionId, {required String authorId, required String authorName, required int rating, required String comment}) =>
+      addReviewFor(_attractions.doc(attractionId), authorId: authorId, authorName: authorName, rating: rating, comment: comment);
+
   // ---------------- Restaurants ----------------
-  Stream<List<CatalogRestaurant>> watchRestaurants({String? favoritedBy}) {
+  Stream<List<CatalogRestaurant>> watchRestaurants({String? favoritedBy, String? destination}) {
     return _restaurants.snapshots().map((snap) => snap.docs
         .where((d) => favoritedBy == null || _favBy(d).contains(favoritedBy))
+        .where((d) => destination == null || (d.data()['destinationQuery'] as String?) == _normalizeDestination(destination))
         .map((d) => CatalogRestaurant(
               id: d.id,
               favoritedBy: _favBy(d),
               name: (d.data()['name'] as String?) ?? '',
               cuisineTags: List<String>.from(d.data()['cuisineTags'] as List? ?? const []),
               location: (d.data()['location'] as String?) ?? '',
-              rating: (d.data()['rating'] as String?) ?? '',
-              reviews: (d.data()['reviews'] as String?) ?? '',
+              rating: _ratingLabel(d.data()),
+              reviews: _reviewCountLabel(d.data()),
               priceRange: (d.data()['priceRange'] as String?) ?? '',
               image: (d.data()['image'] as String?) ?? '',
               openingHours: (d.data()['openingHours'] as String?) ?? 'Daily, 11:00 AM - 10:00 PM',
+              address: (d.data()['address'] as String?) ?? '',
+              phone: (d.data()['phone'] as String?) ?? '',
+              website: (d.data()['website'] as String?) ?? '',
+              description: (d.data()['description'] as String?) ?? '',
             ))
         .toList());
   }
@@ -142,24 +405,107 @@ class CatalogRepository {
   Future<void> toggleRestaurantFavorite(String id, String uid, String tripId, bool fav) =>
       _toggleFav(_restaurants, id, '$uid#$tripId', fav);
 
+  Stream<List<PlaceReview>> watchRestaurantReviews(String restaurantId) => watchReviewsFor(_restaurants.doc(restaurantId));
+
+  Future<void> addRestaurantReview(String restaurantId, {required String authorId, required String authorName, required int rating, required String comment}) =>
+      addReviewFor(_restaurants.doc(restaurantId), authorId: authorId, authorName: authorName, rating: rating, comment: comment);
+
   // ---------------- Near-by places ----------------
-  Stream<List<NearbyPlace>> watchPlaces({String? category}) {
-    return _places.snapshots().map((snap) => snap.docs
-        .where((d) => category == null || (d.data()['category'] as String?) == category)
-        .map((d) => NearbyPlace(
-              id: d.id,
-              name: (d.data()['name'] as String?) ?? '',
-              category: (d.data()['category'] as String?) ?? '',
-              categoryLabel: (d.data()['categoryLabel'] as String?) ?? (d.data()['category'] as String?) ?? '',
-              rating: (d.data()['rating'] as String?) ?? '',
-              distance: (d.data()['distance'] as String?) ?? '',
-              image: (d.data()['image'] as String?) ?? '',
-            ))
-        .toList());
+  // A one-shot live query (not a Firestore stream — there's nothing to
+  // subscribe to) against real OpenStreetMap data around the device's
+  // actual current position, replacing what used to be a fixed Tokyo
+  // seed shown to every user everywhere regardless of where they really
+  // were. Never throws: a geocoding/network failure from
+  // [PlacesApiService] just means an empty list, which [NearByController]
+  // already shows as "No places found nearby".
+  Future<List<NearbyPlace>> fetchNearbyPlaces({required double lat, required double lon, required String category}) async {
+    final filter = PlacesApiService.overpassFilterFor(category);
+    final found = await PlacesApiService.instance.searchNearby(lat: lat, lon: lon, filter: filter);
+    final withDistance = found.map((p) {
+      final km = _distanceKm(lat, lon, p.lat, p.lon);
+      return (place: p, km: km);
+    }).toList()
+      ..sort((a, b) => a.km.compareTo(b.km));
+    // A real photo per place, not a blank box — tries the OSM tags
+    // themselves first, then Wikipedia (see PlacesApiService.resolveImage;
+    // all free/keyless). Run in parallel rather than one-by-one so a
+    // list of ~20 places doesn't serialize ~20 network round-trips; a
+    // single slow/failed lookup still can't block the rest since
+    // resolveImage never throws.
+    final images = await Future.wait(withDistance.map((e) => PlacesApiService.instance.resolveImage(e.place.tags)));
+    return [
+      for (var i = 0; i < withDistance.length; i++)
+        NearbyPlace(
+          id: withDistance[i].place.id,
+          name: withDistance[i].place.name,
+          category: category,
+          categoryLabel: _osmCategoryLabel(withDistance[i].place, category),
+          // OSM has no rating/review data — 'New' is honest (zero
+          // in-app reviews so far) rather than a made-up number.
+          rating: 'New',
+          distance: withDistance[i].km < 1 ? '${(withDistance[i].km * 1000).round()} m' : '${withDistance[i].km.toStringAsFixed(1)} km',
+          image: images[i] ?? '',
+          lat: withDistance[i].place.lat,
+          lon: withDistance[i].place.lon,
+        ),
+    ];
+  }
+
+  /// A short, readable subtitle built from whatever OSM tags this POI
+  /// actually has (cuisine for a restaurant, shop type for a shop, ...),
+  /// falling back to just the category chip name when OSM has nothing
+  /// more specific tagged.
+  String _osmCategoryLabel(OsmPlace p, String category) {
+    final cuisine = p.tags['cuisine'];
+    if (category == 'Restaurants' || category == 'Cafes') {
+      if (cuisine != null && cuisine.isNotEmpty) {
+        return cuisine.split(';').map((s) => s.trim()).where((s) => s.isNotEmpty).take(2).join(' • ');
+      }
+    }
+    if (category == 'Shopping') {
+      final shop = p.tags['shop'];
+      if (shop != null && shop.isNotEmpty) return shop.replaceAll('_', ' ');
+    }
+    final tourism = p.tags['tourism'];
+    if (category == 'Attractions' && tourism != null && tourism.isNotEmpty) {
+      return tourism.replaceAll('_', ' ');
+    }
+    return category;
+  }
+
+  double _distanceKm(double lat1, double lon1, double lat2, double lon2) {
+    const earthRadiusKm = 6371.0;
+    double degToRad(double deg) => deg * (pi / 180);
+    final dLat = degToRad(lat2 - lat1);
+    final dLon = degToRad(lon2 - lon1);
+    final a = sin(dLat / 2) * sin(dLat / 2) + cos(degToRad(lat1)) * cos(degToRad(lat2)) * sin(dLon / 2) * sin(dLon / 2);
+    final c = 2 * atan2(sqrt(a), sqrt(1 - a));
+    return earthRadiusKm * c;
   }
 
   List<String> _favBy(QueryDocumentSnapshot<Map<String, dynamic>> d) =>
       List<String>.from(d.data()['favoritedBy'] as List? ?? const []);
+
+  /// The rating shown in list cards and detail-page headers. Once real
+  /// reviews exist (`ratingCount` > 0, bumped by [addReviewFor] every time
+  /// someone submits one), this is the true average of those reviews —
+  /// otherwise it falls back to the seeded placeholder `rating` string so
+  /// items with no reviews yet still show something reasonable.
+  String _ratingLabel(Map<String, dynamic> data) {
+    final count = (data['ratingCount'] as num?)?.toInt() ?? 0;
+    final sum = (data['ratingSum'] as num?)?.toDouble() ?? 0;
+    if (count > 0) return (sum / count).toStringAsFixed(1);
+    return (data['rating'] as String?) ?? '';
+  }
+
+  /// Same idea as [_ratingLabel] for the review-count half of the summary
+  /// (e.g. the "(1.2k)" in "4.8 (1.2k)") — real count once there are real
+  /// reviews, seeded placeholder otherwise.
+  String _reviewCountLabel(Map<String, dynamic> data) {
+    final count = (data['ratingCount'] as num?)?.toInt() ?? 0;
+    if (count > 0) return compactCount(count);
+    return (data['reviews'] as String?) ?? '';
+  }
 
   /// [key] is the composite "uid#tripId" saved-for-trip key (see class doc).
   Future<void> _toggleFav(CollectionReference<Map<String, dynamic>> col, String id, String key, bool fav) {
@@ -168,346 +514,133 @@ class CatalogRepository {
     });
   }
 
-  /// Writes the starter catalogue once, so a brand-new Firebase project
-  /// isn't empty. No-ops once there's any data in each collection.
-  Future<void> seedIfEmpty() async {
-    await Future.wait([
-      _seedFlights(),
-      _seedHotels(),
-      _seedAttractions(),
-      _seedRestaurants(),
-      _seedPlaces(),
-    ]);
-  }
+  // How long a destination's attractions/restaurants stay fresh before
+  // [refreshAttractions]/[refreshRestaurants] will hit Overpass again for
+  // it — short-lived, same idea as the flight/hotel search cache above,
+  // just to stop every rebuild (or every person browsing the same trip)
+  // from re-querying the same city repeatedly.
+  static const Duration _placesRefreshTtl = Duration(minutes: 20);
+  final Map<String, DateTime> _attractionsRefreshedAt = {};
+  final Map<String, DateTime> _restaurantsRefreshedAt = {};
 
-  Future<void> _seedFlights() async {
-    if ((await _flights.limit(1).get()).docs.isNotEmpty) return;
-    for (var i = 0; i < 6; i++) {
-      await _flights.add(const {
-        'depTime': '9:20',
-        'arrTime': '17:25',
-        'duration': '7h 5m',
-        'from': 'KUL',
-        'to': 'NRT',
-        'stops': 'Non-stop',
-        'price': 'RM 899',
-        'fareType': 'One Way',
-        'favoritedBy': <String>[],
-      });
-    }
-  }
+  /// Firestore-safe, comparison-stable key for a free-text destination
+  /// string ("Tokyo", "Tokyo, Japan", " tokyo ") — trimmed/lowercased so
+  /// the same place always matches the same stored docs regardless of
+  /// how it was typed/capitalised.
+  String _normalizeDestination(String destination) => destination.trim().toLowerCase();
 
-  Future<void> _seedHotels() async {
-    if ((await _hotels.limit(1).get()).docs.isNotEmpty) return;
-    for (var i = 0; i < 6; i++) {
-      await _hotels.add({
-        'name': 'L Hotel',
-        'location': 'Shinjoku, Tokyo',
-        'rating': '4.8',
-        'reviews': '1.2k',
-        'price': 'RM 899',
-        'image': 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=400',
-        'favoritedBy': <String>[],
-      });
-    }
-  }
-
-  Future<void> _seedAttractions() async {
-    if ((await _attractions.limit(1).get()).docs.isNotEmpty) return;
-    final seed = [
-      {
-        'name': 'Senso-ji Temple',
-        'category': 'Cultural',
-        'rating': '4.7',
-        'reviews': '3.4k',
-        'price': 'Free entry',
-        'image': 'https://images.unsplash.com/photo-1478436127897-769e1b3f0f36?w=400',
-        'location': 'Asakusa, Tokyo',
-        'openingHours': 'Daily, 6:00 AM - 5:00 PM',
-        'address': '2 Chome-3-1 Asakusa, Taito City, Tokyo 111-0032, Japan',
-        'categories': const ['Cultural', 'Historic Site', 'Temple'],
-        'openingHoursByDay': _dailyHours('6:00 AM - 5:00 PM'),
-        'facilities': const ['Souvenir Shop', 'Public Toilet', 'Food & Beverage'],
-        'highlights': const [
-          'Iconic Kaminarimon Thunder Gate and giant lantern',
-          'Nakamise shopping street lined with traditional snacks',
-          "Tokyo's oldest and most visited Buddhist temple",
-        ],
-        'phone': '+81 3-3842-0181',
-        'website': 'https://www.senso-ji.jp',
-        'recommendedDuration': '1 - 2 hours',
-      },
-      {
-        'name': 'TeamLab Planets',
-        'category': 'Museum',
-        'rating': '4.9',
-        'reviews': '2.1k',
-        'price': 'RM 120',
-        'image': 'https://images.unsplash.com/photo-1554797589-7241bb691973?w=400',
-        'location': 'Toyosu, Tokyo',
-        'openingHours': 'Daily, 9:00 AM - 9:00 PM',
-        'address': '6-1-16 Toyosu, Koto City, Tokyo 135-0061, Japan',
-        'categories': const ['Museum', 'Art & Culture', 'Entertainment'],
-        'openingHoursByDay': _dailyHours('9:00 AM - 9:00 PM'),
-        'facilities': const ['Locker Room', 'Gift Shop', 'Cafe'],
-        'highlights': const [
-          'Wade through water and light installations barefoot',
-          'Instagram-famous infinity mirror rooms',
-          "One of Tokyo's most popular digital art museums",
-        ],
-        'phone': '+81 3-6812-6428',
-        'website': 'https://www.teamlab.art/e/planets/',
-        'recommendedDuration': '2 - 3 hours',
-        'fees': const {'adult': 'RM 120', 'child': 'RM 80', 'senior': 'RM 100'},
-      },
-      {
-        'name': 'Shibuya Crossing',
-        'category': 'Nature',
-        'rating': '4.6',
-        'reviews': '5.0k',
-        'price': 'Free entry',
-        'image': 'https://images.unsplash.com/photo-1503899036084-c55cdd92da26?w=400',
-        'location': 'Shibuya, Tokyo',
-        'openingHours': 'Open 24 hours',
-        'address': 'Shibuya City, Tokyo 150-0043, Japan',
-        'categories': const ['Landmark', 'Photography Spot'],
-        'openingHoursByDay': _dailyHours('Open 24 hours'),
-        'facilities': const ['Public Toilet (Shibuya Station)'],
-        'highlights': const [
-          "World's busiest pedestrian scramble crossing",
-          'Great photo spot from the Starbucks second floor',
-          'Surrounded by shopping and nightlife',
-        ],
-        'recommendedDuration': '30 mins - 1 hour',
-      },
-      {
-        'name': 'Mount Fuji Viewpoint',
-        'category': 'Adventure',
-        'rating': '4.8',
-        'reviews': '1.8k',
-        'price': 'RM 60',
-        'image': 'https://images.unsplash.com/photo-1570459027562-4a916cc6113f?w=400',
-        'location': 'Fujiyoshida, Yamanashi',
-        'openingHours': 'Daily, 8:00 AM - 6:00 PM',
-        'address': 'Fujiyoshida, Yamanashi 403-0005, Japan',
-        'categories': const ['Adventure', 'Nature', 'Scenic Viewpoint'],
-        'openingHoursByDay': _dailyHours('8:00 AM - 6:00 PM'),
-        'facilities': const ['Parking', 'Public Toilet', 'Souvenir Shop'],
-        'highlights': const [
-          'Unobstructed panoramic views of Mount Fuji',
-          'Popular sunrise and sunset photography spot',
-          'Short walk from the nearest car park',
-        ],
-        'recommendedDuration': '1 - 2 hours',
-        'fees': const {'adult': 'RM 60', 'child': 'RM 30', 'senior': 'RM 45'},
-      },
-    ];
-    for (final a in seed) {
-      await _attractions.add({...a, 'favoritedBy': <String>[]});
-    }
-  }
-
-  /// Same hours string repeated for every day of the week — the sample
-  /// attractions here all keep flat hours (no different Sunday schedule
-  /// etc.), but the model still stores a real per-weekday map so a future
-  /// attraction with an actual varying schedule is just different seed
-  /// data, not a data-model change.
-  static Map<String, String> _dailyHours(String hours) => {
-        'Monday': hours,
-        'Tuesday': hours,
-        'Wednesday': hours,
-        'Thursday': hours,
-        'Friday': hours,
-        'Saturday': hours,
-        'Sunday': hours,
-      };
-
-  Future<void> _seedRestaurants() async {
-    if ((await _restaurants.limit(1).get()).docs.isNotEmpty) return;
-    const seed = [
-      {
-        'name': 'Ichiran Ramen',
-        'cuisineTags': ['Japanese', 'Ramen'],
-        'location': 'Shibuya, Tokyo',
-        'rating': '4.7',
-        'reviews': '9.2k',
-        'priceRange': 'RM 20 - 40',
-        'image': 'https://images.unsplash.com/photo-1569718212165-3a8278d5f624?w=400',
-      },
-      {
-        'name': 'Sushi Dai',
-        'cuisineTags': ['Japanese', 'Sushi'],
-        'location': 'Tsukiji, Tokyo',
-        'rating': '4.9',
-        'reviews': '4.6k',
-        'priceRange': 'RM 80 - 150',
-        'image': 'https://images.unsplash.com/photo-1553621042-f6e147245754?w=400',
-      },
-      {
-        'name': 'Gyukatsu Motomura',
-        'cuisineTags': ['Japanese', 'Beef Cutlet'],
-        'location': 'Shibuya, Tokyo',
-        'rating': '4.8',
-        'reviews': '3.1k',
-        'priceRange': 'RM 40 - 70',
-        'image': 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=400',
-      },
-      {
-        'name': 'Blue Bottle Coffee',
-        'cuisineTags': ['Cafe', 'Coffee'],
-        'location': 'Aoyama, Tokyo',
-        'rating': '4.6',
-        'reviews': '2.0k',
-        'priceRange': 'RM 15 - 30',
-        'image': 'https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?w=400',
-      },
-      {
-        'name': 'Ippudo',
-        'cuisineTags': ['Japanese', 'Ramen'],
-        'location': 'Shinjuku, Tokyo',
-        'rating': '4.6',
-        'reviews': '6.5k',
-        'priceRange': 'RM 25 - 45',
-        'image': 'https://images.unsplash.com/photo-1591814468924-caf88d1232e1?w=400',
-      },
-    ];
-    for (final r in seed) {
-      await _restaurants.add({...r, 'favoritedBy': <String>[]});
-    }
-  }
-
-  // Backfills per category rather than a single "collection already has
-  // something, skip everything" check: this collection originally only
-  // ever seeded 'Restaurants', so on an existing project the other five
-  // categories (Cafes/Attractions/Shopping/ATM/Pharmacy) would otherwise
-  // never get created and those chips would stay empty forever.
-  Future<void> _seedPlaces() async {
-    const seed = [
-      {
-        'name': 'Ichiran Ramen',
-        'category': 'Restaurants',
-        'categoryLabel': 'Japanese • Ramen',
-        'rating': '4.7',
-        'distance': '250 m',
-        'image': 'https://images.unsplash.com/photo-1569718212165-3a8278d5f624?w=400',
-      },
-      {
-        'name': 'Sushi Dai',
-        'category': 'Restaurants',
-        'categoryLabel': 'Japanese • Sushi',
-        'rating': '4.9',
-        'distance': '400 m',
-        'image': 'https://images.unsplash.com/photo-1553621042-f6e147245754?w=400',
-      },
-      {
-        'name': 'Ippudo',
-        'category': 'Restaurants',
-        'categoryLabel': 'Japanese • Ramen',
-        'rating': '4.6',
-        'distance': '650 m',
-        'image': 'https://images.unsplash.com/photo-1591814468924-caf88d1232e1?w=400',
-      },
-      {
-        'name': 'Gyukatsu Motomura',
-        'category': 'Restaurants',
-        'categoryLabel': 'Japanese • Beef Cutlet',
-        'rating': '4.8',
-        'distance': '900 m',
-        'image': 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=400',
-      },
-      {
-        'name': 'Blue Bottle Coffee',
-        'category': 'Cafes',
-        'categoryLabel': 'Cafe • Coffee',
-        'rating': '4.6',
-        'distance': '180 m',
-        'image': 'https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?w=400',
-      },
-      {
-        'name': '% Arabica',
-        'category': 'Cafes',
-        'categoryLabel': 'Cafe • Coffee',
-        'rating': '4.8',
-        'distance': '520 m',
-        'image': 'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=400',
-      },
-      {
-        'name': 'Ueno Park',
-        'category': 'Attractions',
-        'categoryLabel': 'Park • Sightseeing',
-        'rating': '4.7',
-        'distance': '1.1 km',
-        'image': 'https://images.unsplash.com/photo-1522383225653-ed111181a951?w=400',
-      },
-      {
-        'name': 'Tokyo Tower',
-        'category': 'Attractions',
-        'categoryLabel': 'Landmark • Sightseeing',
-        'rating': '4.8',
-        'distance': '2.3 km',
-        'image': 'https://images.unsplash.com/photo-1503899036084-c55cdd92da26?w=400',
-      },
-      {
-        'name': 'Don Quijote',
-        'category': 'Shopping',
-        'categoryLabel': 'Department Store',
-        'rating': '4.5',
-        'distance': '300 m',
-        'image': 'https://images.unsplash.com/photo-1555529771-835f59fc5efe?w=400',
-      },
-      {
-        'name': 'Takeshita Street',
-        'category': 'Shopping',
-        'categoryLabel': 'Shopping Street',
-        'rating': '4.6',
-        'distance': '1.4 km',
-        'image': 'https://images.unsplash.com/photo-1567958451986-2de427a4a0be?w=400',
-      },
-      {
-        'name': '7-Eleven ATM',
-        'category': 'ATM',
-        'categoryLabel': 'ATM • 24 Hours',
-        'rating': '4.3',
-        'distance': '120 m',
-        'image': 'https://images.unsplash.com/photo-1601597111158-2fceff292cdc?w=400',
-      },
-      {
-        'name': 'Seven Bank ATM',
-        'category': 'ATM',
-        'categoryLabel': 'ATM • 24 Hours',
-        'rating': '4.2',
-        'distance': '480 m',
-        'image': 'https://images.unsplash.com/photo-1601597111158-2fceff292cdc?w=400',
-      },
-      {
-        'name': 'Matsumoto Kiyoshi',
-        'category': 'Pharmacy',
-        'categoryLabel': 'Pharmacy • Drugstore',
-        'rating': '4.5',
-        'distance': '350 m',
-        'image': 'https://images.unsplash.com/photo-1587854692152-cbe660dbde88?w=400',
-      },
-      {
-        'name': 'Sugi Pharmacy',
-        'category': 'Pharmacy',
-        'categoryLabel': 'Pharmacy • Drugstore',
-        'rating': '4.4',
-        'distance': '760 m',
-        'image': 'https://images.unsplash.com/photo-1587854692152-cbe660dbde88?w=400',
-      },
-    ];
-    final byCategory = <String, List<Map<String, String>>>{};
-    for (final p in seed) {
-      byCategory.putIfAbsent(p['category']!, () => []).add(p);
-    }
-    for (final entry in byCategory.entries) {
-      final existing = await _places.where('category', isEqualTo: entry.key).limit(1).get();
-      if (existing.docs.isNotEmpty) continue;
-      for (final p in entry.value) {
-        await _places.add(p);
+  /// Fetches real attractions for [destination] from OpenStreetMap (see
+  /// [PlacesApiService]) and upserts them into `catalog_attractions`,
+  /// each tagged with `destinationQuery` so [watchAttractions] can scope
+  /// to just this place. Upserts by a stable id derived from the OSM
+  /// element (`set(..., merge: true)`) so calling this again for the
+  /// same destination refreshes details instead of duplicating rows, and
+  /// never touches `favoritedBy`/`ratingSum`/`ratingCount` on an existing
+  /// doc (those are real user activity, not something a re-fetch should
+  /// reset). A no-op within [_placesRefreshTtl] of the last successful
+  /// fetch for the same destination, and silently does nothing if
+  /// geocoding/Overpass fails (the UI just keeps whatever it already has
+  /// — same "flaky network means stale, not broken" behaviour as the
+  /// flight/hotel search cache).
+  Future<void> refreshAttractions(String destination) async {
+    final key = _normalizeDestination(destination);
+    if (key.isEmpty) return;
+    final last = _attractionsRefreshedAt[key];
+    if (last != null && DateTime.now().difference(last) < _placesRefreshTtl) return;
+    final point = await PlacesApiService.instance.geocode(destination);
+    if (point == null) return;
+    final found = await PlacesApiService.instance.searchNearby(
+      lat: point.lat,
+      lon: point.lon,
+      filter: PlacesApiService.overpassFilterFor('Attractions'),
+      radiusMeters: 15000,
+      limit: 20,
+    );
+    _attractionsRefreshedAt[key] = DateTime.now();
+    // Resolved in parallel, same reason fetchNearbyPlaces resolves images
+    // in parallel — one Wikipedia round-trip per POI, sequentially, would
+    // make a 20-attraction refresh noticeably slow for no benefit.
+    final descriptions = await Future.wait(found.map((p) => PlacesApiService.instance.resolveDescription(p.tags)));
+    for (var i = 0; i < found.length; i++) {
+      final p = found[i];
+      final tourism = p.tags['tourism'] ?? '';
+      try {
+        await _attractions.doc('osm_${p.id}').set({
+          'name': p.name,
+          'category': tourism.isEmpty ? 'Attraction' : _titleCase(tourism.replaceAll('_', ' ')),
+          'categories': [if (tourism.isNotEmpty) _titleCase(tourism.replaceAll('_', ' '))],
+          'price': p.tags['fee'] == 'no' ? 'Free entry' : '',
+          'image': '',
+          'location': destination.trim(),
+          'destinationQuery': key,
+          'openingHours': p.tags['opening_hours'] ?? '',
+          'address': p.address,
+          'phone': p.tags['phone'] ?? p.tags['contact:phone'] ?? '',
+          'website': p.tags['website'] ?? p.tags['contact:website'] ?? '',
+          'description': descriptions[i] ?? '',
+          // No reviews yet — 'New' is an honest placeholder (real, if
+          // empty, rather than a fabricated rating/review count); once
+          // someone actually reviews it in-app, ratingCount/ratingSum
+          // (bumped by addAttractionReview) take over (see _ratingLabel).
+          'rating': 'New',
+          'reviews': '0',
+        }, SetOptions(merge: true));
+      } catch (_) {
+        // One POI's write failing (a rules hiccup, a transient Firestore
+        // error) shouldn't stop the rest of the batch from landing —
+        // this is a best-effort background refresh, not something the
+        // person is waiting on with a spinner.
       }
     }
   }
+
+  /// Same idea as [refreshAttractions], for `catalog_restaurants`.
+  Future<void> refreshRestaurants(String destination) async {
+    final key = _normalizeDestination(destination);
+    if (key.isEmpty) return;
+    final last = _restaurantsRefreshedAt[key];
+    if (last != null && DateTime.now().difference(last) < _placesRefreshTtl) return;
+    final point = await PlacesApiService.instance.geocode(destination);
+    if (point == null) return;
+    final found = await PlacesApiService.instance.searchNearby(
+      lat: point.lat,
+      lon: point.lon,
+      filter: PlacesApiService.overpassFilterFor('Restaurants'),
+      radiusMeters: 15000,
+      limit: 20,
+    );
+    _restaurantsRefreshedAt[key] = DateTime.now();
+    final descriptions = await Future.wait(found.map((p) => PlacesApiService.instance.resolveDescription(p.tags)));
+    for (var i = 0; i < found.length; i++) {
+      final p = found[i];
+      final cuisine = p.tags['cuisine'] ?? '';
+      final cuisineTags = cuisine.isEmpty
+          ? const <String>['Restaurant']
+          : cuisine.split(';').map((s) => _titleCase(s.trim().replaceAll('_', ' '))).where((s) => s.isNotEmpty).toList();
+      try {
+        await _restaurants.doc('osm_${p.id}').set({
+          'name': p.name,
+          'cuisineTags': cuisineTags,
+          'location': destination.trim(),
+          'destinationQuery': key,
+          'priceRange': '',
+          'image': '',
+          'openingHours': p.tags['opening_hours'] ?? '',
+          'address': p.address,
+          'phone': p.tags['phone'] ?? p.tags['contact:phone'] ?? '',
+          'website': p.tags['website'] ?? p.tags['contact:website'] ?? '',
+          'description': descriptions[i] ?? '',
+          'rating': 'New',
+          'reviews': '0',
+        }, SetOptions(merge: true));
+      } catch (_) {
+        // see refreshAttractions — best-effort, one failure shouldn't
+        // stop the rest of the batch.
+      }
+    }
+  }
+
+  String _titleCase(String s) => s.isEmpty ? s : s[0].toUpperCase() + s.substring(1);
 }
 
 /// [HotelData] doesn't carry an id or favorited-by list, both of which
@@ -517,6 +650,11 @@ class CatalogRepository {
 class CatalogHotel extends HotelData {
   final String id;
   final List<String> favoritedBy;
+  /// The original amount/currency Duffel/RollingGo quoted this at when
+  /// it was saved — null for anything seeded before this existed, or
+  /// not provided by its source. See [displayPrice].
+  final double? priceAmount;
+  final String? priceCurrency;
   const CatalogHotel({
     required this.id,
     required this.favoritedBy,
@@ -526,12 +664,25 @@ class CatalogHotel extends HotelData {
     required super.reviews,
     required super.price,
     required super.image,
+    this.priceAmount,
+    this.priceCurrency,
   });
 
   /// Whether [uid] saved this hotel for [tripId] (see class doc — saves are
   /// per trip, not just per user).
   bool isSavedForTrip(String uid, String? tripId) =>
       tripId != null && favoritedBy.contains('$uid#$tripId');
+
+  /// [price] converted into [userCurrency] (typically
+  /// [CurrencyService.lastKnownUserCurrency]) when there's a raw
+  /// amount/currency to convert from and live rates are loaded —
+  /// otherwise just the plain stored [price] string, same as every
+  /// screen showed before currency conversion existed. Safe to call with
+  /// a null [userCurrency] (no preference set / signed out).
+  String displayPrice([String? userCurrency]) {
+    if (priceAmount == null || priceCurrency == null) return price;
+    return CurrencyService.instance.format(priceAmount!, priceCurrency!, userCurrency);
+  }
 }
 
 /// Same idea as [CatalogHotel], for attractions.
@@ -559,6 +710,7 @@ class CatalogAttraction extends AttractionData {
     super.recommendedDuration,
     super.images,
     super.fees,
+    super.description,
   });
 
   bool isSavedForTrip(String uid, String? tripId) =>
@@ -580,6 +732,10 @@ class CatalogRestaurant extends RestaurantData {
     required super.priceRange,
     required super.image,
     super.openingHours,
+    super.address,
+    super.phone,
+    super.website,
+    super.description,
   });
 
   bool isSavedForTrip(String uid, String? tripId) =>
@@ -591,6 +747,15 @@ class CatalogRestaurant extends RestaurantData {
 class CatalogFlight extends FlightData {
   final String id;
   final List<String> favoritedBy;
+  /// Same idea as [CatalogHotel.priceAmount]/[priceCurrency] — the raw
+  /// amount Duffel quoted this at when it was saved. See [displayPrice].
+  final double? priceAmount;
+  final String? priceCurrency;
+  /// Duffel's real carrier logo URL (SVG) for this flight's airline —
+  /// null for anything saved before this existed. See
+  /// [DuffelFlightOffer.airlineLogoUrl] / detail_widgets.dart's
+  /// `DetailHeader`.
+  final String? airlineLogoUrl;
   const CatalogFlight({
     required this.id,
     required this.favoritedBy,
@@ -602,8 +767,26 @@ class CatalogFlight extends FlightData {
     required super.stops,
     required super.price,
     required super.fareType,
+    super.airline,
+    this.priceAmount,
+    this.priceCurrency,
+    this.airlineLogoUrl,
   });
 
   bool isSavedForTrip(String uid, String? tripId) =>
       tripId != null && favoritedBy.contains('$uid#$tripId');
+
+  /// See [CatalogHotel.displayPrice] — same fallback behavior.
+  String displayPrice([String? userCurrency]) {
+    if (priceAmount == null || priceCurrency == null) return price;
+    return CurrencyService.instance.format(priceAmount!, priceCurrency!, userCurrency);
+  }
+}
+
+/// One cached search result for [CatalogRepository]'s short-lived
+/// flight/hotel search cache — see its doc comment above.
+class _CachedSearch<T> {
+  final DateTime fetchedAt;
+  final List<T> results;
+  _CachedSearch(this.fetchedAt, this.results);
 }

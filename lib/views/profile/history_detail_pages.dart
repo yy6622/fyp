@@ -1,6 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:url_launcher/url_launcher.dart';
 
+import '../../repositories/booking_repository.dart';
+import '../../repositories/catalog_repository.dart';
+import '../../services/auth_service.dart';
+import '../../services/booking_document_service.dart';
 import '../../theme.dart';
+import '../detail/detail_widgets.dart';
 
 // ---------------------------------------------------------------------
 // Past-booking detail pages opened from History's Hotel / Insurance tabs.
@@ -17,25 +24,25 @@ import '../../theme.dart';
 // the remaining fields use the same kind of static defaults
 // PlanFlightDetailPage already uses for airline/terminal/booking
 // reference/status, since per-booking data that fine-grained isn't kept.
+// Documents are real, though (see BookingDocumentService) — every booking
+// has a real Firestore doc id to attach an upload to, unlike the fields
+// above.
 // ---------------------------------------------------------------------
 
-enum _InfoTab { detail, people, documents }
-
-/// Shared shell: VoyaAppBar with the popup menu, the 3-tab row, and the
-/// tab body switch. Both pages below just supply their own tab bodies.
+/// Shared shell: VoyaAppBar with the popup menu, a [PillTabBar] (matching
+/// Plan's Plan/Chat/Expenses/Vote look), and the tab body switch. [tabs]
+/// and [builders] must be the same length and in the same order — each
+/// page below supplies its own set (Hotel adds a 4th "Review" tab only
+/// when it has a real catalog id to show reviews for).
 class _HistoryDetailShell extends StatefulWidget {
   final String title;
-  final String peopleTabLabel;
-  final Widget Function(BuildContext context) detailBuilder;
-  final Widget Function(BuildContext context) peopleBuilder;
-  final Widget Function(BuildContext context) documentsBuilder;
+  final List<PillTab> tabs;
+  final List<Widget Function(BuildContext context)> builders;
 
   const _HistoryDetailShell({
     required this.title,
-    required this.peopleTabLabel,
-    required this.detailBuilder,
-    required this.peopleBuilder,
-    required this.documentsBuilder,
+    required this.tabs,
+    required this.builders,
   });
 
   @override
@@ -43,7 +50,7 @@ class _HistoryDetailShell extends StatefulWidget {
 }
 
 class _HistoryDetailShellState extends State<_HistoryDetailShell> {
-  _InfoTab _tab = _InfoTab.detail;
+  int _tabIndex = 0;
 
   @override
   Widget build(BuildContext context) {
@@ -64,35 +71,13 @@ class _HistoryDetailShellState extends State<_HistoryDetailShell> {
       ),
       body: Column(
         children: [
-          Row(
-            children: [
-              Expanded(child: _tabButton('Detail', _InfoTab.detail)),
-              Expanded(child: _tabButton(widget.peopleTabLabel, _InfoTab.people)),
-              Expanded(child: _tabButton('Documents', _InfoTab.documents)),
-            ],
+          PillTabBar(
+            tabs: widget.tabs,
+            selectedIndex: _tabIndex,
+            onSelected: (i) => setState(() => _tabIndex = i),
           ),
-          const Divider(height: 1, color: Color(0xFFECECEC)),
-          Expanded(
-            child: switch (_tab) {
-              _InfoTab.detail => widget.detailBuilder(context),
-              _InfoTab.people => widget.peopleBuilder(context),
-              _InfoTab.documents => widget.documentsBuilder(context),
-            },
-          ),
+          Expanded(child: widget.builders[_tabIndex](context)),
         ],
-      ),
-    );
-  }
-
-  Widget _tabButton(String label, _InfoTab tab) {
-    final selected = _tab == tab;
-    return GestureDetector(
-      onTap: () => setState(() => _tab = tab),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        decoration: BoxDecoration(border: Border(bottom: BorderSide(color: selected ? AppColors.primary : Colors.transparent, width: 2))),
-        alignment: Alignment.center,
-        child: Text(label, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: selected ? AppColors.primary : AppColors.textGrey)),
       ),
     );
   }
@@ -162,41 +147,209 @@ Widget _peopleList(String label) {
   );
 }
 
-Widget _documentsList(List<(String, IconData)> docs) {
+/// Real document upload for a History booking — same Upload/uploading-
+/// spinner/Uploaded+View states PlanFlightDetailPage's Documents tab
+/// uses, backed by [BookingDocumentService] + [BookingRepository.
+/// setBookingDocument] instead of the trip-flight equivalents. [onUpload]
+/// drives the parent's own state (so a fresh upload shows immediately
+/// without waiting for the next watchBookings snapshot).
+Widget _documentsList({
+  required List<(String, IconData)> docs,
+  required Map<String, String> documents,
+  required Set<String> uploading,
+  required void Function(String docType) onUpload,
+}) {
   return ListView.separated(
     padding: const EdgeInsets.all(20),
     itemCount: docs.length,
     separatorBuilder: (_, __) => const SizedBox(height: 10),
-    itemBuilder: (context, i) => Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: BoxDecoration(color: AppColors.chipGrey, borderRadius: BorderRadius.circular(12)),
-      child: Row(
-        children: [
-          Container(
-            width: 34,
-            height: 34,
-            decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-            child: Icon(docs[i].$2, size: 16, color: AppColors.navy),
-          ),
-          const SizedBox(width: 12),
-          Expanded(child: Text(docs[i].$1, style: const TextStyle(fontSize: 13, color: Colors.black))),
-          TextButton.icon(
-            onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Opening file picker...')),
+    itemBuilder: (context, i) {
+      final (label, icon) = docs[i];
+      final url = documents[label];
+      final isUploading = uploading.contains(label);
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(color: AppColors.chipGrey, borderRadius: BorderRadius.circular(12)),
+        child: Row(
+          children: [
+            Container(
+              width: 34,
+              height: 34,
+              decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+              child: Icon(icon, size: 16, color: AppColors.navy),
             ),
-            icon: const Icon(Icons.upload_outlined, size: 16, color: AppColors.primary),
-            label: const Text('Upload', style: TextStyle(color: AppColors.primary, fontSize: 12, fontWeight: FontWeight.w600)),
-          ),
-        ],
-      ),
-    ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(label, style: const TextStyle(fontSize: 13, color: Colors.black)),
+                  if (url != null) ...[
+                    const SizedBox(height: 2),
+                    const Text('Uploaded', style: TextStyle(fontSize: 11, color: AppColors.primary)),
+                  ],
+                ],
+              ),
+            ),
+            if (isUploading)
+              const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary))
+            else if (url != null)
+              TextButton(
+                onPressed: () => launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication),
+                child: const Text('View', style: TextStyle(color: AppColors.primary, fontSize: 12, fontWeight: FontWeight.w600)),
+              )
+            else
+              TextButton.icon(
+                onPressed: () => onUpload(label),
+                icon: const Icon(Icons.upload_outlined, size: 16, color: AppColors.primary),
+                label: const Text('Upload', style: TextStyle(color: AppColors.primary, fontSize: 12, fontWeight: FontWeight.w600)),
+              ),
+          ],
+        ),
+      );
+    },
   );
+}
+
+/// Shared upload flow (pick source → pick file → upload → save the URL)
+/// used by both booking detail pages below — identical to
+/// PlanFlightDetailPage._uploadDocument except it saves through
+/// [BookingRepository.setBookingDocument] instead of a trip flight's
+/// document map.
+mixin _BookingDocumentUploader<T extends StatefulWidget> on State<T> {
+  Map<String, String> get documents;
+  set documents(Map<String, String> value);
+  Set<String> get uploading;
+  String get bookingId;
+
+  Future<void> uploadDocument(String docType) async {
+    final uid = AuthService.instance.currentUser?.uid ?? '';
+    if (uid.isEmpty || bookingId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Not available for this entry.')));
+      return;
+    }
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.camera_alt_outlined, color: AppColors.primary),
+              title: const Text('Take a Photo'),
+              onTap: () => Navigator.of(ctx).pop(ImageSource.camera),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined, color: AppColors.primary),
+              title: const Text('Choose from Gallery'),
+              onTap: () => Navigator.of(ctx).pop(ImageSource.gallery),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (source == null) return;
+    final file = await BookingDocumentService.instance.pick(source);
+    if (file == null || !mounted) return;
+    setState(() => uploading.add(docType));
+    try {
+      final url = await BookingDocumentService.instance.upload(uid: uid, bookingId: bookingId, docType: docType, file: file);
+      await BookingRepository.instance.setBookingDocument(uid, bookingId, docType, url);
+      if (!mounted) return;
+      setState(() {
+        documents = {...documents, docType: url};
+        uploading.remove(docType);
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => uploading.remove(docType));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Upload failed: $e')));
+    }
+  }
+}
+
+// ---------------------------------------------------------------------
+// Flight
+// ---------------------------------------------------------------------
+// History's Flight tab used to reuse PlanFlightDetailPage with no
+// tripId/id (see group_trip_page.dart's _pickHistoryFlight comment for the
+// in-trip case) — that disabled its Documents tab entirely, which is what
+// made the upload button look broken for a past flight booking. This page
+// is the Flight sibling of HistoryHotelDetailPage/HistoryInsuranceDetailPage
+// below: a real `users/{uid}/bookings` doc id to upload against, instead of
+// a trip-scoped flight id that a bare History entry never has.
+class HistoryFlightDetailPage extends StatefulWidget {
+  final String routeCode;
+  final String dateTime;
+  final String price;
+  final String bookingRef;
+  final String status;
+  final String bookingId;
+  final Map<String, String> documents;
+
+  const HistoryFlightDetailPage({
+    super.key,
+    required this.routeCode,
+    required this.dateTime,
+    required this.price,
+    this.bookingRef = '',
+    this.status = 'Confirmed',
+    this.bookingId = '',
+    this.documents = const {},
+  });
+
+  static const _docs = [
+    ('E-Ticket', Icons.confirmation_number_outlined),
+    ('Boarding Pass', Icons.airplane_ticket_outlined),
+    ('Passport Scan', Icons.badge_outlined),
+    ('Travel Insurance', Icons.shield_outlined),
+  ];
+
+  @override
+  State<HistoryFlightDetailPage> createState() => _HistoryFlightDetailPageState();
+}
+
+class _HistoryFlightDetailPageState extends State<HistoryFlightDetailPage> with _BookingDocumentUploader<HistoryFlightDetailPage> {
+  @override
+  late Map<String, String> documents = Map.of(widget.documents);
+  @override
+  final Set<String> uploading = {};
+  @override
+  String get bookingId => widget.bookingId;
+
+  @override
+  Widget build(BuildContext context) {
+    return _HistoryDetailShell(
+      title: 'Flight',
+      tabs: const [
+        PillTab('Detail', Icons.info_outline),
+        PillTab('Documents', Icons.description_outlined),
+      ],
+      builders: [
+        (_) => _infoCard('FLIGHT INFORMATION', [
+              _field('Route', widget.routeCode),
+              _field('Date & Time', widget.dateTime),
+              _field('Price', widget.price),
+              _field('Booking Reference', widget.bookingRef.isEmpty ? 'Not available' : widget.bookingRef),
+              _field('Status', widget.status, last: true),
+            ]),
+        (_) => _documentsList(
+              docs: HistoryFlightDetailPage._docs,
+              documents: documents,
+              uploading: uploading,
+              onUpload: uploadDocument,
+            ),
+      ],
+    );
+  }
 }
 
 // ---------------------------------------------------------------------
 // Hotel
 // ---------------------------------------------------------------------
-class HistoryHotelDetailPage extends StatelessWidget {
+class HistoryHotelDetailPage extends StatefulWidget {
   final String name;
   final String location;
   final String pricePerNight;
@@ -204,6 +357,18 @@ class HistoryHotelDetailPage extends StatelessWidget {
   final String checkOut;
   final String bookingRef;
   final String status;
+  // The `catalog_hotels` doc id this booking refers to — blank for a stay
+  // with no catalog link (a manually-typed hotel). Only when this is set
+  // do we know which real place to show reviews for, so the Review tab
+  // only appears then, instead of showing reviews for the wrong hotel or
+  // crashing on an empty id.
+  final String hotelId;
+  // The `users/{uid}/bookings` doc id this booking actually is — what
+  // document uploads attach to (see BookingRepository.setBookingDocument).
+  // Blank only for a legacy/placeholder call site, in which case uploads
+  // are disabled (see _BookingDocumentUploader.uploadDocument).
+  final String bookingId;
+  final Map<String, String> documents;
 
   const HistoryHotelDetailPage({
     super.key,
@@ -214,6 +379,9 @@ class HistoryHotelDetailPage extends StatelessWidget {
     this.checkOut = '15 Jun 2026',
     this.bookingRef = 'HTL0456',
     this.status = 'Confirmed',
+    this.hotelId = '',
+    this.bookingId = '',
+    this.documents = const {},
   });
 
   static const _docs = [
@@ -224,21 +392,65 @@ class HistoryHotelDetailPage extends StatelessWidget {
   ];
 
   @override
+  State<HistoryHotelDetailPage> createState() => _HistoryHotelDetailPageState();
+}
+
+class _HistoryHotelDetailPageState extends State<HistoryHotelDetailPage> with _BookingDocumentUploader<HistoryHotelDetailPage> {
+  @override
+  late Map<String, String> documents = Map.of(widget.documents);
+  @override
+  final Set<String> uploading = {};
+  @override
+  String get bookingId => widget.bookingId;
+
+  @override
   Widget build(BuildContext context) {
+    final hasReviews = widget.hotelId.isNotEmpty;
     return _HistoryDetailShell(
       title: 'Hotel',
-      peopleTabLabel: 'Guests',
-      detailBuilder: (_) => _infoCard('HOTEL INFORMATION', [
-        _field('Hotel Name', name),
-        _field('Location', location),
-        _field('Check-in', checkIn),
-        _field('Check-out', checkOut),
-        _field('Price / Night', pricePerNight),
-        _field('Booking Reference', bookingRef),
-        _field('Status', status, last: true),
-      ]),
-      peopleBuilder: (_) => _peopleList('Guest name'),
-      documentsBuilder: (_) => _documentsList(_docs),
+      tabs: [
+        const PillTab('Detail', Icons.info_outline),
+        const PillTab('Guests', Icons.people_outline),
+        const PillTab('Documents', Icons.description_outlined),
+        if (hasReviews) const PillTab('Review', Icons.rate_review_outlined),
+      ],
+      builders: [
+        (_) => _infoCard('HOTEL INFORMATION', [
+              _field('Hotel Name', widget.name),
+              _field('Location', widget.location),
+              _field('Check-in', widget.checkIn),
+              _field('Check-out', widget.checkOut),
+              _field('Price / Night', widget.pricePerNight),
+              _field('Booking Reference', widget.bookingRef),
+              _field('Status', widget.status, last: true),
+            ]),
+        (_) => _peopleList('Guest name'),
+        (_) => _documentsList(
+              docs: HistoryHotelDetailPage._docs,
+              documents: documents,
+              uploading: uploading,
+              onUpload: uploadDocument,
+            ),
+        if (hasReviews)
+          (_) => ListView(
+                padding: const EdgeInsets.all(20),
+                children: [
+                  ReviewsSection(
+                    title: widget.name,
+                    ratingSummary: 'Guest Reviews',
+                    reviewsStream: CatalogRepository.instance.watchHotelReviews(widget.hotelId).map((list) => list.map(reviewDataFromPlace).toList()),
+                    onSubmitReview: ({required authorId, required authorName, required rating, required comment}) =>
+                        CatalogRepository.instance.addHotelReview(
+                      widget.hotelId,
+                      authorId: authorId,
+                      authorName: authorName,
+                      rating: rating,
+                      comment: comment,
+                    ),
+                  ),
+                ],
+              ),
+      ],
     );
   }
 }
@@ -246,12 +458,14 @@ class HistoryHotelDetailPage extends StatelessWidget {
 // ---------------------------------------------------------------------
 // Insurance
 // ---------------------------------------------------------------------
-class HistoryInsuranceDetailPage extends StatelessWidget {
+class HistoryInsuranceDetailPage extends StatefulWidget {
   final String planName;
   final String policyNumber;
   final String amountPaid;
   final String coverage;
   final String status;
+  final String bookingId;
+  final Map<String, String> documents;
 
   const HistoryInsuranceDetailPage({
     super.key,
@@ -260,6 +474,8 @@ class HistoryInsuranceDetailPage extends StatelessWidget {
     required this.amountPaid,
     this.coverage = 'Basic Travel Cover',
     this.status = 'Confirmed',
+    this.bookingId = '',
+    this.documents = const {},
   });
 
   static const _docs = [
@@ -270,19 +486,42 @@ class HistoryInsuranceDetailPage extends StatelessWidget {
   ];
 
   @override
+  State<HistoryInsuranceDetailPage> createState() => _HistoryInsuranceDetailPageState();
+}
+
+class _HistoryInsuranceDetailPageState extends State<HistoryInsuranceDetailPage> with _BookingDocumentUploader<HistoryInsuranceDetailPage> {
+  @override
+  late Map<String, String> documents = Map.of(widget.documents);
+  @override
+  final Set<String> uploading = {};
+  @override
+  String get bookingId => widget.bookingId;
+
+  @override
   Widget build(BuildContext context) {
     return _HistoryDetailShell(
       title: 'Insurance',
-      peopleTabLabel: 'Traveller',
-      detailBuilder: (_) => _infoCard('INSURANCE INFORMATION', [
-        _field('Plan Name', planName),
-        _field('Coverage', coverage),
-        _field('Policy Number', policyNumber),
-        _field('Amount Paid', amountPaid),
-        _field('Status', status, last: true),
-      ]),
-      peopleBuilder: (_) => _peopleList('Traveller name'),
-      documentsBuilder: (_) => _documentsList(_docs),
+      tabs: const [
+        PillTab('Detail', Icons.info_outline),
+        PillTab('Traveller', Icons.people_outline),
+        PillTab('Documents', Icons.description_outlined),
+      ],
+      builders: [
+        (_) => _infoCard('INSURANCE INFORMATION', [
+              _field('Plan Name', widget.planName),
+              _field('Coverage', widget.coverage),
+              _field('Policy Number', widget.policyNumber),
+              _field('Amount Paid', widget.amountPaid),
+              _field('Status', widget.status, last: true),
+            ]),
+        (_) => _peopleList('Traveller name'),
+        (_) => _documentsList(
+              docs: HistoryInsuranceDetailPage._docs,
+              documents: documents,
+              uploading: uploading,
+              onUpload: uploadDocument,
+            ),
+      ],
     );
   }
 }

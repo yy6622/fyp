@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../../controllers/community_controller.dart';
 import '../../models/community_models.dart';
+import '../../repositories/community_repository.dart';
 import '../../theme.dart';
+import '../detail/detail_widgets.dart';
 
 // ---------------------------------------------------------------------
 // Community post detail — hero photo carousel, rating, and an
@@ -112,7 +114,7 @@ class _CommunityPostDetailPageState extends State<CommunityPostDetailPage> {
             const SizedBox(height: 16),
             _ratingRow(post),
             const SizedBox(height: 14),
-            Center(child: _tabs(post)),
+            _tabs(post),
             const SizedBox(height: 14),
             post.tab == CommunityPostTab.itinerary ? _fullItinerary(post) : _fullReviews(post),
           ],
@@ -211,30 +213,13 @@ class _CommunityPostDetailPageState extends State<CommunityPostDetailPage> {
   }
 
   Widget _tabs(CommunityPost post) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        _tabLabel('Itinerary', CommunityPostTab.itinerary, post),
-        const SizedBox(width: 28),
-        _tabLabel('Review', CommunityPostTab.review, post),
+    return PillTabBar(
+      tabs: const [
+        PillTab('Itinerary', Icons.map_outlined),
+        PillTab('Review', Icons.rate_review_outlined),
       ],
-    );
-  }
-
-  Widget _tabLabel(String label, CommunityPostTab tab, CommunityPost post) {
-    final selected = post.tab == tab;
-    return GestureDetector(
-      onTap: () => controller.setTab(post, tab),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(label,
-              style: TextStyle(
-                  fontSize: 14, fontWeight: selected ? FontWeight.bold : FontWeight.normal, color: selected ? AppColors.navy : AppColors.textGrey)),
-          const SizedBox(height: 4),
-          Container(height: 2, width: 54, color: selected ? AppColors.primary : Colors.transparent),
-        ],
-      ),
+      selectedIndex: post.tab == CommunityPostTab.itinerary ? 0 : 1,
+      onSelected: (i) => controller.setTab(post, i == 0 ? CommunityPostTab.itinerary : CommunityPostTab.review),
     );
   }
 
@@ -294,7 +279,7 @@ class _CommunityPostDetailPageState extends State<CommunityPostDetailPage> {
             child: Icon(_iconForLine(line), size: 12, color: AppColors.navy),
           ),
           const SizedBox(width: 8),
-          Expanded(child: Text(line, style: const TextStyle(fontSize: 11.5, color: Color(0xFF0015FF)))),
+          Expanded(child: Text(line, style: const TextStyle(fontSize: 11.5, color: Colors.black87))),
         ],
       ),
     );
@@ -315,40 +300,36 @@ class _CommunityPostDetailPageState extends State<CommunityPostDetailPage> {
     return '$n';
   }
 
+  // Real, Firestore-backed written reviews (`posts/{id}/reviews`) —
+  // separate from the quick 1-tap star rating above (`_ratingRow`, backed
+  // by the post's `ratings` map). [CommunityPost.reviews]/[CommunityReview]
+  // predate this and are always empty; nothing reads them anymore.
   Widget _fullReviews(CommunityPost post) {
-    if (post.reviews.isEmpty) {
-      return const Text('No reviews yet.', style: TextStyle(fontSize: 12, color: AppColors.textGrey));
+    // Defensive guard: a post with no Firestore id (e.g. sample/demo data
+    // that was never saved) has nowhere to read or write reviews from —
+    // calling watchReviews('') throws, so show a friendly message instead
+    // of crashing (mirrors DetailPageHotel's handling of a manually-added
+    // hotel with no catalog id).
+    if (post.id.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.symmetric(vertical: 28),
+        alignment: Alignment.center,
+        child: const Text(
+          'Reviews aren\'t available for this post yet.',
+          style: TextStyle(fontSize: 12, color: AppColors.textGrey),
+        ),
+      );
     }
-    return Column(children: post.reviews.map((r) => _reviewCard(r)).toList());
-  }
-
-  Widget _reviewCard(CommunityReview r) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: AppColors.chipGrey, borderRadius: BorderRadius.circular(12)),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const CircleAvatar(radius: 16, backgroundColor: Color(0xFFD9D9D9)),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Text(r.author, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: Colors.black)),
-                    const SizedBox(width: 6),
-                    ...List.generate(5, (i) => Icon(i < r.stars ? Icons.star : Icons.star_border, size: 12, color: AppColors.orange)),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Text(r.text, style: const TextStyle(fontSize: 11.5, color: AppColors.textGrey, height: 1.35)),
-              ],
-            ),
-          ),
-        ],
+    return ReviewsSection(
+      title: post.title,
+      ratingSummary: '${post.avgRating.toStringAsFixed(1)} (${_compactCount(post.ratingCount)})',
+      reviewsStream: CommunityRepository.instance.watchReviews(post.id).map((list) => list.map(reviewDataFromPlace).toList()),
+      onSubmitReview: ({required authorId, required authorName, required rating, required comment}) => CommunityRepository.instance.addReview(
+        post.id,
+        authorId: authorId,
+        authorName: authorName,
+        rating: rating,
+        comment: comment,
       ),
     );
   }

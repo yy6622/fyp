@@ -1,6 +1,8 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_stripe/flutter_stripe.dart';
 
+import 'config/secrets.dart';
 import 'firebase_options.dart';
 import 'theme.dart';
 import 'views/auth/splash_page.dart';
@@ -8,6 +10,13 @@ import 'views/auth/splash_page.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  // Real Stripe payment sheet (test/sandbox mode) for Flight/Hotel checkout
+  // — see lib/services/stripe_service.dart and
+  // lib/views/detail/booking_payment_page.dart. Only the *publishable* key
+  // is ever set here; it can start a payment but never move money or read
+  // anyone else's data (see config/secrets.dart's doc comment on it).
+  Stripe.publishableKey = stripePublishableKey;
+  await Stripe.instance.applySettings();
   runApp(const MyApp());
 }
 
@@ -23,6 +32,12 @@ class MyApp extends StatelessWidget {
         fontFamily: 'Roboto',
         scaffoldBackgroundColor: AppColors.scaffoldBackground,
         useMaterial3: true,
+        // Material 3's default seed color is purple — with no
+        // colorScheme set here, every native Material widget (date/time
+        // pickers, checkboxes, snackbars, ...) fell back to that purple
+        // instead of the app's own navy brand color. Seeding the scheme
+        // from AppColors.primary retheme's all of them at once.
+        colorScheme: ColorScheme.fromSeed(seedColor: AppColors.primary),
       ),
       home: const SplashPage(),
     );

@@ -1,6 +1,14 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 
 import '../../controllers/bottom_nav_controller.dart';
+import '../../repositories/user_repository.dart';
+import '../../services/auth_service.dart';
+import '../../services/currency_service.dart';
+import '../../services/language_service.dart';
+import '../../services/location_service.dart';
 import '../../theme.dart';
 import '../explore/explore_page.dart';
 import '../home/home_page.dart';
@@ -31,9 +39,92 @@ class _MainPageState extends State<MainPage> {
   ];
   static const _labels = ['Home', 'Explore', 'Plan', 'Profile'];
 
+  // ---------------------------------------------------------------------
+  // Real-time location tracking. MainPage stays mounted for as long as
+  // the person is signed in and using the app (it's the IndexedStack
+  // host behind every tab), which makes it the right long-lived place to
+  // run a background position subscription — started only while their
+  // own "Share Location with Group" flag (Privacy and Security) is on,
+  // and only re-emitting on a real `distanceFilter`-sized move rather
+  // than on a timer. See LocationService.trackPosition.
+  // ---------------------------------------------------------------------
+  StreamSubscription<AppUser?>? _profileSub;
+  StreamSubscription<Position>? _positionSub;
+  bool _tracking = false;
+  // The Firestore profile doc only re-emits when it actually changes, so a
+  // mid-stream failure (GPS toggled off, permission revoked) would
+  // otherwise leave tracking stuck off with shareLocation still true in
+  // Firestore until something unrelated happened to touch the doc again.
+  // Caching what the person *wants* separately from whether it's
+  // currently running lets the error handler below retry on its own.
+  bool _wantsTracking = false;
+  Timer? _retryTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    // Warms CurrencyService's rate table for the whole app session (not
+    // just once Explore happens to be opened) — MainPage is mounted for
+    // as long as the person is signed in and using the app, same reason
+    // it hosts location tracking below.
+    unawaited(CurrencyService.instance.ensureRatesLoaded());
+    final uid = AuthService.instance.currentUser?.uid;
+    if (uid != null) {
+      _profileSub = UserRepository.instance.watchProfile(uid).listen((user) {
+        // See CurrencyService.lastKnownUserCurrency's doc comment — this
+        // is the one long-lived subscription that keeps it current for
+        // every screen other than Explore (which tracks its own).
+        CurrencyService.instance.lastKnownUserCurrency = user?.currencyCode;
+        // Same idea, for LanguageService/TranslatedText — see its doc
+        // comment.
+        LanguageService.instance.lastKnownLanguageCode = user?.languageCode;
+        _wantsTracking = user?.shareLocation ?? false;
+        if (_wantsTracking && !_tracking) {
+          _startTracking(uid);
+        } else if (!_wantsTracking && _tracking) {
+          _stopTracking();
+        }
+      });
+    }
+  }
+
+  void _startTracking(String uid) {
+    _retryTimer?.cancel();
+    _tracking = true;
+    _positionSub = LocationService.instance.trackPosition().listen(
+      (position) {
+        UserRepository.instance.updateLocation(uid, position.latitude, position.longitude);
+      },
+      // A denied/disabled service mid-stream ends the subscription on its
+      // own. Reset the flag and, as long as sharing is still wanted and
+      // this page is still mounted, retry after a short delay instead of
+      // leaving tracking silently stuck off.
+      onError: (_) {
+        _tracking = false;
+        if (_wantsTracking && mounted) {
+          _retryTimer = Timer(const Duration(seconds: 30), () {
+            if (mounted && _wantsTracking && !_tracking) _startTracking(uid);
+          });
+        }
+      },
+      cancelOnError: true,
+    );
+  }
+
+  void _stopTracking() {
+    _tracking = false;
+    _retryTimer?.cancel();
+    _retryTimer = null;
+    _positionSub?.cancel();
+    _positionSub = null;
+  }
+
   @override
   void dispose() {
     controller.dispose();
+    _profileSub?.cancel();
+    _positionSub?.cancel();
+    _retryTimer?.cancel();
     super.dispose();
   }
 

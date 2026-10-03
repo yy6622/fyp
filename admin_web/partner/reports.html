@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Reports — Voya Insurance Partner</title>
+<link rel="stylesheet" href="../css/tokens.css" />
+<link rel="stylesheet" href="../css/base.css" />
+<link rel="stylesheet" href="../css/layout.css" />
+<link rel="stylesheet" href="../css/components.css" />
+</head>
+<body>
+<div class="shell">
+  <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-brand">Voya</div>
+    <div class="sidebar-user">
+      <div class="name" id="sbUserName">Loading…</div>
+      <div class="role" id="sbUserRole">Partner workspace</div>
+    </div>
+    <nav class="nav" id="sidebarNav"></nav>
+    <button class="sidebar-logout" id="logoutBtn"><span data-icon="log-out"></span>Log out</button>
+  </aside>
+
+  <main class="content">
+    <div class="topbar">
+      <div>
+        <button class="menu-toggle" id="menuToggle"><span data-icon="menu"></span></button>
+        <h1 class="h1">Reports</h1>
+        <p class="subtitle">Export your performance for offline review</p>
+      </div>
+      <button class="btn btn-primary" id="exportBtn"><span data-icon="download"></span>Export full report</button>
+    </div>
+
+    <div class="stat-grid" id="statGrid"><div class="skeleton" style="height:90px;grid-column:1/-1;"></div></div>
+
+    <div class="card card-pad">
+      <h3 class="h3" style="margin-bottom:18px;">Premium by month</h3>
+      <div class="bars" id="chartBars"></div>
+      <div class="bars-labels" id="chartLabels"></div>
+    </div>
+
+    <div class="card card-pad" style="margin-top:20px;">
+      <h3 class="h3" style="margin-bottom:16px;">Claims by category</h3>
+      <div class="table-wrap scroll-x" style="border:none;">
+        <table class="data-table">
+          <thead><tr><th>Category</th><th>Claims</th><th>Amount claimed</th></tr></thead>
+          <tbody id="categoryBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script type="module">
+import { requireRole } from "../js/auth-guard.js";
+import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js";
+import { mountIcons } from "../js/icons.js";
+import { listTransactions, listClaims } from "../js/data.js";
+import { money, moneyExact, number, escapeHtml } from "../js/ui.js";
+
+mountSidebarNav({ role: "partner", active: "reports" });
+const session = await requireRole("partner", "login.html");
+let txns = [], claims = [];
+
+if (session) {
+  setSidebarUser({ displayName: session.profile.companyName || "Partner", roleLabel: `${session.profile.companyName || "Insurance"} · Insurance Partner` });
+  await load();
+}
+
+function statCard(label, value, icon) {
+  return `<div class="card stat-card"><div class="stat-top"><div class="stat-icon"><span data-icon="${icon}"></span></div><div class="stat-label">${label}</div></div><div class="stat-value">${value}</div><div class="stat-delta">↑ 2.4% from last month</div></div>`;
+}
+
+async function load() {
+  [txns, claims] = await Promise.all([listTransactions(session.uid), listClaims(session.uid)]);
+  const paid = txns.filter((t) => t.status === "paid");
+  const revenue = paid.reduce((s, t) => s + (Number(t.premium) || 0), 0);
+  const approvedCount = claims.filter((c) => c.status === "approved").length;
+  const rate = claims.length ? Math.round((approvedCount / claims.length) * 1000) / 10 : 0;
+
+  document.getElementById("statGrid").innerHTML = [
+    statCard("Revenue", money(revenue), "coin"),
+    statCard("Policies sold", number(paid.length), "shield-check"),
+    statCard("Total claims", number(claims.length), "doc-text"),
+    statCard("Approval rate", `${rate}%`, "percent"),
+  ].join("");
+
+  const months = [];
+  const now = new Date();
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    months.push({ label: d.toLocaleDateString("en-MY", { month: "short" }), key: `${d.getFullYear()}-${d.getMonth()}`, revenue: 0 });
+  }
+  paid.forEach((t) => {
+    if (!t.createdAt?.toDate) return;
+    const d = t.createdAt.toDate();
+    const key = `${d.getFullYear()}-${d.getMonth()}`;
+    const m = months.find((m) => m.key === key);
+    if (m) m.revenue += Number(t.premium) || 0;
+  });
+  const max = Math.max(1, ...months.map((m) => m.revenue));
+  document.getElementById("chartBars").innerHTML = months.map((m, i) => `<div class="bar-col"><div class="bar${i % 2 ? " alt" : ""}" style="height:${Math.max(6, (m.revenue / max) * 100)}%"></div></div>`).join("");
+  document.getElementById("chartLabels").innerHTML = months.map((m) => `<span>${m.label}</span>`).join("");
+
+  const byCategory = {};
+  claims.forEach((c) => {
+    const cat = c.category || "Other";
+    byCategory[cat] = byCategory[cat] || { count: 0, amount: 0 };
+    byCategory[cat].count++;
+    byCategory[cat].amount += Number(c.amount) || 0;
+  });
+  const rows = Object.entries(byCategory).sort((a, b) => b[1].amount - a[1].amount);
+  document.getElementById("categoryBody").innerHTML = rows.length
+    ? rows.map(([cat, d]) => `<tr><td class="cell-strong">${escapeHtml(cat)}</td><td class="muted">${number(d.count)}</td><td class="muted">${moneyExact(d.amount)}</td></tr>`).join("")
+    : `<tr><td colspan="3" class="muted" style="text-align:center;padding:24px 0;">No claims recorded yet.</td></tr>`;
+
+  mountIcons(document);
+}
+
+document.getElementById("exportBtn").addEventListener("click", () => {
+  const rows = [["Type", "Reference", "Name", "Amount (RM)", "Status", "Date"]];
+  txns.forEach((t) => rows.push(["Transaction", t.txnRef || t.id, t.customerName || "", (Number(t.premium) || 0).toFixed(2), t.status || "", t.createdAt?.toDate ? t.createdAt.toDate().toISOString() : ""]));
+  claims.forEach((c) => rows.push(["Claim", c.claimRef, c.policyholderName || "", (Number(c.amount) || 0).toFixed(2), c.status || "", c.createdAt?.toDate ? c.createdAt.toDate().toISOString() : ""]));
+  const csv = rows.map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `voya-partner-report-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+});
+</script>
+</body>
+</html>

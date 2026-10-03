@@ -11,5 +11,32 @@ service firebase.storage {
       allow read: if request.auth != null;
       allow write: if request.auth != null && fileName == request.auth.uid + '.jpg';
     }
+
+    // Expense receipt photos ("Upload Receipt" flow) — one per upload
+    // (see receipt_service.dart), grouped by trip. Same pragmatic
+    // "any signed-in user" level as avatars above rather than a
+    // Firestore trip-membership lookup from Storage rules.
+    match /receipts/{tripId}/{fileName} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null;
+    }
+
+    // Flight travel documents (e-ticket, boarding pass, passport scan, ...)
+    // uploaded from PlanFlightDetailPage's Documents tab — one per upload
+    // (see flight_document_service.dart), grouped by trip then flight.
+    // Same pragmatic level as receipts/avatars above.
+    match /flight_documents/{tripId}/{flightId}/{fileName} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null;
+    }
+
+    // History booking documents (booking confirmation, passport scan, ...)
+    // uploaded from History's Documents tab (see
+    // booking_document_service.dart) — unlike flight_documents above,
+    // these are a personal purchase record, not shared with trip
+    // members, so only the owning uid can read/write its own folder.
+    match /booking_documents/{uid}/{bookingId}/{fileName} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
   }
 }

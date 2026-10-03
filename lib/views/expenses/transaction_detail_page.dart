@@ -40,6 +40,24 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
             child: ListView(
               padding: const EdgeInsets.all(20),
               children: [
+                if (e.receiptImageUrl.isNotEmpty) ...[
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(14),
+                    child: Image.network(
+                      e.receiptImageUrl,
+                      height: 180,
+                      width: double.infinity,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) => Container(
+                        height: 180,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(color: AppColors.chipGrey, borderRadius: BorderRadius.circular(14)),
+                        child: const Icon(Icons.broken_image_outlined, color: AppColors.textGrey),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(color: AppColors.chipGrey, borderRadius: BorderRadius.circular(14)),

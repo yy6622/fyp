@@ -17,6 +17,10 @@ class ActivityItem {
   final String time;
   final IconData icon;
   final String label;
+  // Optional place/address for this activity (e.g. "Narita Airport (NRT)"
+  // or a street address) — shown under the title on the day card so the
+  // group can see *where* an activity is, not just what it is.
+  final String location;
   final int voted;
   final int total;
   final bool votedByMe;
@@ -25,6 +29,7 @@ class ActivityItem {
     required this.time,
     required this.icon,
     required this.label,
+    this.location = '',
     required this.voted,
     required this.total,
     this.votedByMe = false,

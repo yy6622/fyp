@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Voya Insurance Partner — Log in</title>
+<link rel="stylesheet" href="../css/tokens.css" />
+<link rel="stylesheet" href="../css/base.css" />
+<link rel="stylesheet" href="../css/components.css" />
+<link rel="stylesheet" href="../css/auth.css" />
+</head>
+<body>
+<div class="auth-shell">
+  <div class="auth-side">
+    <div class="brand">Voya</div>
+    <h1>Protect Every Journey with Confidence.</h1>
+    <p class="lede">One platform to manage travel insurance, support travellers, and streamline claims.</p>
+    <div class="auth-points">
+      <div class="auth-point"><span class="tick"><span data-icon="check-circle" data-icon-size="15"></span></span>Policy Management</div>
+      <div class="auth-point"><span class="tick"><span data-icon="check-circle" data-icon-size="15"></span></span>Claims & Customer Support</div>
+      <div class="auth-point"><span class="tick"><span data-icon="check-circle" data-icon-size="15"></span></span>Actionable Insights</div>
+    </div>
+    <a class="auth-switch" href="register.html"><span data-icon="arrow-left" data-icon-size="16"></span>Register as a Insurance Partner</a>
+  </div>
+  <div class="auth-main">
+    <div class="auth-card">
+      <h2>Welcome back</h2>
+      <p class="lede">Sign in to access the Voya Insurance Partner Console.</p>
+      <div class="auth-error" id="authError"></div>
+      <form id="loginForm">
+        <div class="auth-field">
+          <label for="email">Email</label>
+          <input class="input" type="email" id="email" placeholder="Email address" required autocomplete="username" />
+        </div>
+        <div class="auth-field">
+          <label for="password">Password</label>
+          <input class="input" type="password" id="password" placeholder="Password" required autocomplete="current-password" />
+        </div>
+        <label class="checkbox-row" style="margin-bottom:22px;">
+          <input type="checkbox" id="remember" checked /> Remember me
+        </label>
+        <button class="btn btn-primary btn-block" type="submit" id="submitBtn">Log in</button>
+      </form>
+      <p class="auth-foot-link">New partner? <a href="register.html">Register your organization</a></p>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import { mountIcons } from "../js/icons.js";
+import { auth } from "../js/firebase-config.js";
+import { onAuthStateChanged, setPersistence, browserLocalPersistence, browserSessionPersistence } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
+import { doc, getDoc } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
+import { db } from "../js/firebase-config.js";
+import { loginWithEmail, authErrorMessage } from "../js/auth-guard.js";
+import { setBusy } from "../js/ui.js";
+
+mountIcons(document);
+
+const params = new URLSearchParams(location.search);
+const errBox = document.getElementById("authError");
+if (params.get("err") === "not-authorized") {
+  errBox.textContent = "That account isn't set up as an insurance partner yet.";
+  errBox.classList.add("show");
+}
+
+onAuthStateChanged(auth, async (user) => {
+  if (!user) return;
+  const snap = await getDoc(doc(db, "insurance_partners", user.uid));
+  if (snap.exists()) location.replace("dashboard.html");
+});
+
+document.getElementById("loginForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  errBox.classList.remove("show");
+  const email = document.getElementById("email").value;
+  const password = document.getElementById("password").value;
+  const remember = document.getElementById("remember").checked;
+  const btn = document.getElementById("submitBtn");
+  setBusy(btn, true, "Signing in…");
+  try {
+    await setPersistence(auth, remember ? browserLocalPersistence : browserSessionPersistence);
+    const user = await loginWithEmail(email, password);
+    const snap = await getDoc(doc(db, "insurance_partners", user.uid));
+    if (!snap.exists()) {
+      errBox.textContent = "That account isn't registered as an insurance partner yet.";
+      errBox.classList.add("show");
+      setBusy(btn, false);
+      return;
+    }
+    location.href = "dashboard.html";
+  } catch (err) {
+    errBox.textContent = authErrorMessage(err);
+    errBox.classList.add("show");
+    setBusy(btn, false);
+  }
+});
+</script>
+</body>
+</html>

@@ -201,15 +201,13 @@ class _ExpensesTabState extends State<ExpensesTab> {
         padding: const EdgeInsets.symmetric(vertical: 10),
         child: Row(
           children: [
-            const CircleAvatar(radius: 18, backgroundColor: Color(0xFFFDFDE0)),
+            const CircleAvatar(radius: 18, backgroundColor: Color(0xFFD9D9D9)),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(expense.title, style: const TextStyle(fontSize: 13, color: Colors.black)),
-                  if (controller.personal)
-                    Text(expense.tripName, style: const TextStyle(fontSize: 10.5, color: AppColors.textGrey)),
                 ],
               ),
             ),

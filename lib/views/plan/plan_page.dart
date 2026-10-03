@@ -17,6 +17,11 @@ class PlanPage extends StatefulWidget {
 class _PlanPageState extends State<PlanPage> {
   final PlanPageController controller = PlanPageController();
 
+  /// Whether the "Past Plans" fold (groups/polls whose trip has had no
+  /// activity for 30+ days) is expanded. Starts collapsed — that's the
+  /// whole point of folding them away.
+  bool _showPast = false;
+
   @override
   void dispose() {
     controller.dispose();
@@ -28,7 +33,7 @@ class _PlanPageState extends State<PlanPage> {
     return ListenableBuilder(
       listenable: controller,
       builder: (context, _) => Scaffold(
-        backgroundColor: const Color(0xFFF7F8FA),
+        backgroundColor: AppColors.scaffoldBackground,
         body: SafeArea(
           child: controller.loading
               ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
@@ -43,12 +48,13 @@ class _PlanPageState extends State<PlanPage> {
               const SizedBox(height: 20),
               if (controller.planGroups.isEmpty) _buildEmptyState(),
               if (controller.planGroups.isNotEmpty) ...[
-              if (controller.showVoting && controller.votingItems.isNotEmpty) ...[
+              if (controller.showVoting && controller.activeVotingItems.isNotEmpty) ...[
                 _buildSectionHeader('Current Voting', showIcon: Icons.how_to_vote_outlined),
                 const SizedBox(height: 12),
                 controller.selectedTab == PlanTab.voting ? _buildVotingDetailedList() : _buildVotingList(),
                 const SizedBox(height: 18),
-              ],
+              ] else if (controller.selectedTab == PlanTab.voting)
+                _buildVotingEmptyState(),
               if (controller.showOwe) ...[
                 controller.selectedTab == PlanTab.expenses ? _buildExpensesTotalCard() : _buildOweCard(),
                 const SizedBox(height: 20),
@@ -62,16 +68,17 @@ class _PlanPageState extends State<PlanPage> {
                 ),
                 const SizedBox(height: 12),
                 if (controller.selectedTab == PlanTab.expenses)
-                  ...controller.planGroups.map((g) => Padding(
+                  ...controller.activePlanGroups.map((g) => Padding(
                         padding: const EdgeInsets.only(bottom: 14),
                         child: _buildExpenseGroupCard(g),
                       ))
                 else
-                  ...controller.planGroups.map((g) => Padding(
+                  ...controller.activePlanGroups.map((g) => Padding(
                         padding: const EdgeInsets.only(bottom: 14),
                         child: _buildPlanGroupCard(g, tab: GroupTab.plan),
                       )),
               ],
+              _buildPastSection(),
               ],
             ],
           ),
@@ -102,6 +109,24 @@ class _PlanPageState extends State<PlanPage> {
     );
   }
 
+  // Shown on the Voting tab itself when there's at least one trip but no
+  // open vote on any of them — otherwise that tab was just a blank screen
+  // below the tab chips.
+  Widget _buildVotingEmptyState() {
+    return const Padding(
+      padding: EdgeInsets.symmetric(horizontal: 20, vertical: 60),
+      child: Column(
+        children: [
+          Icon(Icons.how_to_vote_outlined, size: 40, color: AppColors.textGrey),
+          SizedBox(height: 12),
+          Text('No active votes', style: TextStyle(color: AppColors.textGrey, fontSize: 13)),
+          SizedBox(height: 4),
+          Text('Open a group and start a vote to see it here', style: TextStyle(color: AppColors.textGrey, fontSize: 11.5)),
+        ],
+      ),
+    );
+  }
+
   // ---------------- Header ----------------
   Widget _buildHeader() {
     return Padding(
@@ -123,15 +148,10 @@ class _PlanPageState extends State<PlanPage> {
               ),
             ],
           ),
-          GestureDetector(
+          HeaderIconButton(
+            icon: Icons.add,
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => const NewPlanPage()),
-            ),
-            child: Container(
-              width: 44,
-              height: 44,
-              decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle),
-              child: const Icon(Icons.add, color: Colors.white),
             ),
           ),
         ],
@@ -243,14 +263,15 @@ class _PlanPageState extends State<PlanPage> {
 
   // ---------------- Current voting ----------------
   Widget _buildVotingList() {
+    final items = controller.activeVotingItems;
     return SizedBox(
       height: 150,
       child: ListView.separated(
         padding: const EdgeInsets.symmetric(horizontal: 20),
         scrollDirection: Axis.horizontal,
-        itemCount: controller.votingItems.length,
+        itemCount: items.length,
         separatorBuilder: (_, __) => const SizedBox(width: 12),
-        itemBuilder: (context, index) => _buildVotingCard(controller.votingItems[index]),
+        itemBuilder: (context, index) => _buildVotingCard(items[index]),
       ),
     );
   }
@@ -351,7 +372,7 @@ class _PlanPageState extends State<PlanPage> {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Column(
-        children: controller.votingItems
+        children: controller.activeVotingItems
             .map((item) => Padding(
                   padding: const EdgeInsets.only(bottom: 12),
                   child: _buildVotingDetailedCard(item),
@@ -573,25 +594,31 @@ class _PlanPageState extends State<PlanPage> {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                      decoration: BoxDecoration(color: AppColors.chipGrey, borderRadius: BorderRadius.circular(10)),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.receipt_long_outlined, size: 13, color: AppColors.primary),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: Text(
-                              '${group.lastExpenseLabel} · RM ${group.lastExpenseAmount.toStringAsFixed(2)}',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(fontSize: 11, color: AppColors.navy),
+                    // Only a real expense has a label — an empty one means
+                    // this group hasn't logged anything yet, so there's no
+                    // "last expense" to preview (previously showed a bare
+                    // " · RM 0.00" chip here even with nothing logged).
+                    if (group.lastExpenseLabel.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(color: AppColors.chipGrey, borderRadius: BorderRadius.circular(10)),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.receipt_long_outlined, size: 13, color: AppColors.primary),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                '${group.lastExpenseLabel} · RM ${group.lastExpenseAmount.toStringAsFixed(2)}',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontSize: 11, color: AppColors.navy),
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
-                    ),
+                    ],
                   ],
                 ),
               ),
@@ -678,6 +705,54 @@ class _PlanPageState extends State<PlanPage> {
           ],
         ),
       ),
+      ),
+    );
+  }
+
+  // ---------------- Past Plans fold ----------------
+  // Groups whose trip has had no real activity (plan edit, vote, expense,
+  // chat message) for 30+ days, per Trip.isInactive. Collapsed by default;
+  // a single small header + arrow reveals both past groups and past polls
+  // together (a group and its own polls fold as one unit, not two).
+  Widget _buildPastSection() {
+    final pastGroups = controller.pastPlanGroups;
+    final pastVotes = controller.showVoting ? controller.pastVotingItems : const <VotingItem>[];
+    final count = pastGroups.length + pastVotes.length;
+    if (count == 0) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          GestureDetector(
+            onTap: () => setState(() => _showPast = !_showPast),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 6),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('Past Plans ($count)',
+                      style: const TextStyle(fontSize: 12.5, color: AppColors.textGrey, fontWeight: FontWeight.w600)),
+                  const SizedBox(width: 4),
+                  Icon(_showPast ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down, size: 18, color: AppColors.textGrey),
+                ],
+              ),
+            ),
+          ),
+          if (_showPast) ...[
+            const SizedBox(height: 8),
+            ...pastVotes.map((v) => Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: _buildVotingDetailedCard(v),
+                )),
+            ...pastGroups.map((g) => Padding(
+                  padding: const EdgeInsets.only(bottom: 14),
+                  child: controller.selectedTab == PlanTab.expenses
+                      ? _buildExpenseGroupCard(g)
+                      : _buildPlanGroupCard(g, tab: GroupTab.plan),
+                )),
+          ],
+        ],
       ),
     );
   }

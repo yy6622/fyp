@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Overview — Voya Admin</title>
+<link rel="stylesheet" href="../css/tokens.css" />
+<link rel="stylesheet" href="../css/base.css" />
+<link rel="stylesheet" href="../css/layout.css" />
+<link rel="stylesheet" href="../css/components.css" />
+</head>
+<body>
+<div class="shell">
+  <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-brand">Voya</div>
+    <div class="sidebar-user">
+      <div class="name" id="sbUserName">Loading…</div>
+      <div class="role" id="sbUserRole">Administrator</div>
+    </div>
+    <nav class="nav" id="sidebarNav"></nav>
+    <button class="sidebar-logout" id="logoutBtn"><span data-icon="log-out"></span>Log out</button>
+  </aside>
+
+  <main class="content">
+    <div class="topbar">
+      <div>
+        <button class="menu-toggle" id="menuToggle"><span data-icon="menu"></span></button>
+        <h1 class="h1">Overview</h1>
+        <p class="subtitle">Monitor platform performance and key metrics</p>
+      </div>
+      <div class="topbar-search"><span data-icon="search"></span><input placeholder="Search anything…" id="globalSearch" /></div>
+    </div>
+
+    <div class="stat-grid" id="statGrid">
+      <div class="card stat-card"><div class="skeleton" style="height:70px;"></div></div>
+      <div class="card stat-card"><div class="skeleton" style="height:70px;"></div></div>
+      <div class="card stat-card"><div class="skeleton" style="height:70px;"></div></div>
+      <div class="card stat-card"><div class="skeleton" style="height:70px;"></div></div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1.7fr 1fr;gap:20px;align-items:start;" class="detail-grid">
+      <div class="card card-pad">
+        <h3 class="h3" style="margin-bottom:18px;">User Engagement Analytics</h3>
+        <div class="bars" id="chartBars"></div>
+        <div class="bars-labels" id="chartLabels"></div>
+      </div>
+      <div class="card card-pad">
+        <h3 class="h3" style="margin-bottom:14px;">Top Destinations</h3>
+        <div class="rank-list" id="topDestinations"></div>
+      </div>
+    </div>
+
+    <div class="card card-pad" style="margin-top:20px;">
+      <h3 class="h3" style="margin-bottom:18px;">Insurance Overview</h3>
+      <div class="stat-grid" id="insuranceStats" style="margin-bottom:0;"></div>
+    </div>
+  </main>
+</div>
+
+<script type="module">
+import { requireRole } from "../js/auth-guard.js";
+import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js";
+import { mountIcons } from "../js/icons.js";
+import { listUsers, listAttractions, listTransactions, listClaims } from "../js/data.js";
+import { money, number } from "../js/ui.js";
+
+mountSidebarNav({ role: "admin", active: "overview" });
+const session = await requireRole("admin", "login.html");
+if (session) {
+  setSidebarUser({ displayName: session.profile.name || "Admin", roleLabel: "Administrator" });
+  await loadOverview();
+}
+
+function statCard(label, value, icon) {
+  return `
+    <div class="card stat-card">
+      <div class="stat-top">
+        <div class="stat-icon"><span data-icon="${icon}"></span></div>
+        <div class="stat-label">${label}</div>
+      </div>
+      <div class="stat-value">${value}</div>
+      <div class="stat-delta">↑ 2.4% from last month</div>
+    </div>`;
+}
+
+async function loadOverview() {
+  const [users, attractions, txns, claims] = await Promise.all([
+    listUsers(), listAttractions(), listTransactions(), listClaims(),
+  ]);
+
+  // ---- Top stat row ----
+  const thirtyDaysAgo = Date.now() - 30 * 86400000;
+  const newSignups = users.filter((u) => u.createdAt?.toDate && u.createdAt.toDate().getTime() > thirtyDaysAgo).length;
+  const suspended = users.filter((u) => u.status === "suspended").length;
+  const active = users.length - suspended;
+
+  document.getElementById("statGrid").innerHTML = [
+    statCard("Total Users", number(users.length), "user"),
+    statCard("New Sign-ups", number(newSignups), "sparkle"),
+    statCard("Active Users", number(active), "user-check"),
+    statCard("Suspended", number(suspended), "user-x"),
+  ].join("");
+  // ---- Bar chart: users joined per month (last 6 months) ----
+  const months = [];
+  const now = new Date();
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    months.push({ label: d.toLocaleDateString("en-MY", { month: "short" }), key: `${d.getFullYear()}-${d.getMonth()}`, count: 0 });
+  }
+  users.forEach((u) => {
+    if (!u.createdAt?.toDate) return;
+    const d = u.createdAt.toDate();
+    const key = `${d.getFullYear()}-${d.getMonth()}`;
+    const m = months.find((m) => m.key === key);
+    if (m) m.count++;
+  });
+  const max = Math.max(1, ...months.map((m) => m.count));
+  document.getElementById("chartBars").innerHTML = months
+    .map((m, i) => `<div class="bar-col"><div class="bar${i % 2 ? " alt" : ""}" style="height:${Math.max(6, (m.count / max) * 100)}%"></div></div>`)
+    .join("");
+  document.getElementById("chartLabels").innerHTML = months.map((m) => `<span>${m.label}</span>`).join("");
+
+  // ---- Top destinations (from catalog_attractions locations) ----
+  const byLocation = {};
+  attractions.forEach((a) => {
+    const loc = a.location || "Unknown";
+    byLocation[loc] = (byLocation[loc] || 0) + 1;
+  });
+  const top = Object.entries(byLocation).sort((a, b) => b[1] - a[1]).slice(0, 5);
+  document.getElementById("topDestinations").innerHTML = top.length
+    ? top.map(([loc, count], i) => `
+        <div class="rank-row">
+          <div class="rank-num">${i + 1}</div>
+          <div><div class="rank-name">${loc}</div><div class="rank-sub">${count} attraction${count === 1 ? "" : "s"} listed</div></div>
+        </div>`).join("")
+    : `<p class="muted small">No attractions in the catalogue yet.</p>`;
+
+  // ---- Insurance overview ----
+  const pendingClaims = claims.filter((c) => c.status === "new" || c.status === "under_review").length;
+  const approvedCount = claims.filter((c) => c.status === "approved").length;
+  const approvalRate = claims.length ? Math.round((approvedCount / claims.length) * 1000) / 10 : 0;
+  const returned = txns.filter((t) => t.status === "rejected").reduce((sum, t) => sum + (Number(t.premium) || 0), 0);
+
+  document.getElementById("insuranceStats").innerHTML = [
+    statCard("Transactions", number(txns.length), "swap"),
+    statCard("Pending Claims", number(pendingClaims), "clock"),
+    statCard("Approved", `${approvalRate}%`, "file-check"),
+    statCard("Returned", money(returned), "undo"),
+  ].join("");
+
+  mountIcons(document);
+}
+</script>
+</body>
+</html>

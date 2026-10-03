@@ -9,7 +9,10 @@ import 'insurance_widgets.dart';
 // Insurance list page — "View All" from Home lands here.
 // ---------------------------------------------------------------------
 class InsuranceListPage extends StatefulWidget {
-  const InsuranceListPage({super.key});
+  // See [InsurancePlanCard.tripId] — set when this list was opened to buy
+  // insurance for a specific trip (from Group Trip's Overview tab).
+  final String? tripId;
+  const InsuranceListPage({super.key, this.tripId});
 
   @override
   State<InsuranceListPage> createState() => _InsuranceListPageState();
@@ -33,34 +36,41 @@ class _InsuranceListPageState extends State<InsuranceListPage> {
       ),
       body: ListenableBuilder(
         listenable: controller,
-        builder: (context, _) => ListView(
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
-          children: [
-            _buildBanner(),
-            const SizedBox(height: 18),
-            Row(
-              children: [
-                _filterTab('All', null),
-                const SizedBox(width: 20),
-                _filterTab('Single Trips', InsuranceCategory.singleTrip),
-                const SizedBox(width: 20),
-                _filterTab('Family', InsuranceCategory.family),
-              ],
-            ),
-            const SizedBox(height: 16),
-            ...controller.filtered.map((p) => Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: InsurancePlanCard(plan: p),
-                )),
-            if (controller.filtered.isEmpty)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 40),
-                child: Center(
-                  child: Text('No plans in this category yet', style: TextStyle(color: AppColors.textGrey)),
-                ),
+        builder: (context, _) => controller.loading
+            ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
+            : ListView(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+                children: [
+                  _buildBanner(),
+                  const SizedBox(height: 18),
+                  Row(
+                    children: [
+                      _filterTab('All', null),
+                      const SizedBox(width: 16),
+                      _filterTab('Single Trips', InsuranceCategory.singleTrip),
+                      const SizedBox(width: 16),
+                      _filterTab('Annual', InsuranceCategory.annual),
+                      const SizedBox(width: 16),
+                      _filterTab('Family', InsuranceCategory.family),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  ...controller.filtered.map((p) => Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: InsurancePlanCard(plan: p, tripId: widget.tripId),
+                      )),
+                  if (controller.filtered.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 40),
+                      child: Center(
+                        child: Text(
+                          controller.filter == null ? 'No insurance plans yet' : 'No plans in this category yet',
+                          style: const TextStyle(color: AppColors.textGrey),
+                        ),
+                      ),
+                    ),
+                ],
               ),
-          ],
-        ),
       ),
     );
   }
@@ -98,7 +108,7 @@ class _InsuranceListPageState extends State<InsuranceListPage> {
       child: const SizedBox(
         height: 130,
         width: double.infinity,
-        child: AppImage('assets/images/insurance_banner.jpg', fit: BoxFit.cover),
+        child: AppImage('assets/images/insurance.png', fit: BoxFit.cover),
       ),
     );
   }

@@ -2,7 +2,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 import '../models/community_models.dart';
+import '../models/review_models.dart';
 import '../services/format_utils.dart';
+import 'review_helpers.dart';
 
 /// Reads/writes the `posts` collection backing the Community feed.
 ///
@@ -65,6 +67,18 @@ class CommunityRepository {
   Future<void> setRating(String postId, String uid, int stars) {
     return _posts.doc(postId).update({'ratings.$uid': stars});
   }
+
+  /// A post's written reviews (separate from the quick 1-tap star rating
+  /// above) — real, Firestore-backed, one per author. Not the same data as
+  /// [CommunityPost.reviews], which is always empty; that field predates
+  /// this and is no longer read anywhere.
+  Stream<List<PlaceReview>> watchReviews(String postId) => watchReviewsFor(_posts.doc(postId));
+
+  /// [bumpAggregate] is false — a post's star average already comes from
+  /// the `ratings` map via [setRating], so a written review shouldn't also
+  /// feed a separate `ratingSum`/`ratingCount` pair on the same doc.
+  Future<void> addReview(String postId, {required String authorId, required String authorName, required int rating, required String comment}) =>
+      addReviewFor(_posts.doc(postId), authorId: authorId, authorName: authorName, rating: rating, comment: comment, bumpAggregate: false);
 
   /// Writes the two original starter posts once, attributed to whichever
   /// signed-in user happens to trigger it, so a brand-new Firebase project

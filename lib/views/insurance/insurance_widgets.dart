@@ -28,13 +28,18 @@ Widget insuranceLogo(InsurancePlan plan, {double size = 46}) {
 /// A single plan row, shared by the Home page preview and the full list.
 class InsurancePlanCard extends StatelessWidget {
   final InsurancePlan plan;
-  const InsurancePlanCard({super.key, required this.plan});
+  // Set only when this list was opened to buy insurance *for* a specific
+  // trip (from Group Trip's Overview tab) — threaded through so the
+  // eventual purchase gets attached back to that trip. Null everywhere
+  // else (Home preview, general browse from Explore/Insurance tab).
+  final String? tripId;
+  const InsurancePlanCard({super.key, required this.plan, this.tripId});
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: () => Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => InsurancePlanDetailPage(plan: plan)),
+        MaterialPageRoute(builder: (_) => InsurancePlanDetailPage(plan: plan, tripId: tripId)),
       ),
       child: Container(
         padding: const EdgeInsets.all(14),

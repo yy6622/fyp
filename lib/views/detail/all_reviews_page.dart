@@ -10,7 +10,8 @@ import 'detail_widgets.dart';
 class AllReviewsPage extends StatelessWidget {
   final String title;
   final String ratingSummary;
-  const AllReviewsPage({super.key, required this.title, required this.ratingSummary});
+  final List<ReviewData> reviews;
+  const AllReviewsPage({super.key, required this.title, required this.ratingSummary, required this.reviews});
 
   @override
   Widget build(BuildContext context) {
@@ -34,7 +35,10 @@ class AllReviewsPage extends StatelessWidget {
           const SizedBox(height: 16),
           const Divider(color: Color(0xFFECECEC)),
           const SizedBox(height: 16),
-          ...kSampleReviews.expand((r) => [ReviewCard(data: r), const SizedBox(height: 12)]),
+          if (reviews.isEmpty)
+            const Text('No reviews yet — be the first to share your experience!', style: TextStyle(fontSize: 12.5, color: AppColors.textGrey))
+          else
+            ...reviews.expand((r) => [ReviewCard(data: r), const SizedBox(height: 12)]),
         ],
       ),
     );

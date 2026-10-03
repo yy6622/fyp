@@ -9,20 +9,19 @@ import '../../theme.dart';
 // ---------------------------------------------------------------------
 class FilterPage extends StatefulWidget {
   final FilterType type;
-  const FilterPage({super.key, required this.type});
+  // Owned by whichever page opened this sheet (e.g. ExplorePage) so the
+  // selections made here actually take effect on what that page shows,
+  // and survive the sheet being closed and reopened. That page is also
+  // responsible for disposing it — this sheet only reads/mutates it.
+  final FilterController controller;
+  const FilterPage({super.key, required this.type, required this.controller});
 
   @override
   State<FilterPage> createState() => _FilterPageState();
 }
 
 class _FilterPageState extends State<FilterPage> {
-  final FilterController controller = FilterController();
-
-  @override
-  void dispose() {
-    controller.dispose();
-    super.dispose();
-  }
+  FilterController get controller => widget.controller;
 
   @override
   Widget build(BuildContext context) {

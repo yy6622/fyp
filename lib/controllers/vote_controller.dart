@@ -57,8 +57,16 @@ class CreateVoteController extends ChangeNotifier {
   bool _allowMultipleChoice = false;
   bool get allowMultipleChoice => _allowMultipleChoice;
 
+  DateTime? _deadline;
+  DateTime? get deadline => _deadline;
+
   bool _saving = false;
   bool get saving => _saving;
+
+  void setDeadline(DateTime? v) {
+    _deadline = v;
+    notifyListeners();
+  }
 
   void addOption() {
     optionControllers.add(TextEditingController());
@@ -98,6 +106,7 @@ class CreateVoteController extends ChangeNotifier {
         allowAddOptions: _allowAddOptions,
         allowMultipleChoice: _allowMultipleChoice,
         createdBy: uid,
+        deadline: _deadline,
       );
       return true;
     } finally {

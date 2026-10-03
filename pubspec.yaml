@@ -41,6 +41,80 @@ dependencies:
   cloud_firestore: ^6.9.0
   image_picker: ^1.2.3
   firebase_storage: ^13.5.0
+  # Calls the `createPaymentIntent` Cloud Function (see functions/index.js)
+  # so the real Stripe secret key only ever lives server-side — the app
+  # itself never sees or holds it. See lib/services/stripe_service.dart.
+  # (Confirmed ^6.3.5 is current and depends on firebase_core ^4.12.1,
+  # compatible with this project's firebase_core ^4.14.0 — checked against
+  # pub.dev before pinning, same discipline as flutter_svg's version
+  # below.)
+  cloud_functions: ^6.3.5
+
+  # Real Stripe payment sheet (sandbox/test mode) for Flight/Hotel
+  # checkout — lib/views/detail/booking_payment_page.dart. Needs the
+  # publishable key in lib/config/secrets.dart (safe to ship in the app;
+  # the secret key never goes here, only into the Cloud Function above)
+  # plus Stripe.publishableKey set once at startup (see main.dart). Needs
+  # native setup too (done): MainActivity now extends
+  # FlutterFragmentActivity and android/app's theme now descends from
+  # Theme.AppCompat — both required by the Android Stripe SDK's own Payment
+  # Sheet UI (confirmed ^13.1.0 is current on pub.dev).
+  flutter_stripe: ^13.0.0
+
+  # HTTP client for the real Flights/Hotels data source (Duffel API) and
+  # the OpenStreetMap Nominatim geocoding lookup used to turn a typed
+  # destination into coordinates for a Duffel Stays search.
+  http: ^1.2.2
+
+  # Device location — on-demand reads only, never background tracking:
+  # (1) suggesting the nearest Malaysian airport for the Home Airport
+  # setting, and (2) one position read when a person turns on "Share
+  # Location with Group" in Privacy and Security, shown to the rest of
+  # their trip's group on Group Info > Member Location while a trip's
+  # owner has Real-Time Location switched on. See
+  # lib/services/location_service.dart.
+  geolocator: ^14.0.3
+
+  # Group trip invites: a QR code of the trip's invite link is shown on
+  # Group Info (qr_flutter); Join → Scan QR code reads it back with the
+  # device camera (mobile_scanner). See lib/views/group/invite_qr_page.dart
+  # and lib/views/group/scan_qr_page.dart.
+  qr_flutter: ^4.1.0
+  mobile_scanner: ^5.2.3
+
+  # Calling a real emergency/embassy phone number and opening Wisma
+  # Putra's mission directory from Group Info > Emergency.
+  url_launcher: ^6.3.1
+
+  # One-tap share of the current device position to WhatsApp/any
+  # share-sheet app, from Group Info > Emergency > Shared Location.
+  # Pinned to ^13.3.0 (not the ^11.0.0 originally added) because
+  # geolocator >=14.0.3 pulls in package_info_plus >=10.1.0, which needs
+  # win32 ^6.0.1 — incompatible with share_plus <13.0.0's win32 ^5.5.3.
+  # The SharePlus.instance.share(ShareParams(...)) API used in
+  # emergency_page.dart is unchanged across 11.x–13.x (confirmed against
+  # the package changelog), so no code change was needed for this bump.
+  share_plus: ^13.3.0
+
+  # In-app (embedded) map tiles for Group Info > Member Location, using
+  # OpenStreetMap — no API key needed, same no-key approach this project
+  # already uses for geocoding in duffel_api_service.dart.
+  flutter_map: ^8.1.1
+  latlong2: ^0.9.1
+
+  # Duffel's real airline logos (carrier.logo_symbol_url/logo_lockup_url,
+  # see DuffelFlightOffer.airlineLogoUrl) are published as SVG, confirmed
+  # against Duffel's own API schema docs — plain Image.network can only
+  # decode raster formats (PNG/JPEG/GIF/WebP/BMP), so it threw "Invalid
+  # image data" on every single flight card once that real logo URL was
+  # wired into Explore's flight cards. flutter_svg adds SvgPicture.network,
+  # which can actually render them. Pinned to ^2.3.0 (not ^1.1.6, which
+  # this was briefly set to by mistake) because SvgPicture.network's
+  # errorBuilder parameter — used in explore_page.dart's _airlineLogo() to
+  # fall back cleanly when a logo fails to load — only exists from 2.0.17
+  # onward (confirmed against the package's own changelog); 1.1.6 predates
+  # it and fails to compile against that parameter.
+  flutter_svg: ^2.3.0
 
 dev_dependencies:
   flutter_test:

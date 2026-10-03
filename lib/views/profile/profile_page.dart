@@ -5,19 +5,15 @@ import '../../models/profile_models.dart';
 import '../../services/auth_service.dart';
 import '../../theme.dart';
 import '../auth/login_page.dart';
-import '../community/create_post_page.dart';
+import '../shared/nice_dialog.dart';
+import '../community/my_community_posts_page.dart';
 import 'account_setting_page.dart';
 import 'chat_setting_page.dart';
-// TEMP DEBUG import — delete this line together with dev_seed_page.dart,
-// dev_seed_service.dart, and the isFakeSeed rule additions in
-// firestore.rules when test data is no longer needed.
-import 'dev_seed_page.dart';
 import 'friends_page.dart';
 import 'help_support_page.dart';
 import 'history_page.dart';
 import 'privacy_security_page.dart';
 import 'report_attraction_page.dart';
-import 'select_plan_page.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -32,16 +28,12 @@ class _ProfilePageState extends State<ProfilePage> {
   late final List<ProfileMenuItem> _menuItems = [
     ProfileMenuItem(Icons.person_outline, 'Account Setting', () => _push(const AccountSettingPage())),
     ProfileMenuItem(Icons.history, 'History', () => _push(const HistoryPage())),
-    ProfileMenuItem(Icons.card_travel_outlined, 'Travel Preferences', () => _push(const SelectPlanPage())),
     ProfileMenuItem(Icons.chat_bubble_outline, 'Chat Setting', () => _push(const ChatSettingPage())),
-    ProfileMenuItem(Icons.dynamic_feed_outlined, 'Community Post', () => _push(const CreatePostPage())),
+    ProfileMenuItem(Icons.dynamic_feed_outlined, 'Community Post', () => _push(const MyCommunityPostsPage())),
     ProfileMenuItem(Icons.people_outline, 'Friends', () => _push(const FriendsPage())),
     ProfileMenuItem(Icons.privacy_tip_outlined, 'Privacy and Security', () => _push(const PrivacySecurityPage())),
     ProfileMenuItem(Icons.add_location_alt_outlined, 'Report new attraction spot', () => _push(const ReportAttractionPage())),
     ProfileMenuItem(Icons.help_outline, 'Help and Support', () => _push(const HelpSupportPage())),
-    // TEMP DEBUG entry — delete this line together with the import above
-    // when test data is no longer needed.
-    ProfileMenuItem(Icons.bug_report_outlined, 'Debug: Seed Test Data', () => _push(const DevSeedPage())),
   ];
 
   void _push(Widget page) {
@@ -57,7 +49,7 @@ class _ProfilePageState extends State<ProfilePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: AppColors.scaffoldBackground,
       body: SafeArea(
         child: ListenableBuilder(
           listenable: controller,
@@ -99,18 +91,9 @@ class _ProfilePageState extends State<ProfilePage> {
               ),
             ],
           ),
-          GestureDetector(
+          HeaderIconButton(
+            icon: controller.favorited ? Icons.favorite : Icons.favorite_border,
             onTap: controller.toggleFavorited,
-            child: Container(
-              width: 40,
-              height: 40,
-              decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle),
-              child: Icon(
-                controller.favorited ? Icons.favorite : Icons.favorite_border,
-                color: Colors.white,
-                size: 18,
-              ),
-            ),
           ),
         ],
       ),
@@ -244,32 +227,21 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  void _confirmLogout(BuildContext context) {
-    showDialog(
+  Future<void> _confirmLogout(BuildContext context) async {
+    final confirmed = await showNiceConfirmDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Log out', style: TextStyle(color: AppColors.navy, fontWeight: FontWeight.bold)),
-        content: const Text('Are you sure you want to log out?', style: TextStyle(color: AppColors.textGrey)),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Cancel', style: TextStyle(color: AppColors.textGrey)),
-          ),
-          TextButton(
-            onPressed: () async {
-              Navigator.of(ctx).pop();
-              await AuthService.instance.signOut();
-              if (!context.mounted) return;
-              Navigator.of(context).pushAndRemoveUntil(
-                MaterialPageRoute(builder: (_) => const LoginPage()),
-                (route) => false,
-              );
-            },
-            child: const Text('Log out', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
-          ),
-        ],
-      ),
+      title: 'Log out',
+      message: 'Are you sure you want to log out?',
+      confirmLabel: 'Log out',
+      icon: Icons.logout,
+      destructive: true,
+    );
+    if (!confirmed) return;
+    await AuthService.instance.signOut();
+    if (!context.mounted) return;
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const LoginPage()),
+      (route) => false,
     );
   }
 }

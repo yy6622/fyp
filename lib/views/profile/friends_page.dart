@@ -122,19 +122,39 @@ class _FriendsPageState extends State<FriendsPage> {
           return Column(
             children: [
               Padding(
-                padding: const EdgeInsets.all(16),
+                // Horizontal 20 matches every friend row below it
+                // (Padding(horizontal: 20) in the itemBuilder) — this was
+                // 16 before, so the search box sat 4px further left than
+                // the list under it.
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 14),
                   decoration: BoxDecoration(color: AppColors.chipGrey, borderRadius: BorderRadius.circular(24)),
-                  child: TextField(
-                    controller: controller.search,
-                    decoration: const InputDecoration(
-                      hintText: 'Search friends',
-                      hintStyle: TextStyle(color: AppColors.textGrey, fontSize: 13),
-                      border: InputBorder.none,
-                      isDense: true,
-                      prefixIcon: Icon(Icons.search, color: AppColors.textGrey, size: 20),
-                    ),
+                  // Icon as a plain Row sibling with a fixed 8px gap —
+                  // the same shape every other search bar in the app
+                  // uses (Plan, Community, Explore's top bar). This used
+                  // to put the search icon on InputDecoration's
+                  // `prefixIcon` instead, which gets its own default
+                  // 48dp tap-target box and sat with different
+                  // spacing/vertical centering than everywhere else —
+                  // the actual cause of this search box visibly not
+                  // lining up with the rest of the app.
+                  child: Row(
+                    children: [
+                      const Icon(Icons.search, color: AppColors.textGrey, size: 20),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TextField(
+                          controller: controller.search,
+                          decoration: const InputDecoration(
+                            hintText: 'Search friends',
+                            hintStyle: TextStyle(color: AppColors.textGrey, fontSize: 13),
+                            border: InputBorder.none,
+                            isDense: true,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),

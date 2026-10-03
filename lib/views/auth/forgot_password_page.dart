@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../controllers/auth_controller.dart';
 import '../../theme.dart';
+import '../shared/nice_dialog.dart';
 import 'auth_widgets.dart';
 
 // ---------------------------------------------------------------------
@@ -33,34 +34,14 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
       return;
     }
-    showDialog(
+    showNiceInfoDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        icon: const Icon(Icons.mark_email_read_outlined, color: AppColors.primary, size: 40),
-        title: const Text('Check your email', style: TextStyle(color: AppColors.navy, fontWeight: FontWeight.bold)),
-        content: const Text(
-          "We've sent a password reset link to your email. Follow the link to set a new password, then come back and log in.",
-          textAlign: TextAlign.center,
-          style: TextStyle(color: AppColors.textGrey),
-        ),
-        actions: [
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primary,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-              onPressed: () {
-                Navigator.of(ctx).pop();
-                Navigator.of(context).pop();
-              },
-              child: const Text('Back to Login', style: TextStyle(color: Colors.white)),
-            ),
-          ),
-        ],
-      ),
+      title: 'Check your email',
+      message: "We've sent a password reset link to your email. Follow the link to set a new password, then come back and log in.",
+      icon: Icons.mark_email_read_outlined,
+      iconColor: AppColors.primary,
+      buttonLabel: 'Back to Login',
+      onDone: () => Navigator.of(context).pop(),
     );
   }
 

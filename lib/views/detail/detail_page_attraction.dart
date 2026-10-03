@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../repositories/catalog_repository.dart';
 import '../../theme.dart';
+import '../shared/contact_launcher.dart';
+import '../shared/translated_text.dart';
 import 'detail_widgets.dart';
 
 // ---------------------------------------------------------------------
@@ -52,144 +54,183 @@ class _DetailPageAttractionState extends State<DetailPageAttraction> {
       body: SafeArea(
         child: Column(
           children: [
-            DetailHeader(title: a.name),
             Expanded(
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
-                children: [
-                  Text(a.name, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.navy)),
-                  const SizedBox(height: 8),
-                  // Star sits right before the rating number (matching
-                  // Hotel's rating row) — it used to float next to the
-                  // title instead, which read as decoration rather than
-                  // part of the rating.
-                  Row(
-                    children: [
-                      const Icon(Icons.star, size: 16, color: AppColors.orange),
-                      const SizedBox(width: 4),
-                      Text('${a.rating} (${a.reviews} reviews)', style: const TextStyle(fontSize: 12.5, color: AppColors.textGrey)),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  // Every category as its own chip — not one label joined
-                  // with a "•" dot.
-                  Wrap(spacing: 6, runSpacing: 6, children: a.categoryTags.map(tagChip).toList()),
-                  if (a.location.isNotEmpty || a.address.isNotEmpty) ...[
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        const Icon(Icons.location_on_outlined, size: 14, color: AppColors.textGrey),
-                        const SizedBox(width: 4),
-                        Expanded(child: Text(a.address.isNotEmpty ? a.address : a.location, style: const TextStyle(fontSize: 12, color: AppColors.textGrey))),
-                      ],
-                    ),
-                  ],
-                  if (a.gallery.length > 1) ...[
-                    const SizedBox(height: 16),
-                    SizedBox(
-                      height: 90,
-                      child: ListView.separated(
-                        scrollDirection: Axis.horizontal,
-                        itemCount: a.gallery.length,
-                        separatorBuilder: (_, __) => const SizedBox(width: 8),
-                        itemBuilder: (context, i) => ClipRRect(
-                          borderRadius: BorderRadius.circular(12),
-                          child: Image.network(a.gallery[i], width: 120, height: 90, fit: BoxFit.cover),
-                        ),
-                      ),
-                    ),
-                  ],
-                  const SizedBox(height: 24),
-                  const Divider(color: Color(0xFFECECEC)),
-                  const SizedBox(height: 16),
-                  const Text('About', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.navy)),
-                  const SizedBox(height: 10),
-                  Text(
-                    'One of the popular ${a.category.toLowerCase()} spots on this trip. Save it to your plan and check '
-                    'opening hours and directions closer to your visit date.',
-                    style: const TextStyle(fontSize: 12.5, color: AppColors.textGrey, height: 1.5),
-                  ),
-                  if (a.highlights.isNotEmpty) ...[
-                    const SizedBox(height: 16),
-                    ...a.highlights.map(_bulletRow),
-                  ],
-                  const SizedBox(height: 20),
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(color: AppColors.chipGrey, borderRadius: BorderRadius.circular(14)),
-                    child: Column(
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(child: InfoField(label: 'Entry Price', value: a.price)),
-                            Container(height: 30, width: 1, color: const Color(0xFFDDDDDD)),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              child: InfoField(
-                                label: 'Duration',
-                                value: a.recommendedDuration.isEmpty ? 'Flexible' : a.recommendedDuration,
+              child: SingleChildScrollView(
+                child: Column(
+                  children: [
+                    DetailHeader(title: a.name, imageUrl: a.image, translate: true),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
+                      child: Column(
+                        // Was missing before — without this, Column defaults
+                        // to centering every child that doesn't fill the
+                        // width itself (the title, the rating row, "About"),
+                        // while full-width children (the info card, chips)
+                        // stayed where they were. That's what made the page
+                        // read as "some stuff in the middle, some to the
+                        // side" instead of one consistent left-aligned page
+                        // like Flight/Hotel/Restaurant's detail pages.
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          TranslatedText(a.name, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.navy)),
+                          const SizedBox(height: 8),
+                          // Star sits right before the rating number (matching
+                          // Hotel's rating row) — it used to float next to the
+                          // title instead, which read as decoration rather than
+                          // part of the rating.
+                          Row(
+                            children: [
+                              const Icon(Icons.star, size: 16, color: AppColors.orange),
+                              const SizedBox(width: 4),
+                              Text('${a.rating} (${a.reviews} reviews)', style: const TextStyle(fontSize: 12.5, color: AppColors.textGrey)),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          // Every category as its own chip — not one label joined
+                          // with a "•" dot.
+                          Wrap(spacing: 6, runSpacing: 6, children: a.categoryTags.map(tagChip).toList()),
+                          if (a.location.isNotEmpty || a.address.isNotEmpty) ...[
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                const Icon(Icons.location_on_outlined, size: 14, color: AppColors.textGrey),
+                                const SizedBox(width: 4),
+                                Expanded(child: Text(a.address.isNotEmpty ? a.address : a.location, style: const TextStyle(fontSize: 12, color: AppColors.textGrey))),
+                              ],
+                            ),
+                          ],
+                          if (a.gallery.length > 1) ...[
+                            const SizedBox(height: 16),
+                            SizedBox(
+                              height: 90,
+                              child: ListView.separated(
+                                scrollDirection: Axis.horizontal,
+                                itemCount: a.gallery.length,
+                                separatorBuilder: (_, __) => const SizedBox(width: 8),
+                                itemBuilder: (context, i) => ClipRRect(
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: Image.network(a.gallery[i], width: 120, height: 90, fit: BoxFit.cover),
+                                ),
                               ),
                             ),
                           ],
-                        ),
-                        const SizedBox(height: 16),
-                        Row(
-                          children: [
-                            Expanded(child: InfoField(label: 'Opening Hours', value: a.openingHours)),
-                            Container(height: 30, width: 1, color: const Color(0xFFDDDDDD)),
-                            const SizedBox(width: 16),
-                            Expanded(child: InfoField(label: 'Location', value: a.location.isEmpty ? 'Not specified' : a.location)),
+                          const SizedBox(height: 24),
+                          const Divider(color: Color(0xFFECECEC)),
+                          const SizedBox(height: 16),
+                          const Text('About', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.navy)),
+                          const SizedBox(height: 10),
+                          Text(
+                            // A real description (OSM/Wikipedia, see
+                            // PlacesApiService.resolveDescription) when
+                            // this place has one — only every attraction
+                            // OSM/Wikipedia has nothing for falls back to
+                            // this generic category sentence, rather than
+                            // every attraction sharing the exact same text.
+                            a.description.isNotEmpty
+                                ? a.description
+                                : 'One of the popular ${a.category.toLowerCase()} spots on this trip. Save it to your plan and check '
+                                    'opening hours and directions closer to your visit date.',
+                            style: const TextStyle(fontSize: 12.5, color: AppColors.textGrey, height: 1.5),
+                          ),
+                          if (a.highlights.isNotEmpty) ...[
+                            const SizedBox(height: 16),
+                            ...a.highlights.map(_bulletRow),
                           ],
-                        ),
-                      ],
-                    ),
-                  ),
-                  if (!a.fees.isEmpty) ...[
-                    const SizedBox(height: 24),
-                    const Text('Entry Fees', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.navy)),
-                    const SizedBox(height: 12),
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), border: Border.all(color: const Color(0xFFECECEC))),
-                      child: Column(
-                        children: [
-                          if (a.fees.adult != null) _feeRow('Adult', a.fees.adult!, last: a.fees.child == null && a.fees.senior == null),
-                          if (a.fees.child != null) _feeRow('Child', a.fees.child!, last: a.fees.senior == null),
-                          if (a.fees.senior != null) _feeRow('Senior', a.fees.senior!, last: true),
+                          const SizedBox(height: 20),
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(color: AppColors.chipGrey, borderRadius: BorderRadius.circular(14)),
+                            child: Column(
+                              children: [
+                                Row(
+                                  children: [
+                                    Expanded(child: InfoField(label: 'Entry Price', value: a.price)),
+                                    Container(height: 30, width: 1, color: const Color(0xFFDDDDDD)),
+                                    const SizedBox(width: 16),
+                                    Expanded(
+                                      child: InfoField(
+                                        label: 'Duration',
+                                        value: a.recommendedDuration.isEmpty ? 'Flexible' : a.recommendedDuration,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 16),
+                                Row(
+                                  children: [
+                                    Expanded(child: InfoField(label: 'Opening Hours', value: a.openingHours)),
+                                    Container(height: 30, width: 1, color: const Color(0xFFDDDDDD)),
+                                    const SizedBox(width: 16),
+                                    Expanded(child: InfoField(label: 'Location', value: a.location.isEmpty ? 'Not specified' : a.location)),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                          if (!a.fees.isEmpty) ...[
+                            const SizedBox(height: 24),
+                            const Text('Entry Fees', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.navy)),
+                            const SizedBox(height: 12),
+                            Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), border: Border.all(color: const Color(0xFFECECEC))),
+                              child: Column(
+                                children: [
+                                  if (a.fees.adult != null) _feeRow('Adult', a.fees.adult!, last: a.fees.child == null && a.fees.senior == null),
+                                  if (a.fees.child != null) _feeRow('Child', a.fees.child!, last: a.fees.senior == null),
+                                  if (a.fees.senior != null) _feeRow('Senior', a.fees.senior!, last: true),
+                                ],
+                              ),
+                            ),
+                          ],
+                          if (a.openingHoursByDay.isNotEmpty) ...[
+                            const SizedBox(height: 24),
+                            const Text('Weekly Hours', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.navy)),
+                            const SizedBox(height: 12),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 16),
+                              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), border: Border.all(color: const Color(0xFFECECEC))),
+                              child: Column(
+                                children: [
+                                  for (int i = 0; i < presentDays.length; i++)
+                                    _hoursRow(presentDays[i], a.openingHoursByDay[presentDays[i]]!, last: i == presentDays.length - 1),
+                                ],
+                              ),
+                            ),
+                          ],
+                          if (a.facilities.isNotEmpty) ...[
+                            const SizedBox(height: 24),
+                            const Text('Facilities', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.navy)),
+                            const SizedBox(height: 12),
+                            Wrap(spacing: 8, runSpacing: 8, children: a.facilities.map(_facilityChip).toList()),
+                          ],
+                          if (a.phone.isNotEmpty || a.website.isNotEmpty) ...[
+                            const SizedBox(height: 24),
+                            const Text('Contact', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.navy)),
+                            const SizedBox(height: 12),
+                            if (a.phone.isNotEmpty) _contactRow(Icons.phone_outlined, a.phone, () => confirmAndLaunch(context, ContactAction.call, a.phone)),
+                            if (a.phone.isNotEmpty && a.website.isNotEmpty) const SizedBox(height: 10),
+                            if (a.website.isNotEmpty) _contactRow(Icons.language_outlined, a.website, () => confirmAndLaunch(context, ContactAction.website, a.website)),
+                          ],
+                          const SizedBox(height: 24),
+                          ReviewsSection(
+                            title: a.name,
+                            ratingSummary: '${a.rating} (${a.reviews} reviews)',
+                            reviewsStream: CatalogRepository.instance.watchAttractionReviews(a.id).map((list) => list.map(reviewDataFromPlace).toList()),
+                            onSubmitReview: ({required authorId, required authorName, required rating, required comment}) =>
+                                CatalogRepository.instance.addAttractionReview(
+                              a.id,
+                              authorId: authorId,
+                              authorName: authorName,
+                              rating: rating,
+                              comment: comment,
+                            ),
+                          ),
                         ],
                       ),
                     ),
                   ],
-                  if (a.openingHoursByDay.isNotEmpty) ...[
-                    const SizedBox(height: 24),
-                    const Text('Weekly Hours', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.navy)),
-                    const SizedBox(height: 12),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), border: Border.all(color: const Color(0xFFECECEC))),
-                      child: Column(
-                        children: [
-                          for (int i = 0; i < presentDays.length; i++)
-                            _hoursRow(presentDays[i], a.openingHoursByDay[presentDays[i]]!, last: i == presentDays.length - 1),
-                        ],
-                      ),
-                    ),
-                  ],
-                  if (a.facilities.isNotEmpty) ...[
-                    const SizedBox(height: 24),
-                    const Text('Facilities', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.navy)),
-                    const SizedBox(height: 12),
-                    Wrap(spacing: 8, runSpacing: 8, children: a.facilities.map(_facilityChip).toList()),
-                  ],
-                  if (a.phone.isNotEmpty || a.website.isNotEmpty) ...[
-                    const SizedBox(height: 24),
-                    const Text('Contact', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.navy)),
-                    const SizedBox(height: 12),
-                    if (a.phone.isNotEmpty) _contactRow(Icons.phone_outlined, a.phone),
-                    if (a.phone.isNotEmpty && a.website.isNotEmpty) const SizedBox(height: 10),
-                    if (a.website.isNotEmpty) _contactRow(Icons.language_outlined, a.website),
-                  ],
-                ],
+                ),
               ),
             ),
             Container(
@@ -204,7 +245,7 @@ class _DetailPageAttractionState extends State<DetailPageAttraction> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(a.price, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.primary)),
+                        Text(orDash(a.price), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.primary)),
                         const Text('entry price', style: TextStyle(fontSize: 11, color: AppColors.textGrey)),
                       ],
                     ),
@@ -292,13 +333,19 @@ class _DetailPageAttractionState extends State<DetailPageAttraction> {
     );
   }
 
-  Widget _contactRow(IconData icon, String text) {
-    return Row(
-      children: [
-        Icon(icon, size: 16, color: AppColors.primary),
-        const SizedBox(width: 10),
-        Expanded(child: Text(text, style: const TextStyle(fontSize: 12.5, color: Colors.black87))),
-      ],
+  Widget _contactRow(IconData icon, String text, VoidCallback onTap) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Row(
+        children: [
+          Icon(icon, size: 16, color: AppColors.primary),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(text, style: const TextStyle(fontSize: 12.5, color: AppColors.primary, decoration: TextDecoration.underline)),
+          ),
+        ],
+      ),
     );
   }
 }

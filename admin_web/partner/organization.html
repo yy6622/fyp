@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Organization Profile — Voya Insurance Partner</title>
+<link rel="stylesheet" href="../css/tokens.css" />
+<link rel="stylesheet" href="../css/base.css" />
+<link rel="stylesheet" href="../css/layout.css" />
+<link rel="stylesheet" href="../css/components.css" />
+</head>
+<body>
+<div class="shell">
+  <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-brand">Voya</div>
+    <div class="sidebar-user">
+      <div class="name" id="sbUserName">Loading…</div>
+      <div class="role" id="sbUserRole">Partner workspace</div>
+    </div>
+    <nav class="nav" id="sidebarNav"></nav>
+    <button class="sidebar-logout" id="logoutBtn"><span data-icon="log-out"></span>Log out</button>
+  </aside>
+
+  <main class="content">
+    <div class="topbar">
+      <div>
+        <button class="menu-toggle" id="menuToggle"><span data-icon="menu"></span></button>
+        <h1 class="h1">Organization Profile</h1>
+        <p class="subtitle">Manage organization information and settings</p>
+      </div>
+    </div>
+
+    <div class="card form-card">
+      <h3 class="h3" style="margin-bottom:18px;">Company information</h3>
+      <div class="form-grid">
+        <div class="field"><label>Company name</label><input class="input" id="companyName" /></div>
+        <div class="field"><label>Registration number</label><input class="input" id="registrationNumber" /></div>
+        <div class="field"><label>Support email</label><input class="input" id="supportEmail" type="email" /></div>
+        <div class="field"><label>Phone</label><input class="input" id="phone" /></div>
+      </div>
+    </div>
+
+    <div class="card form-card">
+      <h3 class="h3" style="margin-bottom:18px;">Brand identity</h3>
+      <div class="form-grid">
+        <div class="field">
+          <label>Current logo</label>
+          <div class="inline-flex" style="gap:12px;">
+            <div id="logoPreview" style="width:44px;height:44px;border-radius:10px;background:var(--teal-100);flex:none;background-size:cover;background-position:center;"></div>
+            <span class="muted small" id="logoStatus">No logo uploaded yet</span>
+          </div>
+        </div>
+        <div class="field">
+          <label>Upload new logo</label>
+          <input class="input" id="logoFile" type="file" accept="image/*" />
+          <p class="hint">PNG or JPG, square works best.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="card form-card">
+      <h3 class="h3" style="margin-bottom:18px;">Registered address</h3>
+      <div class="form-grid">
+        <div class="field"><label>Address line 1</label><input class="input" id="addrLine1" /></div>
+        <div class="field"><label>City</label><input class="input" id="addrCity" /></div>
+        <div class="field"><label>State / Province</label><input class="input" id="addrState" /></div>
+        <div class="field"><label>Postal code</label><input class="input" id="addrPostal" /></div>
+      </div>
+    </div>
+
+    <div class="card form-card">
+      <h3 class="h3" style="margin-bottom:18px;">Primary contact</h3>
+      <div class="form-grid">
+        <div class="field"><label>Full name</label><input class="input" id="contactName" /></div>
+        <div class="field"><label>Designation</label><input class="input" id="contactDesignation" /></div>
+        <div class="field"><label>Email address</label><input class="input" id="contactEmail" type="email" /></div>
+        <div class="field"><label>Phone</label><input class="input" id="contactPhone" /></div>
+      </div>
+    </div>
+
+    <div class="form-actions split">
+      <button class="btn btn-outline" id="discardBtn">Discard</button>
+      <button class="btn btn-primary" id="saveBtn">Save changes</button>
+    </div>
+  </main>
+</div>
+
+<script type="module">
+import { requireRole } from "../js/auth-guard.js";
+import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js";
+import { mountIcons } from "../js/icons.js";
+import { getPartnerProfile, savePartnerProfile } from "../js/data.js";
+import { storage } from "../js/firebase-config.js";
+import { ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-storage.js";
+import { toast, setBusy } from "../js/ui.js";
+
+mountSidebarNav({ role: "partner", active: "organization" });
+const session = await requireRole("partner", "login.html");
+let profile = null;
+
+if (session) {
+  setSidebarUser({ displayName: session.profile.companyName || "Partner", roleLabel: `${session.profile.companyName || "Insurance"} · Insurance Partner` });
+  await load();
+}
+
+async function load() {
+  profile = (await getPartnerProfile(session.uid)) || {};
+  document.getElementById("companyName").value = profile.companyName || "";
+  document.getElementById("registrationNumber").value = profile.registrationNumber || "";
+  document.getElementById("supportEmail").value = profile.supportEmail || "";
+  document.getElementById("phone").value = profile.phone || "";
+  document.getElementById("addrLine1").value = profile.address?.line1 || "";
+  document.getElementById("addrCity").value = profile.address?.city || "";
+  document.getElementById("addrState").value = profile.address?.state || "";
+  document.getElementById("addrPostal").value = profile.address?.postalCode || "";
+  document.getElementById("contactName").value = profile.contact?.fullName || "";
+  document.getElementById("contactDesignation").value = profile.contact?.designation || "";
+  document.getElementById("contactEmail").value = profile.contact?.email || "";
+  document.getElementById("contactPhone").value = profile.contact?.phone || "";
+  if (profile.logoUrl) {
+    document.getElementById("logoPreview").style.backgroundImage = `url('${profile.logoUrl}')`;
+    document.getElementById("logoStatus").textContent = "Logo uploaded";
+  }
+}
+
+async function uploadLogoIfNeeded() {
+  const fileInput = document.getElementById("logoFile");
+  const file = fileInput.files?.[0];
+  if (!file) return profile.logoUrl || "";
+  const ext = file.name.split(".").pop() || "jpg";
+  const path = `partner_logos/${session.uid}.${ext}`;
+  const storageRef = ref(storage, path);
+  await uploadBytes(storageRef, file);
+  return getDownloadURL(storageRef);
+}
+
+document.getElementById("saveBtn").addEventListener("click", async () => {
+  const btn = document.getElementById("saveBtn");
+  setBusy(btn, true, "Saving…");
+  try {
+    const logoUrl = await uploadLogoIfNeeded();
+    const data = {
+      companyName: document.getElementById("companyName").value.trim(),
+      registrationNumber: document.getElementById("registrationNumber").value.trim(),
+      supportEmail: document.getElementById("supportEmail").value.trim(),
+      phone: document.getElementById("phone").value.trim(),
+      logoUrl,
+      address: {
+        line1: document.getElementById("addrLine1").value.trim(),
+        city: document.getElementById("addrCity").value.trim(),
+        state: document.getElementById("addrState").value.trim(),
+        postalCode: document.getElementById("addrPostal").value.trim(),
+      },
+      contact: {
+        fullName: document.getElementById("contactName").value.trim(),
+        designation: document.getElementById("contactDesignation").value.trim(),
+        email: document.getElementById("contactEmail").value.trim(),
+        phone: document.getElementById("contactPhone").value.trim(),
+      },
+    };
+    await savePartnerProfile(session.uid, data);
+    toast("Organization profile saved.", "success");
+    await load();
+  } catch (err) {
+    toast(err.message || "Couldn't save changes.", "error");
+  } finally {
+    setBusy(btn, false);
+  }
+});
+
+document.getElementById("discardBtn").addEventListener("click", () => load());
+</script>
+</body>
+</html>

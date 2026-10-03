@@ -2,9 +2,15 @@ import 'package:flutter/material.dart';
 
 import '../../models/community_models.dart';
 import '../../models/insurance_models.dart';
+import '../../repositories/community_repository.dart';
+import '../../repositories/insurance_repository.dart';
+import '../../repositories/trip_repository.dart';
+import '../../services/auth_service.dart';
+import '../../services/format_utils.dart';
 import '../../theme.dart';
 import '../community/community_page.dart';
 import '../community/community_post_detail_page.dart';
+import '../group/group_trip_page.dart';
 import '../insurance/insurance_list_page.dart';
 import '../insurance/insurance_widgets.dart';
 
@@ -14,7 +20,7 @@ class HomePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: AppColors.scaffoldBackground,
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.only(bottom: 24),
@@ -41,7 +47,7 @@ class HomePage extends StatelessWidget {
   // ---------------- Header ----------------
   Widget _buildHeader(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 18),
+      padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
@@ -63,11 +69,11 @@ class HomePage extends StatelessWidget {
               ),
             ],
           ),
-          GestureDetector(
+          HeaderIconButton(
+            icon: Icons.notifications_outlined,
             onTap: () => ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(content: Text('No new notifications')),
             ),
-            child: AppImage('assets/images/home_bell.png', width: 29, height: 29),
           ),
         ],
       ),
@@ -75,17 +81,53 @@ class HomePage extends StatelessWidget {
   }
 
   // ---------------- Adventure card ----------------
+  // The signed-in person's own real soonest-upcoming trip (not yet ended),
+  // picked from their actual `trips/{tripId}` docs — this used to be a
+  // fixed "New York, 25 May - 7 June 2026" shown to literally everyone
+  // regardless of who was signed in or what trips they actually had.
   Widget _buildAdventureCard() {
+    final uid = AuthService.instance.currentUser?.uid;
+    if (uid == null) return _adventureCardShell(child: _adventureCardMessage('Sign in to see your next trip'));
+    return StreamBuilder<List<Trip>>(
+      stream: TripRepository.instance.watchMyTrips(uid),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return _adventureCardShell(
+            child: const Center(child: CircularProgressIndicator(color: Colors.white)),
+          );
+        }
+        final now = DateTime.now();
+        final today = DateTime(now.year, now.month, now.day);
+        final upcoming = snapshot.data!.where((t) => t.endDate != null && !t.endDate!.isBefore(today)).toList()
+          ..sort((a, b) => (a.startDate ?? today).compareTo(b.startDate ?? today));
+        if (upcoming.isEmpty) {
+          return _adventureCardShell(child: _adventureCardMessage("No upcoming trip yet — let's plan one!"));
+        }
+        return _adventureCardShell(trip: upcoming.first, child: _adventureCardContent(context, upcoming.first, today));
+      },
+    );
+  }
+
+  /// The card's background/gradient/rounding/tap target — shared by the
+  /// real-content state and the "sign in" / "no upcoming trip" states so
+  /// all three look like the same card rather than two different widgets.
+  /// Uses the trip's own real cover photo (see TripRepository.createTrip
+  /// / PlacesApiService.destinationPhoto) once there is a trip to show.
+  Widget _adventureCardShell({Trip? trip, required Widget child}) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 18),
+      padding: const EdgeInsets.symmetric(horizontal: 20),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(10),
         child: Container(
           height: 196,
-          decoration: const BoxDecoration(
+          decoration: BoxDecoration(
+            color: AppColors.navy,
             image: DecorationImage(
-              image: AssetImage('assets/images/adventure_bg.jpg'),
+              image: (trip != null && trip.coverImage.isNotEmpty)
+                  ? NetworkImage(trip.coverImage)
+                  : const AssetImage('assets/images/adventure_bg.jpg') as ImageProvider,
               fit: BoxFit.cover,
+              onError: (_, __) {},
             ),
           ),
           child: Container(
@@ -99,79 +141,106 @@ class HomePage extends StatelessWidget {
             ),
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Your Next Adventure',
-                    style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w500),
-                  ),
-                  const SizedBox(height: 6),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'New York',
-                            style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
-                          ),
-                          SizedBox(height: 4),
-                          Text(
-                            '25 May - 7 June 2026',
-                            style: TextStyle(color: Colors.white, fontSize: 10),
-                          ),
-                          Text(
-                            '13 days 12 nights',
-                            style: TextStyle(color: Colors.white, fontSize: 8),
-                          ),
-                        ],
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.85),
-                          borderRadius: BorderRadius.circular(7),
-                        ),
-                        child: const Column(
-                          children: [
-                            Text(
-                              '8',
-                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.black),
-                            ),
-                            Text(
-                              'days to go',
-                              style: TextStyle(fontSize: 8, color: Colors.black),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  const Spacer(),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(7),
-                    ),
-                    child: Row(
-                      children: [
-                        _cardInfoTile(Icons.flight_takeoff, 'Flight', '25 May 2026, 14.30'),
-                        _verticalDivider(),
-                        _cardInfoTile(Icons.bed_outlined, 'Hotel', 'Artezen Hotel'),
-                        _verticalDivider(),
-                        _cardInfoTile(Icons.wb_cloudy_outlined, 'Weather', '24°C/18°C'),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
+              child: child,
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _adventureCardMessage(String message) {
+    return Center(
+      child: Text(message, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600)),
+    );
+  }
+
+  Widget _adventureCardContent(BuildContext context, Trip trip, DateTime today) {
+    final start = trip.startDate;
+    final daysToGo = start == null ? null : start.difference(today).inDays;
+    final ongoing = daysToGo != null && daysToGo <= 0;
+    return GestureDetector(
+      onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => GroupTripPage(tripId: trip.id))),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Your Next Adventure',
+            style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w500),
+          ),
+          const SizedBox(height: 6),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      trip.destination.isNotEmpty ? trip.destination : trip.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      trip.dateRangeLabel.isEmpty ? trip.name : trip.dateRangeLabel,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(color: Colors.white, fontSize: 10),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.85),
+                  borderRadius: BorderRadius.circular(7),
+                ),
+                child: ongoing
+                    ? const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 3),
+                        child: Text('Ongoing', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.black)),
+                      )
+                    : Column(
+                        children: [
+                          Text(
+                            '${daysToGo ?? '-'}',
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.black),
+                          ),
+                          const Text(
+                            'days to go',
+                            style: TextStyle(fontSize: 8, color: Colors.black),
+                          ),
+                        ],
+                      ),
+              ),
+            ],
+          ),
+          const Spacer(),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(7),
+            ),
+            child: Row(
+              children: [
+                _cardInfoTile(Icons.flight_takeoff, 'Flight', trip.flights.isNotEmpty ? trip.flights.first.dateTime : '-'),
+                _verticalDivider(),
+                _cardInfoTile(Icons.bed_outlined, 'Hotel', trip.hotelStays.isNotEmpty ? trip.hotelStays.first.name : '-'),
+                _verticalDivider(),
+                // No weather data source wired into this project (no API
+                // key, no established pattern like the OSM/Wikipedia ones
+                // elsewhere) — '-' rather than a fabricated reading.
+                _cardInfoTile(Icons.wb_cloudy_outlined, 'Weather', '-'),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -200,7 +269,7 @@ class HomePage extends StatelessWidget {
   // ---------------- AI banner ----------------
   Widget _buildAiBanner() {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 18),
+      padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
@@ -251,7 +320,7 @@ class HomePage extends StatelessWidget {
   // ---------------- Recommended itinerary header ----------------
   Widget _buildRecommendedHeader(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 18),
+      padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
@@ -274,22 +343,45 @@ class HomePage extends StatelessWidget {
   }
 
   Widget _buildRecommendedList(BuildContext context) {
+    final uid = AuthService.instance.currentUser?.uid;
+    if (uid == null) {
+      return const SizedBox(
+        height: 200,
+        child: Center(
+          child: Text('Sign in to see community itineraries', style: TextStyle(fontSize: 11.5, color: AppColors.textGrey)),
+        ),
+      );
+    }
     return SizedBox(
       height: 200,
-      child: ListView.separated(
-        padding: const EdgeInsets.symmetric(horizontal: 18),
-        scrollDirection: Axis.horizontal,
-        itemCount: 3,
-        separatorBuilder: (_, __) => const SizedBox(width: 12),
-        itemBuilder: (context, index) => _buildItineraryCard(context),
+      child: StreamBuilder<List<CommunityPost>>(
+        stream: CommunityRepository.instance.watchPosts(uid),
+        builder: (context, snapshot) {
+          if (!snapshot.hasData) {
+            return const Center(child: CircularProgressIndicator(color: AppColors.primary));
+          }
+          final posts = snapshot.data!.take(6).toList();
+          if (posts.isEmpty) {
+            return const Center(
+              child: Text('No community itineraries yet', style: TextStyle(fontSize: 11.5, color: AppColors.textGrey)),
+            );
+          }
+          return ListView.separated(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            scrollDirection: Axis.horizontal,
+            itemCount: posts.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 12),
+            itemBuilder: (context, index) => _buildItineraryCard(context, posts[index], uid),
+          );
+        },
       ),
     );
   }
 
-  Widget _buildItineraryCard(BuildContext context) {
+  Widget _buildItineraryCard(BuildContext context, CommunityPost post, String uid) {
     return GestureDetector(
       onTap: () => Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => CommunityPostDetailPage(post: mockCommunityPosts.first)),
+        MaterialPageRoute(builder: (_) => CommunityPostDetailPage(post: post)),
       ),
       child: Container(
         width: 139,
@@ -307,17 +399,38 @@ class HomePage extends StatelessWidget {
               children: [
                 ClipRRect(
                   borderRadius: const BorderRadius.vertical(top: Radius.circular(5)),
-                  child: AppImage(
-                    'assets/images/adventure_bg.jpg',
-                    height: 100,
-                    width: double.infinity,
-                    fit: BoxFit.cover,
-                  ),
+                  child: post.images.isNotEmpty
+                      ? Image.network(
+                          post.images.first,
+                          height: 100,
+                          width: double.infinity,
+                          fit: BoxFit.cover,
+                          errorBuilder: (c, e, s) => Container(
+                            height: 100,
+                            color: AppColors.chipGrey,
+                            alignment: Alignment.center,
+                            child: const Icon(Icons.image_outlined, color: AppColors.textGrey),
+                          ),
+                        )
+                      : Container(
+                          height: 100,
+                          color: AppColors.chipGrey,
+                          alignment: Alignment.center,
+                          child: const Icon(Icons.image_outlined, color: AppColors.textGrey),
+                        ),
                 ),
                 Positioned(
                   top: 6,
                   right: 6,
-                  child: AppImage('assets/images/icon_like.png', width: 19, height: 19),
+                  child: GestureDetector(
+                    onTap: () => CommunityRepository.instance.toggleLike(post.id, uid, !post.liked),
+                    child: Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                      child: Icon(post.liked ? Icons.favorite : Icons.favorite_border,
+                          size: 13, color: post.liked ? Colors.redAccent : AppColors.textGrey),
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -326,26 +439,27 @@ class HomePage extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'New York 7 days 6 night',
+                  Text(
+                    post.title,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Colors.black),
+                    style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Colors.black),
                   ),
                   const SizedBox(height: 6),
                   Row(
                     children: [
-                      AppImage('assets/images/icon_star.png', width: 12, height: 12),
+                      const Icon(Icons.star, size: 12, color: AppColors.orange),
                       const SizedBox(width: 4),
-                      const Text('4.8(1.2k)', style: TextStyle(fontSize: 8, color: Colors.black)),
+                      Text('${post.avgRating.toStringAsFixed(1)} (${compactCount(post.ratingCount)})',
+                          style: const TextStyle(fontSize: 8, color: Colors.black)),
                     ],
                   ),
                   const SizedBox(height: 6),
-                  const Text(
-                    'Budget RM 6000 per members',
+                  Text(
+                    post.location.isEmpty ? 'Unknown' : post.location,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: 8, color: AppColors.textGrey),
+                    style: const TextStyle(fontSize: 8, color: AppColors.textGrey),
                   ),
                 ],
               ),
@@ -362,7 +476,7 @@ class HomePage extends StatelessWidget {
   // trip-planning shortcuts on Home.
   Widget _buildInsuranceHeader(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 18),
+      padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
@@ -387,12 +501,26 @@ class HomePage extends StatelessWidget {
   Widget _buildInsuranceList() {
     return SizedBox(
       height: 110,
-      child: ListView.separated(
-        padding: const EdgeInsets.symmetric(horizontal: 18),
-        scrollDirection: Axis.horizontal,
-        itemCount: insurancePlans.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 10),
-        itemBuilder: (context, index) => InsurancePlanTile(plan: insurancePlans[index]),
+      child: StreamBuilder<List<InsurancePlan>>(
+        stream: InsuranceRepository.instance.watchPlans(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator(color: AppColors.primary));
+          }
+          final plans = snapshot.data ?? const [];
+          if (plans.isEmpty) {
+            return const Center(
+              child: Text('No insurance plans yet', style: TextStyle(fontSize: 12, color: AppColors.textGrey)),
+            );
+          }
+          return ListView.separated(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            scrollDirection: Axis.horizontal,
+            itemCount: plans.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 10),
+            itemBuilder: (context, index) => InsurancePlanTile(plan: plans[index]),
+          );
+        },
       ),
     );
   }

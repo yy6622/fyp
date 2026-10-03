@@ -1,0 +1,17 @@
+{
+  "name": "functions",
+  "description": "Voya Cloud Functions \u2014 creates real Stripe PaymentIntents (test mode) for Flight/Hotel checkout. The Stripe secret key lives only here (via Secret Manager, see README.md), never in the Flutter app.",
+  "engines": {
+    "node": "20"
+  },
+  "main": "index.js",
+  "scripts": {
+    "deploy": "firebase deploy --only functions",
+    "logs": "firebase functions:log"
+  },
+  "dependencies": {
+    "firebase-functions": "^7.4.0",
+    "stripe": "^23.0.0"
+  },
+  "private": true
+}

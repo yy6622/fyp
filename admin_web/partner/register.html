@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Register — Voya Insurance Partner</title>
+<link rel="stylesheet" href="../css/tokens.css" />
+<link rel="stylesheet" href="../css/base.css" />
+<link rel="stylesheet" href="../css/components.css" />
+<link rel="stylesheet" href="../css/auth.css" />
+<style>.auth-card{max-width:520px;}</style>
+</head>
+<body>
+<div class="auth-shell">
+  <div class="auth-side">
+    <div class="brand">Voya</div>
+    <h1>Bring your cover to every traveller.</h1>
+    <p class="lede">Register your organization to list plans, manage transactions, and handle claims on Voya.</p>
+    <div class="auth-points">
+      <div class="auth-point"><span class="tick"><span data-icon="check-circle" data-icon-size="15"></span></span>Quick onboarding</div>
+      <div class="auth-point"><span class="tick"><span data-icon="check-circle" data-icon-size="15"></span></span>Reviewed by the Voya team</div>
+      <div class="auth-point"><span class="tick"><span data-icon="check-circle" data-icon-size="15"></span></span>Full partner workspace once approved</div>
+    </div>
+    <a class="auth-switch" href="login.html"><span data-icon="arrow-left" data-icon-size="16"></span>Back to log in</a>
+  </div>
+  <div class="auth-main">
+    <div class="auth-card">
+      <h2>Register your organization</h2>
+      <p class="lede">Create your Voya Insurance Partner account.</p>
+      <div class="auth-error" id="authError"></div>
+      <form id="regForm">
+        <div class="auth-field">
+          <label for="companyName">Company name</label>
+          <input class="input" id="companyName" placeholder="e.g. AIA Malaysia" required />
+        </div>
+        <div class="auth-field">
+          <label for="registrationNumber">Registration number</label>
+          <input class="input" id="registrationNumber" placeholder="Company registration number" required />
+        </div>
+        <div class="auth-field">
+          <label for="phone">Phone</label>
+          <input class="input" id="phone" placeholder="Company phone" required />
+        </div>
+        <div class="auth-field">
+          <label for="email">Work email</label>
+          <input class="input" type="email" id="email" placeholder="you@company.com" required autocomplete="username" />
+        </div>
+        <div class="auth-field">
+          <label for="password">Password</label>
+          <input class="input" type="password" id="password" placeholder="At least 6 characters" required autocomplete="new-password" minlength="6" />
+        </div>
+        <button class="btn btn-primary btn-block" type="submit" id="submitBtn">Create partner account</button>
+      </form>
+      <p class="auth-foot-link">Already registered? <a href="login.html">Log in</a></p>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import { mountIcons } from "../js/icons.js";
+import { registerWithRole, authErrorMessage } from "../js/auth-guard.js";
+import { setBusy } from "../js/ui.js";
+
+mountIcons(document);
+const errBox = document.getElementById("authError");
+
+document.getElementById("regForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  errBox.classList.remove("show");
+  const companyName = document.getElementById("companyName").value.trim();
+  const registrationNumber = document.getElementById("registrationNumber").value.trim();
+  const phone = document.getElementById("phone").value.trim();
+  const email = document.getElementById("email").value;
+  const password = document.getElementById("password").value;
+  const btn = document.getElementById("submitBtn");
+  setBusy(btn, true, "Creating account…");
+  try {
+    await registerWithRole("partner", email, password, {
+      companyName,
+      providerId: companyName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, ""),
+      registrationNumber,
+      phone,
+      supportEmail: email.trim().toLowerCase(),
+      logoUrl: "",
+      address: { line1: "", city: "", state: "", postalCode: "" },
+      contact: { fullName: "", designation: "", email: email.trim().toLowerCase(), phone },
+      status: "pending",
+    });
+    location.href = "dashboard.html?welcome=1";
+  } catch (err) {
+    errBox.textContent = authErrorMessage(err);
+    errBox.classList.add("show");
+    setBusy(btn, false);
+  }
+});
+</script>
+</body>
+</html>

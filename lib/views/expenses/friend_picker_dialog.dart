@@ -46,7 +46,7 @@ class _FriendPickerDialogState extends State<FriendPickerDialog> {
                   return CheckboxListTile(
                     value: checked,
                     activeColor: Colors.green,
-                    secondary: const CircleAvatar(radius: 16, backgroundColor: Color(0xFFFDFDE0)),
+                    secondary: const CircleAvatar(radius: 16, backgroundColor: Color(0xFFD9D9D9)),
                     title: Text(members[i].value, style: const TextStyle(fontSize: 13)),
                     onChanged: (v) => setState(() => v! ? selected.add(uid) : selected.remove(uid)),
                   );

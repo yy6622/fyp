@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../controllers/insurance_controller.dart';
 import '../../models/insurance_models.dart';
 import '../../theme.dart';
+import '../shared/nice_pickers.dart';
 import 'payment_method_page.dart';
 
 const List<String> _monthNames = [
@@ -15,7 +16,9 @@ const List<String> _monthNames = [
 // ---------------------------------------------------------------------
 class TravellerDetailsPage extends StatefulWidget {
   final InsurancePlan plan;
-  const TravellerDetailsPage({super.key, required this.plan});
+  // See [InsurancePlanCard.tripId].
+  final String? tripId;
+  const TravellerDetailsPage({super.key, required this.plan, this.tripId});
 
   @override
   State<TravellerDetailsPage> createState() => _TravellerDetailsPageState();
@@ -24,9 +27,37 @@ class TravellerDetailsPage extends StatefulWidget {
 class _TravellerDetailsPageState extends State<TravellerDetailsPage> {
   final TravellerDetailsController controller = TravellerDetailsController();
 
+  // Real TextEditingControllers for the four plain-text fields per
+  // traveller (Full Name, Passport Number, Email, Phone) — these used to
+  // be bare TextFields with no controller at all (see
+  // TravellerDetailsController's doc comment), so typing into them never
+  // reached TravellerData. _addTraveller/_removeTraveller below keep each
+  // list's length in exact lockstep with controller.travellerCount, adding
+  // or removing at the same index as the traveller itself (not just
+  // trimming from the end) so a mid-list removal doesn't mix up which
+  // controller belongs to which remaining traveller.
+  final List<TextEditingController> _nameCtrls = [];
+  final List<TextEditingController> _passportCtrls = [];
+  final List<TextEditingController> _emailCtrls = [];
+  final List<TextEditingController> _phoneCtrls = [];
+
+  @override
+  void initState() {
+    super.initState();
+    // Starts with exactly one traveller (TravellerDetailsController's own
+    // initial state).
+    _nameCtrls.add(TextEditingController());
+    _passportCtrls.add(TextEditingController());
+    _emailCtrls.add(TextEditingController());
+    _phoneCtrls.add(TextEditingController());
+  }
+
   @override
   void dispose() {
     controller.dispose();
+    for (final c in [..._nameCtrls, ..._passportCtrls, ..._emailCtrls, ..._phoneCtrls]) {
+      c.dispose();
+    }
     super.dispose();
   }
 
@@ -36,7 +67,25 @@ class _TravellerDetailsPageState extends State<TravellerDetailsPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('You can add up to 6 travellers per booking')),
       );
+      return;
     }
+    setState(() {
+      _nameCtrls.add(TextEditingController());
+      _passportCtrls.add(TextEditingController());
+      _emailCtrls.add(TextEditingController());
+      _phoneCtrls.add(TextEditingController());
+    });
+  }
+
+  void _removeTraveller(int index) {
+    if (controller.travellers.length <= 1) return;
+    controller.removeTraveller(index);
+    setState(() {
+      _nameCtrls.removeAt(index).dispose();
+      _passportCtrls.removeAt(index).dispose();
+      _emailCtrls.removeAt(index).dispose();
+      _phoneCtrls.removeAt(index).dispose();
+    });
   }
 
   @override
@@ -96,7 +145,8 @@ class _TravellerDetailsPageState extends State<TravellerDetailsPage> {
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                   ),
                   onPressed: () => Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => PaymentMethodPage(plan: widget.plan, travellerCount: controller.travellerCount)),
+                    MaterialPageRoute(
+                        builder: (_) => PaymentMethodPage(plan: widget.plan, travellerCount: controller.travellerCount, tripId: widget.tripId)),
                   ),
                   child: const Text('Continue', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 15)),
                 ),
@@ -120,13 +170,13 @@ class _TravellerDetailsPageState extends State<TravellerDetailsPage> {
             const Spacer(),
             if (index > 0)
               GestureDetector(
-                onTap: () => controller.removeTraveller(index),
+                onTap: () => _removeTraveller(index),
                 child: const Icon(Icons.delete_outline, size: 20, color: Colors.redAccent),
               ),
           ],
         ),
         const SizedBox(height: 10),
-        _field('Full Name (as in passport)'),
+        _field(_nameCtrls[index], 'Full Name (as in passport)', onChanged: (v) => controller.setName(index, v)),
         const SizedBox(height: 10),
         _pickerField(
           'Date of Birth',
@@ -140,18 +190,27 @@ class _TravellerDetailsPageState extends State<TravellerDetailsPage> {
           onTap: () => _pickNationality(index),
         ),
         const SizedBox(height: 10),
-        _field('Passport Number'),
+        _field(_passportCtrls[index], 'Passport Number', onChanged: (v) => controller.setPassport(index, v)),
         if (index == 0) ...[
           const SizedBox(height: 10),
-          _field('Email'),
+          _field(_emailCtrls[index], 'Email', keyboardType: TextInputType.emailAddress, onChanged: (v) => controller.setEmail(index, v)),
           const SizedBox(height: 10),
-          _field('Phone Number'),
+          _field(_phoneCtrls[index], 'Phone Number', keyboardType: TextInputType.phone, onChanged: (v) => controller.setPhone(index, v)),
         ],
       ],
     );
   }
 
-  Widget _field(String label, {IconData? trailing}) {
+  // Was a bare TextField with no controller/onChanged at all — see
+  // TravellerDetailsController's doc comment for why that silently
+  // discarded whatever was typed. Now a real, wired-up text field.
+  Widget _field(
+    TextEditingController controller,
+    String label, {
+    IconData? trailing,
+    TextInputType? keyboardType,
+    required ValueChanged<String> onChanged,
+  }) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10)),
@@ -159,6 +218,9 @@ class _TravellerDetailsPageState extends State<TravellerDetailsPage> {
         children: [
           Expanded(
             child: TextField(
+              controller: controller,
+              keyboardType: keyboardType,
+              onChanged: onChanged,
               decoration: InputDecoration(
                 labelText: label,
                 labelStyle: const TextStyle(fontSize: 11.5, color: AppColors.textGrey),
@@ -206,11 +268,12 @@ class _TravellerDetailsPageState extends State<TravellerDetailsPage> {
 
   Future<void> _pickDob(int index) async {
     final now = DateTime.now();
-    final picked = await showDatePicker(
+    final picked = await showVoyaDatePicker(
       context: context,
       initialDate: controller.travellers[index].dob ?? DateTime(now.year - 20, now.month, now.day),
       firstDate: DateTime(now.year - 100),
       lastDate: now,
+      title: 'Date of Birth',
     );
     if (picked != null) controller.setDob(index, picked);
   }

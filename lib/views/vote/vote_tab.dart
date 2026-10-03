@@ -61,10 +61,27 @@ class _VoteTabState extends State<VoteTab> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(vote.title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.navy)),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Text(vote.title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.navy)),
+              ),
+              if (vote.isClosed)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(color: AppColors.chipGrey, borderRadius: BorderRadius.circular(8)),
+                  child: const Text('Closed', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.textGrey)),
+                ),
+            ],
+          ),
           const SizedBox(height: 2),
           Text(vote.allowMultipleChoice ? 'Multiple choice' : 'Single choice',
               style: const TextStyle(fontSize: 10.5, color: AppColors.textGrey)),
+          if (vote.deadline != null) ...[
+            const SizedBox(height: 2),
+            Text(_deadlineLabel(vote), style: TextStyle(fontSize: 10.5, color: vote.isClosed ? Colors.redAccent : AppColors.textGrey)),
+          ],
           const SizedBox(height: 10),
           ...vote.options.map((o) => _optionRow(vote, o)),
         ],
@@ -72,12 +89,21 @@ class _VoteTabState extends State<VoteTab> {
     );
   }
 
+  String _deadlineLabel(TripVote vote) {
+    final d = vote.deadline!;
+    const months = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    final hour12 = d.hour % 12 == 0 ? 12 : d.hour % 12;
+    final period = d.hour < 12 ? 'AM' : 'PM';
+    final when = '${d.day} ${months[d.month]}, $hour12:${d.minute.toString().padLeft(2, '0')} $period';
+    return vote.isClosed ? 'Voting closed $when' : 'Closes $when';
+  }
+
   Widget _optionRow(TripVote vote, VoteOption option) {
     final mineVoted = controller.votedByMe(option);
     final maxVotes = vote.options.fold(0, (m, o) => o.votedBy.length > m ? o.votedBy.length : m);
     final fraction = maxVotes == 0 ? 0.0 : option.votedBy.length / maxVotes;
     return GestureDetector(
-      onTap: () => controller.castVote(vote, option.id),
+      onTap: vote.isClosed ? null : () => controller.castVote(vote, option.id),
       child: Container(
         margin: const EdgeInsets.only(bottom: 8),
         padding: const EdgeInsets.all(10),

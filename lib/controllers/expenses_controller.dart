@@ -1,13 +1,18 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 
 import '../repositories/trip_repository.dart';
 import '../services/auth_service.dart';
+import '../services/receipt_service.dart';
 
-/// Controller for [ExpensesTab] (Groups / Personal toggle). "Groups" streams
-/// this trip's own expenses; "Personal" streams every expense the
-/// signed-in user participates in, across every trip.
+/// Controller for [ExpensesTab] (Groups / Personal toggle). Both views are
+/// scoped to this one trip only — "Groups" is every expense on this trip;
+/// "Personal" is just the subset of this trip's expenses where the
+/// signed-in user is a participant (their own share of this trip's costs).
+/// Neither view ever pulls in another trip's expenses: a "fee for this
+/// trip" must not interconnect with any other trip's data.
 class ExpensesTabController extends ChangeNotifier {
   final String tripId;
   ExpensesTabController({required this.tripId}) {
@@ -16,13 +21,6 @@ class ExpensesTabController extends ChangeNotifier {
       _loading = false;
       notifyListeners();
     });
-    final uid = _uid;
-    if (uid.isNotEmpty) {
-      _personalSub = TripRepository.instance.watchMyExpenses(uid).listen((list) {
-        _personalExpenses = list;
-        notifyListeners();
-      });
-    }
   }
 
   String get _uid => AuthService.instance.currentUser?.uid ?? '';
@@ -38,10 +36,15 @@ class ExpensesTabController extends ChangeNotifier {
   bool get loading => _loading;
 
   List<TripExpense> _groupExpenses = [];
-  List<TripExpense> _personalExpenses = [];
 
   StreamSubscription<List<TripExpense>>? _groupSub;
-  StreamSubscription<List<TripExpense>>? _personalSub;
+
+  /// This trip's expenses where the signed-in user is a participant —
+  /// derived client-side from [_groupExpenses] (already scoped to
+  /// [tripId]) rather than a separate cross-trip query, so it can never
+  /// show another trip's transactions.
+  List<TripExpense> get _personalExpenses =>
+      _groupExpenses.where((e) => e.participants.any((p) => p.uid == _uid)).toList();
 
   List<TripExpense> get visibleExpenses => _personal ? _personalExpenses : _groupExpenses;
 
@@ -78,7 +81,6 @@ class ExpensesTabController extends ChangeNotifier {
   @override
   void dispose() {
     _groupSub?.cancel();
-    _personalSub?.cancel();
     super.dispose();
   }
 }
@@ -111,6 +113,15 @@ class AddExpenseController extends ChangeNotifier {
   String location = 'Unknown';
   String category = 'Food & Drinks';
   bool reminder = true;
+
+  /// Set when this expense was started from "Upload Receipt" and a photo
+  /// was actually picked/taken — shown as a preview on the Details form and
+  /// uploaded to Firebase Storage on [submit]. Null for "Manual Entry".
+  File? receiptImage;
+  void setReceiptImage(File? file) {
+    receiptImage = file;
+    notifyListeners();
+  }
 
   /// True = split the entered [amountController] amount equally between
   /// [selectedUids]; false = itemized split driven by [items].
@@ -201,6 +212,10 @@ class AddExpenseController extends ChangeNotifier {
     final amt = amount;
     final shares = _computeShares();
     if (title.isEmpty || amt <= 0 || shares.isEmpty) return false;
+    // Itemized split: every line item must have at least one assignee, or
+    // the shares (derived only from assigned items) would silently add up
+    // to less than the saved total — money "lost" from the split.
+    if (!splitEqually && items.any((i) => i.assigneeUids.isEmpty)) return false;
     _submitting = true;
     notifyListeners();
     try {
@@ -213,6 +228,11 @@ class AddExpenseController extends ChangeNotifier {
                 paid: e.key == uid,
               ))
           .toList();
+      var receiptImageUrl = '';
+      final photo = receiptImage;
+      if (photo != null) {
+        receiptImageUrl = await ReceiptService.instance.upload(tripId, uid, photo);
+      }
       await TripRepository.instance.addExpense(
         tripId,
         tripName: trip.name,
@@ -224,6 +244,7 @@ class AddExpenseController extends ChangeNotifier {
         paidBy: uid,
         paidByName: myName,
         participants: participants,
+        receiptImageUrl: receiptImageUrl,
       );
       return true;
     } finally {

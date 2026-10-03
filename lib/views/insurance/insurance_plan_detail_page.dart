@@ -10,7 +10,10 @@ import 'traveller_details_page.dart';
 // ---------------------------------------------------------------------
 class InsurancePlanDetailPage extends StatelessWidget {
   final InsurancePlan plan;
-  const InsurancePlanDetailPage({super.key, required this.plan});
+  // See [InsurancePlanCard.tripId] — carried through so a purchase made
+  // here attaches back to the trip it was browsed from.
+  final String? tripId;
+  const InsurancePlanDetailPage({super.key, required this.plan, this.tripId});
 
   static const _icons = [
     (Icons.verified_outlined, 'Licenses'),
@@ -172,7 +175,7 @@ class InsurancePlanDetailPage extends StatelessWidget {
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                   ),
                   onPressed: () => Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => TravellerDetailsPage(plan: plan)),
+                    MaterialPageRoute(builder: (_) => TravellerDetailsPage(plan: plan, tripId: tripId)),
                   ),
                   child: const Text('Enter Traveller', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
                 ),

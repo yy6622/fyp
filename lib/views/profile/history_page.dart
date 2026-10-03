@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import '../../controllers/profile_controller.dart';
 import '../../repositories/booking_repository.dart';
 import '../../theme.dart';
-import '../group/plan_flight_detail_page.dart';
 import 'history_detail_pages.dart';
 
 // ---------------------------------------------------------------------
@@ -44,14 +43,15 @@ class _HistoryPageState extends State<HistoryPage> {
         listenable: controller,
         builder: (context, _) => Column(
           children: [
-            Row(
-              children: [
-                Expanded(child: _tabButton('Flight', HistoryTab.flight)),
-                Expanded(child: _tabButton('Hotel', HistoryTab.hotel)),
-                Expanded(child: _tabButton('Insurance', HistoryTab.insurance)),
+            PillTabBar(
+              tabs: const [
+                PillTab('Flight', Icons.flight_takeoff),
+                PillTab('Hotel', Icons.hotel_outlined),
+                PillTab('Insurance', Icons.shield_outlined),
               ],
+              selectedIndex: controller.tab.index,
+              onSelected: (i) => controller.setTab(HistoryTab.values[i]),
             ),
-            const Divider(height: 1, color: Color(0xFFECECEC)),
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
               child: Row(
@@ -71,19 +71,6 @@ class _HistoryPageState extends State<HistoryPage> {
             Expanded(child: _buildList(context)),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _tabButton(String label, HistoryTab tab) {
-    final selected = controller.tab == tab;
-    return GestureDetector(
-      onTap: () => controller.setTab(tab),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        decoration: BoxDecoration(border: Border(bottom: BorderSide(color: selected ? AppColors.primary : Colors.transparent, width: 2))),
-        alignment: Alignment.center,
-        child: Text(label, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: selected ? AppColors.primary : AppColors.textGrey)),
       ),
     );
   }
@@ -127,7 +114,7 @@ class _HistoryPageState extends State<HistoryPage> {
       itemCount: bookings.length,
       itemBuilder: (context, i) {
         final b = bookings[i];
-        return _historyRow(context, icon: icon, title: b.title, subtitle: b.subtitle, trailing: b.trailing);
+        return _historyRow(context, icon: icon, id: b.id, title: b.title, subtitle: b.subtitle, trailing: b.trailing, refId: b.refId, documents: b.documents);
       },
     );
   }
@@ -135,13 +122,16 @@ class _HistoryPageState extends State<HistoryPage> {
   Widget _historyRow(
     BuildContext context, {
     required IconData icon,
+    required String id,
     required String title,
     required String subtitle,
     required String trailing,
+    required String refId,
+    required Map<String, String> documents,
   }) {
     return InkWell(
       borderRadius: BorderRadius.circular(14),
-      onTap: () => _openHistoryDetail(context, title: title, subtitle: subtitle, trailing: trailing),
+      onTap: () => _openHistoryDetail(context, id: id, title: title, subtitle: subtitle, trailing: trailing, refId: refId, documents: documents),
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.all(12),
@@ -183,22 +173,47 @@ class _HistoryPageState extends State<HistoryPage> {
   // looked completely different from the Flight tab. The row's own
   // title/subtitle/trailing are threaded through so each page reflects the
   // booking that was actually tapped.
-  void _openHistoryDetail(BuildContext context, {required String title, required String subtitle, required String trailing}) {
+  void _openHistoryDetail(
+    BuildContext context, {
+    required String id,
+    required String title,
+    required String subtitle,
+    required String trailing,
+    required String refId,
+    required Map<String, String> documents,
+  }) {
     switch (controller.tab) {
       case HistoryTab.flight:
+        // id is the real `users/{uid}/bookings` doc id — passed through as
+        // bookingId so the Documents tab can actually attach an upload
+        // (see HistoryFlightDetailPage / BookingDocumentService). Before,
+        // this reused PlanFlightDetailPage with no tripId/id at all, which
+        // left the upload button permanently disabled for every History
+        // flight entry.
         Navigator.of(context).push(MaterialPageRoute(
-          builder: (_) => PlanFlightDetailPage(
+          builder: (_) => HistoryFlightDetailPage(
             routeCode: title,
-            routeCities: '',
             dateTime: subtitle,
+            price: trailing,
+            bookingId: id,
+            documents: documents,
           ),
         ));
         break;
       case HistoryTab.hotel:
         // trailing reads like "RM 320 (per night)" (see BookingBar) — strip
         // the suffix back off, HistoryHotelDetailPage labels it itself.
+        // refId (when set) is the original catalog_hotels doc id, which
+        // unlocks a real Review tab on the detail page below.
         Navigator.of(context).push(MaterialPageRoute(
-          builder: (_) => HistoryHotelDetailPage(name: title, location: subtitle, pricePerNight: trailing.split(' (').first),
+          builder: (_) => HistoryHotelDetailPage(
+            name: title,
+            location: subtitle,
+            pricePerNight: trailing.split(' (').first,
+            hotelId: refId,
+            bookingId: id,
+            documents: documents,
+          ),
         ));
         break;
       case HistoryTab.insurance:
@@ -210,6 +225,8 @@ class _HistoryPageState extends State<HistoryPage> {
             planName: title,
             policyNumber: subtitle.replaceFirst('Policy #', ''),
             amountPaid: trailing,
+            bookingId: id,
+            documents: documents,
           ),
         ));
         break;

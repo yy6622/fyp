@@ -1,0 +1,42 @@
+/* Voya Admin/Partner Console — design tokens
+   Colors sampled from the Figma mockups (Voya brand navy + teal). */
+:root {
+  --navy-900: #0c2f42;
+  --navy-800: #0e3a52;
+  --navy-700: #12455f;
+  --teal-600: #1c7d8c;
+  --teal-500: #2a95a3;
+  --teal-100: #e3f2f3;
+
+  --bg: #f5f7f9;
+  --card-bg: #ffffff;
+  --border: #e6eaee;
+  --border-strong: #d7dde3;
+
+  --text-900: #12202c;
+  --text-700: #35414c;
+  --text-500: #6b7684;
+  --text-400: #8a95a1;
+
+  --accent-indigo: #4b63d9;
+
+  --green-bg: #e3f6ea;
+  --green-text: #1f8a4d;
+  --amber-bg: #fdf1da;
+  --amber-text: #b3790c;
+  --red-bg: #fbe7e7;
+  --red-text: #c53a3a;
+  --blue-bg: #e8edfb;
+  --blue-text: #3b53c4;
+
+  --radius-lg: 16px;
+  --radius-md: 12px;
+  --radius-sm: 8px;
+  --radius-pill: 999px;
+
+  --shadow-card: 0 1px 2px rgba(16, 24, 32, .04), 0 1px 10px rgba(16, 24, 32, .04);
+  --shadow-pop: 0 12px 32px rgba(12, 40, 55, .18);
+
+  --sidebar-w: 252px;
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}

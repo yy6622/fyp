@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../theme.dart';
 import '../create_plan/create_plan_wizard.dart';
+import 'join_trip_page.dart';
+import 'scan_qr_page.dart';
 
 // ---------------------------------------------------------------------
 // New Plan chooser (reached from the Plan tab's "+" button)
@@ -18,16 +20,18 @@ class NewPlanPage extends StatelessWidget {
       ),
       body: Column(
         children: [
-          _tile(context, 'Create New Plan', 'Start a new trip with friends',
+          _tile(context, Icons.add_circle_outline, 'Create New Plan', 'Start a new trip with friends',
               () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const CreatePlanWizard()))),
-          _tile(context, 'Join with invite link', 'Enter invite link to join', () {}),
-          _tile(context, 'Scan QR code', 'Scan to join a group', () {}),
+          _tile(context, Icons.link, 'Join with invite code', 'Enter invite code to join',
+              () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const JoinTripPage()))),
+          _tile(context, Icons.qr_code_scanner, 'Scan QR code', 'Scan to join a group',
+              () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ScanQrPage()))),
         ],
       ),
     );
   }
 
-  Widget _tile(BuildContext context, String title, String subtitle, VoidCallback onTap) {
+  Widget _tile(BuildContext context, IconData icon, String title, String subtitle, VoidCallback onTap) {
     return InkWell(
       onTap: onTap,
       child: Padding(
@@ -37,7 +41,9 @@ class NewPlanPage extends StatelessWidget {
             Container(
               width: 44,
               height: 44,
-              decoration: BoxDecoration(color: const Color(0xFFFDFDE0), borderRadius: BorderRadius.circular(22)),
+              decoration: BoxDecoration(color: const Color(0xFFD9D9D9), borderRadius: BorderRadius.circular(22)),
+              alignment: Alignment.center,
+              child: Icon(icon, color: AppColors.primary, size: 20),
             ),
             const SizedBox(width: 14),
             Expanded(

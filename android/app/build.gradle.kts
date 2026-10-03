@@ -29,7 +29,7 @@ android {
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         // Raised from flutter.minSdkVersion — current firebase_auth/cloud_firestore
         // need API 23+.
-        minSdk = 23
+        minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
@@ -42,6 +42,14 @@ android {
             signingConfig = signingConfigs.getByName("debug")
         }
     }
+}
+
+// flutter_stripe's native Payment Sheet needs an AppCompat theme
+// (see values/styles.xml) built on top of this library — added
+// explicitly rather than relying on it coming in transitively from
+// another plugin.
+dependencies {
+    implementation("androidx.appcompat:appcompat:1.7.0")
 }
 
 flutter {

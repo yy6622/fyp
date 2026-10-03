@@ -3,10 +3,15 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../controllers/profile_controller.dart';
 import '../../data/countries.dart';
+import '../../data/malaysia_airports.dart';
+import '../../data/popular_destinations.dart';
 import '../../repositories/user_repository.dart';
 import '../../services/auth_service.dart';
 import '../../services/avatar_service.dart';
+import '../../services/language_service.dart';
+import '../../services/location_service.dart';
 import '../../theme.dart';
+import '../shared/nice_dialog.dart';
 import 'sub_page_scaffold.dart';
 
 // ---------------------------------------------------------------------
@@ -110,27 +115,68 @@ class _AccountSettingPageState extends State<AccountSettingPage> {
     await UserRepository.instance.updateProfile(uid, currencyCode: picked.code);
   }
 
-  Future<void> _editField({required String label, required String current, required String field}) async {
-    final ctrl = TextEditingController(text: current == 'Not set' ? '' : current);
-    final result = await showDialog<String>(
+  /// Attraction/restaurant/hotel names show translated into whichever
+  /// language is picked here (see LanguageService/TranslatedText) — this
+  /// row used to just read 'English' with no way to change it at all.
+  Future<void> _changeLanguage() async {
+    final picked = await showModalBottomSheet<LanguageOption>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text(label, style: const TextStyle(color: AppColors.navy, fontWeight: FontWeight.bold)),
-        content: TextField(controller: ctrl, autofocus: true),
-        actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Cancel', style: TextStyle(color: AppColors.textGrey))),
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(ctrl.text.trim()),
-            child: const Text('Save', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
-          ),
-        ],
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => _PickerSheet<LanguageOption>(
+        title: 'Language',
+        items: kSupportedLanguages,
+        labelOf: (l) => l.label,
+        trailingOf: (l) => l.code,
       ),
     );
-    if (result == null) return;
+    if (picked == null) return;
     final uid = AuthService.instance.currentUser?.uid;
     if (uid == null) return;
-    await UserRepository.instance.updateProfile(uid, name: field == 'name' ? result : null, phone: field == 'phone' ? result : null);
+    await UserRepository.instance.updateProfile(uid, languageCode: picked.code);
+  }
+
+  /// "Kuala Lumpur (KUL)" for a known airport code, or the bare code
+  /// itself if it's somehow not in [kMalaysiaAirports] (shouldn't
+  /// happen, but a raw code is still a meaningful fallback label).
+  String _airportLabel(String iataCode) {
+    for (final a in kMalaysiaAirports) {
+      if (a.iataCode == iataCode) return '${a.city.split(',').first} (${a.iataCode})';
+    }
+    return iataCode;
+  }
+
+  Future<void> _changeHomeAirport() async {
+    final picked = await showModalBottomSheet<MalaysiaAirport>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => const _HomeAirportPickerSheet(),
+    );
+    if (picked == null) return;
+    final uid = AuthService.instance.currentUser?.uid;
+    if (uid == null) return;
+    await UserRepository.instance.updateProfile(uid, homeAirportCode: picked.iataCode);
+  }
+
+  Future<void> _editField({required String label, required String current, required String field}) async {
+    final ctrl = TextEditingController(text: current == 'Not set' ? '' : current);
+    final result = await showNiceFormDialog(
+      context: context,
+      title: label,
+      headerIcon: Icons.edit_outlined,
+      confirmLabel: 'Save',
+      fieldsBuilder: (ctx, setState) => [
+        niceDialogField(ctrl, label, autofocus: true),
+      ],
+    );
+    if (result != true) return;
+    final uid = AuthService.instance.currentUser?.uid;
+    if (uid == null) return;
+    final value = ctrl.text.trim();
+    await UserRepository.instance.updateProfile(uid, name: field == 'name' ? value : null, phone: field == 'phone' ? value : null);
   }
 
   @override
@@ -146,6 +192,7 @@ class _AccountSettingPageState extends State<AccountSettingPage> {
           final phone = (profile?.phone.isNotEmpty ?? false) ? profile!.phone : 'Not set';
           final country = (profile?.country.isNotEmpty ?? false) ? profile!.country : 'Not set';
           final currency = (profile?.currencyCode.isNotEmpty ?? false) ? profile!.currencyCode : 'Not set';
+          final homeAirport = _airportLabel((profile?.homeAirportCode.isNotEmpty ?? false) ? profile!.homeAirportCode : kDefaultHomeAirport);
           return ListView(
             children: [
               profileNavRow('Username', username, onTap: () => _editField(label: 'Username', current: username, field: 'name')),
@@ -176,9 +223,10 @@ class _AccountSettingPageState extends State<AccountSettingPage> {
               profileNavRow('Password', '••••••••'),
               profileNavRow('Email', email),
               profileNavRow('Phone Number', phone, onTap: () => _editField(label: 'Phone Number', current: phone, field: 'phone')),
-              profileNavRow('Language', 'English'),
+              profileNavRow('Language', LanguageService.instance.labelFor(profile?.languageCode ?? ''), onTap: _changeLanguage),
               profileNavRow('Country / Region', country, onTap: _changeCountry),
               profileNavRow('Currency', currency, onTap: _changeCurrency),
+              profileNavRow('Home Airport', homeAirport, onTap: _changeHomeAirport),
               const SizedBox(height: 24),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -190,26 +238,13 @@ class _AccountSettingPageState extends State<AccountSettingPage> {
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                     ),
-                    onPressed: () => showDialog(
+                    onPressed: () => showNiceConfirmDialog(
                       context: context,
-                      builder: (ctx) => AlertDialog(
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                        title: const Text('Delete Account', style: TextStyle(color: AppColors.navy, fontWeight: FontWeight.bold)),
-                        content: const Text(
-                          'This permanently deletes your account and all your trips. This cannot be undone. Are you sure?',
-                          style: TextStyle(color: AppColors.textGrey),
-                        ),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.of(ctx).pop(),
-                            child: const Text('Cancel', style: TextStyle(color: AppColors.textGrey)),
-                          ),
-                          TextButton(
-                            onPressed: () => Navigator.of(ctx).pop(),
-                            child: const Text('Delete', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
-                          ),
-                        ],
-                      ),
+                      title: 'Delete Account',
+                      message: 'This permanently deletes your account and all your trips. This cannot be undone. Are you sure?',
+                      confirmLabel: 'Delete',
+                      icon: Icons.warning_amber_rounded,
+                      destructive: true,
                     ),
                     child: const Text('Delete Account', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
                   ),
@@ -219,6 +254,130 @@ class _AccountSettingPageState extends State<AccountSettingPage> {
           );
         },
       ),
+    );
+  }
+}
+
+/// Home Airport's picker sheet — unlike the plain [_PickerSheet] below,
+/// this one kicks off an on-demand [LocationService] lookup as soon as
+/// it opens and, when that succeeds, puts the nearest airport(s) in
+/// their own "NEAR YOU" section above the full list (see
+/// `location_service.dart`'s doc comment for why: someone in Penang
+/// should be offered PEN, not have to scroll a plain A-Z list looking
+/// for it while KUL sits at the top by coincidence of list order).
+/// Location failing in any of its ordinary ways (service off,
+/// permission declined, no fix within the timeout) just shows a short
+/// explanation and falls back to the plain full list — never blocks
+/// picking an airport manually.
+class _HomeAirportPickerSheet extends StatefulWidget {
+  const _HomeAirportPickerSheet();
+
+  @override
+  State<_HomeAirportPickerSheet> createState() => _HomeAirportPickerSheetState();
+}
+
+class _HomeAirportPickerSheetState extends State<_HomeAirportPickerSheet> {
+  LocationLookupResult? _result;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _lookup();
+  }
+
+  Future<void> _lookup() async {
+    final result = await LocationService.instance.suggestNearestAirport();
+    if (mounted) setState(() => _result = result);
+    if (mounted) setState(() => _loading = false);
+  }
+
+  String? get _statusMessage {
+    switch (_result?.status) {
+      case LocationLookupStatus.serviceDisabled:
+        return 'Turn on location services to see airports near you.';
+      case LocationLookupStatus.permissionDenied:
+        return "Location permission wasn't granted — showing all airports instead.";
+      case LocationLookupStatus.permissionDeniedForever:
+        return 'Location permission is blocked — enable it in system settings to see nearby airports.';
+      case LocationLookupStatus.failed:
+        return "Couldn't get your location — showing all airports instead.";
+      case LocationLookupStatus.success:
+      case null:
+        return null;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final nearby = _result?.rankedByDistanceKm?.take(3).toList() ?? const <MapEntry<MalaysiaAirport, double>>[];
+    final nearbyCodes = nearby.map((e) => e.key.iataCode).toSet();
+    final rest = kMalaysiaAirports.where((a) => !nearbyCodes.contains(a.iataCode)).toList();
+    final message = _statusMessage;
+
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Home Airport', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.navy)),
+            const SizedBox(height: 2),
+            const Text('Used as your departure point for flight searches.', style: TextStyle(fontSize: 11, color: AppColors.textGrey)),
+            const SizedBox(height: 8),
+            if (_loading)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 14),
+                child: Row(children: [
+                  SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary)),
+                  SizedBox(width: 10),
+                  Text('Finding airports near you…', style: TextStyle(fontSize: 12, color: AppColors.textGrey)),
+                ]),
+              )
+            else if (message != null)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Text(message, style: const TextStyle(fontSize: 11.5, color: AppColors.textGrey)),
+              ),
+            ConstrainedBox(
+              constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.5),
+              child: ListView(
+                shrinkWrap: true,
+                children: [
+                  if (nearby.isNotEmpty) ...[
+                    const Padding(
+                      padding: EdgeInsets.only(left: 4, bottom: 2),
+                      child: Text('NEAR YOU', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: AppColors.primary, letterSpacing: 0.4)),
+                    ),
+                    ...nearby.map((e) => _airportTile(e.key, distanceKm: e.value)),
+                    const Divider(height: 20),
+                  ],
+                  ...rest.map((a) => _airportTile(a)),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _airportTile(MalaysiaAirport airport, {double? distanceKm}) {
+    return ListTile(
+      leading: const Icon(Icons.flight_takeoff, size: 18, color: AppColors.primary),
+      title: Text(airport.city.split(',').first, style: const TextStyle(fontSize: 13.5)),
+      subtitle: Text(airport.name, style: const TextStyle(fontSize: 10.5, color: AppColors.textGrey)),
+      trailing: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Text(airport.iataCode, style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.navy, fontSize: 12.5)),
+          if (distanceKm != null)
+            Text('${distanceKm.toStringAsFixed(0)} km', style: const TextStyle(fontSize: 9.5, color: AppColors.textGrey)),
+        ],
+      ),
+      onTap: () => Navigator.of(context).pop(airport),
     );
   }
 }

@@ -1,0 +1,15 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Avatar photos — anyone signed in can view (shown to friends/trip
+    // members), only the owner can upload/replace/remove their own.
+    // A wildcard segment can't be suffix-qualified (`{uid}.jpg` isn't
+    // valid Security Rules syntax) — match the whole filename instead and
+    // compare it to "<uid>.jpg" in the condition, matching how
+    // avatar_service.dart names the uploaded object.
+    match /avatars/{fileName} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && fileName == request.auth.uid + '.jpg';
+    }
+  }
+}

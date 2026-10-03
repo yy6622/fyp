@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Content Moderation — Voya Admin</title>
+<link rel="stylesheet" href="../css/tokens.css" />
+<link rel="stylesheet" href="../css/base.css" />
+<link rel="stylesheet" href="../css/layout.css" />
+<link rel="stylesheet" href="../css/components.css" />
+</head>
+<body>
+<div class="shell">
+  <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-brand">Voya</div>
+    <div class="sidebar-user">
+      <div class="name" id="sbUserName">Loading…</div>
+      <div class="role" id="sbUserRole">Administrator</div>
+    </div>
+    <nav class="nav" id="sidebarNav"></nav>
+    <button class="sidebar-logout" id="logoutBtn"><span data-icon="log-out"></span>Log out</button>
+  </aside>
+
+  <main class="content">
+    <div class="topbar">
+      <div>
+        <button class="menu-toggle" id="menuToggle"><span data-icon="menu"></span></button>
+        <h1 class="h1">Content Moderation</h1>
+        <p class="subtitle">Review reported content and keep Voya safe</p>
+      </div>
+    </div>
+
+    <div class="stat-grid" id="statGrid"><div class="skeleton" style="height:90px;grid-column:1/-1;"></div></div>
+
+    <div class="filter-bar">
+      <div class="search-input-wrap"><span data-icon="search"></span><input class="input" id="searchInput" placeholder="Search reported content…" /></div>
+    </div>
+
+    <div id="list"><div class="card" style="padding:20px;"><div class="skeleton" style="height:80px;"></div></div></div>
+    <div class="empty-state" id="emptyState" style="display:none;">
+      <span data-icon="flag" class="icon-lg"></span>
+      <div class="h3">Nothing to review</div>
+      <p class="small">Reported posts will show up here.</p>
+    </div>
+  </main>
+</div>
+
+<div class="modal-backdrop" id="reviewModal">
+  <div class="modal" style="max-width:600px;">
+    <div class="modal-head"><h3 class="h2">Reported post</h3><button class="modal-close" data-close><span data-icon="x"></span></button></div>
+    <div id="reviewBody"></div>
+  </div>
+</div>
+
+<script type="module">
+import { requireRole } from "../js/auth-guard.js";
+import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js";
+import { mountIcons } from "../js/icons.js";
+import { listReportedPosts, approvePostReport, rejectPost, logModerationAction, countModerationToday } from "../js/data.js";
+import { number, timeAgo, escapeHtml, toast, setBusy, confirmDialog, openModal, closeModal, wireModalDismiss } from "../js/ui.js";
+
+mountSidebarNav({ role: "admin", active: "moderation" });
+const session = await requireRole("admin", "login.html");
+let reports = [];
+
+if (session) {
+  setSidebarUser({ displayName: session.profile.name || "Admin", roleLabel: "Administrator" });
+  wireModalDismiss();
+  await load();
+}
+
+function statCard(label, value, icon) {
+  return `<div class="card stat-card"><div class="stat-top"><div class="stat-icon"><span data-icon="${icon}"></span></div><div class="stat-label">${label}</div></div><div class="stat-value">${value}</div><div class="stat-delta">↑ 2.4% from last month</div></div>`;
+}
+
+async function load() {
+  const [posts, approvedToday, rejectedToday] = await Promise.all([
+    listReportedPosts(), countModerationToday("approved"), countModerationToday("rejected"),
+  ]);
+  reports = posts;
+  document.getElementById("statGrid").innerHTML = [
+    statCard("Pending review", number(reports.length), "clock"),
+    statCard("Approved today", number(approvedToday), "file-check"),
+    statCard("Rejected today", number(rejectedToday), "file-x"),
+  ].join("");
+  renderList();
+  mountIcons(document);
+}
+
+function renderList() {
+  const q = document.getElementById("searchInput").value.trim().toLowerCase();
+  const filtered = reports.filter((p) => !q || (p.title || "").toLowerCase().includes(q) || (p.author || "").toLowerCase().includes(q));
+  const list = document.getElementById("list");
+  const empty = document.getElementById("emptyState");
+  if (!filtered.length) {
+    list.innerHTML = "";
+    empty.style.display = "block";
+    return;
+  }
+  empty.style.display = "none";
+  list.innerHTML = filtered.map((p) => `
+    <div class="card report-card" style="margin-bottom:16px;">
+      <div class="report-thumb" style="${p.images?.[0] ? `background-image:url('${p.images[0]}');background-size:cover;background-position:center;` : ""}"></div>
+      <div class="report-body">
+        <div class="report-title">${escapeHtml(p.title || "Untitled post")}</div>
+        <div class="report-meta">Reported by ${escapeHtml(p.reportedBy || "a traveller")} · ${timeAgo(p.reportedAt)} · ${escapeHtml(p.reportReason || "No reason given")}</div>
+        <div class="report-desc">Review the reported content and choose the appropriate action.</div>
+      </div>
+      <div class="report-actions">
+        <button class="btn btn-outline btn-sm" data-review="${p.id}"><span data-icon="eye" data-icon-size="14"></span>Review</button>
+        <button class="btn btn-danger-outline btn-sm" data-reject="${p.id}"><span data-icon="x" data-icon-size="14"></span>Reject</button>
+        <button class="btn btn-primary btn-sm" data-approve="${p.id}"><span data-icon="check-circle" data-icon-size="14"></span>Approve</button>
+      </div>
+    </div>`).join("");
+  mountIcons(document);
+  list.querySelectorAll("[data-review]").forEach((b) => b.addEventListener("click", () => review(b.dataset.review)));
+  list.querySelectorAll("[data-reject]").forEach((b) => b.addEventListener("click", () => act("reject", b.dataset.reject, b)));
+  list.querySelectorAll("[data-approve]").forEach((b) => b.addEventListener("click", () => act("approve", b.dataset.approve, b)));
+}
+
+function review(postId) {
+  const p = reports.find((x) => x.id === postId);
+  if (!p) return;
+  document.getElementById("reviewBody").innerHTML = `
+    ${p.images?.[0] ? `<img src="${p.images[0]}" style="width:100%;border-radius:12px;margin-bottom:16px;max-height:220px;object-fit:cover;" />` : ""}
+    <p class="h3" style="margin-bottom:6px;">${escapeHtml(p.title || "Untitled post")}</p>
+    <p class="muted small" style="margin-bottom:14px;">By ${escapeHtml(p.author || "Traveller")} · ${escapeHtml(p.location || "")}</p>
+    <p style="font-size:14px;line-height:1.6;color:var(--text-700);margin-bottom:18px;">${escapeHtml(p.description || "No description.")}</p>
+    <div class="card-pad" style="background:var(--amber-bg);border-radius:12px;">
+      <p class="small" style="color:var(--amber-text);font-weight:700;">Reported: ${escapeHtml(p.reportReason || "No reason given")}</p>
+      <p class="small" style="color:var(--amber-text);">By ${escapeHtml(p.reportedBy || "a traveller")}</p>
+    </div>
+    <div class="form-actions">
+      <button class="btn btn-danger-outline" data-modal-reject="${p.id}"><span data-icon="x" data-icon-size="14"></span>Reject</button>
+      <button class="btn btn-primary" data-modal-approve="${p.id}"><span data-icon="check-circle" data-icon-size="14"></span>Approve</button>
+    </div>`;
+  mountIcons(document.getElementById("reviewBody"));
+  document.getElementById("reviewBody").querySelector("[data-modal-reject]").onclick = (e) => { closeModal("reviewModal"); act("reject", postId, e.target); };
+  document.getElementById("reviewBody").querySelector("[data-modal-approve]").onclick = (e) => { closeModal("reviewModal"); act("approve", postId, e.target); };
+  openModal("reviewModal");
+}
+
+async function act(kind, postId, btn) {
+  if (kind === "reject") {
+    const ok = await confirmDialog({
+      title: "Reject and remove this post?",
+      body: "This permanently deletes the post from Voya. This can't be undone.",
+      confirmText: "Reject & remove", danger: true,
+    });
+    if (!ok) return;
+  }
+  setBusy(btn, true, "Working…");
+  try {
+    if (kind === "approve") await approvePostReport(postId);
+    else await rejectPost(postId);
+    await logModerationAction(kind === "approve" ? "approved" : "rejected", postId, session.uid);
+    reports = reports.filter((r) => r.id !== postId);
+    toast(kind === "approve" ? "Report dismissed — post stays live." : "Post removed.", "success");
+    await load();
+  } catch (err) {
+    toast(err.message || "Something went wrong.", "error");
+    setBusy(btn, false);
+  }
+}
+
+document.getElementById("searchInput").addEventListener("input", renderList);
+</script>
+</body>
+</html>

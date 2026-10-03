@@ -1,4 +1,17 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Used by geolocator (lib/services/location_service.dart) to
+         suggest the nearest departure airport for Home Airport in
+         Account Setting. ACCESS_COARSE_LOCATION alone is enough for a
+         "which city am I near" suggestion; FINE is requested too since
+         the OS may grant only coarse either way, and coarse is what
+         the app actually needs. -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
+    <!-- Used by mobile_scanner (lib/views/group/scan_qr_page.dart) to
+         scan a trip's invite QR code shown on its Group Info page. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+
     <application
         android:label="voya"
         android:name="${applicationName}"

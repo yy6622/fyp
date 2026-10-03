@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 
-/// A day inside a community/public itinerary post (`DetailPagePlan`).
-/// Kept separate from [DayPlan] (group_trip) since that one carries
-/// group-voting fields these itinerary posts don't have.
+/// A day inside a community/public itinerary post (see
+/// `community_post_detail_page.dart`). Kept separate from [DayPlan]
+/// (group_trip) since that one carries group-voting fields these
+/// itinerary posts don't have.
 class ItineraryDay {
   final int day;
   final List<ItineraryDayItem> items;

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../models/nearby_models.dart';
 import '../../theme.dart';
+import '../shared/maps_launcher.dart';
+import '../shared/translated_text.dart';
 import 'detail_widgets.dart';
 
 // ---------------------------------------------------------------------
@@ -22,12 +24,17 @@ class DetailPagePlace extends StatelessWidget {
       body: SafeArea(
         child: Column(
           children: [
-            DetailHeader(title: place.name),
+            DetailHeader(title: place.name, imageUrl: place.image, translate: true),
             Expanded(
               child: ListView(
+                // ListView lays its children out full-width already (one
+                // per row), so this page didn't have DetailPageAttraction's
+                // centering bug — kept as ListView rather than switching to
+                // Column+crossAxisAlignment for consistency's sake, since
+                // the visual result is identical either way.
                 padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
                 children: [
-                  Text(place.name, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.navy)),
+                  TranslatedText(place.name, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.navy)),
                   const SizedBox(height: 6),
                   Text(place.categoryLabel, style: const TextStyle(fontSize: 12.5, color: AppColors.textGrey)),
                   const SizedBox(height: 12),
@@ -73,6 +80,26 @@ class DetailPagePlace extends StatelessWidget {
                     ),
                   ),
                 ],
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 10, offset: const Offset(0, -4))],
+              ),
+              child: SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  ),
+                  onPressed: () => openDirections(context, place.lat, place.lon),
+                  icon: const Icon(Icons.directions_outlined, color: Colors.white, size: 20),
+                  label: const Text('Get Directions', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+                ),
               ),
             ),
           ],

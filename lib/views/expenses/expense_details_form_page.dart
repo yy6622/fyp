@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../../controllers/expenses_controller.dart';
 import '../../theme.dart';
 import '../group/group_trip_page.dart';
+import '../shared/nice_dialog.dart';
+import 'itemized_split_page.dart';
 import 'split_friends_page.dart';
 
 class ExpenseDetailsFormPage extends StatefulWidget {
@@ -14,36 +16,37 @@ class ExpenseDetailsFormPage extends StatefulWidget {
 }
 
 class _ExpenseDetailsFormPageState extends State<ExpenseDetailsFormPage> {
-  void _editField(String label, String current, ValueChanged<String> onSaved, {TextInputType? keyboardType}) {
+  Future<void> _editField(String label, String current, ValueChanged<String> onSaved, {TextInputType? keyboardType}) async {
     final ctrl = TextEditingController(text: current);
-    showDialog(
+    final result = await showNiceFormDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text('Edit $label', style: const TextStyle(color: AppColors.navy, fontWeight: FontWeight.bold)),
-        content: TextField(controller: ctrl, autofocus: true, keyboardType: keyboardType),
-        actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Cancel')),
-          TextButton(
-            onPressed: () {
-              onSaved(ctrl.text.trim().isEmpty ? current : ctrl.text.trim());
-              Navigator.of(ctx).pop();
-            },
-            child: const Text('Save'),
-          ),
-        ],
-      ),
+      title: 'Edit $label',
+      headerIcon: Icons.edit_outlined,
+      confirmLabel: 'Save',
+      fieldsBuilder: (ctx, setState) => [
+        niceDialogField(ctrl, label, autofocus: true, keyboardType: keyboardType),
+      ],
     );
+    if (result == true) {
+      onSaved(ctrl.text.trim().isEmpty ? current : ctrl.text.trim());
+    }
   }
 
   Future<void> _submit() async {
-    final ok = await widget.controller.submit();
+    bool ok;
+    String? error;
+    try {
+      ok = await widget.controller.submit();
+    } catch (_) {
+      ok = false;
+      error = "Couldn't save this expense — check your connection and try again";
+    }
     if (!mounted) return;
     if (ok) {
       Navigator.of(context).popUntil((r) => r.settings.name == GroupTripPage.routeName);
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Add a title, an amount, and who to split with')),
+        SnackBar(content: Text(error ?? 'Add a title, an amount, and who to split with')),
       );
     }
   }
@@ -63,6 +66,13 @@ class _ExpenseDetailsFormPageState extends State<ExpenseDetailsFormPage> {
               child: ListView(
                 padding: const EdgeInsets.all(20),
                 children: [
+                  if (widget.controller.receiptImage != null) ...[
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(14),
+                      child: Image.file(widget.controller.receiptImage!, height: 160, width: double.infinity, fit: BoxFit.cover),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
                   const Text('Details', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.navy)),
                   const SizedBox(height: 8),
                   _editableRow('Title', widget.controller.titleController.text.isEmpty ? 'Tap to add a title' : widget.controller.titleController.text,
@@ -77,11 +87,13 @@ class _ExpenseDetailsFormPageState extends State<ExpenseDetailsFormPage> {
                   _editableRow('Category', widget.controller.category, onTap: () => _editField('Category', widget.controller.category, widget.controller.setCategory)),
                   _editableRow('Note', widget.controller.noteController.text.isEmpty ? 'Tap to add a note' : widget.controller.noteController.text,
                       onTap: () => _editField('Note', widget.controller.noteController.text, widget.controller.setNote)),
-                  if (widget.controller.splitEqually)
-                    _editableRow('Split Method', 'Equally · ${widget.controller.selectedUids.length} people',
-                        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => SplitFriendsPage(controller: widget.controller))))
-                  else
-                    _row('Split Method', 'Itemized · ${widget.controller.items.length} items'),
+                  _editableRow(
+                    'Split Method',
+                    widget.controller.splitEqually
+                        ? 'Equally · ${widget.controller.selectedUids.length} people'
+                        : 'Itemized · ${widget.controller.items.length} items',
+                    onTap: _chooseSplitMethod,
+                  ),
                   Container(
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: Color(0xFFE4E4E4)))),
@@ -116,6 +128,45 @@ class _ExpenseDetailsFormPageState extends State<ExpenseDetailsFormPage> {
         ),
       ),
     );
+  }
+
+  /// Lets the split method be changed from right inside Details, instead of
+  /// being locked in by which "Add Expenses" tile was tapped — "Split With"
+  /// (equal, member checklist) or "Itemized" (per-line-item), either
+  /// reachable at any point while filling the form in.
+  Future<void> _chooseSplitMethod() async {
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.people_outline, color: AppColors.primary),
+              title: const Text('Split Equally'),
+              subtitle: const Text('Divide the total between selected members'),
+              onTap: () => Navigator.of(ctx).pop('equal'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.receipt_long_outlined, color: AppColors.primary),
+              title: const Text('Itemized'),
+              subtitle: const Text('Split by line item, person by person'),
+              onTap: () => Navigator.of(ctx).pop('itemized'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (choice == null || !mounted) return;
+    if (choice == 'equal') {
+      widget.controller.setSplitEqually(true);
+      Navigator.of(context).push(MaterialPageRoute(builder: (_) => SplitFriendsPage(controller: widget.controller)));
+    } else {
+      widget.controller.setSplitEqually(false);
+      Navigator.of(context).push(MaterialPageRoute(builder: (_) => ItemizedSplitPage(controller: widget.controller)));
+    }
   }
 
   Widget _row(String label, String value) {

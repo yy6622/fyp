@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 
 import '../../controllers/detail_page_controller.dart';
+import '../../repositories/catalog_repository.dart';
+import '../../repositories/trip_repository.dart';
+import '../../services/format_utils.dart';
 import '../../theme.dart';
-import 'all_reviews_page.dart';
+import '../shared/translated_text.dart';
 import 'detail_widgets.dart';
 
 // ---------------------------------------------------------------------
@@ -12,17 +15,39 @@ class DetailPageHotel extends StatefulWidget {
   // Defaults match the original Japan-trip mock so existing callers that
   // still just do `const DetailPageHotel()` render exactly as before; real
   // callers (Explore, a trip's hotel stays) pass the actual hotel through.
+  // [hotelId] is the `catalog_hotels` doc id — only set when this page was
+  // opened from a real catalog hotel (Explore, Saved, History), not for a
+  // trip's own manually-typed hotel stay, which has no catalog doc to
+  // attach real reviews to. When it's empty the Reviews section is hidden
+  // entirely rather than showing something fake.
+  final String hotelId;
   final String name;
   final String location;
   final String ratingLabel;
   final String pricePerNight;
+  // The hotel's real photo (Duffel/RollingGo's own accommodation photo, or
+  // the saved catalog hotel's `image`) — empty for a trip's manually-typed
+  // hotel stay, which has no photo data at all, same as [hotelId].
+  final String image;
+  // The trip this stay should be added to once payment succeeds (see
+  // BookingBar's onPaid) — blank when there's no trip context. checkIn/
+  // checkOut are the dates actually searched for (when known) so the
+  // trip's own hotel-stay record reflects real dates instead of blanks.
+  final String tripId;
+  final String checkIn;
+  final String checkOut;
 
   const DetailPageHotel({
     super.key,
+    this.hotelId = '',
     this.name = 'L Hotel',
     this.location = 'Shinjoku, Tokyo   1.2km to city center',
     this.ratingLabel = '4.8(1.2k)',
     this.pricePerNight = 'RM 320',
+    this.image = '',
+    this.tripId = '',
+    this.checkIn = '',
+    this.checkOut = '',
   });
 
   @override
@@ -47,12 +72,22 @@ class _DetailPageHotelState extends State<DetailPageHotel> {
           listenable: controller,
           builder: (context, _) => Column(
             children: [
-              DetailHeader(title: widget.name),
               Expanded(
-                child: ListView(
-                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-                  children: [
-                    Text(widget.name, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.navy)),
+                child: SingleChildScrollView(
+                  child: Column(
+                    children: [
+                      DetailHeader(title: widget.name, imageUrl: widget.image, translate: true),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+                        child: Column(
+                          // Same fix as DetailPageAttraction/DetailPageRestaurant:
+                          // without this, Column centers every child that
+                          // doesn't already fill the width (name, rating,
+                          // "About"), which is why this page looked
+                          // inconsistent with the others' left-aligned layout.
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                    TranslatedText(widget.name, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.navy)),
                     const SizedBox(height: 8),
                     Row(
                       children: [
@@ -96,7 +131,11 @@ class _DetailPageHotelState extends State<DetailPageHotel> {
                     const Divider(height: 1, color: Color(0xFFECECEC)),
                     const SizedBox(height: 16),
                     if (!controller.showReview) ..._detailsContent() else ..._reviewContent(),
-                  ],
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
               BookingBar(
@@ -106,6 +145,28 @@ class _DetailPageHotelState extends State<DetailPageHotel> {
                 bookingType: 'hotel',
                 bookingTitle: widget.name,
                 bookingSubtitle: widget.location,
+                refId: widget.hotelId,
+                tripId: widget.tripId,
+                onPaid: widget.tripId.isEmpty
+                    ? null
+                    : (confirmation) => TripRepository.instance.addHotelStay(
+                          widget.tripId,
+                          TripHotelStay(
+                            id: '${DateTime.now().microsecondsSinceEpoch}',
+                            name: widget.name,
+                            location: widget.location,
+                            // The dates actually confirmed at checkout —
+                            // real, not whatever (possibly blank) dates
+                            // this page happened to be opened with.
+                            checkIn: confirmation.checkIn != null ? formatLongDate(confirmation.checkIn!) : widget.checkIn,
+                            checkOut: confirmation.checkOut != null ? formatLongDate(confirmation.checkOut!) : widget.checkOut,
+                            guestName: confirmation.guestName,
+                            guestEmail: confirmation.guestEmail,
+                            guestPhone: confirmation.guestPhone,
+                            guestIdNumber: confirmation.guestIdNumber,
+                            specialRequests: confirmation.specialRequests,
+                          ),
+                        ),
               ),
             ],
           ),
@@ -195,22 +256,28 @@ class _DetailPageHotelState extends State<DetailPageHotel> {
   }
 
   List<Widget> _reviewContent() {
+    // No catalog doc to attach real reviews to (a manually-typed trip
+    // hotel stay, or the default preview) — skip the section rather than
+    // showing canned content that isn't about a real place.
+    if (widget.hotelId.isEmpty) {
+      return const [
+        Text('No review for this hotel yet.', style: TextStyle(fontSize: 12, color: AppColors.textGrey)),
+      ];
+    }
     return [
-      Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          const Text('Guest Reviews', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.navy)),
-          GestureDetector(
-            onTap: () => Navigator.of(context).push(MaterialPageRoute(
-              builder: (_) => AllReviewsPage(title: widget.name, ratingSummary: widget.ratingLabel),
-            )),
-            child: const Text('View All', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: Colors.blue)),
-          ),
-        ],
+      ReviewsSection(
+        title: widget.name,
+        ratingSummary: widget.ratingLabel,
+        reviewsStream: CatalogRepository.instance.watchHotelReviews(widget.hotelId).map((list) => list.map(reviewDataFromPlace).toList()),
+        onSubmitReview: ({required authorId, required authorName, required rating, required comment}) => CatalogRepository.instance.addHotelReview(
+          widget.hotelId,
+          authorId: authorId,
+          authorName: authorName,
+          rating: rating,
+          comment: comment,
+        ),
+        allowWriting: false,
       ),
-      const SizedBox(height: 12),
-      // Top 3 only — the rest are a tap away via "View All".
-      ...kSampleReviews.take(3).expand((r) => [ReviewCard(data: r), const SizedBox(height: 12)]),
     ];
   }
 }

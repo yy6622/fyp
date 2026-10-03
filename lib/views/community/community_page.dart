@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../controllers/community_controller.dart';
+import '../../controllers/filter_controller.dart';
 import '../../models/community_models.dart';
 import '../../theme.dart';
 import '../filter/filter_page.dart';
@@ -22,6 +23,11 @@ class CommunityPage extends StatefulWidget {
 
 class _CommunityPageState extends State<CommunityPage> {
   final CommunityController controller = CommunityController();
+  // FilterPage now always needs an owned controller passed in (see
+  // filter_page.dart) — this page's Filter sheet isn't wired to actually
+  // filter the post feed (unchanged from before), it just needs somewhere
+  // to keep its own selections while open.
+  final FilterController filterController = FilterController();
 
   @override
   void initState() {
@@ -32,6 +38,7 @@ class _CommunityPageState extends State<CommunityPage> {
   @override
   void dispose() {
     controller.dispose();
+    filterController.dispose();
     super.dispose();
   }
 
@@ -40,7 +47,7 @@ class _CommunityPageState extends State<CommunityPage> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => const FilterPage(type: filters.FilterType.plan),
+      builder: (_) => FilterPage(type: filters.FilterType.plan, controller: filterController),
     );
   }
 
@@ -55,13 +62,11 @@ class _CommunityPageState extends State<CommunityPage> {
             children: [
               Column(
                 children: [
+                  // The only thing that stays put while scrolling — the
+                  // search bar, the story banner and the feed all move
+                  // together underneath it now (see _buildScrollableBody).
                   _buildHeader(),
-                  const SizedBox(height: 10),
-                  _buildSearchBar(),
-                  const SizedBox(height: 12),
-                  _buildStoryBanner(),
-                  const SizedBox(height: 14),
-                  Expanded(child: _buildFeed()),
+                  Expanded(child: _buildScrollableBody()),
                 ],
               ),
               if (controller.composeOpen)
@@ -103,11 +108,17 @@ class _CommunityPageState extends State<CommunityPage> {
   }
 
   // ---------------- Search + banner ----------------
+  // Same shape as Explore's top search bar (ExplorePage._buildSearchBar)
+  // — same fill color, radius and the extra `vertical: 4` padding that
+  // gives it its height; kept as two separate widgets rather than one
+  // shared one since Explore's trailing icon runs a search/voice action
+  // and this one opens the post filter sheet, a genuinely different
+  // control, not just a style difference.
   Widget _buildSearchBar() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
         decoration: BoxDecoration(color: AppColors.chipGrey, borderRadius: BorderRadius.circular(24)),
         child: Row(
           children: [
@@ -144,7 +155,7 @@ class _CommunityPageState extends State<CommunityPage> {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Container(
-        height: 260,
+        height: 150,
         clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(16),
@@ -153,7 +164,7 @@ class _CommunityPageState extends State<CommunityPage> {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            const AppImage('assets/images/story_banner.jpg', fit: BoxFit.cover),
+            const AppImage('assets/images/community.jpg', fit: BoxFit.cover),
             Container(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
@@ -200,19 +211,57 @@ class _CommunityPageState extends State<CommunityPage> {
     );
   }
 
-  // ---------------- Feed ----------------
-  Widget _buildFeed() {
+  // ---------------- Scrollable body (search bar + banner + feed) ----------------
+  // Everything below the fixed header scrolls as one — the search bar
+  // and story banner used to be fixed Column children with only the
+  // feed below them scrolling in its own ListView, which meant they
+  // permanently ate screen height even once someone had scrolled past
+  // them. A CustomScrollView with the search bar/banner as a
+  // SliverToBoxAdapter ahead of the feed's own sliver lets all of it
+  // scroll together under one shared scroll position instead.
+  Widget _buildScrollableBody() {
     final posts = controller.filteredPosts;
-    if (posts.isEmpty) {
-      return const Center(
-        child: Text('No posts match your search', style: TextStyle(color: AppColors.textGrey)),
-      );
-    }
-    return ListView.separated(
-      padding: const EdgeInsets.fromLTRB(20, 4, 20, 90),
-      itemCount: posts.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 18),
-      itemBuilder: (context, i) => _postCard(posts[i]),
+    return CustomScrollView(
+      slivers: [
+        SliverToBoxAdapter(
+          child: Column(
+            children: [
+              const SizedBox(height: 10),
+              _buildSearchBar(),
+              const SizedBox(height: 12),
+              _buildStoryBanner(),
+              const SizedBox(height: 14),
+            ],
+          ),
+        ),
+        if (posts.isEmpty)
+          const SliverFillRemaining(
+            hasScrollBody: false,
+            child: Center(
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: 40),
+                child: Text('No posts match your search', style: TextStyle(color: AppColors.textGrey)),
+              ),
+            ),
+          )
+        else
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(20, 4, 20, 90),
+            // A plain SliverChildListDelegate (rather than
+            // SliverList.separated, a newer constructor not worth
+            // depending on sight-unseen) with the gap manually
+            // interleaved — same visual result as the old
+            // ListView.separated(separatorBuilder: SizedBox(height: 18)).
+            sliver: SliverList(
+              delegate: SliverChildListDelegate([
+                for (var i = 0; i < posts.length; i++) ...[
+                  if (i > 0) const SizedBox(height: 18),
+                  _postCard(posts[i]),
+                ],
+              ]),
+            ),
+          ),
+      ],
     );
   }
 

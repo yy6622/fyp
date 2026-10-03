@@ -20,7 +20,7 @@ extension ExploreCategoryMeta on ExploreCategory {
       case ExploreCategory.accommodation:
         return 'Hotels';
       case ExploreCategory.attractions:
-        return 'Places';
+        return 'Attractions';
       case ExploreCategory.restaurants:
         return 'Restaurants';
     }
@@ -35,7 +35,7 @@ extension ExploreCategoryMeta on ExploreCategory {
       case ExploreCategory.accommodation:
         return Icons.hotel_outlined;
       case ExploreCategory.attractions:
-        return Icons.place_outlined;
+        return Icons.attractions_outlined;
       case ExploreCategory.restaurants:
         return Icons.restaurant_outlined;
     }
@@ -59,6 +59,12 @@ extension ExploreCategoryMeta on ExploreCategory {
 
 class FlightData {
   final String depTime, arrTime, duration, from, to, stops, price, fareType;
+  // Defaults to '' rather than being required — the seeded mock flights
+  // predate this field, and CatalogRepository.watchFlights() falls back
+  // to a default label for those, but a bare '' here keeps any other
+  // FlightData construction (tests, future call sites) compiling without
+  // having to know about airline.
+  final String airline;
   const FlightData({
     required this.depTime,
     required this.arrTime,
@@ -68,6 +74,7 @@ class FlightData {
     required this.stops,
     required this.price,
     required this.fareType,
+    this.airline = '',
   });
 }
 
@@ -121,6 +128,13 @@ class AttractionData {
   final String recommendedDuration;
   final List<String> images;
   final AttractionFees fees;
+  // A real, place-specific summary — OSM's own `description` tag or that
+  // place's Wikipedia lead paragraph (see
+  // PlacesApiService.resolveDescription) when either exists, '' when
+  // neither does. The detail page only falls back to its generic
+  // category sentence when this is empty, rather than always showing
+  // the same templated text for every place in a category.
+  final String description;
 
   const AttractionData({
     required this.name,
@@ -139,6 +153,7 @@ class AttractionData {
     this.phone = '',
     this.website = '',
     this.recommendedDuration = '',
+    this.description = '',
     this.images = const [],
     this.fees = const AttractionFees(),
   });
@@ -158,6 +173,17 @@ class RestaurantData {
   // chips — not one string joined with a "•" dot, which read as a single
   // odd label instead of two distinct, scannable tags.
   final List<String> cuisineTags;
+  // Real street address/phone/website from OpenStreetMap (see
+  // CatalogRepository.refreshRestaurants) — same contact-info shape
+  // AttractionData already has, added here so a restaurant's detail page
+  // can show (and let someone tap) the same Contact section an
+  // attraction's does, instead of having nowhere to put this data.
+  // Default '' for older/simpler construction sites and for a POI OSM
+  // just doesn't have this field for.
+  final String address, phone, website;
+  // Same idea as AttractionData.description — a real, place-specific
+  // summary when OSM or Wikipedia has one, '' otherwise.
+  final String description;
   const RestaurantData({
     required this.name,
     required this.cuisineTags,
@@ -167,6 +193,10 @@ class RestaurantData {
     required this.priceRange,
     required this.image,
     this.openingHours = 'Daily, 11:00 AM - 10:00 PM',
+    this.address = '',
+    this.phone = '',
+    this.website = '',
+    this.description = '',
   });
 
   /// One plain string for places that just want a short description

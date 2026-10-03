@@ -25,3 +25,31 @@ int colorValueForName(String name) {
   final idx = name.codeUnitAt(0) % palette.length;
   return palette[idx];
 }
+
+/// "1.2k" style compact count, matching the look the seeded catalogue data
+/// already used for review counts before they were real numbers.
+String compactCount(int n) {
+  if (n >= 1000) return '${(n / 1000).toStringAsFixed(1)}k';
+  return '$n';
+}
+
+const List<String> _kFullMonths = [
+  '',
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
+];
+
+/// "12 June 2026" style long date, e.g. for the "Add Flight" dialog's
+/// separate Date field — matches the spelled-out date format already used
+/// elsewhere in the app (trip day headers, traveller details).
+String formatLongDate(DateTime d) => '${d.day} ${_kFullMonths[d.month]} ${d.year}';

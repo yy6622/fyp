@@ -50,15 +50,26 @@ class _SplashPageState extends State<SplashPage> {
               style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: AppColors.navy),
             ),
             const SizedBox(height: 40),
-            Container(
-              width: 139,
-              height: 6,
-              decoration: BoxDecoration(
-                color: const Color(0xFFD9D9D9),
-                borderRadius: BorderRadius.circular(3),
-              ),
-            ),
+            const _SplashLoadingBar(),
           ],
+        ),
+      ),
+    );
+  }
+}
+class _SplashLoadingBar extends StatelessWidget {
+  const _SplashLoadingBar();
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(3),
+      child: const SizedBox(
+        width: 139,
+        height: 6,
+        child: LinearProgressIndicator(
+          backgroundColor: Color(0xFFF4F4F4),
+          valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
         ),
       ),
     );
