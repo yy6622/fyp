@@ -1,0 +1,36 @@
+{
+  "model": "projects/1020854066179/locations/us/endpoints/4914201249647165440",
+  "label": "tuned",
+  "splits": {
+    "test_seen": {
+      "n": 60,
+      "valid_json": 100.0,
+      "add_f1": 97.6,
+      "add_p": 97.3,
+      "add_r": 97.9,
+      "add_exact_f1": 89.6,
+      "time_acc": 99.7,
+      "saved_acc": 99.7,
+      "update_f1": 100.0,
+      "remove_f1": 100.0,
+      "change_p": 100.0,
+      "unresolved_f1": 97.1,
+      "exact": 28.3
+    },
+    "test_unseen": {
+      "n": 60,
+      "valid_json": 100.0,
+      "add_f1": 96.3,
+      "add_p": 96.2,
+      "add_r": 96.4,
+      "add_exact_f1": 83.9,
+      "time_acc": 99.7,
+      "saved_acc": 99.7,
+      "update_f1": 100.0,
+      "remove_f1": 100.0,
+      "change_p": 100.0,
+      "unresolved_f1": 94.9,
+      "exact": 13.3
+    }
+  }
+}

@@ -17,6 +17,10 @@ class FriendsPage extends StatefulWidget {
 class _FriendsPageState extends State<FriendsPage> {
   final FriendsController controller = FriendsController();
 
+  // Names currently mid-resend, so the button can show a spinner and
+  // can't be double-tapped while the write/notification is in flight.
+  final Set<String> _resending = {};
+
   @override
   void initState() {
     super.initState();
@@ -35,6 +39,44 @@ class _FriendsPageState extends State<FriendsPage> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(nowBlocked ? '${friend.name} has been blocked' : '${friend.name} has been unblocked')),
     );
+  }
+
+  Future<void> _resend(SentFriendRequest request) async {
+    setState(() => _resending.add(request.toUid));
+    await controller.resendRequest(request);
+    if (!mounted) return;
+    setState(() => _resending.remove(request.toUid));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Friend request resent to ${request.toName}')),
+    );
+  }
+
+  Future<void> _cancel(SentFriendRequest request) async {
+    await controller.cancelRequest(request);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Friend request to ${request.toName} cancelled')),
+    );
+  }
+
+  String _outcomeMessage(FriendRequestOutcome outcome, String query) {
+    switch (outcome.status) {
+      case FriendRequestStatus.sent:
+        // Directly says the request is waiting on the other person, not
+        // just "sent" — a persistent "Pending" row below also shows this
+        // for as long as it's outstanding, not just in this one snackbar.
+        return 'Friend request sent to ${outcome.name} — waiting for them to accept';
+      case FriendRequestStatus.autoAccepted:
+        return '${outcome.name} had already requested you — you\'re now friends';
+      case FriendRequestStatus.alreadyFriends:
+        return 'You and ${outcome.name} are already friends';
+      case FriendRequestStatus.alreadyRequested:
+        return 'Friend request to ${outcome.name} is already pending';
+      case FriendRequestStatus.isSelf:
+        return "That's your own account";
+      case FriendRequestStatus.noMatch:
+        return 'No Voya user found for "$query"';
+    }
   }
 
   void _openAddFriend() {
@@ -86,14 +128,10 @@ class _FriendsPageState extends State<FriendsPage> {
                     );
                     return;
                   }
-                  final matchedName = await controller.addFriend(value);
+                  final outcome = await controller.sendFriendRequest(value);
                   if (!mounted) return;
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(matchedName != null
-                          ? 'You and $matchedName are now friends'
-                          : 'No Voya user found for "$value"'),
-                    ),
+                    SnackBar(content: Text(_outcomeMessage(outcome, value))),
                   );
                 },
                 child: const Text('Send Request', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
@@ -101,6 +139,63 @@ class _FriendsPageState extends State<FriendsPage> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _pendingSection(List<SentFriendRequest> sent) {
+    if (sent.isEmpty) return const SizedBox.shrink();
+    return Container(
+      margin: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+      decoration: BoxDecoration(color: AppColors.chipGrey, borderRadius: BorderRadius.circular(16)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+            child: Text(
+              'Pending (${sent.length})',
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.textGrey),
+            ),
+          ),
+          for (final request in sent)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 6, 12, 6),
+              child: Row(
+                children: [
+                  UserAvatar(uid: request.toUid, radius: 16, backgroundColor: const Color(0xFFD9D9D9)),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(request.toName, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.black)),
+                        const Text('Pending — waiting for response', style: TextStyle(fontSize: 11, color: AppColors.textGrey)),
+                      ],
+                    ),
+                  ),
+                  _resending.contains(request.toUid)
+                      ? const Padding(
+                          padding: EdgeInsets.all(8),
+                          child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+                        )
+                      : TextButton(
+                          onPressed: () => _resend(request),
+                          style: TextButton.styleFrom(minimumSize: Size.zero, padding: const EdgeInsets.symmetric(horizontal: 8)),
+                          child: const Text('Resend', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.primary)),
+                        ),
+                  IconButton(
+                    onPressed: () => _cancel(request),
+                    icon: const Icon(Icons.close, size: 18, color: AppColors.textGrey),
+                    tooltip: 'Cancel request',
+                    constraints: const BoxConstraints(),
+                    padding: const EdgeInsets.all(8),
+                  ),
+                ],
+              ),
+            ),
+          const SizedBox(height: 4),
+        ],
       ),
     );
   }
@@ -158,6 +253,7 @@ class _FriendsPageState extends State<FriendsPage> {
                   ),
                 ),
               ),
+              _pendingSection(controller.sentRequests),
               Expanded(
                 child: visible.isEmpty
                     ? const Center(child: Text('No friends yet — add one below', style: TextStyle(color: AppColors.textGrey)))
@@ -171,7 +267,7 @@ class _FriendsPageState extends State<FriendsPage> {
                             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                             child: Row(
                               children: [
-                                const CircleAvatar(radius: 20, backgroundColor: Color(0xFFD9D9D9)),
+                                UserAvatar(uid: friend.uid, radius: 20, backgroundColor: const Color(0xFFD9D9D9)),
                                 const SizedBox(width: 14),
                                 Expanded(
                                   child: Text(friend.name, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.black)),

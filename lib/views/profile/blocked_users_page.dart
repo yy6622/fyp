@@ -52,7 +52,7 @@ class _BlockedUsersPageState extends State<BlockedUsersPage> {
                 padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                 child: Row(
                   children: [
-                    const CircleAvatar(radius: 20, backgroundColor: Color(0xFFD9D9D9)),
+                    UserAvatar(uid: friend.uid, radius: 20, backgroundColor: const Color(0xFFD9D9D9)),
                     const SizedBox(width: 14),
                     Expanded(child: Text(friend.name, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.black))),
                     OutlinedButton(

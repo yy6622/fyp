@@ -4,16 +4,16 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Content Moderation — Voya Admin</title>
-<link rel="stylesheet" href="../css/tokens.css" />
-<link rel="stylesheet" href="../css/base.css" />
-<link rel="stylesheet" href="../css/layout.css" />
-<link rel="stylesheet" href="../css/components.css" />
+<link rel="stylesheet" href="../css/tokens.css?v=20261006b" />
+<link rel="stylesheet" href="../css/base.css?v=20261006b" />
+<link rel="stylesheet" href="../css/layout.css?v=20261006b" />
+<link rel="stylesheet" href="../css/components.css?v=20261006b" />
 </head>
 <body>
 <div class="shell">
   <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
   <aside class="sidebar" id="sidebar">
-    <div class="sidebar-brand">Voya</div>
+    <img class="sidebar-brand" src="../img/voya-logo-white.png" alt="Voya" />
     <div class="sidebar-user">
       <div class="name" id="sbUserName">Loading…</div>
       <div class="role" id="sbUserRole">Administrator</div>
@@ -54,11 +54,11 @@
 </div>
 
 <script type="module">
-import { requireRole } from "../js/auth-guard.js";
-import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js";
-import { mountIcons } from "../js/icons.js";
-import { listReportedPosts, approvePostReport, rejectPost, logModerationAction, countModerationToday } from "../js/data.js";
-import { number, timeAgo, escapeHtml, toast, setBusy, confirmDialog, openModal, closeModal, wireModalDismiss } from "../js/ui.js";
+import { requireRole } from "../js/auth-guard.js?v=20261007e";
+import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261007e";
+import { mountIcons } from "../js/icons.js?v=20261007e";
+import { listReportedPosts, approvePostReport, rejectPost, logModerationAction, countModerationToday, countModerationYesterday } from "../js/data.js?v=20261007e";
+import { number, timeAgo, escapeHtml, toast, setBusy, confirmDialog, openModal, closeModal, wireModalDismiss, statCard, plainCard, trendDelta } from "../js/ui.js?v=20261007e";
 
 mountSidebarNav({ role: "admin", active: "moderation" });
 const session = await requireRole("admin", "login.html");
@@ -70,19 +70,23 @@ if (session) {
   await load();
 }
 
-function statCard(label, value, icon) {
-  return `<div class="card stat-card"><div class="stat-top"><div class="stat-icon"><span data-icon="${icon}"></span></div><div class="stat-label">${label}</div></div><div class="stat-value">${value}</div><div class="stat-delta">↑ 2.4% from last month</div></div>`;
-}
-
 async function load() {
-  const [posts, approvedToday, rejectedToday] = await Promise.all([
-    listReportedPosts(), countModerationToday("approved"), countModerationToday("rejected"),
-  ]);
+  let posts, approvedToday, rejectedToday, approvedYesterday, rejectedYesterday;
+  try {
+    [posts, approvedToday, rejectedToday, approvedYesterday, rejectedYesterday] = await Promise.all([
+      listReportedPosts(), countModerationToday("approved"), countModerationToday("rejected"),
+      countModerationYesterday("approved"), countModerationYesterday("rejected"),
+    ]);
+  } catch (err) {
+    document.getElementById("statGrid").innerHTML = "";
+    document.getElementById("list").innerHTML = `<p class="muted small" style="padding:20px 0;">Couldn't load this report — ${escapeHtml(err.message || "missing or insufficient permissions")}.</p>`;
+    return;
+  }
   reports = posts;
   document.getElementById("statGrid").innerHTML = [
-    statCard("Pending review", number(reports.length), "clock"),
-    statCard("Approved today", number(approvedToday), "file-check"),
-    statCard("Rejected today", number(rejectedToday), "file-x"),
+    plainCard("Pending review", number(reports.length)),
+    statCard("Approved today", number(approvedToday), "file-check", trendDelta(approvedToday, approvedYesterday, "yesterday")),
+    statCard("Rejected today", number(rejectedToday), "file-x", trendDelta(rejectedToday, rejectedYesterday, "yesterday")),
   ].join("");
   renderList();
   mountIcons(document);
@@ -100,7 +104,7 @@ function renderList() {
   }
   empty.style.display = "none";
   list.innerHTML = filtered.map((p) => `
-    <div class="card report-card" style="margin-bottom:16px;">
+    <div class="card report-card" style="margin-bottom:16px;cursor:pointer;" data-open-report="${p.id}">
       <div class="report-thumb" style="${p.images?.[0] ? `background-image:url('${p.images[0]}');background-size:cover;background-position:center;` : ""}"></div>
       <div class="report-body">
         <div class="report-title">${escapeHtml(p.title || "Untitled post")}</div>
@@ -114,6 +118,13 @@ function renderList() {
       </div>
     </div>`).join("");
   mountIcons(document);
+  // Click anywhere on the card to open the review modal — not just the
+  // small "Review" button. Clicks inside .report-actions (Review/Reject/
+  // Approve) are excluded so they keep their own distinct behavior.
+  list.querySelectorAll("[data-open-report]").forEach((card) => card.addEventListener("click", (e) => {
+    if (e.target.closest(".report-actions")) return;
+    review(card.dataset.openReport);
+  }));
   list.querySelectorAll("[data-review]").forEach((b) => b.addEventListener("click", () => review(b.dataset.review)));
   list.querySelectorAll("[data-reject]").forEach((b) => b.addEventListener("click", () => act("reject", b.dataset.reject, b)));
   list.querySelectorAll("[data-approve]").forEach((b) => b.addEventListener("click", () => act("approve", b.dataset.approve, b)));

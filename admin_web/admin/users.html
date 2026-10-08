@@ -4,16 +4,16 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>User Management — Voya Admin</title>
-<link rel="stylesheet" href="../css/tokens.css" />
-<link rel="stylesheet" href="../css/base.css" />
-<link rel="stylesheet" href="../css/layout.css" />
-<link rel="stylesheet" href="../css/components.css" />
+<link rel="stylesheet" href="../css/tokens.css?v=20261006b" />
+<link rel="stylesheet" href="../css/base.css?v=20261006b" />
+<link rel="stylesheet" href="../css/layout.css?v=20261006b" />
+<link rel="stylesheet" href="../css/components.css?v=20261006b" />
 </head>
 <body>
 <div class="shell">
   <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
   <aside class="sidebar" id="sidebar">
-    <div class="sidebar-brand">Voya</div>
+    <img class="sidebar-brand" src="../img/voya-logo-white.png" alt="Voya" />
     <div class="sidebar-user">
       <div class="name" id="sbUserName">Loading…</div>
       <div class="role" id="sbUserRole">Administrator</div>
@@ -91,12 +91,12 @@
 </div>
 
 <script type="module">
-import { requireRole } from "../js/auth-guard.js";
-import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js";
-import { mountIcons } from "../js/icons.js";
-import { listUsers, setUserRoleStatus } from "../js/data.js";
-import { number, shortDate, statusBadge, initials, escapeHtml, paginate, toast, setBusy } from "../js/ui.js";
-import { openModal, closeModal, wireModalDismiss } from "../js/ui.js";
+import { requireRole } from "../js/auth-guard.js?v=20261007e";
+import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261007e";
+import { mountIcons } from "../js/icons.js?v=20261007e";
+import { listUsers, setUserRoleStatus } from "../js/data.js?v=20261007e";
+import { number, shortDate, statusBadge, initials, escapeHtml, paginate, renderPager, toast, setBusy, statCard, plainCard, trendDelta, countBefore, monthBounds } from "../js/ui.js?v=20261007e";
+import { openModal, closeModal, wireModalDismiss } from "../js/ui.js?v=20261007e";
 
 mountSidebarNav({ role: "admin", active: "users" });
 const session = await requireRole("admin", "login.html");
@@ -112,10 +112,6 @@ if (session) {
   await load();
 }
 
-function statCard(label, value, icon) {
-  return `<div class="card stat-card"><div class="stat-top"><div class="stat-icon"><span data-icon="${icon}"></span></div><div class="stat-label">${label}</div></div><div class="stat-value">${value}</div><div class="stat-delta">↑ 2.4% from last month</div></div>`;
-}
-
 async function load() {
   users = await listUsers();
   users.forEach((u) => { u.status = u.status || "active"; u.role = u.role || "user"; });
@@ -124,14 +120,19 @@ async function load() {
 }
 
 function renderStats() {
-  const active = users.filter((u) => u.status === "active").length;
+  const active = users.filter((u) => u.status === "active");
   const pending = users.filter((u) => u.status === "pending").length;
   const suspended = users.filter((u) => u.status === "suspended").length;
+  // Real deltas (js/ui.js) — Pending/Suspended are live status snapshots
+  // with no honest baseline, so they're plainCards.
+  const { start: thisMonthStart } = monthBounds(0);
+  const totalDelta = trendDelta(users.length, countBefore(users, "createdAt", thisMonthStart));
+  const activeDelta = trendDelta(active.length, countBefore(active, "createdAt", thisMonthStart));
   document.getElementById("statGrid").innerHTML = [
-    statCard("Total users", number(users.length), "user"),
-    statCard("Active", number(active), "sparkle"),
-    statCard("Pending", number(pending), "user-check"),
-    statCard("Suspended", number(suspended), "user-x"),
+    statCard("Total users", number(users.length), "user", totalDelta),
+    statCard("Active", number(active.length), "sparkle", activeDelta),
+    plainCard("Pending", number(pending)),
+    plainCard("Suspended", number(suspended)),
   ].join("");
   mountIcons(document);
 }
@@ -176,20 +177,7 @@ function renderTable() {
   document.getElementById("resultsLabel").textContent = total
     ? `Showing ${(page - 1) * PAGE_SIZE + 1} to ${Math.min(page * PAGE_SIZE, total)} of ${total} results`
     : "No results";
-  const pager = document.getElementById("pagination");
-  let html = `<button class="page-btn" ${page === 1 ? "disabled" : ""} id="prevPage"><span data-icon="chevron-left" data-icon-size="14"></span></button>`;
-  for (let i = 1; i <= pages; i++) {
-    if (pages > 7 && Math.abs(i - page) > 2 && i !== 1 && i !== pages) {
-      if (i === 2 || i === pages - 1) html += `<span class="muted" style="padding:0 4px;">…</span>`;
-      continue;
-    }
-    html += `<button class="page-btn${i === page ? " active" : ""}" data-page="${i}">${i}</button>`;
-  }
-  html += `<button class="page-btn" ${page === pages ? "disabled" : ""} id="nextPage"><span data-icon="chevron-right" data-icon-size="14"></span></button>`;
-  pager.innerHTML = html;
-  pager.querySelectorAll("[data-page]").forEach((b) => b.addEventListener("click", () => { page = Number(b.dataset.page); renderTable(); }));
-  document.getElementById("prevPage")?.addEventListener("click", () => { page--; renderTable(); });
-  document.getElementById("nextPage")?.addEventListener("click", () => { page++; renderTable(); });
+  renderPager("pagination", { page, pages }, (n) => { page = n; renderTable(); });
   mountIcons(document);
 }
 

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../models/nearby_models.dart';
 import '../repositories/catalog_repository.dart';
 import '../services/location_service.dart';
+import '../services/places_api_service.dart';
 
 /// Controller for [NearByPage]. Streamed from a fixed Firestore seed
 /// before — now a live, one-shot-per-selection query against real
@@ -30,6 +31,15 @@ class NearByController extends ChangeNotifier {
   List<NearbyPlace> places = [];
   bool loading = true;
 
+  /// Set when the last reload came back empty *because the OpenStreetMap
+  /// request actually failed* (see PlacesApiService.lastSearchNearbyError)
+  /// — null when the location genuinely has no matches for this category.
+  /// Lets the page show the real reason (a timeout, a non-200 response, a
+  /// DNS/connection failure — often what a network that blocks this host
+  /// outright looks like) instead of always showing the same "No places
+  /// found nearby" regardless of which of those actually happened.
+  String? error;
+
   /// Set once a position has been obtained (or failed to be obtained) so
   /// the page can tell "still getting your location" apart from "got
   /// your location, found nothing nearby" apart from "couldn't get your
@@ -38,6 +48,13 @@ class NearByController extends ChangeNotifier {
 
   double? _lat;
   double? _lon;
+
+  /// The device's own real current position — exposed so NearByPage can
+  /// center a real embedded map on it (see MemberLocationPage's
+  /// _StaticMapPreview for the same no-API-key OpenStreetMap approach).
+  /// Null until [locationStatus] is success.
+  double? get myLat => _lat;
+  double? get myLon => _lon;
 
   Future<void> _init() async {
     final position = await LocationService.instance.getCurrentPosition();
@@ -63,14 +80,31 @@ class NearByController extends ChangeNotifier {
     loading = true;
     notifyListeners();
     places = await CatalogRepository.instance.fetchNearbyPlaces(lat: _lat!, lon: _lon!, category: _selectedCategory);
+    error = places.isEmpty ? _describeError(PlacesApiService.instance.lastSearchNearbyError) : null;
     loading = false;
     notifyListeners();
+  }
+
+  String? _describeError(Object? e) {
+    if (e == null) return null;
+    final s = e.toString();
+    if (s.contains('TimeoutException')) return "Timed out reaching OpenStreetMap's servers.";
+    if (s.contains('SocketException') || s.contains('Failed host lookup') || s.contains('Connection')) {
+      return "Couldn't connect to OpenStreetMap's servers — the network may be blocking this host.";
+    }
+    return "Couldn't load nearby places ($s).";
   }
 
   /// Re-tries getting the device's location — offered on the page when
   /// [locationStatus] isn't success (e.g. the person just turned location
   /// services on and wants to try again without leaving the page).
   Future<void> retryLocation() => _init();
+
+  /// Re-runs the search for the currently selected category, without
+  /// re-asking for location — offered on the page when a reload came back
+  /// empty with a real [error] (location is already known good; only the
+  /// OpenStreetMap request needs retrying).
+  Future<void> retry() => _reload();
 
   @override
   void dispose() {

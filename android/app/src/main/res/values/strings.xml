@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Facebook Login (lib/services/auth_service.dart's signInWithFacebook,
+         behind login_page.dart / signup_page.dart's social row) needs these
+         three real values from your Facebook app at developers.facebook.com
+         (Settings > Basic for the App ID and Client Token; the login
+         protocol scheme is just "fb" + your App ID, no separate lookup).
+         Enabling Facebook as a sign-in provider in the Firebase console
+         already asked for the same App ID + App Secret — reuse that same
+         Facebook app here, don't create a second one.
+         Without real values here, tapping the Facebook icon will fail
+         (Facebook's SDK rejects the placeholder below immediately). -->
+    <string name="facebook_app_id">YOUR_FACEBOOK_APP_ID</string>
+    <string name="facebook_client_token">YOUR_FACEBOOK_CLIENT_TOKEN</string>
+    <string name="fb_login_protocol_scheme">fbYOUR_FACEBOOK_APP_ID</string>
+</resources>

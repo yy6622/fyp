@@ -4,7 +4,7 @@
   color: #fff; padding: 56px 48px; display: flex; flex-direction: column; justify-content: center;
   min-width: 0;
 }
-.auth-side .brand { font-size: 34px; font-weight: 800; margin-bottom: 46px; }
+.auth-side .brand { display: block; height: 36px; width: auto; align-self: flex-start; margin-bottom: 46px; }
 .auth-side h1 { font-size: 38px; font-weight: 800; line-height: 1.15; letter-spacing: -0.01em; max-width: 480px; }
 .auth-side .lede { font-size: 15px; color: rgba(255,255,255,.75); margin-top: 16px; max-width: 420px; line-height: 1.5; }
 .auth-points { margin-top: 40px; display: flex; flex-direction: column; gap: 18px; }

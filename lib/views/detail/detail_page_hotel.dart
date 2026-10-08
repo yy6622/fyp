@@ -1,25 +1,23 @@
 import 'package:flutter/material.dart';
 
-import '../../controllers/detail_page_controller.dart';
-import '../../repositories/catalog_repository.dart';
 import '../../repositories/trip_repository.dart';
+import '../../services/auth_service.dart';
 import '../../services/format_utils.dart';
 import '../../theme.dart';
 import '../shared/translated_text.dart';
 import 'detail_widgets.dart';
 
 // ---------------------------------------------------------------------
-// Hotel detail (Details / Review tabs)
+// Hotel detail
 // ---------------------------------------------------------------------
 class DetailPageHotel extends StatefulWidget {
   // Defaults match the original Japan-trip mock so existing callers that
   // still just do `const DetailPageHotel()` render exactly as before; real
   // callers (Explore, a trip's hotel stays) pass the actual hotel through.
   // [hotelId] is the `catalog_hotels` doc id — only set when this page was
-  // opened from a real catalog hotel (Explore, Saved, History), not for a
-  // trip's own manually-typed hotel stay, which has no catalog doc to
-  // attach real reviews to. When it's empty the Reviews section is hidden
-  // entirely rather than showing something fake.
+  // opened from a real catalog hotel (Explore, Saved, History). No longer
+  // used by this page itself (the Review tab that read it is gone), kept
+  // only because BookingBar still records it as the booked stay's refId.
   final String hotelId;
   final String name;
   final String location;
@@ -36,6 +34,13 @@ class DetailPageHotel extends StatefulWidget {
   final String tripId;
   final String checkIn;
   final String checkOut;
+  // Real per-hotel amenity names from Duffel/RollingGo (see
+  // DuffelStayResult.amenities / CatalogHotel.amenities) — empty for a
+  // manually-typed trip stay or any source result that just didn't have
+  // this data. The amenities row only renders when this is non-empty,
+  // rather than ever showing a fixed list that isn't actually about this
+  // hotel.
+  final List<String> amenities;
 
   const DetailPageHotel({
     super.key,
@@ -48,6 +53,7 @@ class DetailPageHotel extends StatefulWidget {
     this.tripId = '',
     this.checkIn = '',
     this.checkOut = '',
+    this.amenities = const [],
   });
 
   @override
@@ -55,24 +61,14 @@ class DetailPageHotel extends StatefulWidget {
 }
 
 class _DetailPageHotelState extends State<DetailPageHotel> {
-  final DetailPageHotelController controller = DetailPageHotelController();
-
-  @override
-  void dispose() {
-    controller.dispose();
-    super.dispose();
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
-        child: ListenableBuilder(
-          listenable: controller,
-          builder: (context, _) => Column(
-            children: [
-              Expanded(
+        child: Column(
+          children: [
+            Expanded(
                 child: SingleChildScrollView(
                   child: Column(
                     children: [
@@ -99,20 +95,22 @@ class _DetailPageHotelState extends State<DetailPageHotel> {
                     const SizedBox(height: 6),
                     Text(widget.location, style: const TextStyle(fontSize: 12, color: AppColors.textGrey)),
                     const SizedBox(height: 16),
-                    SizedBox(
-                      height: 74,
-                      child: ListView(
-                        scrollDirection: Axis.horizontal,
-                        children: const [
-                          AmenityIcon(icon: Icons.wifi, label: 'Free Wifi'),
-                          AmenityIcon(icon: Icons.free_breakfast_outlined, label: 'Breakfast'),
-                          AmenityIcon(icon: Icons.cleaning_services_outlined, label: 'Housekeeping'),
-                          AmenityIcon(icon: Icons.luggage_outlined, label: 'Luggage storage'),
-                          AmenityIcon(icon: Icons.support_agent_outlined, label: '24h Desk'),
-                        ],
+                    // Only render this row when the source result actually
+                    // had amenities data — no fixed fallback list, same
+                    // "don't fabricate" rule this app uses for
+                    // reviewScore/description elsewhere.
+                    if (widget.amenities.isNotEmpty) ...[
+                      SizedBox(
+                        height: 74,
+                        child: ListView(
+                          scrollDirection: Axis.horizontal,
+                          children: widget.amenities
+                              .map((a) => AmenityIcon(icon: _amenityIcon(a), label: a))
+                              .toList(),
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 20),
+                      const SizedBox(height: 20),
+                    ],
                     const Text('About', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.navy)),
                     const SizedBox(height: 8),
                     Text(
@@ -122,15 +120,7 @@ class _DetailPageHotelState extends State<DetailPageHotel> {
                       style: const TextStyle(fontSize: 12.5, color: AppColors.textGrey, height: 1.5),
                     ),
                     const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        Expanded(child: _tabButton('Details', !controller.showReview)),
-                        Expanded(child: _tabButton('Review', controller.showReview)),
-                      ],
-                    ),
-                    const Divider(height: 1, color: Color(0xFFECECEC)),
-                    const SizedBox(height: 16),
-                    if (!controller.showReview) ..._detailsContent() else ..._reviewContent(),
+                    ..._detailsContent(),
                           ],
                         ),
                       ),
@@ -165,35 +155,25 @@ class _DetailPageHotelState extends State<DetailPageHotel> {
                             guestPhone: confirmation.guestPhone,
                             guestIdNumber: confirmation.guestIdNumber,
                             specialRequests: confirmation.specialRequests,
+                            // The real Stripe PaymentIntent id from this
+                            // charge, and the catalog hotel this stay was
+                            // booked from (when there is one) — previously
+                            // dropped on the floor because TripHotelStay had
+                            // nowhere to put them, which is why Plan's hotel
+                            // viewer couldn't show a Booking Reference or a
+                            // Review tab the way Flight's can.
+                            bookingRef: confirmation.paymentRef,
+                            status: 'Confirmed',
+                            refId: widget.hotelId,
+                            forMemberUids: confirmation.forMemberUids,
                           ),
+                          actorUid: AuthService.instance.currentUser?.uid,
                         ),
               ),
             ],
           ),
         ),
-      ),
-    );
-  }
-
-  Widget _tabButton(String label, bool selected) {
-    return GestureDetector(
-      onTap: () => controller.setShowReview(label == 'Review'),
-      child: Container(
-        padding: const EdgeInsets.only(bottom: 10),
-        decoration: BoxDecoration(
-          border: Border(bottom: BorderSide(color: selected ? AppColors.primary : Colors.transparent, width: 2)),
-        ),
-        alignment: Alignment.center,
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-            color: selected ? AppColors.primary : AppColors.textGrey,
-          ),
-        ),
-      ),
-    );
+      );
   }
 
   List<Widget> _detailsContent() {
@@ -241,6 +221,34 @@ class _DetailPageHotelState extends State<DetailPageHotel> {
     );
   }
 
+  /// Maps a real amenity name (Duffel's `description`/`type`, or
+  /// RollingGo's plain `hotelAmenities` string — e.g. "WiFi"/"WIFI",
+  /// "Pool", "Gym", "Parking", "Bar", "SPA") to a representative icon.
+  /// Matching is case-insensitive substring matching rather than an exact
+  /// lookup table, since the two APIs don't share one fixed vocabulary;
+  /// anything unrecognized still renders with its real label text, just
+  /// under a generic fallback icon instead of guessing wrong.
+  IconData _amenityIcon(String amenity) {
+    final a = amenity.toLowerCase();
+    if (a.contains('wifi') || a.contains('wi-fi') || a.contains('internet')) return Icons.wifi;
+    if (a.contains('breakfast')) return Icons.free_breakfast_outlined;
+    if (a.contains('pool')) return Icons.pool_outlined;
+    if (a.contains('gym') || a.contains('fitness')) return Icons.fitness_center_outlined;
+    if (a.contains('spa')) return Icons.spa_outlined;
+    if (a.contains('park')) return Icons.local_parking_outlined;
+    if (a.contains('bar')) return Icons.local_bar_outlined;
+    if (a.contains('restaurant') || a.contains('dining')) return Icons.restaurant_outlined;
+    if (a.contains('air') && a.contains('condition')) return Icons.ac_unit_outlined;
+    if (a.contains('laundry')) return Icons.local_laundry_service_outlined;
+    if (a.contains('luggage') || a.contains('storage')) return Icons.luggage_outlined;
+    if (a.contains('housekeeping') || a.contains('cleaning')) return Icons.cleaning_services_outlined;
+    if (a.contains('desk') || a.contains('reception') || a.contains('24')) return Icons.support_agent_outlined;
+    if (a.contains('pet')) return Icons.pets_outlined;
+    if (a.contains('elevator') || a.contains('lift')) return Icons.elevator_outlined;
+    if (a.contains('smok')) return Icons.smoking_rooms_outlined;
+    return Icons.check_circle_outline;
+  }
+
   Widget _bookingRowSingle(String label) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -255,29 +263,4 @@ class _DetailPageHotelState extends State<DetailPageHotel> {
     );
   }
 
-  List<Widget> _reviewContent() {
-    // No catalog doc to attach real reviews to (a manually-typed trip
-    // hotel stay, or the default preview) — skip the section rather than
-    // showing canned content that isn't about a real place.
-    if (widget.hotelId.isEmpty) {
-      return const [
-        Text('No review for this hotel yet.', style: TextStyle(fontSize: 12, color: AppColors.textGrey)),
-      ];
-    }
-    return [
-      ReviewsSection(
-        title: widget.name,
-        ratingSummary: widget.ratingLabel,
-        reviewsStream: CatalogRepository.instance.watchHotelReviews(widget.hotelId).map((list) => list.map(reviewDataFromPlace).toList()),
-        onSubmitReview: ({required authorId, required authorName, required rating, required comment}) => CatalogRepository.instance.addHotelReview(
-          widget.hotelId,
-          authorId: authorId,
-          authorName: authorName,
-          rating: rating,
-          comment: comment,
-        ),
-        allowWriting: false,
-      ),
-    ];
-  }
 }

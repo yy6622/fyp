@@ -4,15 +4,18 @@ import '../../models/community_models.dart';
 import '../../models/insurance_models.dart';
 import '../../repositories/community_repository.dart';
 import '../../repositories/insurance_repository.dart';
+import '../../repositories/notifications_repository.dart';
 import '../../repositories/trip_repository.dart';
 import '../../services/auth_service.dart';
 import '../../services/format_utils.dart';
+import '../../services/weather_service.dart';
 import '../../theme.dart';
 import '../community/community_page.dart';
 import '../community/community_post_detail_page.dart';
 import '../group/group_trip_page.dart';
 import '../insurance/insurance_list_page.dart';
 import '../insurance/insurance_widgets.dart';
+import '../notifications/notifications_page.dart';
 
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
@@ -69,14 +72,52 @@ class HomePage extends StatelessWidget {
               ),
             ],
           ),
-          HeaderIconButton(
-            icon: Icons.notifications_outlined,
-            onTap: () => ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('No new notifications')),
-            ),
-          ),
+          _notificationsBell(context),
         ],
       ),
+    );
+  }
+
+  // Real inbox behind the bell — used to be a dead icon that just showed
+  // "No new notifications" with no notification system behind it at all.
+  // The red dot reflects actual unread `users/{uid}/notifications` docs
+  // (a pending friend request, for now).
+  Widget _notificationsBell(BuildContext context) {
+    final uid = AuthService.instance.currentUser?.uid;
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        HeaderIconButton(
+          icon: Icons.notifications_outlined,
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const NotificationsPage()),
+          ),
+        ),
+        if (uid != null)
+          StreamBuilder<int>(
+            stream: NotificationsRepository.instance.watchUnreadCount(uid),
+            builder: (context, snapshot) {
+              final count = snapshot.data ?? 0;
+              if (count == 0) return const SizedBox.shrink();
+              return Positioned(
+                right: -2,
+                top: -2,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                  decoration: BoxDecoration(
+                    color: Colors.redAccent,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.white, width: 1.5),
+                  ),
+                  child: Text(
+                    count > 9 ? '9+' : '$count',
+                    style: const TextStyle(fontSize: 9.5, color: Colors.white, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              );
+            },
+          ),
+      ],
     );
   }
 
@@ -184,12 +225,32 @@ class HomePage extends StatelessWidget {
                       style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 4),
-                    Text(
-                      trip.dateRangeLabel.isEmpty ? trip.name : trip.dateRangeLabel,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(color: Colors.white, fontSize: 10),
-                    ),
+                    if (trip.dateRangeLabel.isEmpty)
+                      Text(
+                        trip.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(color: Colors.white, fontSize: 10),
+                      )
+                    else ...[
+                      // Date range and "X days Y nights" on their own
+                      // lines — previously one line with both joined by
+                      // "·", which squeezed the nights count out under
+                      // the ellipsis on anything but a very short date range.
+                      Text(
+                        trip.dateOnlyLabel,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(color: Colors.white, fontSize: 10),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        trip.nightsLabel,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(color: Colors.white, fontSize: 10),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -233,10 +294,18 @@ class HomePage extends StatelessWidget {
                 _verticalDivider(),
                 _cardInfoTile(Icons.bed_outlined, 'Hotel', trip.hotelStays.isNotEmpty ? trip.hotelStays.first.name : '-'),
                 _verticalDivider(),
-                // No weather data source wired into this project (no API
-                // key, no established pattern like the OSM/Wikipedia ones
-                // elsewhere) — '-' rather than a fabricated reading.
-                _cardInfoTile(Icons.wb_cloudy_outlined, 'Weather', '-'),
+                // Real weather for the destination, via Open-Meteo — free
+                // and keyless, same convention as PlacesApiService's
+                // Nominatim geocoding/Overpass POIs (see
+                // weather_service.dart). Shows the forecast for the trip's
+                // start date when that's within Open-Meteo's ~15-day
+                // forecast horizon, or today's actual reading once the
+                // trip has started; _WeatherTile shows '-' rather than a
+                // fabricated reading when neither is available yet.
+                _WeatherTile(
+                  destination: trip.destination.isNotEmpty ? trip.destination : trip.name,
+                  forDate: trip.startDate == null ? null : DateTime(trip.startDate!.year, trip.startDate!.month, trip.startDate!.day),
+                ),
               ],
             ),
           ),
@@ -247,23 +316,6 @@ class HomePage extends StatelessWidget {
 
   Widget _verticalDivider() {
     return Container(height: 23, width: 1, color: const Color(0xFFE0E0E0));
-  }
-
-  Widget _cardInfoTile(IconData icon, String label, String value) {
-    return Expanded(
-      child: Column(
-        children: [
-          Icon(icon, size: 13, color: Colors.black),
-          const SizedBox(height: 2),
-          Text(label, style: const TextStyle(fontSize: 8, fontWeight: FontWeight.w500, color: Colors.black)),
-          Text(
-            value,
-            textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 7, color: Colors.black),
-          ),
-        ],
-      ),
-    );
   }
 
   // ---------------- AI banner ----------------
@@ -523,5 +575,80 @@ class HomePage extends StatelessWidget {
         },
       ),
     );
+  }
+}
+
+/// One of the three small white tiles at the bottom of the "Next
+/// Adventure" card (Flight / Hotel / Weather) — a plain top-level
+/// function rather than a HomePage method so [_WeatherTile] below can
+/// build the exact same look once its own async weather value resolves.
+Widget _cardInfoTile(IconData icon, String label, String value) {
+  return Expanded(
+    child: Column(
+      children: [
+        Icon(icon, size: 13, color: Colors.black),
+        const SizedBox(height: 2),
+        Text(label, style: const TextStyle(fontSize: 8, fontWeight: FontWeight.w500, color: Colors.black)),
+        Text(
+          value,
+          textAlign: TextAlign.center,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(fontSize: 7, color: Colors.black),
+        ),
+      ],
+    ),
+  );
+}
+
+/// The "Weather" tile on Home's "Next Adventure" card — real data from
+/// [WeatherService] (Open-Meteo, free and keyless), fetched once per
+/// destination/date rather than on every rebuild (Home's trip stream can
+/// emit often; WeatherService's own short cache also protects against
+/// hammering the API if several widgets ask for the same destination at
+/// once). Shows '-' rather than a fabricated reading whenever the
+/// destination can't be geocoded, the date is beyond Open-Meteo's
+/// forecast horizon, or the request fails for any reason.
+class _WeatherTile extends StatefulWidget {
+  final String destination;
+  final DateTime? forDate;
+  const _WeatherTile({required this.destination, required this.forDate});
+
+  @override
+  State<_WeatherTile> createState() => _WeatherTileState();
+}
+
+class _WeatherTileState extends State<_WeatherTile> {
+  DestinationWeather? _weather;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void didUpdateWidget(_WeatherTile old) {
+    super.didUpdateWidget(old);
+    if (old.destination != widget.destination || old.forDate != widget.forDate) _load();
+  }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    final weather = await WeatherService.instance.forDestination(widget.destination, forDate: widget.forDate);
+    if (!mounted) return;
+    setState(() {
+      _weather = weather;
+      _loading = false;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final weather = _weather;
+    final icon = weather?.icon ?? Icons.wb_cloudy_outlined;
+    final value = _loading ? '...' : (weather == null ? '-' : '${weather.tempLabel} ${weather.label}');
+    return _cardInfoTile(icon, 'Weather', value);
   }
 }

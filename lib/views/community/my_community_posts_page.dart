@@ -8,11 +8,22 @@ import 'community_post_detail_page.dart';
 import 'create_post_page.dart';
 
 // ---------------------------------------------------------------------
-// Profile's "Community Post" entry — a real "My Posts" / "Saved" view
-// instead of jumping straight into composing. Backed by the same
-// Firestore-backed [CommunityController] stream the Community feed and
-// post detail page use, so a like/save/new post made anywhere shows up
-// here too without a manual refresh.
+// Profile's "Community Post" entry — a real "My Posts" / "Liked" /
+// "Rating & Review" view instead of jumping straight into composing.
+// Backed by the same Firestore-backed [CommunityController] stream the
+// Community feed and post detail page use, so a like/rating/review made
+// anywhere — here, the feed, or a post's own detail page — shows up
+// across all of them without a manual refresh.
+//
+// Liked: posts this user liked (CommunityPost.liked — already resolved
+// for the signed-in user when each post snapshot is read). Rating &
+// Review: posts they've rated and/or left a written review on — the two
+// are the same action now (rating only ever happens as part of leaving a
+// review, see showWriteReviewDialog), so one combined tab covers both;
+// a post lands here if either CommunityPost.myRating > 0 or it's in
+// CommunityController.myReviewedPostIds (a collectionGroup query over
+// every post's `reviews` subcollection) — kept as two checks since older
+// ratings set before review+rating were merged won't have a review doc.
 // ---------------------------------------------------------------------
 class MyCommunityPostsPage extends StatefulWidget {
   const MyCommunityPostsPage({super.key});
@@ -23,7 +34,7 @@ class MyCommunityPostsPage extends StatefulWidget {
 
 class _MyCommunityPostsPageState extends State<MyCommunityPostsPage> {
   final CommunityController controller = CommunityController();
-  int _tabIndex = 0; // 0 = My Posts, 1 = Saved
+  int _tabIndex = 0; // 0 = My Posts, 1 = Liked, 2 = Rating & Review
 
   String get _uid => AuthService.instance.currentUser?.uid ?? '';
 
@@ -44,7 +55,16 @@ class _MyCommunityPostsPageState extends State<MyCommunityPostsPage> {
         listenable: controller,
         builder: (context, _) {
           final posts = controller.filteredPosts;
-          final shown = _tabIndex == 0 ? posts.where((p) => p.authorId == _uid).toList() : posts.where((p) => p.saved).toList();
+          final shown = switch (_tabIndex) {
+            0 => posts.where((p) => p.authorId == _uid).toList(),
+            1 => posts.where((p) => p.liked).toList(),
+            _ => posts.where((p) => p.myRating > 0 || controller.myReviewedPostIds.contains(p.id)).toList(),
+          };
+          final emptyMessage = switch (_tabIndex) {
+            0 => "You haven't posted anything yet",
+            1 => "You haven't liked any posts yet",
+            _ => "You haven't rated or reviewed any posts yet",
+          };
           return Column(
             children: [
               // Bare, full-bleed PillTabBar directly under the AppBar — same
@@ -55,7 +75,8 @@ class _MyCommunityPostsPageState extends State<MyCommunityPostsPage> {
               PillTabBar(
                 tabs: const [
                   PillTab('My Posts', Icons.dynamic_feed_outlined),
-                  PillTab('Saved', Icons.bookmark_outline),
+                  PillTab('Liked', Icons.favorite_border),
+                  PillTab('Rating & Review', Icons.reviews_outlined),
                 ],
                 selectedIndex: _tabIndex,
                 onSelected: (i) => setState(() => _tabIndex = i),
@@ -65,10 +86,7 @@ class _MyCommunityPostsPageState extends State<MyCommunityPostsPage> {
                     ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
                     : shown.isEmpty
                         ? Center(
-                            child: Text(
-                              _tabIndex == 0 ? "You haven't posted anything yet" : 'No saved posts yet',
-                              style: const TextStyle(fontSize: 12.5, color: AppColors.textGrey),
-                            ),
+                            child: Text(emptyMessage, style: const TextStyle(fontSize: 12.5, color: AppColors.textGrey)),
                           )
                         : ListView.separated(
                             padding: const EdgeInsets.all(20),
@@ -90,6 +108,7 @@ class _MyCommunityPostsPageState extends State<MyCommunityPostsPage> {
   }
 
   Widget _postRow(CommunityPost post) {
+    final reviewed = controller.myReviewedPostIds.contains(post.id);
     return GestureDetector(
       onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => CommunityPostDetailPage(post: post))),
       child: Container(
@@ -143,15 +162,36 @@ class _MyCommunityPostsPageState extends State<MyCommunityPostsPage> {
                       Text(post.avgRating.toStringAsFixed(1), style: const TextStyle(fontSize: 11, color: AppColors.textGrey)),
                     ],
                   ),
+                  if (post.myRating > 0 || reviewed) ...[
+                    const SizedBox(height: 6),
+                    Wrap(
+                      spacing: 6,
+                      children: [
+                        if (post.myRating > 0) _youBadge(Icons.star, 'You rated ${post.myRating}★'),
+                        if (reviewed) _youBadge(Icons.chat_bubble_outline, 'You reviewed'),
+                      ],
+                    ),
+                  ],
                 ],
               ),
             ),
-            GestureDetector(
-              onTap: () => controller.toggleSaved(post),
-              child: Icon(post.saved ? Icons.bookmark : Icons.bookmark_border, size: 18, color: post.saved ? AppColors.primary : AppColors.textGrey),
-            ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _youBadge(IconData icon, String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(8)),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 11, color: AppColors.primary),
+          const SizedBox(width: 3),
+          Text(label, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: AppColors.primary)),
+        ],
       ),
     );
   }

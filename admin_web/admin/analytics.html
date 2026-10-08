@@ -4,16 +4,16 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Analytics & Reporting — Voya Admin</title>
-<link rel="stylesheet" href="../css/tokens.css" />
-<link rel="stylesheet" href="../css/base.css" />
-<link rel="stylesheet" href="../css/layout.css" />
-<link rel="stylesheet" href="../css/components.css" />
+<link rel="stylesheet" href="../css/tokens.css?v=20261006b" />
+<link rel="stylesheet" href="../css/base.css?v=20261006b" />
+<link rel="stylesheet" href="../css/layout.css?v=20261006b" />
+<link rel="stylesheet" href="../css/components.css?v=20261006b" />
 </head>
 <body>
 <div class="shell">
   <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
   <aside class="sidebar" id="sidebar">
-    <div class="sidebar-brand">Voya</div>
+    <img class="sidebar-brand" src="../img/voya-logo-white.png" alt="Voya" />
     <div class="sidebar-user">
       <div class="name" id="sbUserName">Loading…</div>
       <div class="role" id="sbUserRole">Administrator</div>
@@ -41,9 +41,8 @@
         <div class="bars-labels" id="trendLabels"></div>
       </div>
       <div class="card card-pad">
-        <h3 class="h3" style="margin-bottom:18px;">Sales by Channel</h3>
-        <div class="bars" id="channelBars"></div>
-        <div class="bars-labels" id="channelLabels"></div>
+        <h3 class="h3" style="margin-bottom:18px;">Top Insurance Partners</h3>
+        <div class="rank-list" id="partnerRank"></div>
       </div>
     </div>
 
@@ -60,11 +59,11 @@
 </div>
 
 <script type="module">
-import { requireRole } from "../js/auth-guard.js";
-import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js";
-import { mountIcons } from "../js/icons.js";
-import { listTransactions, listClaims, listUsers } from "../js/data.js";
-import { money, moneyExact, number, escapeHtml } from "../js/ui.js";
+import { requireRole } from "../js/auth-guard.js?v=20261007f";
+import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261007f";
+import { mountIcons } from "../js/icons.js?v=20261007f";
+import { listTransactions, listClaims, listUsers } from "../js/data.js?v=20261007f";
+import { money, moneyExact, number, escapeHtml, statCard, trendDelta, pointDelta, sumInMonth, countInMonth, monthBounds, rateOf } from "../js/ui.js?v=20261007f";
 
 mountSidebarNav({ role: "admin", active: "analytics" });
 const session = await requireRole("admin", "login.html");
@@ -75,10 +74,6 @@ if (session) {
   await load();
 }
 
-function statCard(label, value, icon) {
-  return `<div class="card stat-card"><div class="stat-top"><div class="stat-icon"><span data-icon="${icon}"></span></div><div class="stat-label">${label}</div></div><div class="stat-value">${value}</div><div class="stat-delta">↑ 2.4% from last month</div></div>`;
-}
-
 async function load() {
   const [txns, claims, users] = await Promise.all([listTransactions(), listClaims(), listUsers()]);
   allTxns = txns;
@@ -86,12 +81,38 @@ async function load() {
   const revenue = paid.reduce((s, t) => s + (Number(t.premium) || 0), 0);
   const approvedCount = claims.filter((c) => c.status === "approved").length;
   const approvalRate = claims.length ? Math.round((approvedCount / claims.length) * 1000) / 10 : 0;
+  const activeTravellers = users.filter((u) => u.status !== "suspended").length;
+
+  // Real month-over-month deltas (js/ui.js) — same pairing as Platform
+  // Overview's identical 4 metrics in admin/reports.html. Active
+  // travellers has no historical status log to replay, so its delta
+  // approximates "how many of today's active travellers had already
+  // signed up before this month" using real signup dates.
+  const { start: thisMonthStart } = monthBounds(0);
+  const revenueDelta = trendDelta(
+    sumInMonth(paid, "createdAt", (t) => Number(t.premium) || 0, 0),
+    sumInMonth(paid, "createdAt", (t) => Number(t.premium) || 0, 1),
+  );
+  const policiesDelta = trendDelta(countInMonth(paid, "createdAt", 0), countInMonth(paid, "createdAt", 1));
+  const { start: lastMonthStart, end: lastMonthEnd } = monthBounds(1);
+  const claimDateOf = (c) => (c.createdAt?.toDate ? c.createdAt.toDate() : null);
+  const claimsThisMonth = claims.filter((c) => { const d = claimDateOf(c); return d && d >= thisMonthStart; });
+  const claimsLastMonth = claims.filter((c) => { const d = claimDateOf(c); return d && d >= lastMonthStart && d < lastMonthEnd; });
+  const approvalRateDelta = pointDelta(rateOf(claimsThisMonth, (c) => c.status === "approved"), rateOf(claimsLastMonth, (c) => c.status === "approved"));
+  const activeDelta = trendDelta(
+    activeTravellers,
+    users.filter((u) => {
+      if (u.status === "suspended") return false;
+      const d = u.createdAt?.toDate ? u.createdAt.toDate() : null;
+      return d && d < thisMonthStart;
+    }).length,
+  );
 
   document.getElementById("statGrid").innerHTML = [
-    statCard("Revenue", money(revenue), "coin"),
-    statCard("Policies sold", number(paid.length), "shield-check"),
-    statCard("Claims approved", `${approvalRate}%`, "check-circle"),
-    statCard("Active travellers", number(users.filter((u) => u.status !== "suspended").length), "user"),
+    statCard("Revenue", money(revenue), "coin", revenueDelta),
+    statCard("Policies sold", number(paid.length), "shield-check", policiesDelta),
+    statCard("Claims approved", `${approvalRate}%`, "check-circle", approvalRateDelta),
+    statCard("Active travellers", number(activeTravellers), "user", activeDelta),
   ].join("");
 
   // Revenue & policy trend — last 6 months
@@ -112,15 +133,28 @@ async function load() {
   document.getElementById("trendBars").innerHTML = months.map((m, i) => `<div class="bar-col"><div class="bar${i % 2 ? " alt" : ""}" style="height:${Math.max(6, (m.revenue / maxRev) * 100)}%"></div></div>`).join("");
   document.getElementById("trendLabels").innerHTML = months.map((m) => `<span>${m.label}</span>`).join("");
 
-  // Sales by channel
-  const byChannel = {};
-  paid.forEach((t) => { const c = t.channel || "Other"; byChannel[c] = (byChannel[c] || 0) + 1; });
-  const channelEntries = Object.entries(byChannel).sort((a, b) => b[1] - a[1]).slice(0, 5);
-  const maxCh = Math.max(1, ...channelEntries.map(([, v]) => v));
-  document.getElementById("channelBars").innerHTML = channelEntries.length
-    ? channelEntries.map(([, v], i) => `<div class="bar-col"><div class="bar${i % 2 ? " alt" : ""}" style="height:${Math.max(6, (v / maxCh) * 100)}%"></div></div>`).join("")
-    : `<p class="muted small" style="padding-top:60px;">No sales data yet.</p>`;
-  document.getElementById("channelLabels").innerHTML = channelEntries.map(([c]) => `<span style="font-size:10.5px;">${escapeHtml(c)}</span>`).join("");
+  // Top insurance partners by revenue. "Sales by Channel" used to live
+  // here, but every real mobile-app purchase writes channel: "Mobile App"
+  // (see lib/repositories/insurance_repository.dart) — only demo-seeded
+  // rows ever vary it — so that chart collapsed to one meaningless,
+  // unlabeled full-height bar once real data was in play. Partner/provider
+  // genuinely varies, and this shows the real policy count + revenue per
+  // partner as text, not just a bar with no visible number.
+  const byProvider = {};
+  paid.forEach((t) => {
+    const name = t.providerName || "Unknown provider";
+    byProvider[name] = byProvider[name] || { policies: 0, revenue: 0 };
+    byProvider[name].policies++;
+    byProvider[name].revenue += Number(t.premium) || 0;
+  });
+  const providerEntries = Object.entries(byProvider).sort((a, b) => b[1].revenue - a[1].revenue).slice(0, 5);
+  document.getElementById("partnerRank").innerHTML = providerEntries.length
+    ? providerEntries.map(([name, d], i) => `
+        <div class="rank-row">
+          <div class="rank-num">${i + 1}</div>
+          <div><div class="rank-name">${escapeHtml(name)}</div><div class="rank-sub">${number(d.policies)} polic${d.policies === 1 ? "y" : "ies"} · ${moneyExact(d.revenue)}</div></div>
+        </div>`).join("")
+    : `<p class="muted small" style="padding:20px 0;">No policy sales recorded yet.</p>`;
 
   // Top destinations (by real transaction destinations)
   const byDest = {};

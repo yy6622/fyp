@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Insurance Partners — Voya Admin</title>
+<link rel="stylesheet" href="../css/tokens.css?v=20261006b" />
+<link rel="stylesheet" href="../css/base.css?v=20261006b" />
+<link rel="stylesheet" href="../css/layout.css?v=20261006b" />
+<link rel="stylesheet" href="../css/components.css?v=20261006b" />
+</head>
+<body>
+<div class="shell">
+  <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+  <aside class="sidebar" id="sidebar">
+    <img class="sidebar-brand" src="../img/voya-logo-white.png" alt="Voya" />
+    <div class="sidebar-user">
+      <div class="name" id="sbUserName">Loading…</div>
+      <div class="role" id="sbUserRole">Administrator</div>
+    </div>
+    <nav class="nav" id="sidebarNav"></nav>
+    <button class="sidebar-logout" id="logoutBtn"><span data-icon="log-out"></span>Log out</button>
+  </aside>
+
+  <main class="content">
+    <div class="topbar">
+      <div>
+        <button class="menu-toggle" id="menuToggle"><span data-icon="menu"></span></button>
+        <a href="insurance.html" class="inline-flex" style="color:var(--text-500);font-weight:700;font-size:13.5px;margin-bottom:10px;">
+          <span data-icon="arrow-left" data-icon-size="14"></span>Back to Insurance Management
+        </a>
+        <h1 class="h1">Insurance Partners</h1>
+        <p class="subtitle">Every insurance partner account — pending, approved, suspended or rejected</p>
+      </div>
+    </div>
+
+    <div class="filter-bar">
+      <div class="search-input-wrap"><span data-icon="search"></span><input class="input" id="searchInput" placeholder="Search by organization or email…" /></div>
+      <select class="select" id="statusFilter">
+        <option value="">All status</option>
+        <option value="pending">Pending</option>
+        <option value="approved">Approved</option>
+        <option value="suspended">Suspended</option>
+        <option value="rejected">Rejected</option>
+      </select>
+    </div>
+
+    <div class="table-wrap scroll-x">
+      <table class="data-table">
+        <thead><tr><th>Organization</th><th>Email</th><th>Registered</th><th>Status</th><th></th></tr></thead>
+        <tbody id="tableBody"><tr><td colspan="5"><div class="skeleton" style="height:40px;"></div></td></tr></tbody>
+      </table>
+      <div class="empty-state" id="emptyState" style="display:none;">
+        <span data-icon="building" class="icon-lg"></span>
+        <div class="h3">No partners found</div>
+        <p class="small">Try a different search or status filter.</p>
+      </div>
+    </div>
+    <div class="table-foot">
+      <p class="small muted" id="resultsLabel"></p>
+      <div class="pagination" id="pagination"></div>
+    </div>
+  </main>
+</div>
+
+<script type="module">
+import { requireRole } from "../js/auth-guard.js?v=20261007f";
+import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261007f";
+import { mountIcons } from "../js/icons.js?v=20261007f";
+import { listPartners, setPartnerStatus } from "../js/data.js?v=20261007f";
+import { fullDate, statusBadge, escapeHtml, paginate, renderPager, toast, setBusy, confirmDialog } from "../js/ui.js?v=20261007f";
+
+mountSidebarNav({ role: "admin", active: "insurance" });
+const session = await requireRole("admin", "login.html");
+let partners = [], filtered = [], page = 1;
+const PAGE_SIZE = 10;
+
+if (session) {
+  setSidebarUser({ displayName: session.profile.name || "Admin", roleLabel: "Administrator" });
+  await load();
+}
+
+async function load() {
+  partners = await listPartners();
+  applyFilters();
+}
+
+function applyFilters() {
+  const q = document.getElementById("searchInput").value.trim().toLowerCase();
+  const status = document.getElementById("statusFilter").value;
+  filtered = partners.filter((p) => {
+    const matchesQ = !q || (p.companyName || "").toLowerCase().includes(q) || (p.email || "").toLowerCase().includes(q);
+    const effectiveStatus = p.status || "pending";
+    return matchesQ && (!status || effectiveStatus === status);
+  });
+  page = 1;
+  renderTable();
+}
+
+function renderTable() {
+  const { pageItems, pages, total } = paginate(filtered, page, PAGE_SIZE);
+  const body = document.getElementById("tableBody");
+  const empty = document.getElementById("emptyState");
+  if (!pageItems.length) { body.innerHTML = ""; empty.style.display = "block"; }
+  else {
+    empty.style.display = "none";
+    body.innerHTML = pageItems.map((p) => `
+      <tr>
+        <td class="cell-strong">${escapeHtml(p.companyName || "—")}</td>
+        <td class="muted">${escapeHtml(p.email || "—")}</td>
+        <td class="muted">${fullDate(p.createdAt)}</td>
+        <td>${statusBadge(p.status === "approved" ? "active" : (p.status || "pending"))}</td>
+        <td>
+          <div class="row-actions">
+            ${p.status === "pending" || !p.status
+              ? `<button class="btn btn-primary btn-sm" data-approve="${p.id}">Approve</button><button class="btn btn-danger-outline btn-sm" data-reject="${p.id}">Reject</button>`
+              : p.status === "approved"
+                ? `<button class="btn btn-danger-outline btn-sm" data-suspend="${p.id}">Suspend</button>`
+                : p.status === "suspended"
+                  ? `<button class="btn btn-primary btn-sm" data-approve="${p.id}">Re-approve</button>`
+                  : ""}
+          </div>
+        </td>
+      </tr>`).join("");
+    body.querySelectorAll("[data-approve]").forEach((b) => b.addEventListener("click", () => setStatus(b.dataset.approve, "approved", b)));
+    body.querySelectorAll("[data-suspend]").forEach((b) => b.addEventListener("click", () => setStatus(b.dataset.suspend, "suspended", b)));
+    body.querySelectorAll("[data-reject]").forEach((b) => b.addEventListener("click", () => setStatus(b.dataset.reject, "rejected", b)));
+  }
+  document.getElementById("resultsLabel").textContent = total
+    ? `Showing ${(page - 1) * PAGE_SIZE + 1} to ${Math.min(page * PAGE_SIZE, total)} of ${total} results` : "No results";
+  renderPager("pagination", { page, pages }, (n) => { page = n; renderTable(); });
+  mountIcons(document);
+}
+
+async function setStatus(uid, status, btn) {
+  if (status === "suspended") {
+    const ok = await confirmDialog({ title: "Suspend this partner?", body: "They'll lose access to publish plans or handle claims until re-approved.", confirmText: "Suspend", danger: true });
+    if (!ok) return;
+  }
+  if (status === "rejected") {
+    const ok = await confirmDialog({ title: "Reject this application?", body: "They won't be able to publish plans or handle claims. This can be undone later by approving them.", confirmText: "Reject", danger: true });
+    if (!ok) return;
+  }
+  setBusy(btn, true, "Working…");
+  try {
+    await setPartnerStatus(uid, status);
+    const p = partners.find((x) => x.id === uid);
+    if (p) p.status = status;
+    applyFilters();
+    toast(status === "approved" ? "Partner approved." : status === "rejected" ? "Partner application rejected." : "Partner suspended.", "success");
+  } catch (err) {
+    toast(err.message || "Couldn't update partner.", "error");
+    setBusy(btn, false);
+  }
+}
+
+document.getElementById("searchInput").addEventListener("input", applyFilters);
+document.getElementById("statusFilter").addEventListener("change", applyFilters);
+</script>
+</body>
+</html>

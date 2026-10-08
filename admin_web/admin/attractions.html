@@ -4,16 +4,16 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Attraction Management — Voya Admin</title>
-<link rel="stylesheet" href="../css/tokens.css" />
-<link rel="stylesheet" href="../css/base.css" />
-<link rel="stylesheet" href="../css/layout.css" />
-<link rel="stylesheet" href="../css/components.css" />
+<link rel="stylesheet" href="../css/tokens.css?v=20261006b" />
+<link rel="stylesheet" href="../css/base.css?v=20261006b" />
+<link rel="stylesheet" href="../css/layout.css?v=20261006b" />
+<link rel="stylesheet" href="../css/components.css?v=20261006b" />
 </head>
 <body>
 <div class="shell">
   <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
   <aside class="sidebar" id="sidebar">
-    <div class="sidebar-brand">Voya</div>
+    <img class="sidebar-brand" src="../img/voya-logo-white.png" alt="Voya" />
     <div class="sidebar-user">
       <div class="name" id="sbUserName">Loading…</div>
       <div class="role" id="sbUserRole">Administrator</div>
@@ -30,7 +30,6 @@
         <p class="subtitle">Manage attraction details and visibility</p>
       </div>
       <div class="inline-flex" style="gap:10px;">
-        <button class="btn btn-outline" id="importBtn"><span data-icon="download"></span>Import attractions</button>
         <button class="btn btn-primary" id="addBtn"><span data-icon="plus"></span>Add attraction</button>
       </div>
     </div>
@@ -65,140 +64,32 @@
   </main>
 </div>
 
-<div class="modal-backdrop" id="importModal">
-  <div class="modal" style="max-width:780px;">
-    <div class="modal-head"><h3 class="h2">Import attractions (OpenStreetMap / Geoapify)</h3><button class="modal-close" data-close><span data-icon="x"></span></button></div>
-    <p class="hint" style="margin-bottom:10px;">Sweeps every category below across every location you list and imports everything it finds straight into the catalogue — no review step. Data comes from OpenStreetMap via Geoapify — unlike Google Places, Geoapify's terms allow storing results permanently in Firestore, so what's imported here stays. Anything already imported before (matched by place) is skipped automatically.</p>
-    <p class="small muted" style="margin-bottom:16px;">Data &copy; OpenStreetMap contributors, via Geoapify.</p>
-
-    <div class="field" style="margin-bottom:16px;">
-      <label>Locations — one per line</label>
-      <textarea class="input" id="pLocations" rows="3" placeholder="Penang, Malaysia&#10;Kuala Lumpur, Malaysia&#10;Langkawi, Malaysia"></textarea>
-    </div>
-
-    <div class="field" style="margin-bottom:16px;">
-      <label>Categories to sweep</label>
-      <div class="tag-input-box" id="pCategoriesBox"><input placeholder="Add another category, then press Enter…" /></div>
-      <p class="hint">Pre-filled with a broad default set — remove any you don't want, or add more.</p>
-    </div>
-
-    <div id="pProgressWrap" style="display:none;margin-bottom:14px;">
-      <div style="height:6px;background:#eef1f3;border-radius:99px;overflow:hidden;"><div id="pProgressBar" style="height:100%;width:0%;background:var(--teal-600);transition:width .15s ease;"></div></div>
-      <p class="hint" id="pProgressLabel" style="margin-top:6px;"></p>
-    </div>
-
-    <p class="hint" id="pStatus" style="margin-bottom:12px;"></p>
-
-    <div class="form-actions">
-      <button class="btn btn-outline" data-close>Close</button>
-      <button class="btn btn-primary" id="pSweepBtn"><span data-icon="download"></span>Import attractions</button>
-    </div>
-  </div>
-</div>
-
-<div class="modal-backdrop" id="formModal">
-  <div class="modal" style="max-width:820px;">
-    <div class="modal-head"><h3 class="h2" id="formTitle">Add attraction</h3><button class="modal-close" data-close><span data-icon="x"></span></button></div>
-
-    <div class="form-section">
-      <div class="form-section-title"><span data-icon="map-pin"></span>Basic info</div>
-      <div class="form-grid">
-        <div class="field" style="grid-column:1/-1;"><label>Name</label><input class="input" id="fName" placeholder="e.g. Senso-ji Temple" /></div>
-        <div class="field"><label>Primary category</label><input class="input" id="fCategory" placeholder="e.g. Cultural" /></div>
-        <div class="field">
-          <label>Status</label>
-          <select class="select" id="fStatus"><option value="active">Active</option><option value="pending">Pending</option><option value="suspended">Suspended</option></select>
-        </div>
-        <div class="field" style="grid-column:1/-1;">
-          <label>Additional category tags</label>
-          <div class="tag-input-box" id="categoriesBox"><input placeholder="Type a tag and press Enter…" /></div>
-          <p class="hint">Shown as extra chips on the attraction's detail page (e.g. "Historic Site", "Temple").</p>
-        </div>
-        <div class="field"><label>Location</label><input class="input" id="fLocation" placeholder="e.g. Asakusa, Tokyo" /></div>
-        <div class="field"><label>Recommended duration</label><input class="input" id="fDuration" placeholder="e.g. 1 - 2 hours" /></div>
-        <div class="field" style="grid-column:1/-1;"><label>Full address</label><input class="input" id="fAddress" placeholder="Full street address" /></div>
-      </div>
-    </div>
-
-    <div class="form-section">
-      <div class="form-section-title"><span data-icon="upload"></span>Photos</div>
-      <div class="image-upload-grid" id="imageGrid"></div>
-      <input type="file" id="imageFileInput" accept="image/jpeg,image/png,image/webp" multiple style="display:none;" />
-      <p class="hint">Click the star to set the cover photo shown on Explore. First photo added becomes the cover automatically.</p>
-    </div>
-
-    <div class="form-section">
-      <div class="form-section-title"><span data-icon="coin"></span>Entry fees</div>
-      <label class="checkbox-row" style="margin-bottom:14px;"><input type="checkbox" id="fFree" /> Free entry</label>
-      <div class="form-grid" id="feeFields">
-        <div class="field"><label>Adult (RM)</label><input class="input" id="fFeeAdult" type="number" min="0" step="1" placeholder="e.g. 20" /></div>
-        <div class="field"><label>Child (RM)</label><input class="input" id="fFeeChild" type="number" min="0" step="1" placeholder="e.g. 10" /></div>
-        <div class="field"><label>Senior (RM)</label><input class="input" id="fFeeSenior" type="number" min="0" step="1" placeholder="e.g. 15" /></div>
-      </div>
-    </div>
-
-    <div class="form-section">
-      <div class="form-section-title"><span data-icon="clock"></span>Opening hours</div>
-      <label class="checkbox-row" style="margin-bottom:10px;"><input type="checkbox" id="fOpen24" /> Open 24 hours</label>
-      <label class="checkbox-row" id="sameHoursRow" style="margin-bottom:14px;"><input type="checkbox" id="fSameHours" checked /> Same hours every day</label>
-      <div class="field" id="hoursSingleField"><label>Hours</label><input class="input" id="fHoursSingle" placeholder="e.g. 9:00 AM - 6:00 PM" /></div>
-      <div class="hours-grid" id="hoursGrid" style="display:none;"></div>
-    </div>
-
-    <div class="form-section">
-      <div class="form-section-title"><span data-icon="phone"></span>Contact & details</div>
-      <div class="form-grid">
-        <div class="field"><label>Phone</label><input class="input" id="fPhone" placeholder="e.g. +81 3-3842-0181" /></div>
-        <div class="field"><label>Website</label><input class="input" id="fWebsite" placeholder="https://…" /></div>
-        <div class="field"><label>Rating</label><input class="input" id="fRating" placeholder="e.g. 4.7" /></div>
-        <div class="field"><label>Reviews</label><input class="input" id="fReviews" placeholder="e.g. 3.4k" /></div>
-      </div>
-    </div>
-
-    <div class="form-section">
-      <div class="form-section-title"><span data-icon="check-circle"></span>Facilities</div>
-      <div class="tag-input-box" id="facilitiesBox"><input placeholder="e.g. Public Toilet, then press Enter…" /></div>
-    </div>
-
-    <div class="form-section">
-      <div class="form-section-title"><span data-icon="sparkle"></span>Highlights</div>
-      <div class="tag-input-box" id="highlightsBox"><input placeholder="e.g. Iconic Kaminarimon Thunder Gate, then press Enter…" /></div>
-    </div>
-
-    <div class="form-actions">
-      <button class="btn btn-outline" data-close>Cancel</button>
-      <button class="btn btn-primary" id="saveBtn">Save attraction</button>
-    </div>
+<div class="modal-backdrop" id="attractionModal">
+  <div class="modal" style="max-width:600px;">
+    <div class="modal-head"><h3 class="h2">Attraction detail</h3><button class="modal-close" data-close><span data-icon="x"></span></button></div>
+    <div id="attractionModalBody"></div>
   </div>
 </div>
 
 <script type="module">
-import { requireRole } from "../js/auth-guard.js";
-import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js";
-import { mountIcons } from "../js/icons.js";
+import { requireRole } from "../js/auth-guard.js?v=20261007e";
+import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261007e";
+import { mountIcons } from "../js/icons.js?v=20261007e";
+import { listAttractions, deleteAttraction } from "../js/data.js?v=20261007e";
 import {
-  listAttractions, newAttractionRef, createAttraction, updateAttraction, deleteAttraction,
-  uploadAttractionImage, deleteAttractionImage, importAttractions,
-} from "../js/data.js";
-import { number, shortDate, statusBadge, escapeHtml, paginate, toast, setBusy, openModal, closeModal, wireModalDismiss, confirmDialog } from "../js/ui.js";
-import { sweepGeoapifyPlaces, DEFAULT_SWEEP_KEYWORDS, hasApiKey } from "../js/places-import.js";
+  number, shortDate, fullDate, statusBadge, escapeHtml, paginate, renderPager, toast, confirmDialog,
+  statCard, plainCard, trendDelta, countBefore, monthBounds, openModal, closeModal, wireModalDismiss,
+} from "../js/ui.js?v=20261007e";
 
 mountSidebarNav({ role: "admin", active: "attractions" });
 const session = await requireRole("admin", "login.html");
-let items = [], filtered = [], page = 1, editingId = null;
+let items = [], filtered = [], page = 1;
 const PAGE_SIZE = 8;
-const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
 if (session) {
   setSidebarUser({ displayName: session.profile.name || "Admin", roleLabel: "Administrator" });
   wireModalDismiss();
-  buildHoursGrid();
-  wireImagePicker();
   await load();
-}
-
-function statCard(label, value, icon) {
-  return `<div class="card stat-card"><div class="stat-top"><div class="stat-icon"><span data-icon="${icon}"></span></div><div class="stat-label">${label}</div></div><div class="stat-value">${value}</div><div class="stat-delta">↑ 2.4% from last month</div></div>`;
 }
 
 async function load() {
@@ -209,14 +100,20 @@ async function load() {
 }
 
 function renderStats() {
-  const active = items.filter((a) => a.status === "active").length;
+  const active = items.filter((a) => a.status === "active");
   const pending = items.filter((a) => a.status === "pending").length;
   const suspended = items.filter((a) => a.status === "suspended").length;
+  // Real deltas (js/ui.js): Attractions/Active compare the current total
+  // to how many existed before this month. Pending/Suspended are live
+  // status snapshots with no honest baseline, so they're plainCards.
+  const { start: thisMonthStart } = monthBounds(0);
+  const totalDelta = trendDelta(items.length, countBefore(items, "createdAt", thisMonthStart));
+  const activeDelta = trendDelta(active.length, countBefore(active, "createdAt", thisMonthStart));
   document.getElementById("statGrid").innerHTML = [
-    statCard("Attractions", number(items.length), "map-pin"),
-    statCard("Active", number(active), "sparkle"),
-    statCard("Pending", number(pending), "user-check"),
-    statCard("Suspended", number(suspended), "user-x"),
+    statCard("Attractions", number(items.length), "map-pin", totalDelta),
+    statCard("Active", number(active.length), "sparkle", activeDelta),
+    plainCard("Pending", number(pending)),
+    plainCard("Suspended", number(suspended)),
   ].join("");
   mountIcons(document);
 }
@@ -240,7 +137,7 @@ function renderTable() {
   else {
     empty.style.display = "none";
     body.innerHTML = pageItems.map((a) => `
-      <tr>
+      <tr style="cursor:pointer;" data-open="${a.id}">
         <td class="cell-strong">${escapeHtml(a.name || "—")}</td>
         <td class="muted">${escapeHtml(a.category || "—")}</td>
         <td class="muted">${escapeHtml(a.location || "—")}</td>
@@ -253,304 +150,70 @@ function renderTable() {
           </div>
         </td>
       </tr>`).join("");
-    body.querySelectorAll("[data-edit]").forEach((b) => b.addEventListener("click", () => openForm(b.dataset.edit)));
+    // Click anywhere on the row to view the attraction's full detail in a
+    // popup — not a separate page. Clicks inside .row-actions (the edit
+    // pencil / delete trash buttons) are excluded so they keep their own
+    // behavior (edit still opens attraction-form.html; delete still deletes).
+    body.querySelectorAll("[data-open]").forEach((row) => row.addEventListener("click", (e) => {
+      if (e.target.closest(".row-actions")) return;
+      openAttractionDetail(row.dataset.open);
+    }));
+    body.querySelectorAll("[data-edit]").forEach((b) => b.addEventListener("click", () => {
+      location.href = `attraction-form.html?id=${encodeURIComponent(b.dataset.edit)}`;
+    }));
     body.querySelectorAll("[data-del]").forEach((b) => b.addEventListener("click", () => remove(b.dataset.del)));
   }
   document.getElementById("resultsLabel").textContent = total
     ? `Showing ${(page - 1) * PAGE_SIZE + 1} to ${Math.min(page * PAGE_SIZE, total)} of ${total} results` : "No results";
-  const pager = document.getElementById("pagination");
-  let html = `<button class="page-btn" ${page === 1 ? "disabled" : ""} id="prevPage"><span data-icon="chevron-left" data-icon-size="14"></span></button>`;
-  for (let i = 1; i <= pages; i++) html += `<button class="page-btn${i === page ? " active" : ""}" data-page="${i}">${i}</button>`;
-  html += `<button class="page-btn" ${page === pages ? "disabled" : ""} id="nextPage"><span data-icon="chevron-right" data-icon-size="14"></span></button>`;
-  pager.innerHTML = html;
-  pager.querySelectorAll("[data-page]").forEach((b) => b.addEventListener("click", () => { page = Number(b.dataset.page); renderTable(); }));
-  document.getElementById("prevPage")?.addEventListener("click", () => { page--; renderTable(); });
-  document.getElementById("nextPage")?.addEventListener("click", () => { page++; renderTable(); });
+  renderPager("pagination", { page, pages }, (n) => { page = n; renderTable(); });
   mountIcons(document);
 }
 
-// ==================== Tag inputs (categories / facilities / highlights) ====================
-function mountTagInput(boxId, initialTags = []) {
-  const box = document.getElementById(boxId);
-  // The form re-opens (Add / Edit) many times per page-load, reusing the
-  // same box element each time — clone+replace the <input> so a fresh one
-  // (with no listeners from a previous mountTagInput() call) is wired up
-  // every time, instead of stacking duplicate "keydown" handlers on it.
-  const oldInput = box.querySelector("input");
-  const input = oldInput.cloneNode(true);
-  oldInput.replaceWith(input);
-  let tags = [...initialTags];
-
-  function render() {
-    box.querySelectorAll(".chip").forEach((c) => c.remove());
-    tags.forEach((tag, i) => {
-      const chip = document.createElement("span");
-      chip.className = "chip";
-      chip.innerHTML = `${escapeHtml(tag)}<button type="button" data-i="${i}"><span data-icon="x"></span></button>`;
-      box.insertBefore(chip, input);
-    });
-    box.querySelectorAll(".chip button").forEach((btn) =>
-      btn.addEventListener("click", () => { tags.splice(Number(btn.dataset.i), 1); render(); })
-    );
-    mountIcons(box);
-  }
-
-  input.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" || e.key === ",") {
-      e.preventDefault();
-      const value = input.value.trim().replace(/,$/, "");
-      if (value && !tags.includes(value)) { tags.push(value); render(); }
-      input.value = "";
-    } else if (e.key === "Backspace" && !input.value && tags.length) {
-      tags.pop();
-      render();
-    }
-  });
-
-  render();
-  return { getTags: () => tags, setTags: (next) => { tags = [...next]; render(); } };
+/** Shows everything we know about one attraction — the table only has
+ * room for Attraction/Category/Location/Updated/Status, but a real
+ * catalog_attractions doc also carries address, fees, hours, contact
+ * details, facilities and highlights — see attraction-form.html. */
+function openAttractionDetail(id) {
+  const a = items.find((x) => x.id === id);
+  if (!a) return;
+  const row = (label, value) => `<div class="field" style="margin-bottom:12px;"><label>${label}</label><p class="value">${value}</p></div>`;
+  const extraCategories = (a.categories || []).filter((cat) => cat !== (a.category || ""));
+  const categoryLine = extraCategories.length
+    ? `${escapeHtml(a.category || "—")} <span class="muted small">(+ ${extraCategories.map(escapeHtml).join(", ")})</span>`
+    : escapeHtml(a.category || "—");
+  const isFree = a.price === "Free entry" || (!a.fees?.adult && !a.fees?.child && !a.fees?.senior && !a.price);
+  const feeLine = isFree
+    ? "Free entry"
+    : [a.fees?.adult && `Adult ${a.fees.adult}`, a.fees?.child && `Child ${a.fees.child}`, a.fees?.senior && `Senior ${a.fees.senior}`].filter(Boolean).join(" · ") || "—";
+  document.getElementById("attractionModalBody").innerHTML = `
+    ${a.image ? `<img src="${a.image}" style="width:100%;border-radius:12px;margin-bottom:16px;max-height:220px;object-fit:cover;" />` : ""}
+    <div class="form-grid">
+      ${row("Name", escapeHtml(a.name || "—"))}
+      ${row("Status", statusBadge(a.status))}
+      ${row("Category", categoryLine)}
+      ${row("Location", escapeHtml(a.location || "—"))}
+      ${row("Full address", escapeHtml(a.address || "—"))}
+      ${row("Recommended duration", escapeHtml(a.recommendedDuration || "—"))}
+      ${row("Entry fee", feeLine)}
+      ${row("Opening hours", escapeHtml(a.openingHours || "—"))}
+      ${row("Phone", escapeHtml(a.phone || "—"))}
+      ${row("Website", a.website ? `<a href="${escapeHtml(/^https?:\/\//i.test(a.website) ? a.website : `https://${a.website}`)}" target="_blank" rel="noopener">${escapeHtml(a.website)}</a>` : "—")}
+      ${row("Rating", a.rating ? `${escapeHtml(String(a.rating))}${a.reviews ? ` <span class="muted small">(${escapeHtml(String(a.reviews))} reviews)</span>` : ""}` : "—")}
+      ${row("Facilities", (a.facilities || []).length ? a.facilities.map(escapeHtml).join(", ") : "—")}
+      ${row("Highlights", (a.highlights || []).length ? a.highlights.map(escapeHtml).join(", ") : "—")}
+      ${row("Last updated", shortDate(a.updatedAt))}
+      ${row("Added", fullDate(a.createdAt))}
+    </div>
+    <div class="form-actions">
+      <button class="btn btn-outline" data-modal-edit="${a.id}"><span data-icon="edit" data-icon-size="14"></span>Edit</button>
+    </div>`;
+  mountIcons(document.getElementById("attractionModalBody"));
+  document.getElementById("attractionModalBody").querySelector("[data-modal-edit]").onclick = () => {
+    closeModal("attractionModal");
+    location.href = `attraction-form.html?id=${encodeURIComponent(a.id)}`;
+  };
+  openModal("attractionModal");
 }
-
-let categoriesTag, facilitiesTag, highlightsTag;
-
-// ==================== Opening hours ====================
-function buildHoursGrid() {
-  const grid = document.getElementById("hoursGrid");
-  grid.innerHTML = DAYS.map((day) => `
-    <div class="day-label">${day}</div>
-    <input class="input" data-day="${day}" placeholder="e.g. 9:00 AM - 6:00 PM" />
-  `).join("");
-}
-
-function refreshHoursVisibility() {
-  const open24 = document.getElementById("fOpen24").checked;
-  const sameHours = document.getElementById("fSameHours").checked;
-  document.getElementById("sameHoursRow").style.display = open24 ? "none" : "flex";
-  document.getElementById("hoursSingleField").style.display = !open24 && sameHours ? "block" : "none";
-  document.getElementById("hoursGrid").style.display = !open24 && !sameHours ? "grid" : "none";
-}
-document.getElementById("fOpen24").addEventListener("change", refreshHoursVisibility);
-document.getElementById("fSameHours").addEventListener("change", refreshHoursVisibility);
-
-function setHoursFields(a) {
-  const byDay = a?.openingHoursByDay || {};
-  const values = DAYS.map((d) => (byDay[d] || "").trim());
-  const allSame = values.every((v) => v === values[0]);
-  const isOpen24 = (a?.openingHours || "").toLowerCase().includes("24");
-  document.getElementById("fOpen24").checked = isOpen24;
-  document.getElementById("fSameHours").checked = allSame || !values.some(Boolean);
-  document.getElementById("fHoursSingle").value = isOpen24 ? "" : (values[0] || (a?.openingHours || "").replace(/^Daily,\s*/, ""));
-  document.querySelectorAll("#hoursGrid input[data-day]").forEach((inp) => {
-    inp.value = byDay[inp.dataset.day] || "";
-  });
-  refreshHoursVisibility();
-}
-
-function readHours() {
-  const open24 = document.getElementById("fOpen24").checked;
-  if (open24) {
-    const byDay = {};
-    DAYS.forEach((d) => (byDay[d] = "Open 24 hours"));
-    return { openingHours: "Open 24 hours", openingHoursByDay: byDay };
-  }
-  const sameHours = document.getElementById("fSameHours").checked;
-  if (sameHours) {
-    const hours = document.getElementById("fHoursSingle").value.trim() || "9:00 AM - 6:00 PM";
-    const byDay = {};
-    DAYS.forEach((d) => (byDay[d] = hours));
-    return { openingHours: `Daily, ${hours}`, openingHoursByDay: byDay };
-  }
-  const byDay = {};
-  document.querySelectorAll("#hoursGrid input[data-day]").forEach((inp) => {
-    byDay[inp.dataset.day] = inp.value.trim();
-  });
-  const firstSet = DAYS.map((d) => byDay[d]).find((v) => v);
-  return { openingHours: firstSet ? `Hours vary by day (e.g. ${firstSet})` : "", openingHoursByDay: byDay };
-}
-
-// ==================== Images (existing URLs + newly-picked files) ====================
-let imageItems = []; // { id, kind: 'existing'|'new', url?, file?, previewUrl? }
-let coverId = null;
-let nextImageId = 1;
-let removedExistingUrls = [];
-
-function wireImagePicker() {
-  document.getElementById("imageFileInput").addEventListener("change", (e) => {
-    const files = Array.from(e.target.files || []);
-    files.forEach((file) => {
-      const id = nextImageId++;
-      const previewUrl = URL.createObjectURL(file);
-      imageItems.push({ id, kind: "new", file, previewUrl });
-      if (!coverId) coverId = id;
-    });
-    e.target.value = "";
-    renderImages();
-  });
-}
-
-function resetImages(a) {
-  imageItems.forEach((it) => { if (it.previewUrl) URL.revokeObjectURL(it.previewUrl); });
-  const urls = a?.images?.length ? a.images : (a?.image ? [a.image] : []);
-  imageItems = urls.map((url) => ({ id: nextImageId++, kind: "existing", url }));
-  coverId = imageItems.length
-    ? (imageItems.find((it) => it.url === a?.image)?.id || imageItems[0].id)
-    : null;
-  removedExistingUrls = [];
-  renderImages();
-}
-
-function renderImages() {
-  const grid = document.getElementById("imageGrid");
-  const tiles = imageItems.map((it) => {
-    const src = it.kind === "existing" ? it.url : it.previewUrl;
-    const isCover = it.id === coverId;
-    return `
-      <div class="image-tile${isCover ? " cover" : ""}" data-id="${it.id}">
-        ${isCover ? `<span class="cover-tag">Cover</span>` : ""}
-        <img src="${src}" alt="" />
-        <div class="tile-actions">
-          <button type="button" class="tile-btn${isCover ? " active" : ""}" data-cover="${it.id}" title="Set as cover"><span data-icon="star"></span></button>
-          <button type="button" class="tile-btn" data-remove="${it.id}" title="Remove"><span data-icon="trash"></span></button>
-        </div>
-      </div>`;
-  }).join("");
-  grid.innerHTML = tiles + `<div class="image-upload-add" id="addImageTile"><span data-icon="upload"></span>Add photo</div>`;
-  document.getElementById("addImageTile").addEventListener("click", () => document.getElementById("imageFileInput").click());
-  grid.querySelectorAll("[data-cover]").forEach((btn) => btn.addEventListener("click", () => { coverId = Number(btn.dataset.cover); renderImages(); }));
-  grid.querySelectorAll("[data-remove]").forEach((btn) => btn.addEventListener("click", () => {
-    const id = Number(btn.dataset.remove);
-    const removed = imageItems.find((it) => it.id === id);
-    if (removed?.kind === "existing") removedExistingUrls.push(removed.url);
-    if (removed?.previewUrl) URL.revokeObjectURL(removed.previewUrl);
-    imageItems = imageItems.filter((it) => it.id !== id);
-    if (coverId === id) coverId = imageItems[0]?.id || null;
-    renderImages();
-  }));
-  mountIcons(grid);
-}
-
-async function resolveImages(attractionId) {
-  const urls = [];
-  let coverUrl = "";
-  let index = 0;
-  for (const it of imageItems) {
-    const url = it.kind === "existing" ? it.url : await uploadAttractionImage(attractionId, it.file, index++);
-    urls.push(url);
-    if (it.id === coverId) coverUrl = url;
-  }
-  if (!coverUrl && urls.length) coverUrl = urls[0];
-  await Promise.all(removedExistingUrls.map((url) => deleteAttractionImage(url)));
-  return { images: urls, image: coverUrl };
-}
-
-// ==================== Fees ====================
-function refreshFeeVisibility() {
-  document.getElementById("feeFields").style.display = document.getElementById("fFree").checked ? "none" : "grid";
-}
-document.getElementById("fFree").addEventListener("change", refreshFeeVisibility);
-
-function setFeeFields(a) {
-  const isFree = !a || a.price === "Free entry" || (!a.fees?.adult && !a.fees?.child && !a.fees?.senior && !a.price);
-  document.getElementById("fFree").checked = !!isFree;
-  document.getElementById("fFeeAdult").value = (a?.fees?.adult || "").replace(/^RM\s*/i, "");
-  document.getElementById("fFeeChild").value = (a?.fees?.child || "").replace(/^RM\s*/i, "");
-  document.getElementById("fFeeSenior").value = (a?.fees?.senior || "").replace(/^RM\s*/i, "");
-  refreshFeeVisibility();
-}
-
-function readFees() {
-  if (document.getElementById("fFree").checked) {
-    return { price: "Free entry", fees: {} };
-  }
-  const adult = document.getElementById("fFeeAdult").value.trim();
-  const child = document.getElementById("fFeeChild").value.trim();
-  const senior = document.getElementById("fFeeSenior").value.trim();
-  const fees = {};
-  if (adult) fees.adult = `RM ${adult}`;
-  if (child) fees.child = `RM ${child}`;
-  if (senior) fees.senior = `RM ${senior}`;
-  const price = fees.adult || fees.child || fees.senior || "";
-  return { price, fees };
-}
-
-// ==================== Open / save / delete ====================
-function openForm(id) {
-  editingId = id || null;
-  const a = id ? items.find((x) => x.id === id) : null;
-  document.getElementById("formTitle").textContent = id ? "Edit attraction" : "Add attraction";
-  document.getElementById("fName").value = a?.name || "";
-  document.getElementById("fCategory").value = a?.category || "";
-  document.getElementById("fLocation").value = a?.location || "";
-  document.getElementById("fDuration").value = a?.recommendedDuration || "";
-  document.getElementById("fAddress").value = a?.address || "";
-  document.getElementById("fPhone").value = a?.phone || "";
-  document.getElementById("fWebsite").value = a?.website || "";
-  document.getElementById("fRating").value = a?.rating || "";
-  document.getElementById("fReviews").value = a?.reviews || "";
-  document.getElementById("fStatus").value = a?.status || "active";
-
-  const extraCategories = (a?.categories || []).filter((c) => c !== (a?.category || ""));
-  categoriesTag = mountTagInput("categoriesBox", extraCategories);
-  facilitiesTag = mountTagInput("facilitiesBox", a?.facilities || []);
-  highlightsTag = mountTagInput("highlightsBox", a?.highlights || []);
-
-  setFeeFields(a);
-  setHoursFields(a);
-  resetImages(a);
-
-  openModal("formModal");
-}
-
-document.getElementById("addBtn").addEventListener("click", () => openForm(null));
-
-document.getElementById("saveBtn").addEventListener("click", async () => {
-  const name = document.getElementById("fName").value.trim();
-  const category = document.getElementById("fCategory").value.trim();
-  if (!name) { toast("Name is required.", "error"); return; }
-  if (!category) { toast("Primary category is required.", "error"); return; }
-
-  const btn = document.getElementById("saveBtn");
-  setBusy(btn, true, "Saving…");
-  try {
-    const ref = editingId ? { id: editingId } : newAttractionRef();
-    const attractionId = editingId || ref.id;
-
-    const { images, image } = await resolveImages(attractionId);
-    const { price, fees } = readFees();
-    const { openingHours, openingHoursByDay } = readHours();
-    const extraCategories = categoriesTag.getTags();
-
-    const data = {
-      name,
-      category,
-      categories: [category, ...extraCategories.filter((c) => c !== category)],
-      location: document.getElementById("fLocation").value.trim(),
-      address: document.getElementById("fAddress").value.trim(),
-      recommendedDuration: document.getElementById("fDuration").value.trim(),
-      phone: document.getElementById("fPhone").value.trim(),
-      website: document.getElementById("fWebsite").value.trim(),
-      rating: document.getElementById("fRating").value.trim() || "0",
-      reviews: document.getElementById("fReviews").value.trim() || "0",
-      status: document.getElementById("fStatus").value,
-      price, fees,
-      openingHours, openingHoursByDay,
-      images, image,
-      facilities: facilitiesTag.getTags(),
-      highlights: highlightsTag.getTags(),
-    };
-
-    if (editingId) await updateAttraction(editingId, data);
-    else await createAttraction(ref, data);
-
-    closeModal("formModal");
-    toast("Attraction saved — this is live in the app's Explore catalogue.", "success");
-    await load();
-  } catch (err) {
-    toast(err.message || "Couldn't save.", "error");
-  } finally {
-    setBusy(btn, false);
-  }
-});
 
 async function remove(id) {
   const a = items.find((x) => x.id === id);
@@ -569,71 +232,9 @@ async function remove(id) {
   }
 }
 
+document.getElementById("addBtn").addEventListener("click", () => { location.href = "attraction-form.html"; });
 document.getElementById("searchInput").addEventListener("input", applyFilters);
 document.getElementById("statusFilter").addEventListener("change", applyFilters);
-
-// ==================== Import attractions (OpenStreetMap via Geoapify) ====================
-// No review/select step — "Import attractions" sweeps every location ×
-// category combo, fetches full details for every unique place found, and
-// writes all of it straight into Firestore (importAttractions() skips
-// anything already imported before, matched by place, so re-running a
-// sweep over the same area is safe and won't create duplicates).
-let sweepCategoriesTag = null;
-
-document.getElementById("importBtn").addEventListener("click", () => {
-  document.getElementById("pLocations").value = "";
-  document.getElementById("pProgressWrap").style.display = "none";
-  document.getElementById("pStatus").textContent = hasApiKey()
-    ? ""
-    : "No Geoapify API key set yet — add one in js/places-config.js, then reload this page.";
-  // Re-seed the category chips fresh every time the modal opens (same
-  // clone+replace-input pattern as mountTagInput's other callers, so
-  // repeated opens don't stack listeners on the chip box's input).
-  sweepCategoriesTag = mountTagInput("pCategoriesBox", DEFAULT_SWEEP_KEYWORDS);
-  openModal("importModal");
-});
-
-document.getElementById("pSweepBtn").addEventListener("click", async () => {
-  const locations = document.getElementById("pLocations").value
-    .split("\n").map((s) => s.trim()).filter(Boolean);
-  const categories = sweepCategoriesTag ? sweepCategoriesTag.getTags() : [];
-  if (!locations.length) { toast("Enter at least one location.", "error"); return; }
-  if (!categories.length) { toast("Add at least one category to sweep.", "error"); return; }
-
-  const btn = document.getElementById("pSweepBtn");
-  setBusy(btn, true, "Sweeping…");
-  document.getElementById("pStatus").textContent = "";
-  const progressWrap = document.getElementById("pProgressWrap");
-  const progressBar = document.getElementById("pProgressBar");
-  const progressLabel = document.getElementById("pProgressLabel");
-  progressWrap.style.display = "block";
-  progressBar.style.width = "0%";
-  progressLabel.textContent = `Starting sweep of ${locations.length} location${locations.length === 1 ? "" : "s"} × ${categories.length} categor${categories.length === 1 ? "y" : "ies"}…`;
-
-  try {
-    const sweepResults = await sweepGeoapifyPlaces(locations, categories, {
-      onProgress: (phase, done, total, label) => {
-        progressBar.style.width = `${Math.round((done / total) * 100)}%`;
-        const phaseLabel = phase === "search" ? "Searching" : "Fetching full details";
-        progressLabel.textContent = `${phaseLabel}: ${done} / ${total} — ${label}`;
-      },
-    });
-    if (!sweepResults.length) {
-      document.getElementById("pStatus").textContent = "No results — try different locations or categories.";
-      return;
-    }
-    setBusy(btn, true, "Importing…");
-    progressLabel.textContent = `Writing ${sweepResults.length} place${sweepResults.length === 1 ? "" : "s"} to the catalogue…`;
-    const { imported, skipped } = await importAttractions(sweepResults);
-    toast(`${imported} imported${skipped ? `, ${skipped} skipped (already added)` : ""}.`, "success");
-    closeModal("importModal");
-    await load();
-  } catch (err) {
-    document.getElementById("pStatus").textContent = err.message || "Import failed.";
-  } finally {
-    setBusy(btn, false);
-  }
-});
 </script>
 </body>
 </html>

@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Migrate catalog_places — Voya Admin</title>
+<link rel="stylesheet" href="../css/tokens.css?v=20261008a" />
+<link rel="stylesheet" href="../css/base.css?v=20261008a" />
+<link rel="stylesheet" href="../css/layout.css?v=20261008a" />
+<link rel="stylesheet" href="../css/components.css?v=20261008a" />
+</head>
+<body>
+<div class="shell">
+  <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+  <aside class="sidebar" id="sidebar">
+    <img class="sidebar-brand" src="../img/voya-logo-white.png" alt="Voya" />
+    <div class="sidebar-user">
+      <div class="name" id="sbUserName">Loading…</div>
+      <div class="role" id="sbUserRole">Administrator</div>
+    </div>
+    <nav class="nav" id="sidebarNav"></nav>
+    <button class="sidebar-logout" id="logoutBtn"><span data-icon="log-out"></span>Log out</button>
+  </aside>
+
+  <main class="content">
+    <div class="topbar">
+      <div>
+        <button class="menu-toggle" id="menuToggle"><span data-icon="menu"></span></button>
+        <a href="settings.html" class="inline-flex" style="color:var(--text-500);font-weight:700;font-size:13.5px;margin-bottom:10px;">
+          <span data-icon="arrow-left" data-icon-size="14"></span>Back to settings
+        </a>
+        <h1 class="h1">Catalog places migration</h1>
+        <p class="subtitle">One-off tool: retires the old, unused <code>catalog_places</code> collection and renames the live <code>places</code> collection to <code>catalog_places</code>.</p>
+      </div>
+    </div>
+
+    <div class="card card-pad" style="max-width:720px;">
+      <div class="form-section-title" style="margin-bottom:10px;"><span data-icon="info"></span>What this does</div>
+      <p class="muted" style="font-size:13.5px;line-height:1.6;margin-bottom:18px;">
+        <code>catalog_places</code> is old, orphaned data from an earlier version of the app — nothing in the current app reads it any more.
+        <code>places</code> is the real, actively-used pre-scraped attraction dataset the Explore tab reads from today.
+        Running this will, in order: <strong>(1)</strong> download a backup of whatever is currently in <code>catalog_places</code>,
+        <strong>(2)</strong> delete it, <strong>(3)</strong> copy every document from <code>places</code> into <code>catalog_places</code> (same document ids),
+        then <strong>(4)</strong> delete the now-copied documents from <code>places</code>. This cannot be undone except by restoring from the downloaded backup file.
+      </p>
+
+      <div id="countsBox" class="form-grid" style="margin-bottom:18px;">
+        <div class="field"><label>places (will be moved, then emptied)</label><div class="input" id="countPlaces" style="display:flex;align-items:center;">Loading…</div></div>
+        <div class="field"><label>catalog_places (will be backed up, then deleted)</label><div class="input" id="countCatalogPlaces" style="display:flex;align-items:center;">Loading…</div></div>
+      </div>
+
+      <p class="hint" id="alreadyDoneMsg" style="display:none;color:var(--red-text);margin-bottom:14px;">
+        <span data-icon="alert-triangle" data-icon-size="14"></span>
+        <code>places</code> is already empty — it looks like this migration has already been run. Running it again would do nothing useful (there's nothing left to copy), so the button below is disabled. If <code>catalog_places</code> still looks wrong, check the backup file from the last run instead of running this again.
+      </p>
+
+      <button class="btn btn-danger-outline" id="runBtn"><span data-icon="refresh"></span>Download backup &amp; run migration</button>
+
+      <div id="progressBox" style="display:none;margin-top:20px;">
+        <div class="form-section-title" style="margin-bottom:8px;"><span data-icon="refresh"></span><span id="progressStage">Working…</span></div>
+        <div style="height:8px;border-radius:999px;background:var(--border);overflow:hidden;">
+          <div id="progressFill" style="height:100%;width:0%;background:var(--teal-500);transition:width .25s ease;"></div>
+        </div>
+        <p class="hint" id="progressDetail"></p>
+      </div>
+
+      <div id="resultBox" class="card-pad" style="display:none;margin-top:20px;background:var(--green-bg);border-radius:12px;">
+        <div class="form-section-title" style="margin-bottom:8px;color:var(--green-text);"><span data-icon="check-circle"></span>Migration complete</div>
+        <p class="muted" style="font-size:13.5px;line-height:1.6;" id="resultDetail"></p>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script type="module">
+import { requireRole } from "../js/auth-guard.js?v=20261008a";
+import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261008a";
+import { mountIcons } from "../js/icons.js?v=20261008a";
+import { getPlacesMigrationCounts, backupCatalogPlaces, runPlacesMigration } from "../js/data.js?v=20261008a";
+import { confirmDialog, toast, setBusy } from "../js/ui.js?v=20261008a";
+
+mountSidebarNav({ role: "admin", active: "settings" });
+const session = await requireRole("admin", "login.html");
+
+const runBtn = document.getElementById("runBtn");
+let counts = { oldCatalogPlaces: 0, places: 0 };
+
+if (session) {
+  setSidebarUser({ displayName: session.profile.name || "Admin", roleLabel: "Administrator" });
+  await loadCounts();
+  runBtn.addEventListener("click", onRunClicked);
+}
+
+async function loadCounts() {
+  runBtn.disabled = true;
+  try {
+    counts = await getPlacesMigrationCounts();
+  } catch (e) {
+    toast("Couldn't load collection counts: " + (e?.message || e), "error");
+    return;
+  }
+  document.getElementById("countPlaces").textContent = String(counts.places);
+  document.getElementById("countCatalogPlaces").textContent = String(counts.oldCatalogPlaces);
+  if (counts.places === 0) {
+    document.getElementById("alreadyDoneMsg").style.display = "block";
+    runBtn.disabled = true;
+  } else {
+    runBtn.disabled = false;
+  }
+}
+
+function downloadJson(filename, data) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+async function onRunClicked() {
+  // Re-check rather than trust the button's disabled state alone — counts
+  // could have changed in another tab, and this is the one guard standing
+  // between a second run and silently destroying a freshly-migrated
+  // catalog_places with no places data left to recover it from.
+  if (counts.places === 0) {
+    toast("places is empty — migration already looks done. Nothing to run.", "error");
+    return;
+  }
+  const ok = await confirmDialog({
+    title: "Run catalog places migration?",
+    body: `This will permanently delete ${counts.oldCatalogPlaces} existing <strong>catalog_places</strong> document(s) ` +
+      `(a backup downloads automatically first), copy all ${counts.places} <strong>places</strong> document(s) into ` +
+      `catalog_places, then delete those ${counts.places} document(s) from <strong>places</strong>. This cannot be undone ` +
+      `except by restoring the downloaded backup. Continue?`,
+    confirmText: "Yes, run migration",
+    danger: true,
+  });
+  if (!ok) return;
+
+  setBusy(runBtn, true, "Backing up…");
+  const progressBox = document.getElementById("progressBox");
+  const progressStage = document.getElementById("progressStage");
+  const progressFill = document.getElementById("progressFill");
+  const progressDetail = document.getElementById("progressDetail");
+  progressBox.style.display = "block";
+  document.getElementById("resultBox").style.display = "none";
+
+  try {
+    // Backup + download FIRST, before anything destructive — see
+    // backupCatalogPlaces()'s doc comment in js/data.js.
+    progressStage.textContent = "Downloading catalog_places backup…";
+    const backup = await backupCatalogPlaces();
+    downloadJson(`voya-catalog_places-backup-${new Date().toISOString().slice(0, 10)}.json`, backup);
+
+    const stageLabels = {
+      "deleting-old": "Deleting old catalog_places…",
+      "copying": "Copying places into catalog_places…",
+      "deleting-places": "Emptying places…",
+    };
+    const result = await runPlacesMigration((stage, done, total) => {
+      progressStage.textContent = stageLabels[stage] || stage;
+      const pct = total > 0 ? Math.round((done / total) * 100) : 100;
+      progressFill.style.width = pct + "%";
+      progressDetail.textContent = `${done} / ${total}`;
+    });
+
+    progressBox.style.display = "none";
+    document.getElementById("resultDetail").textContent =
+      `Backed up and deleted ${result.oldCatalogPlacesDeleted} old catalog_places document(s). ` +
+      `Copied ${result.copied} document(s) from places into catalog_places, then emptied places. ` +
+      `A backup JSON file was downloaded to your computer before any deletion happened.`;
+    document.getElementById("resultBox").style.display = "block";
+    toast("Migration complete.", "success");
+    await loadCounts();
+  } catch (e) {
+    toast("Migration failed partway through: " + (e?.message || e) + " — check the backup file and Firestore console before retrying.", "error");
+  } finally {
+    setBusy(runBtn, false);
+  }
+}
+</script>
+</body>
+</html>

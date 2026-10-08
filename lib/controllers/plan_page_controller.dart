@@ -158,6 +158,7 @@ class PlanPageController extends ChangeNotifier {
         lastExpenseLabel: expenses.isEmpty ? '' : expenses.first.title,
         lastExpenseAmount: expenses.isEmpty ? 0 : expenses.first.amount,
         tripId: trip.id,
+        coverImage: trip.coverImage,
       );
     }).toList();
   }

@@ -4,16 +4,16 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Dashboard — Voya Insurance Partner</title>
-<link rel="stylesheet" href="../css/tokens.css" />
-<link rel="stylesheet" href="../css/base.css" />
-<link rel="stylesheet" href="../css/layout.css" />
-<link rel="stylesheet" href="../css/components.css" />
+<link rel="stylesheet" href="../css/tokens.css?v=20261006b" />
+<link rel="stylesheet" href="../css/base.css?v=20261006b" />
+<link rel="stylesheet" href="../css/layout.css?v=20261006b" />
+<link rel="stylesheet" href="../css/components.css?v=20261006b" />
 </head>
 <body>
 <div class="shell">
   <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
   <aside class="sidebar" id="sidebar">
-    <div class="sidebar-brand">Voya</div>
+    <img class="sidebar-brand" src="../img/voya-logo-white.png" alt="Voya" />
     <div class="sidebar-user">
       <div class="name" id="sbUserName">Loading…</div>
       <div class="role" id="sbUserRole">Partner workspace</div>
@@ -56,12 +56,12 @@
 </div>
 
 <script type="module">
-import { requireRole } from "../js/auth-guard.js";
-import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js";
-import { mountIcons } from "../js/icons.js";
-import { listTransactions, listClaims, listPlans } from "../js/data.js";
-import { seedPartnerDemoData } from "../js/seed.js";
-import { money, moneyExact, number, statusBadge, escapeHtml, timeAgo, toast, setBusy } from "../js/ui.js";
+import { requireRole } from "../js/auth-guard.js?v=20261007e";
+import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261007e";
+import { mountIcons } from "../js/icons.js?v=20261007e";
+import { listTransactions, listClaims, listPlans } from "../js/data.js?v=20261007e";
+import { seedPartnerDemoData } from "../js/seed.js?v=20261007e";
+import { money, moneyExact, number, statusBadge, escapeHtml, timeAgo, toast, setBusy, statCard, plainCard, trendDelta, pointDelta, sumInMonth, countInMonth, monthBounds, rateOf } from "../js/ui.js?v=20261007e";
 
 mountSidebarNav({ role: "partner", active: "dashboard" });
 const session = await requireRole("partner", "login.html");
@@ -72,10 +72,6 @@ if (session) {
   const params = new URLSearchParams(location.search);
   if (params.get("welcome")) toast("Welcome to Voya! Your organization is now in the queue for admin approval.", "success");
   await load();
-}
-
-function statCard(label, value, icon) {
-  return `<div class="card stat-card"><div class="stat-top"><div class="stat-icon"><span data-icon="${icon}"></span></div><div class="stat-label">${label}</div></div><div class="stat-value">${value}</div><div class="stat-delta">↑ 2.4% from last month</div></div>`;
 }
 
 async function load() {
@@ -90,11 +86,23 @@ async function load() {
   const approved = claims.filter((c) => c.status === "approved").length;
   const rate = claims.length ? Math.round((approved / claims.length) * 1000) / 10 : 0;
 
+  const grossDelta = trendDelta(
+    sumInMonth(paid, "createdAt", (t) => Number(t.premium) || 0, 0),
+    sumInMonth(paid, "createdAt", (t) => Number(t.premium) || 0, 1),
+  );
+  const soldDelta = trendDelta(countInMonth(paid, "createdAt", 0), countInMonth(paid, "createdAt", 1));
+  const { start: thisMonthStart } = monthBounds(0);
+  const { start: lastMonthStart, end: lastMonthEnd } = monthBounds(1);
+  const claimDateOf = (c) => (c.createdAt?.toDate ? c.createdAt.toDate() : null);
+  const claimsThisMonth = claims.filter((c) => { const d = claimDateOf(c); return d && d >= thisMonthStart; });
+  const claimsLastMonth = claims.filter((c) => { const d = claimDateOf(c); return d && d >= lastMonthStart && d < lastMonthEnd; });
+  const rateDelta = pointDelta(rateOf(claimsThisMonth, (c) => c.status === "approved"), rateOf(claimsLastMonth, (c) => c.status === "approved"));
+
   document.getElementById("statGrid").innerHTML = [
-    statCard("Gross premium", money(gross), "coin"),
-    statCard("Policies sold", number(paid.length), "shield-check"),
-    statCard("Pending claims", number(pending), "clock"),
-    statCard("Approval rate", `${rate}%`, "percent"),
+    statCard("Gross premium", money(gross), "coin", grossDelta),
+    statCard("Policies sold", number(paid.length), "shield-check", soldDelta),
+    plainCard("Pending claims", number(pending)),
+    statCard("Approval rate", `${rate}%`, "percent", rateDelta),
   ].join("");
 
   const months = [];

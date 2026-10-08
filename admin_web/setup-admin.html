@@ -4,15 +4,15 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Voya — Admin bootstrap</title>
-<link rel="stylesheet" href="css/tokens.css" />
-<link rel="stylesheet" href="css/base.css" />
-<link rel="stylesheet" href="css/components.css" />
-<link rel="stylesheet" href="css/auth.css" />
+<link rel="stylesheet" href="css/tokens.css?v=20261006b" />
+<link rel="stylesheet" href="css/base.css?v=20261006b" />
+<link rel="stylesheet" href="css/components.css?v=20261006b" />
+<link rel="stylesheet" href="css/auth.css?v=20261006b" />
 </head>
 <body>
 <div class="auth-shell">
   <div class="auth-side">
-    <div class="brand">Voya</div>
+    <img class="brand" src="img/voya-logo-white.png" alt="Voya" />
     <h1>Create the first admin account.</h1>
     <p class="lede">This page is for one-time setup only. Anyone who can open it can create an admin
       account, so remove it (or restrict access to it) once your team's admin accounts exist.</p>
@@ -44,10 +44,10 @@
 </div>
 
 <script type="module">
-import { registerWithRole, authErrorMessage } from "./js/auth-guard.js";
-import { isFirstAdminNeeded } from "./js/data.js";
-import { setBusy } from "./js/ui.js";
-import { auth } from "./js/firebase-config.js";
+import { registerWithRole, authErrorMessage } from "./js/auth-guard.js?v=20261007";
+import { isFirstAdminNeeded } from "./js/data.js?v=20261007";
+import { setBusy } from "./js/ui.js?v=20261007";
+import { auth } from "./js/firebase-config.js?v=20261007";
 import { signOut } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
 
 const statusLine = document.getElementById("statusLine");

@@ -38,6 +38,15 @@ class MyApp extends StatelessWidget {
         // instead of the app's own navy brand color. Seeding the scheme
         // from AppColors.primary retheme's all of them at once.
         colorScheme: ColorScheme.fromSeed(seedColor: AppColors.primary),
+        // Material 3's other default: once content scrolls underneath an
+        // AppBar, it raises the bar's elevation and tints it with
+        // colorScheme.surfaceTint (derived from the seed color above) —
+        // a visible colour shift the instant you scroll, on every AppBar
+        // in the app (Plan's tab bar included). Nothing here ever asked
+        // for that tint/shadow look (bottom_nav uses a plain top border
+        // instead of elevation, same flat style everywhere else), so it's
+        // switched off globally rather than page by page.
+        appBarTheme: const AppBarTheme(scrolledUnderElevation: 0, surfaceTintColor: Colors.transparent),
       ),
       home: const SplashPage(),
     );

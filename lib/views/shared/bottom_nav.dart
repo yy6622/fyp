@@ -4,13 +4,16 @@ import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 
 import '../../controllers/bottom_nav_controller.dart';
+import '../../repositories/trip_repository.dart';
 import '../../repositories/user_repository.dart';
 import '../../services/auth_service.dart';
 import '../../services/currency_service.dart';
+import '../../services/itinerary_ai_service.dart';
 import '../../services/language_service.dart';
 import '../../services/location_service.dart';
 import '../../theme.dart';
 import '../explore/explore_page.dart';
+import '../group/group_trip_page.dart';
 import '../home/home_page.dart';
 import '../plan/plan_page.dart';
 import '../profile/profile_page.dart';
@@ -134,9 +137,24 @@ class _MainPageState extends State<MainPage> {
       listenable: controller,
       builder: (context, _) {
         return Scaffold(
-          body: IndexedStack(
-            index: controller.index,
-            children: _pages,
+          // The AI Summarise status bar used to live only inside
+          // GroupTripPage, so leaving that one trip's page (any of the
+          // four tabs below, not just Plan) meant losing sight of a run
+          // that was still going in the background — the user asked for
+          // it to be visible from anywhere in the app, not just "the chat
+          // page". A sibling of the IndexedStack, not inside any one
+          // page, is what makes that true regardless of which tab is
+          // selected.
+          body: Column(
+            children: [
+              Expanded(
+                child: IndexedStack(
+                  index: controller.index,
+                  children: _pages,
+                ),
+              ),
+              const _GlobalAiItineraryBar(),
+            ],
           ),
           bottomNavigationBar: _buildBottomNav(),
         );
@@ -205,6 +223,86 @@ class _MainPageState extends State<MainPage> {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// The app-wide counterpart to [AiItineraryStatusBar] (which only shows
+/// while that one trip's own group page is open) — sits above the bottom
+/// nav on every tab, so a run that's still going (or just finished) stays
+/// visible no matter where in the app the person wanders off to. Shows
+/// nothing when no trip has an active run. Tapping it opens that trip's
+/// group page, where the existing page-local bar (and from there, the
+/// full sheet) picks up the exact same run — this bar is just a second,
+/// always-reachable way to notice it, not a separate one.
+class _GlobalAiItineraryBar extends StatelessWidget {
+  const _GlobalAiItineraryBar();
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: ItineraryAiService.instance,
+      builder: (context, _) {
+        final active = ItineraryAiService.instance.anyActiveJob;
+        if (active == null) return const SizedBox.shrink();
+        final job = active.job;
+        final running = job.status == AiItineraryStatus.running;
+        final statusText = switch (job.status) {
+          AiItineraryStatus.running => 'AI is reading your discussion...',
+          AiItineraryStatus.ready => 'AI suggestions are ready',
+          _ => 'AI Summarise didn\'t finish',
+        };
+        final uid = AuthService.instance.currentUser?.uid;
+        return Material(
+          color: AppColors.chipGrey,
+          child: InkWell(
+            onTap: () => Navigator.of(context)
+                .push(MaterialPageRoute(builder: (_) => GroupTripPage(tripId: active.tripId))),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+              child: Row(
+                children: [
+                  if (running)
+                    const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
+                    )
+                  else
+                    const Icon(Icons.auto_awesome, size: 16, color: AppColors.navy),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    // The per-trip bar on the group page itself doesn't
+                    // need the trip's name (it's obvious which trip you're
+                    // looking at); this one can be seen from any tab, so a
+                    // bare "AI suggestions are ready" would leave someone
+                    // with more than one trip guessing which one. Falls
+                    // back to the plain status text while the trip doc
+                    // hasn't loaded yet or has no name.
+                    child: uid == null
+                        ? Text(statusText, style: const TextStyle(fontSize: 12.5, color: AppColors.navy))
+                        : StreamBuilder<Trip?>(
+                            stream: TripRepository.instance.watchTrip(active.tripId, uid),
+                            builder: (context, snap) {
+                              final name = snap.data?.name;
+                              final label = (name == null || name.isEmpty) ? statusText : '$name  ·  $statusText';
+                              return Text(
+                                label,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontSize: 12.5, color: AppColors.navy),
+                              );
+                            },
+                          ),
+                  ),
+                  Text(running ? 'Show' : 'View',
+                      style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: AppColors.primary)),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

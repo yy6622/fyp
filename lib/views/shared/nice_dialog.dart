@@ -239,6 +239,13 @@ Widget niceStarPicker({required int rating, required ValueChanged<int> onChanged
 /// rounded-card, icon-in-a-circle language as [showNiceFormDialog], just
 /// with no input fields and one wide confirm button instead of a
 /// Cancel/Confirm pair.
+/// [secondaryLabel]/[onSecondary] add an optional second, text-only action
+/// below the main button (e.g. "Resend email") — omitted entirely when
+/// either is null, so existing single-button call sites are unaffected.
+/// [onSecondary] returns an error message to show, or null on success; on
+/// success the dialog's own message is swapped for [secondarySuccessMessage]
+/// instead of closing, so the person can tap it again if a second email
+/// still doesn't arrive.
 Future<void> showNiceInfoDialog({
   required BuildContext context,
   required String title,
@@ -247,49 +254,84 @@ Future<void> showNiceInfoDialog({
   Color iconColor = Colors.green,
   String buttonLabel = 'Done',
   VoidCallback? onDone,
+  String? secondaryLabel,
+  Future<String?> Function()? onSecondary,
+  String secondarySuccessMessage = 'Sent again — check your email.',
 }) {
   return showDialog<void>(
     context: context,
-    builder: (ctx) => Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
-      insetPadding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(24, 28, 24, 20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 64,
-              height: 64,
-              decoration: BoxDecoration(color: iconColor.withValues(alpha: 0.12), shape: BoxShape.circle),
-              alignment: Alignment.center,
-              child: Icon(icon, color: iconColor, size: 32),
-            ),
-            const SizedBox(height: 16),
-            Text(title, textAlign: TextAlign.center, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: AppColors.navy)),
-            const SizedBox(height: 8),
-            Text(message, textAlign: TextAlign.center, style: const TextStyle(fontSize: 13, color: AppColors.textGrey, height: 1.4)),
-            const SizedBox(height: 22),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  elevation: 0,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+    builder: (ctx) {
+      String currentMessage = message;
+      bool sendingSecondary = false;
+      return StatefulBuilder(
+        builder: (ctx, setState) => Dialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+          insetPadding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 28, 24, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 64,
+                  height: 64,
+                  decoration: BoxDecoration(color: iconColor.withValues(alpha: 0.12), shape: BoxShape.circle),
+                  alignment: Alignment.center,
+                  child: Icon(icon, color: iconColor, size: 32),
                 ),
-                onPressed: () {
-                  Navigator.of(ctx).pop();
-                  onDone?.call();
-                },
-                child: Text(buttonLabel, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
-              ),
+                const SizedBox(height: 16),
+                Text(title, textAlign: TextAlign.center, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: AppColors.navy)),
+                const SizedBox(height: 8),
+                Text(currentMessage, textAlign: TextAlign.center, style: const TextStyle(fontSize: 13, color: AppColors.textGrey, height: 1.4)),
+                const SizedBox(height: 22),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    ),
+                    onPressed: () {
+                      Navigator.of(ctx).pop();
+                      onDone?.call();
+                    },
+                    child: Text(buttonLabel, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+                  ),
+                ),
+                if (secondaryLabel != null && onSecondary != null) ...[
+                  const SizedBox(height: 8),
+                  TextButton(
+                    onPressed: sendingSecondary
+                        ? null
+                        : () async {
+                            setState(() => sendingSecondary = true);
+                            final error = await onSecondary();
+                            if (!ctx.mounted) return;
+                            setState(() {
+                              sendingSecondary = false;
+                              if (error == null) currentMessage = secondarySuccessMessage;
+                            });
+                            if (error != null) {
+                              ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text(error)));
+                            }
+                          },
+                    child: sendingSecondary
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : Text(secondaryLabel, style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.w600, fontSize: 13)),
+                  ),
+                ],
+              ],
             ),
-          ],
+          ),
         ),
-      ),
-    ),
+      );
+    },
   );
 }
 

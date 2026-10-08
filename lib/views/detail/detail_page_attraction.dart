@@ -109,7 +109,19 @@ class _DetailPageAttractionState extends State<DetailPageAttraction> {
                                 separatorBuilder: (_, __) => const SizedBox(width: 8),
                                 itemBuilder: (context, i) => ClipRRect(
                                   borderRadius: BorderRadius.circular(12),
-                                  child: Image.network(a.gallery[i], width: 120, height: 90, fit: BoxFit.cover),
+                                  child: Image.network(
+                                    a.gallery[i],
+                                    width: 120,
+                                    height: 90,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (_, __, ___) => Container(
+                                      width: 120,
+                                      height: 90,
+                                      color: AppColors.chipGrey,
+                                      alignment: Alignment.center,
+                                      child: const Icon(Icons.image_outlined, color: AppColors.textGrey),
+                                    ),
+                                  ),
                                 ),
                               ),
                             ),
@@ -212,20 +224,6 @@ class _DetailPageAttractionState extends State<DetailPageAttraction> {
                             if (a.phone.isNotEmpty && a.website.isNotEmpty) const SizedBox(height: 10),
                             if (a.website.isNotEmpty) _contactRow(Icons.language_outlined, a.website, () => confirmAndLaunch(context, ContactAction.website, a.website)),
                           ],
-                          const SizedBox(height: 24),
-                          ReviewsSection(
-                            title: a.name,
-                            ratingSummary: '${a.rating} (${a.reviews} reviews)',
-                            reviewsStream: CatalogRepository.instance.watchAttractionReviews(a.id).map((list) => list.map(reviewDataFromPlace).toList()),
-                            onSubmitReview: ({required authorId, required authorName, required rating, required comment}) =>
-                                CatalogRepository.instance.addAttractionReview(
-                              a.id,
-                              authorId: authorId,
-                              authorName: authorName,
-                              rating: rating,
-                              comment: comment,
-                            ),
-                          ),
                         ],
                       ),
                     ),

@@ -10,6 +10,7 @@ import '../repositories/trip_repository.dart';
 import '../repositories/user_repository.dart';
 import '../services/auth_service.dart';
 import '../services/currency_service.dart';
+import '../services/places_api_service.dart';
 
 /// Controller for [ExplorePage]. Attractions/restaurants stream from
 /// Firestore, same as flights/hotels — but, like flights/hotels, what's
@@ -38,6 +39,10 @@ class ExploreController extends ChangeNotifier {
     // destination flights/hotels' "popular" fallback uses, so the
     // category pages aren't empty before a trip/search picks a real one.
     _resubscribePlaces(kPopularDestinations.first.hotelPlaceQuery);
+    // Same idea for the top banner's photo — it has something real to
+    // show immediately rather than sitting on the neutral fallback until
+    // the first trip/profile snapshot resolves.
+    unawaited(_loadBannerImage(kPopularDestinations.first.label));
     if (_uid.isNotEmpty) {
       // Home Airport (from the profile stream below) affects the very
       // first flight search, so the initial search has to wait for
@@ -187,6 +192,45 @@ class ExploreController extends ChangeNotifier {
     }
   }
 
+  // ---------------- Top banner (destination photo) ----------------
+  /// The destination name shown in the top banner's "Explore {name}"
+  /// title — the selected trip's destination, or (no trip selected) the
+  /// same popular-destination fallback flights/hotels' "popular" search
+  /// defaults to. Kept separate from [selectedTrip] so the banner has a
+  /// sensible destination even for a signed-out session / before trips
+  /// have loaded.
+  String bannerDestination = kPopularDestinations.first.label;
+
+  /// A real photo for [bannerDestination] — Wikipedia's lead image (see
+  /// [PlacesApiService.destinationPhoto], the same free, no-API-key
+  /// lookup create_plan_wizard_controller.dart already uses for a new
+  /// trip's cover photo). Null while loading, or when no photo was
+  /// found, in which case the banner falls back to a neutral travel
+  /// photo instead of showing nothing.
+  String? bannerImageUrl;
+  String? _bannerPhotoFetchedFor;
+
+  Future<void> _loadBannerImage(String destination) async {
+    final trimmed = destination.trim();
+    if (trimmed.isEmpty) return;
+    bannerDestination = trimmed;
+    if (_bannerPhotoFetchedFor == trimmed) {
+      notifyListeners();
+      return;
+    }
+    _bannerPhotoFetchedFor = trimmed;
+    bannerImageUrl = null;
+    notifyListeners();
+    final photo = await PlacesApiService.instance.destinationPhoto(trimmed);
+    // Stale guard — a second destination change can race ahead of this
+    // one while its own lookup is still in flight (same pattern as
+    // _resubscribePlaces' subscription swap, just for a plain Future
+    // instead of a stream).
+    if (_disposed || _bannerPhotoFetchedFor != trimmed) return;
+    bannerImageUrl = photo;
+    notifyListeners();
+  }
+
   List<CatalogAttraction> attractions = [];
   List<CatalogRestaurant> restaurants = [];
   bool loadingPlaces = false;
@@ -240,6 +284,22 @@ class ExploreController extends ChangeNotifier {
   String flightResultsLabel = 'Popular destinations';
   String hotelResultsLabel = 'Popular destinations';
 
+  /// True once the person has run a manual top-bar search ([searchFromTopBar])
+  /// and nothing has restored the default view since. Explore has no
+  /// separate "search results" screen — a manual search overwrites
+  /// [flightResults]/[hotelResults]/[attractions]/[restaurants] in place,
+  /// on the same "All" page the person started on, with nothing that used
+  /// to say so or offer a way back. [ExplorePage] shows a "Showing
+  /// results for '…' · Clear" bar whenever this is true, and
+  /// [clearManualSearch] is that way back.
+  bool isManualSearch = false;
+
+  /// The query currently backing a manual search — '' once
+  /// [clearManualSearch] (or a trip switch, which also re-runs
+  /// [_runDefaultSearches]) restores the default view. Only used for the
+  /// "Showing results for '…'" bar's label.
+  String lastSearchQuery = '';
+
   /// Duffel offer/search-result ids saved this session, so a card can
   /// show "Saved" and stop offering to save again without having to
   /// re-derive that from the catalogue stream.
@@ -247,6 +307,12 @@ class ExploreController extends ChangeNotifier {
   final Set<String> savedStayIds = {};
 
   Future<void> _runDefaultSearches() async {
+    // Every call site here (initial load, a trip switch, the trip's own
+    // destination/dates being edited) means "go back to the default
+    // view" — including clearManualSearch's own call — so this is the
+    // one place that needs to turn isManualSearch back off.
+    isManualSearch = false;
+    lastSearchQuery = '';
     final trip = selectedTrip;
     if (trip != null && trip.destination.isNotEmpty) {
       final departureDate = trip.startDate ?? DateTime.now().add(const Duration(days: 30));
@@ -255,10 +321,12 @@ class ExploreController extends ChangeNotifier {
       unawaited(searchFlights(origin: _homeAirportCode, destination: trip.destination, departureDate: departureDate, label: trip.destination));
       unawaited(searchHotels(destinationQuery: trip.destination, checkIn: checkIn, checkOut: checkOut, label: trip.destination));
       _resubscribePlaces(trip.destination);
+      unawaited(_loadBannerImage(trip.destination));
     } else {
       _resubscribePlaces(kPopularDestinations.first.hotelPlaceQuery);
       unawaited(_loadPopularFlights());
       unawaited(_loadPopularHotels());
+      unawaited(_loadBannerImage(kPopularDestinations.first.label));
     }
   }
 
@@ -374,6 +442,9 @@ class ExploreController extends ChangeNotifier {
   void searchFromTopBar(String text) {
     final query = text.trim();
     if (query.isEmpty) return;
+    isManualSearch = true;
+    lastSearchQuery = query;
+    notifyListeners();
     final departureDate = DateTime.now().add(const Duration(days: 30));
     if (_selectedCategory == ExploreCategory.flights || _selectedCategory == ExploreCategory.all) {
       searchFlights(origin: _homeAirportCode, destination: query, departureDate: departureDate, label: query);
@@ -386,6 +457,22 @@ class ExploreController extends ChangeNotifier {
         _selectedCategory == ExploreCategory.all) {
       _resubscribePlaces(query);
     }
+    // A manual search is "for" that one destination regardless of which
+    // category triggered it — the banner photo follows along too, same
+    // as a trip switch already does.
+    unawaited(_loadBannerImage(query));
+  }
+
+  /// The way back from a manual search (see [isManualSearch]) — restores
+  /// whichever default view was showing before it (the selected trip's
+  /// destination, or the shared "popular destinations" browse feed).
+  /// Nothing here remembers the actual pre-search results to restore
+  /// them directly, so this just re-runs the same default search any
+  /// other "back to default" trigger (a trip switch) already goes
+  /// through.
+  void clearManualSearch() {
+    if (!isManualSearch) return;
+    _runDefaultSearches();
   }
 
   Future<void> saveHotelResult(DuffelStayResult stay) async {

@@ -72,9 +72,12 @@ also read plans from `insurance_plans` and write to
 `insurance_transactions`, so a real in-app purchase shows up here too.
 
 **Other simplifications, clearly flagged in the UI where relevant:**
-- The small "↑ 2.4% from last month" trend line on every stat card is
-  decorative (matches the Figma mockup) — computing a real month-over-month
-  delta needs daily snapshots this project doesn't keep.
+- The trend line on every stat card (e.g. "↑ 4.2% from last month") is a
+  real delta computed client-side from each record's own `createdAt`/
+  `timeline` — see monthDelta/pointDelta/sumInMonth/countByStatusInMonth in
+  `js/ui.js`. A metric with no honest baseline to compare against (a
+  "Pending …" queue, a status with no real temporal correlation like
+  "Suspended") renders as a plainCard with no delta instead of faking one.
 - "Suspending" a user only sets a Firestore flag; the mobile app doesn't
   currently check it at login, so a suspended user isn't actually blocked
   yet (a real deployment would add that check to `auth_controller.dart`).

@@ -39,6 +39,12 @@ class BookingConfirmation {
   final DateTime? checkIn;
   final DateTime? checkOut;
 
+  // Which of the trip's members this booking is for (see
+  // MemberSelectSection, shown on FlightPassengerDetailsPage/
+  // HotelGuestDetailsPage for a group trip) — empty for a solo trip or no
+  // trip context at all.
+  final List<String> forMemberUids;
+
   const BookingConfirmation({
     required this.paymentRef,
     this.passengerDetails = const [],
@@ -51,6 +57,7 @@ class BookingConfirmation {
     this.specialRequests = '',
     this.checkIn,
     this.checkOut,
+    this.forMemberUids = const [],
   });
 
   /// Back-compat convenience for any display code that just wants the
@@ -103,6 +110,10 @@ class BookingPaymentPage extends StatefulWidget {
   final DateTime? checkIn;
   final DateTime? checkOut;
 
+  // Which of the trip's members this booking is for — collected one step
+  // earlier (see BookingConfirmation.forMemberUids) and just forwarded.
+  final List<String> forMemberUids;
+
   // The trip to auto-add this booking to once payment succeeds, and the
   // callback that does it (built by the detail page that knows the full
   // flight/hotel data) — see [BookingBar]. Blank/null when there's no
@@ -132,6 +143,7 @@ class BookingPaymentPage extends StatefulWidget {
     this.specialRequests = '',
     this.checkIn,
     this.checkOut,
+    this.forMemberUids = const [],
     this.tripId = '',
     this.onPaid,
   });
@@ -389,6 +401,20 @@ class _BookingPaymentPageState extends State<BookingPaymentPage> {
 
     if (user != null) {
       final qtyNote = controller.quantity > 1 ? ' · ${controller.quantity} $_quantityLabel' : '';
+      // Guest/passenger details collected one step earlier (on
+      // FlightPassengerDetailsPage/HotelGuestDetailsPage) were previously
+      // only forwarded to `onPaid` (the trip's own TripFlight/TripHotelStay)
+      // and never written into this booking's own History row — so History
+      // showed a bare title/subtitle with nothing underneath. Written here
+      // too now, so History's detail pages have the same real data Plan's
+      // does.
+      final isFlight = widget.bookingType == 'flight';
+      final guestName = isFlight ? widget.passengerDetails.map((p) => p.name).where((n) => n.isNotEmpty).join(', ') : widget.guestName;
+      final guestEmail = isFlight ? widget.contactEmail : widget.guestEmail;
+      final guestPhone = isFlight ? widget.contactPhone : widget.guestPhone;
+      final guestIdNumber = isFlight
+          ? widget.passengerDetails.map((p) => p.passportNumber).where((n) => n.isNotEmpty).join(', ')
+          : widget.guestIdNumber;
       try {
         await BookingRepository.instance.addBooking(
           uid: user.uid,
@@ -397,6 +423,15 @@ class _BookingPaymentPageState extends State<BookingPaymentPage> {
           subtitle: '${widget.bookingSubtitle}$qtyNote',
           trailing: '${widget.currencyLabel} ${controller.subtotal.toStringAsFixed(2)}',
           refId: widget.refId,
+          bookingRef: paymentRef,
+          status: 'Confirmed',
+          guestName: guestName,
+          guestEmail: guestEmail,
+          guestPhone: guestPhone,
+          guestIdNumber: guestIdNumber,
+          specialRequests: widget.specialRequests,
+          checkIn: widget.checkIn != null ? formatLongDate(widget.checkIn!) : '',
+          checkOut: widget.checkOut != null ? formatLongDate(widget.checkOut!) : '',
         );
       } catch (e) {
         // The Stripe charge itself already succeeded at this point — only
@@ -428,6 +463,7 @@ class _BookingPaymentPageState extends State<BookingPaymentPage> {
         specialRequests: widget.specialRequests,
         checkIn: widget.checkIn,
         checkOut: widget.checkOut,
+        forMemberUids: widget.forMemberUids,
       ));
     } catch (e) {
       if (mounted) {

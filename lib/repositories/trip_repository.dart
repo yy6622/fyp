@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../models/booking_details.dart';
 import '../models/day_plan_models.dart';
 import '../models/plan_page_models.dart';
+import 'notifications_repository.dart';
 
 /// Thrown by [TripRepository.joinByInviteCode] for a blank/unparseable
 /// invite link or code.
@@ -42,6 +43,13 @@ IconData iconForKey(String key) => activityIcons[key] ?? Icons.local_activity_ou
 class TripFlight {
   final String id;
   final String airline, flightNumber, routeCode, routeCities, dateTime, terminal, bookingRef, status;
+  // The flight's real arrival date + time ("5 June 2026 14:35"), same
+  // shape as [dateTime] (which is departure) — added so the AI
+  // itinerary assistant (see functions/itinerary.js's LOGISTICS section)
+  // can avoid suggesting anything on day 1 before the flight actually
+  // lands, instead of guessing. Blank for a manually-typed flight, or
+  // one booked before this existed.
+  final String arrivalTime;
   // Passenger full names collected at checkout (BookingPaymentPage) — empty
   // for a manually-typed flight, which never went through a checkout step.
   // Kept alongside [passengerDetails] below (rather than derived from it)
@@ -61,6 +69,14 @@ class TripFlight {
   // -> real Firebase Storage download URL. Empty until someone actually
   // uploads one from PlanFlightDetailPage's Documents tab.
   final Map<String, String> documents;
+  // Which of the trip's members this flight is actually for — picked on
+  // FlightPassengerDetailsPage at checkout (see MemberSelectSection) when
+  // the trip has more than one member, so a group trip's Plan shows who a
+  // booking applies to instead of leaving it ambiguous whether it was for
+  // the whole group or just whoever paid. Empty means "not set" (a solo
+  // trip, or a flight added before this existed) — PlanFlightDetailPage
+  // treats that the same as "everyone".
+  final List<String> forMemberUids;
   const TripFlight({
     this.id = '',
     required this.airline,
@@ -76,6 +92,8 @@ class TripFlight {
     this.contactEmail = '',
     this.contactPhone = '',
     this.documents = const {},
+    this.forMemberUids = const [],
+    this.arrivalTime = '',
   });
 
   Map<String, dynamic> toMap() => {
@@ -85,6 +103,7 @@ class TripFlight {
         'routeCode': routeCode,
         'routeCities': routeCities,
         'dateTime': dateTime,
+        'arrivalTime': arrivalTime,
         'terminal': terminal,
         'bookingRef': bookingRef,
         'status': status,
@@ -93,6 +112,7 @@ class TripFlight {
         'contactEmail': contactEmail,
         'contactPhone': contactPhone,
         'documents': documents,
+        'forMemberUids': forMemberUids,
       };
 
   factory TripFlight.fromMap(Map<String, dynamic> m) => TripFlight(
@@ -102,6 +122,7 @@ class TripFlight {
         routeCode: (m['routeCode'] as String?) ?? '',
         routeCities: (m['routeCities'] as String?) ?? '',
         dateTime: (m['dateTime'] as String?) ?? '',
+        arrivalTime: (m['arrivalTime'] as String?) ?? '',
         terminal: (m['terminal'] as String?) ?? '',
         bookingRef: (m['bookingRef'] as String?) ?? '',
         status: (m['status'] as String?) ?? 'Confirmed',
@@ -112,6 +133,7 @@ class TripFlight {
         contactEmail: (m['contactEmail'] as String?) ?? '',
         contactPhone: (m['contactPhone'] as String?) ?? '',
         documents: Map<String, String>.from((m['documents'] as Map?) ?? const {}),
+        forMemberUids: ((m['forMemberUids'] as List?) ?? const []).map((e) => '$e').toList(),
       );
 }
 
@@ -130,6 +152,23 @@ class TripHotelStay {
   final String guestPhone;
   final String guestIdNumber;
   final String specialRequests;
+  // Added alongside Flight's equivalent fields so a Plan hotel stay can
+  // show a real booking reference/status (rather than none at all) and
+  // have a Documents tab (setHotelDocument) and a Review tab (refId) —
+  // previously missing entirely, which is why PlanHotelDetailPage had no
+  // Guests/Documents tabs the way PlanFlightDetailPage does.
+  final String bookingRef;
+  final String status;
+  // The `catalog_hotels` doc id this stay was booked from — blank for a
+  // manually-typed stay. Lets the Plan viewer show real reviews, same as
+  // HistoryHotelDetailPage's hotelId.
+  final String refId;
+  // Uploaded documents for this stay — docType -> Firebase Storage URL
+  // (see TripRepository.setHotelDocument), same idea as TripFlight.documents.
+  final Map<String, String> documents;
+  // Which of the trip's members this stay is for — see
+  // [TripFlight.forMemberUids]'s doc comment, same idea here.
+  final List<String> forMemberUids;
   const TripHotelStay({
     this.id = '',
     required this.name,
@@ -141,6 +180,11 @@ class TripHotelStay {
     this.guestPhone = '',
     this.guestIdNumber = '',
     this.specialRequests = '',
+    this.bookingRef = '',
+    this.status = 'Confirmed',
+    this.refId = '',
+    this.documents = const {},
+    this.forMemberUids = const [],
   });
 
   Map<String, dynamic> toMap() => {
@@ -154,6 +198,11 @@ class TripHotelStay {
         'guestPhone': guestPhone,
         'guestIdNumber': guestIdNumber,
         'specialRequests': specialRequests,
+        'bookingRef': bookingRef,
+        'status': status,
+        'refId': refId,
+        'documents': documents,
+        'forMemberUids': forMemberUids,
       };
 
   factory TripHotelStay.fromMap(Map<String, dynamic> m) => TripHotelStay(
@@ -167,6 +216,11 @@ class TripHotelStay {
         guestPhone: (m['guestPhone'] as String?) ?? '',
         guestIdNumber: (m['guestIdNumber'] as String?) ?? '',
         specialRequests: (m['specialRequests'] as String?) ?? '',
+        bookingRef: (m['bookingRef'] as String?) ?? '',
+        status: (m['status'] as String?) ?? 'Confirmed',
+        refId: (m['refId'] as String?) ?? '',
+        documents: Map<String, String>.from((m['documents'] as Map?) ?? const {}),
+        forMemberUids: ((m['forMemberUids'] as List?) ?? const []).map((e) => '$e').toList(),
       );
 }
 
@@ -298,9 +352,24 @@ class Trip {
 
   String get dateRangeLabel {
     if (startDate == null || endDate == null) return '';
+    return '$dateOnlyLabel  ·  $nightsLabel';
+  }
+
+  /// Just the date-range half of [dateRangeLabel] — split out so a narrow
+  /// card (see HomePage's "Your Next Adventure") can put the "X days Y
+  /// nights" part on its own line instead of squeezing both onto one line
+  /// and losing the nights count to the ellipsis.
+  String get dateOnlyLabel {
+    if (startDate == null || endDate == null) return '';
     String fmt(DateTime d) => '${d.day} ${_month(d.month)} ${d.year}';
+    return '${fmt(startDate!)} - ${fmt(endDate!)}';
+  }
+
+  /// Just the "X days Y nights" half of [dateRangeLabel].
+  String get nightsLabel {
+    if (startDate == null || endDate == null) return '';
     final nights = endDate!.difference(startDate!).inDays;
-    return '${fmt(startDate!)} - ${fmt(endDate!)}  ·  ${nights + 1} days $nights night${nights == 1 ? '' : 's'}';
+    return '${nights + 1} days $nights night${nights == 1 ? '' : 's'}';
   }
 
   static String _month(int m) => const [
@@ -370,6 +439,7 @@ class Trip {
           voted: votedBy.length,
           total: memberIds.isEmpty ? 1 : memberIds.length,
           votedByMe: votedBy.contains(myUid),
+          forMemberUids: List<String>.from(it['forMemberUids'] as List? ?? const []),
         );
       }).toList();
       return DayPlan(
@@ -608,6 +678,15 @@ class TripRepository {
     return _trips.doc(tripId).snapshots().map((doc) => doc.exists ? Trip.fromDoc(doc, myUid: myUid) : null);
   }
 
+  /// One-shot fetch of a single trip (unlike [watchTrip], no live stream) —
+  /// for a spot where only the current value is needed once, such as
+  /// pulling a trip's destination into an insurance purchase record (see
+  /// PaymentMethodPage._confirmPayment).
+  Future<Trip?> getTrip(String tripId, String myUid) async {
+    final doc = await _trips.doc(tripId).get();
+    return doc.exists ? Trip.fromDoc(doc, myUid: myUid) : null;
+  }
+
   // ---------------- Join by invite code / QR ----------------
   // The invite code shown on Group Info (InviteQrPage, as both a QR
   // code and plain text) and fed back in here from Join → Enter code /
@@ -755,7 +834,13 @@ class TripRepository {
     String? accommodation,
     String? foodPreference,
     String? coverImage,
-  }) {
+    // See [addActivity] — who's doing this, for [_notifyMembers]. Only
+    // the shared-plan fields below (not muteChat/pinChat/realTimeLocation/
+    // notificationOption, which are this device's own chat prefs even
+    // though they're stored on the trip doc) ever trigger a notification,
+    // so passing this is harmless even when only a chat pref changed.
+    String? actorUid,
+  }) async {
     final data = <String, dynamic>{};
     if (name != null) data['name'] = name;
     if (about != null) data['about'] = about;
@@ -772,11 +857,25 @@ class TripRepository {
     if (travelStyle != null) data['travelStyle'] = travelStyle;
     if (accommodation != null) data['accommodation'] = accommodation;
     if (foodPreference != null) data['foodPreference'] = foodPreference;
-    if (data.isEmpty) return Future.value();
+    if (data.isEmpty) return;
     // Only the trip-detail edits (destination/dates/budget/preferences)
     // count as real "planning" activity for the Past Plans fold — muting
     // chat or renaming the group isn't the kind of activity that should
-    // keep a quiet trip out of that fold.
+    // keep a quiet trip out of that fold. The same list of fields is what
+    // other members get notified about below — a renamed group or a new
+    // cover photo is shared/visible enough to count too, so those two are
+    // folded into the notified set even though they skip lastActivityAt.
+    final planFieldsChanged = <String>[
+      if (name != null) 'the trip name',
+      if (coverImage != null) 'the cover photo',
+      if (destination != null) 'the destination',
+      if (startDate != null || endDate != null) 'the dates',
+      if (budgetPerPerson != null) 'the budget',
+      if (interests != null) 'the interests',
+      if (travelStyle != null) 'the travel style',
+      if (accommodation != null) 'the accommodation preference',
+      if (foodPreference != null) 'the food preference',
+    ];
     if (destination != null ||
         startDate != null ||
         endDate != null ||
@@ -787,10 +886,21 @@ class TripRepository {
         foodPreference != null) {
       data['lastActivityAt'] = FieldValue.serverTimestamp();
     }
-    return _trips.doc(tripId).update(data);
+    await _trips.doc(tripId).update(data);
+    if (actorUid != null && planFieldsChanged.isNotEmpty) {
+      final summary = planFieldsChanged.length == 1
+          ? planFieldsChanged.first
+          : '${planFieldsChanged.sublist(0, planFieldsChanged.length - 1).join(', ')} and ${planFieldsChanged.last}';
+      await _notifyMembers(
+        tripId,
+        actorUid,
+        (actorName, _) => '$actorName updated $summary',
+        type: 'trip_settings_updated',
+      );
+    }
   }
 
-  Future<void> addMembers(String tripId, Map<String, String> uidToName) async {
+  Future<void> addMembers(String tripId, Map<String, String> uidToName, {String? actorUid}) async {
     if (uidToName.isEmpty) return;
     final data = <String, dynamic>{
       'memberIds': FieldValue.arrayUnion(uidToName.keys.toList()),
@@ -799,6 +909,32 @@ class TripRepository {
       data['memberNames.${e.key}'] = e.value;
     }
     await _trips.doc(tripId).update(data);
+    if (actorUid == null) return;
+    try {
+      final snap = await _trips.doc(tripId).get();
+      if (!snap.exists) return;
+      final d = snap.data()!;
+      final tripName = (d['name'] as String?) ?? 'the trip';
+      final names = Map<String, dynamic>.from((d['memberNames'] as Map?) ?? const {});
+      final actorName = (names[actorUid] as String?) ?? 'Someone';
+      final memberIds = List<String>.from((d['memberIds'] as List?) ?? const []);
+      final joinedNames = uidToName.values.join(', ');
+      for (final uid in memberIds) {
+        if (uid == actorUid) continue;
+        // The newcomer(s) hear it framed as "you" rather than being lumped
+        // into the generic "X added Y to the trip" everyone else gets.
+        final isNewcomer = uidToName.containsKey(uid);
+        await NotificationsRepository.instance.send(
+          toUid: uid,
+          type: 'trip_member_added',
+          title: tripName,
+          body: isNewcomer ? '$actorName added you to the trip "$tripName"' : '$actorName added $joinedNames to the trip',
+          data: {'tripId': tripId},
+        );
+      }
+    } catch (_) {
+      // See _notifyMembers' doc comment — never mask the real write.
+    }
   }
 
   /// Removes a member from the trip. Used by the trip owner to remove
@@ -808,18 +944,31 @@ class TripRepository {
   /// kept as a separate, clearly-named method since "an owner removing
   /// someone else" and "a member leaving on their own" are different
   /// actions even though they touch the same fields.
-  Future<void> removeMember(String tripId, String uid) {
-    return _trips.doc(tripId).update({
+  Future<void> removeMember(String tripId, String uid, {String? actorUid}) async {
+    var removedName = 'A member';
+    if (actorUid != null) {
+      final snap = await _trips.doc(tripId).get();
+      final names = Map<String, dynamic>.from((snap.data()?['memberNames'] as Map?) ?? const {});
+      removedName = (names[uid] as String?) ?? removedName;
+    }
+    await _trips.doc(tripId).update({
       'memberIds': FieldValue.arrayRemove([uid]),
       'memberNames.$uid': FieldValue.delete(),
     });
+    if (actorUid != null) {
+      await _notifyMembers(tripId, actorUid, (_, __) => '$removedName was removed from the trip', type: 'trip_member_removed');
+    }
   }
 
-  Future<void> leaveTrip(String tripId, String uid) {
-    return _trips.doc(tripId).update({
+  Future<void> leaveTrip(String tripId, String uid) async {
+    final snap = await _trips.doc(tripId).get();
+    final names = Map<String, dynamic>.from((snap.data()?['memberNames'] as Map?) ?? const {});
+    final leavingName = (names[uid] as String?) ?? 'A member';
+    await _trips.doc(tripId).update({
       'memberIds': FieldValue.arrayRemove([uid]),
       'memberNames.$uid': FieldValue.delete(),
     });
+    await _notifyMembers(tripId, uid, (_, __) => '$leavingName left the trip', type: 'trip_member_left');
   }
 
   Future<void> addActivity(
@@ -829,23 +978,62 @@ class TripRepository {
     required String label,
     required String iconKey,
     String location = '',
-  }) {
+    // Which members this activity is for — see ActivityItem.forMemberUids.
+    // Empty (the default) means "everyone", same as leaving it unset.
+    List<String> forMemberUids = const [],
+    // Who's doing this — passed through to [_notifyMembers] so every other
+    // member hears about it. Null (the default) skips notifying, for
+    // callers that don't have a signed-in actor to attribute it to.
+    String? actorUid,
+  }) async {
     final itemId = '${DateTime.now().microsecondsSinceEpoch}';
-    return _trips.doc(tripId).update({
+    await _trips.doc(tripId).update({
       'days.$dayIndex.items.$itemId': {
         'time': time,
         'label': label,
         'icon': iconKey,
         'location': location,
         'votedBy': <String>[],
+        'forMemberUids': forMemberUids,
       },
       'lastActivityAt': FieldValue.serverTimestamp(),
     });
+    if (actorUid != null) {
+      await _notifyMembers(
+        tripId,
+        actorUid,
+        (name, _) => '$name added "$label" to Day ${dayIndex + 1}',
+        type: 'trip_activity_added',
+        data: {'dayIndex': dayIndex},
+      );
+    }
   }
 
-  Future<void> removeActivity(String tripId, int dayIndex, String itemId) {
-    return _trips.doc(tripId).update({
+  Future<void> removeActivity(String tripId, int dayIndex, String itemId, {String? actorUid}) async {
+    await _trips.doc(tripId).update({
       'days.$dayIndex.items.$itemId': FieldValue.delete(),
+      'lastActivityAt': FieldValue.serverTimestamp(),
+    });
+    if (actorUid != null) {
+      await _notifyMembers(
+        tripId,
+        actorUid,
+        (name, _) => '$name removed an activity from Day ${dayIndex + 1}',
+        type: 'trip_activity_removed',
+        data: {'dayIndex': dayIndex},
+      );
+    }
+  }
+
+  /// Moves an existing activity to a new time only — label/location/icon/
+  /// votes are untouched. [time] is 24-hour "HH:MM", same format
+  /// [addActivity] stores. The drag-to-reschedule timeline in Day edit
+  /// mode (see `day_timeline_view.dart`) is the only caller today; before
+  /// it existed there was no way to change an activity's time short of
+  /// deleting and re-adding it.
+  Future<void> updateActivityTime(String tripId, int dayIndex, String itemId, String time) {
+    return _trips.doc(tripId).update({
+      'days.$dayIndex.items.$itemId.time': time,
       'lastActivityAt': FieldValue.serverTimestamp(),
     });
   }
@@ -858,11 +1046,19 @@ class TripRepository {
     });
   }
 
-  Future<void> addFlight(String tripId, TripFlight flight) {
-    return _trips.doc(tripId).update({
+  Future<void> addFlight(String tripId, TripFlight flight, {String? actorUid}) async {
+    await _trips.doc(tripId).update({
       'flights': FieldValue.arrayUnion([flight.toMap()]),
       'lastActivityAt': FieldValue.serverTimestamp(),
     });
+    if (actorUid != null) {
+      await _notifyMembers(
+        tripId,
+        actorUid,
+        (name, _) => '$name added a flight (${flight.airline} ${flight.flightNumber}) to the trip',
+        type: 'trip_flight_added',
+      );
+    }
   }
 
   /// Firestore arrays have no per-item update/remove by id — `flights` is
@@ -894,11 +1090,34 @@ class TripRepository {
     await _trips.doc(tripId).update({'flights': flights, 'lastActivityAt': FieldValue.serverTimestamp()});
   }
 
-  Future<void> addHotelStay(String tripId, TripHotelStay stay) {
-    return _trips.doc(tripId).update({
+  Future<void> addHotelStay(String tripId, TripHotelStay stay, {String? actorUid}) async {
+    await _trips.doc(tripId).update({
       'hotelStays': FieldValue.arrayUnion([stay.toMap()]),
       'lastActivityAt': FieldValue.serverTimestamp(),
     });
+    if (actorUid != null) {
+      await _notifyMembers(
+        tripId,
+        actorUid,
+        (name, _) => '$name added a hotel stay (${stay.name}) to the trip',
+        type: 'trip_hotel_added',
+      );
+    }
+  }
+
+  /// Attaches (or replaces) one uploaded document's download URL on a
+  /// specific hotel stay already on this trip — see
+  /// [TripHotelStay.documents]. Mirrors [setFlightDocument] exactly; a
+  /// no-op if [stayId] isn't found.
+  Future<void> setHotelDocument(String tripId, String stayId, String docType, String url) async {
+    final snap = await _trips.doc(tripId).get();
+    final stays = ((snap.data()?['hotelStays'] as List?) ?? const []).map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    final idx = stays.indexWhere((m) => (m['id'] as String?) == stayId);
+    if (idx == -1) return;
+    final docs = Map<String, dynamic>.from((stays[idx]['documents'] as Map?) ?? const {});
+    docs[docType] = url;
+    stays[idx] = {...stays[idx], 'documents': docs};
+    await _trips.doc(tripId).update({'hotelStays': stays, 'lastActivityAt': FieldValue.serverTimestamp()});
   }
 
   /// Same idea as [removeFlight], for `hotelStays`.
@@ -914,11 +1133,19 @@ class TripRepository {
   /// Records the insurance plan bought for this trip — a single field
   /// (unlike `flights`/`hotelStays`, which are lists), since a trip only
   /// ever shows one active policy at a time on the Overview tab.
-  Future<void> setInsurance(String tripId, TripInsurance insurance) {
-    return _trips.doc(tripId).update({
+  Future<void> setInsurance(String tripId, TripInsurance insurance, {String? actorUid}) async {
+    await _trips.doc(tripId).update({
       'insurance': insurance.toMap(),
       'lastActivityAt': FieldValue.serverTimestamp(),
     });
+    if (actorUid != null) {
+      await _notifyMembers(
+        tripId,
+        actorUid,
+        (name, _) => '$name added trip insurance (${insurance.planName}) for the trip',
+        type: 'trip_insurance_added',
+      );
+    }
   }
 
   /// Bumps the trip's `lastActivityAt` — used by write methods that don't
@@ -931,6 +1158,51 @@ class TripRepository {
     // denied, doc deleted mid-flight) so it can never surface as an
     // unrelated error on top of the real write that triggered this.
     _trips.doc(tripId).update({'lastActivityAt': FieldValue.serverTimestamp()}).catchError((_) {});
+  }
+
+  /// Notifies every *other* member of [tripId] (everyone but [actorUid])
+  /// that something changed on the shared plan — a new activity, flight,
+  /// hotel stay, poll, expense, a settings edit, or a membership change.
+  /// Re-reads the trip doc rather than trusting a [Trip] object a caller
+  /// might be holding (it could be seconds stale), so the member list and
+  /// the actor's display name are always current. [buildBody] gets the
+  /// actor's resolved name and the trip's name so each call site can write
+  /// its own message ("X added an activity to Day 2") without needing a
+  /// second round-trip to look either up itself. Best-effort: a caller
+  /// passes `actorUid: null` to opt out entirely (e.g. the trip-creation
+  /// wizard, where there's nobody else to notify yet), and any failure
+  /// here (offline, a member's inbox write denied, trip deleted mid-flight)
+  /// is swallowed so it never surfaces as an error on top of the write that
+  /// triggered it.
+  Future<void> _notifyMembers(
+    String tripId,
+    String actorUid,
+    String Function(String actorName, String tripName) buildBody, {
+    String type = 'trip_update',
+    Map<String, dynamic> data = const {},
+  }) async {
+    try {
+      final snap = await _trips.doc(tripId).get();
+      if (!snap.exists) return;
+      final d = snap.data()!;
+      final memberIds = List<String>.from((d['memberIds'] as List?) ?? const []);
+      final names = Map<String, dynamic>.from((d['memberNames'] as Map?) ?? const {});
+      final tripName = (d['name'] as String?) ?? 'Your trip';
+      final actorName = (names[actorUid] as String?) ?? 'Someone';
+      final body = buildBody(actorName, tripName);
+      for (final uid in memberIds) {
+        if (uid == actorUid) continue;
+        await NotificationsRepository.instance.send(
+          toUid: uid,
+          type: type,
+          title: tripName,
+          body: body,
+          data: {'tripId': tripId, ...data},
+        );
+      }
+    } catch (_) {
+      // See doc comment — never let this mask the real write's result.
+    }
   }
 
   // ---------------- Votes ----------------
@@ -947,13 +1219,13 @@ class TripRepository {
     required bool allowMultipleChoice,
     required String createdBy,
     DateTime? deadline,
-  }) {
+  }) async {
     final optionsMap = <String, dynamic>{};
     for (var i = 0; i < options.length; i++) {
       optionsMap['opt${i}_${DateTime.now().microsecondsSinceEpoch}'] = {'label': options[i], 'votedBy': <String>[]};
     }
     _touchActivity(tripId);
-    return _votes(tripId).add({
+    await _votes(tripId).add({
       'title': title,
       'createdBy': createdBy,
       'allowAddOptions': allowAddOptions,
@@ -962,6 +1234,12 @@ class TripRepository {
       'createdAt': FieldValue.serverTimestamp(),
       'deadline': deadline == null ? null : Timestamp.fromDate(deadline),
     });
+    await _notifyMembers(
+      tripId,
+      createdBy,
+      (name, _) => '$name started a new poll: "$title"',
+      type: 'trip_poll_created',
+    );
   }
 
   /// Casts/withdraws [uid]'s vote for [optionId]. For a single-choice poll
@@ -1021,12 +1299,12 @@ class TripRepository {
     required String paidByName,
     required List<ExpenseParticipant> participants,
     String receiptImageUrl = '',
-  }) {
+  }) async {
     final participantsMap = <String, dynamic>{
       for (final p in participants) p.uid: {'name': p.name, 'share': p.share, 'paid': p.paid}
     };
     _touchActivity(tripId);
-    return _expenses(tripId).add({
+    await _expenses(tripId).add({
       'tripId': tripId,
       'tripName': tripName,
       'title': title,
@@ -1042,6 +1320,12 @@ class TripRepository {
       'receiptImageUrl': receiptImageUrl,
       'createdAt': FieldValue.serverTimestamp(),
     });
+    await _notifyMembers(
+      tripId,
+      paidBy,
+      (_, __) => '$paidByName added an expense: "$title" (RM${amount.toStringAsFixed(2)})',
+      type: 'trip_expense_added',
+    );
   }
 
   Future<void> setParticipantPaid(String tripId, String expenseId, String uid, bool paid) {

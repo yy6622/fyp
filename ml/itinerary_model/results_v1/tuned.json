@@ -1,0 +1,32 @@
+{
+  "model": "projects/1020854066179/locations/us/endpoints/6652590705812176896",
+  "label": "tuned",
+  "splits": {
+    "test_seen": {
+      "n": 60,
+      "valid_json": 100.0,
+      "decision_f1": 95.8,
+      "decision_p": 95.9,
+      "decision_r": 95.7,
+      "item_f1": 82.9,
+      "place_f1": 86.6,
+      "time_acc": 95.6,
+      "icon_acc": 92.4,
+      "unresolved_f1": 87.7,
+      "exact": 0.0
+    },
+    "test_unseen": {
+      "n": 60,
+      "valid_json": 98.3,
+      "decision_f1": 94.7,
+      "decision_p": 95.5,
+      "decision_r": 93.9,
+      "item_f1": 74.6,
+      "place_f1": 84.1,
+      "time_acc": 94.6,
+      "icon_acc": 92.5,
+      "unresolved_f1": 72.0,
+      "exact": 0.0
+    }
+  }
+}

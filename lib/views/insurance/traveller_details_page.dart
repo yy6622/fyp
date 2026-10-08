@@ -4,6 +4,7 @@ import '../../controllers/insurance_controller.dart';
 import '../../models/insurance_models.dart';
 import '../../theme.dart';
 import '../shared/nice_pickers.dart';
+import '../shared/phone_input_field.dart';
 import 'payment_method_page.dart';
 
 const List<String> _monthNames = [
@@ -88,6 +89,18 @@ class _TravellerDetailsPageState extends State<TravellerDetailsPage> {
     });
   }
 
+  void _continue() {
+    final error = controller.validate();
+    if (error != null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
+      return;
+    }
+    Navigator.of(context).push(
+      MaterialPageRoute(
+          builder: (_) => PaymentMethodPage(plan: widget.plan, travellerCount: controller.travellerCount, tripId: widget.tripId)),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -144,10 +157,7 @@ class _TravellerDetailsPageState extends State<TravellerDetailsPage> {
                     padding: const EdgeInsets.symmetric(vertical: 15),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                   ),
-                  onPressed: () => Navigator.of(context).push(
-                    MaterialPageRoute(
-                        builder: (_) => PaymentMethodPage(plan: widget.plan, travellerCount: controller.travellerCount, tripId: widget.tripId)),
-                  ),
+                  onPressed: _continue,
                   child: const Text('Continue', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 15)),
                 ),
               ),
@@ -195,7 +205,13 @@ class _TravellerDetailsPageState extends State<TravellerDetailsPage> {
           const SizedBox(height: 10),
           _field(_emailCtrls[index], 'Email', keyboardType: TextInputType.emailAddress, onChanged: (v) => controller.setEmail(index, v)),
           const SizedBox(height: 10),
-          _field(_phoneCtrls[index], 'Phone Number', keyboardType: TextInputType.phone, onChanged: (v) => controller.setPhone(index, v)),
+          PhoneInputField(
+            initialValue: _phoneCtrls[index].text,
+            onChanged: (v) {
+              _phoneCtrls[index].text = v;
+              controller.setPhone(index, v);
+            },
+          ),
         ],
       ],
     );

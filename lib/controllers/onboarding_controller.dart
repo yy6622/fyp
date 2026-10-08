@@ -136,10 +136,19 @@ class OnboardingController extends ChangeNotifier {
     addFriendMessage = null;
     notifyListeners();
     final me = await UserRepository.instance.fetchProfile(_uid);
-    final addedName = await FriendsRepository.instance.addFriend(myUid: _uid, myName: me?.name ?? 'Traveller', query: query);
+    final outcome = await FriendsRepository.instance.sendFriendRequest(myUid: _uid, myName: me?.name ?? 'Traveller', query: query);
     addingFriend = false;
-    addFriendMessage = addedName != null ? 'Added $addedName as a friend!' : "Couldn't find anyone with that email or username.";
-    if (addedName != null) friendQueryController.clear();
+    addFriendMessage = switch (outcome.status) {
+      FriendRequestStatus.sent => 'Friend request sent to ${outcome.name}!',
+      FriendRequestStatus.autoAccepted => '${outcome.name} had already requested you — you\'re now friends!',
+      FriendRequestStatus.alreadyFriends => 'You and ${outcome.name} are already friends.',
+      FriendRequestStatus.alreadyRequested => 'Friend request to ${outcome.name} is already pending.',
+      FriendRequestStatus.isSelf => "That's your own account.",
+      FriendRequestStatus.noMatch => "Couldn't find anyone with that email or username.",
+    };
+    if (outcome.status != FriendRequestStatus.noMatch && outcome.status != FriendRequestStatus.isSelf) {
+      friendQueryController.clear();
+    }
     notifyListeners();
   }
 

@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart' as ll;
 
 import '../../controllers/near_by_controller.dart';
 import '../../models/nearby_models.dart';
@@ -7,7 +9,6 @@ import '../../theme.dart';
 import '../detail/detail_page_place.dart';
 import '../shared/maps_launcher.dart';
 import '../shared/translated_text.dart';
-import 'map_painter.dart';
 
 class NearByPage extends StatefulWidget {
   const NearByPage({super.key});
@@ -91,7 +92,13 @@ class _NearByPageState extends State<NearByPage> {
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(16),
-                child: SizedBox(height: 170, child: CustomPaint(painter: MapPainter(), size: Size.infinite)),
+                child: SizedBox(
+                  height: 170,
+                  child: ListenableBuilder(
+                    listenable: controller,
+                    builder: (context, _) => _map(),
+                  ),
+                ),
               ),
             ),
             const SizedBox(height: 14),
@@ -124,6 +131,27 @@ class _NearByPageState extends State<NearByPage> {
                     );
                   }
                   if (controller.places.isEmpty) {
+                    if (controller.error != null) {
+                      // A real request failure (timeout / blocked / bad
+                      // response), not just "nothing here" — shown with
+                      // its actual reason plus a retry, instead of the
+                      // same generic empty message either way.
+                      return Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.wifi_off_outlined, size: 32, color: AppColors.textGrey),
+                              const SizedBox(height: 12),
+                              Text(controller.error!, textAlign: TextAlign.center, style: const TextStyle(color: AppColors.textGrey, fontSize: 12.5)),
+                              const SizedBox(height: 14),
+                              OutlinedButton(onPressed: controller.retry, child: const Text('Try Again')),
+                            ],
+                          ),
+                        ),
+                      );
+                    }
                     return const Center(child: Text('No places found nearby', style: TextStyle(color: AppColors.textGrey, fontSize: 12.5)));
                   }
                   return ListView.separated(
@@ -150,6 +178,91 @@ class _NearByPageState extends State<NearByPage> {
       if (label == category) return icon;
     }
     return Icons.place_outlined;
+  }
+
+  /// A distinct marker color per category, same idea as the old painted
+  /// map's colored pins — but now actually tied to what each pin really
+  /// is instead of five arbitrary colors in a fixed order.
+  Color _colorFor(String category) {
+    switch (category) {
+      case 'Restaurants':
+        return Colors.redAccent;
+      case 'Cafes':
+        return const Color(0xFFA9703B);
+      case 'Attractions':
+        return Colors.purple;
+      case 'Shopping':
+        return Colors.blue;
+      case 'ATM':
+        return Colors.green;
+      case 'Pharmacy':
+        return Colors.pink;
+      default:
+        return AppColors.primary;
+    }
+  }
+
+  /// A real, interactive embedded map (OpenStreetMap tiles, no API key —
+  /// same approach MemberLocationPage's map already uses in this app) —
+  /// replaces what used to be a hand-painted fake map (colored lines and
+  /// pins drawn with CustomPaint, with no relation to any real place).
+  /// Centered on the device's real current position, with one real marker
+  /// per place actually returned for the selected category — each at its
+  /// real OSM coordinates, tappable to open that place's detail page, same
+  /// as tapping its card below.
+  Widget _map() {
+    final myLat = controller.myLat;
+    final myLon = controller.myLon;
+    if (myLat == null || myLon == null) {
+      // Still resolving (or failed to resolve) the device's position —
+      // the list below already explains why; this just avoids showing an
+      // empty/broken map while that's unresolved.
+      return Container(
+        color: AppColors.chipGrey,
+        alignment: Alignment.center,
+        child: const Icon(Icons.map_outlined, size: 28, color: AppColors.textGrey),
+      );
+    }
+    final me = ll.LatLng(myLat, myLon);
+    return FlutterMap(
+      options: MapOptions(initialCenter: me, initialZoom: 15),
+      children: [
+        TileLayer(
+          urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+          userAgentPackageName: 'com.voya.app',
+        ),
+        MarkerLayer(
+          markers: [
+            Marker(
+              point: me,
+              width: 30,
+              height: 30,
+              child: Container(
+                decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle),
+                child: const Icon(Icons.person, size: 16, color: Colors.white),
+              ),
+            ),
+            for (final place in controller.places)
+              Marker(
+                point: ll.LatLng(place.lat, place.lon),
+                width: 34,
+                height: 34,
+                child: GestureDetector(
+                  onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => DetailPagePlace(place: place))),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: _colorFor(place.category),
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white, width: 2),
+                    ),
+                    child: Icon(_iconFor(place.category), size: 16, color: Colors.white),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ],
+    );
   }
 
   Widget _placeImage(NearbyPlace place) {

@@ -58,3 +58,6 @@ exports.createPaymentIntent = onCall({ secrets: [stripeSecretKey] }, async (requ
 
   return { clientSecret: paymentIntent.client_secret };
 });
+
+// AI itinerary from the group chat - see itinerary.js and ml/itinerary_model/README.md.
+exports.generateItinerary = require("./itinerary").generateItinerary;

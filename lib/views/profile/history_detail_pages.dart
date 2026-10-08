@@ -124,26 +124,44 @@ Widget _infoCard(String header, List<Widget> fields) {
   );
 }
 
-/// Placeholder people list — same visual as PlanFlightDetailPage's
-/// Passenger tab (a plain named list; no per-booking data is stored for
-/// this yet, same as flight's).
-Widget _peopleList(String label) {
-  return ListView.separated(
+/// Guest/traveller list for a past booking — [roleLabel] is the row's
+/// caption ("Guest", "Traveller"), [name]/[email]/[phone]/[idNumber] are
+/// the real values captured at checkout (see BookingPaymentPage.
+/// _confirmPayment → BookingRepository.addBooking). Used to show the
+/// literal role label itself as if it were a name — this now shows what
+/// was actually booked, with an honest "Not available" when a legacy
+/// booking (from before these fields existed) has none stored.
+Widget _peopleList(String roleLabel, {required String name, String email = '', String phone = '', String idNumber = ''}) {
+  final hasName = name.isNotEmpty;
+  return ListView(
     padding: const EdgeInsets.all(20),
-    itemCount: 1,
-    separatorBuilder: (_, __) => const SizedBox(height: 10),
-    itemBuilder: (context, i) => Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: BoxDecoration(color: AppColors.chipGrey, borderRadius: BorderRadius.circular(12)),
-      child: Row(
-        children: [
-          const CircleAvatar(radius: 16, backgroundColor: Color(0xFFD9D9D9)),
-          const SizedBox(width: 12),
-          Expanded(child: Text(label, style: const TextStyle(fontSize: 13, color: Colors.black))),
-          const Icon(Icons.chevron_right, color: AppColors.textGrey),
-        ],
+    children: [
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(color: AppColors.chipGrey, borderRadius: BorderRadius.circular(12)),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            CircleAvatar(radius: 16, backgroundColor: const Color(0xFFD9D9D9), child: Icon(Icons.person_outline, size: 16, color: AppColors.textGrey)),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(hasName ? name : 'Not available', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.black)),
+                  Text(roleLabel, style: const TextStyle(fontSize: 10.5, color: AppColors.textGrey)),
+                  if (email.isNotEmpty || phone.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text([email, phone].where((s) => s.isNotEmpty).join(' · '), style: const TextStyle(fontSize: 11.5, color: AppColors.textGrey)),
+                  ],
+                  if (idNumber.isNotEmpty) Text('ID/Passport: $idNumber', style: const TextStyle(fontSize: 11.5, color: AppColors.textGrey)),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
-    ),
+    ],
   );
 }
 
@@ -357,6 +375,14 @@ class HistoryHotelDetailPage extends StatefulWidget {
   final String checkOut;
   final String bookingRef;
   final String status;
+  // Guest details captured at checkout (see BookingPaymentPage.
+  // _confirmPayment) — blank for a legacy booking made before these were
+  // stored.
+  final String guestName;
+  final String guestEmail;
+  final String guestPhone;
+  final String guestIdNumber;
+  final String specialRequests;
   // The `catalog_hotels` doc id this booking refers to — blank for a stay
   // with no catalog link (a manually-typed hotel). Only when this is set
   // do we know which real place to show reviews for, so the Review tab
@@ -375,10 +401,21 @@ class HistoryHotelDetailPage extends StatefulWidget {
     required this.name,
     required this.location,
     required this.pricePerNight,
-    this.checkIn = '12 Jun 2026',
-    this.checkOut = '15 Jun 2026',
-    this.bookingRef = 'HTL0456',
+    // These used to default to fake-looking fixed dates/reference
+    // ("12 Jun 2026" / "HTL0456") whenever the call site didn't pass real
+    // ones — which was always, since history_page.dart never had real
+    // values to pass. Now that BookingPaymentPage actually stores
+    // checkIn/checkOut/bookingRef, an honest "Not available" is correct
+    // for the rare legacy booking that still has none.
+    this.checkIn = '',
+    this.checkOut = '',
+    this.bookingRef = '',
     this.status = 'Confirmed',
+    this.guestName = '',
+    this.guestEmail = '',
+    this.guestPhone = '',
+    this.guestIdNumber = '',
+    this.specialRequests = '',
     this.hotelId = '',
     this.bookingId = '',
     this.documents = const {},
@@ -418,13 +455,19 @@ class _HistoryHotelDetailPageState extends State<HistoryHotelDetailPage> with _B
         (_) => _infoCard('HOTEL INFORMATION', [
               _field('Hotel Name', widget.name),
               _field('Location', widget.location),
-              _field('Check-in', widget.checkIn),
-              _field('Check-out', widget.checkOut),
+              _field('Check-in', widget.checkIn.isEmpty ? 'Not available' : widget.checkIn),
+              _field('Check-out', widget.checkOut.isEmpty ? 'Not available' : widget.checkOut),
               _field('Price / Night', widget.pricePerNight),
-              _field('Booking Reference', widget.bookingRef),
+              _field('Booking Reference', widget.bookingRef.isEmpty ? 'Not available' : widget.bookingRef),
               _field('Status', widget.status, last: true),
             ]),
-        (_) => _peopleList('Guest name'),
+        (_) => _peopleList(
+              'Guest',
+              name: widget.guestName,
+              email: widget.guestEmail,
+              phone: widget.guestPhone,
+              idNumber: widget.guestIdNumber,
+            ),
         (_) => _documentsList(
               docs: HistoryHotelDetailPage._docs,
               documents: documents,
@@ -464,6 +507,7 @@ class HistoryInsuranceDetailPage extends StatefulWidget {
   final String amountPaid;
   final String coverage;
   final String status;
+  final String travellerName;
   final String bookingId;
   final Map<String, String> documents;
 
@@ -474,6 +518,7 @@ class HistoryInsuranceDetailPage extends StatefulWidget {
     required this.amountPaid,
     this.coverage = 'Basic Travel Cover',
     this.status = 'Confirmed',
+    this.travellerName = '',
     this.bookingId = '',
     this.documents = const {},
   });
@@ -514,7 +559,7 @@ class _HistoryInsuranceDetailPageState extends State<HistoryInsuranceDetailPage>
               _field('Amount Paid', widget.amountPaid),
               _field('Status', widget.status, last: true),
             ]),
-        (_) => _peopleList('Traveller name'),
+        (_) => _peopleList('Traveller', name: widget.travellerName),
         (_) => _documentsList(
               docs: HistoryInsuranceDetailPage._docs,
               documents: documents,

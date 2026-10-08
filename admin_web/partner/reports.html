@@ -3,11 +3,15 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Reports — Voya Insurance Partner</title>
+<title>Insurance Operations Report — Voya Insurance Partner</title>
 <link rel="stylesheet" href="../css/tokens.css" />
 <link rel="stylesheet" href="../css/base.css" />
 <link rel="stylesheet" href="../css/layout.css" />
 <link rel="stylesheet" href="../css/components.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.5.1/chart.umd.min.js"></script>
 </head>
 <body>
 <div class="shell">
@@ -26,110 +30,303 @@
     <div class="topbar">
       <div>
         <button class="menu-toggle" id="menuToggle"><span data-icon="menu"></span></button>
-        <h1 class="h1">Reports</h1>
-        <p class="subtitle">Export your performance for offline review</p>
+        <h1 class="h1">Insurance Operations Report</h1>
+        <p class="subtitle">Your plans, purchases, claims and refunds performance</p>
       </div>
-      <button class="btn btn-primary" id="exportBtn"><span data-icon="download"></span>Export full report</button>
+      <div class="inline-flex" style="gap:10px;">
+        <button class="btn btn-outline" id="exportExcelBtn"><span data-icon="download"></span>Export Excel</button>
+        <button class="btn btn-primary" id="exportPdfBtn"><span data-icon="download"></span>Export PDF</button>
+      </div>
+    </div>
+
+    <div class="filter-bar">
+      <select class="select" id="rangeFilter">
+        <option value="6">Last 6 months</option>
+        <option value="12">Last 12 months</option>
+      </select>
+      <p class="small muted" id="asOfLabel" style="margin-left:auto;"></p>
     </div>
 
     <div class="stat-grid" id="statGrid"><div class="skeleton" style="height:90px;grid-column:1/-1;"></div></div>
 
-    <div class="card card-pad">
-      <h3 class="h3" style="margin-bottom:18px;">Premium by month</h3>
-      <div class="bars" id="chartBars"></div>
-      <div class="bars-labels" id="chartLabels"></div>
+    <div style="display:grid;grid-template-columns:1.4fr 1fr;gap:20px;align-items:start;" class="detail-grid">
+      <div class="card card-pad">
+        <h3 class="h3" style="margin-bottom:18px;">Monthly Plan Purchases</h3>
+        <div class="bars" id="purchaseBars"></div>
+        <div class="bars-labels" id="purchaseLabels"></div>
+      </div>
+      <div class="card card-pad">
+        <h3 class="h3" style="margin-bottom:6px;">Claim & Refund Status Distribution</h3>
+        <div id="statusChart"></div>
+      </div>
     </div>
 
     <div class="card card-pad" style="margin-top:20px;">
-      <h3 class="h3" style="margin-bottom:16px;">Claims by category</h3>
+      <h3 class="h3" style="margin-bottom:16px;">Insurance Plan Performance</h3>
       <div class="table-wrap scroll-x" style="border:none;">
         <table class="data-table">
-          <thead><tr><th>Category</th><th>Claims</th><th>Amount claimed</th></tr></thead>
-          <tbody id="categoryBody"></tbody>
+          <thead><tr><th>Plan</th><th>State</th><th>Purchases</th><th>Value</th><th>Claims</th><th>Refunds</th><th>Avg. processing</th></tr></thead>
+          <tbody id="planBody"></tbody>
         </table>
       </div>
+    </div>
+
+    <div class="card card-pad" style="margin-top:20px;">
+      <h3 class="h3" style="margin-bottom:16px;">Partner Performance Summary</h3>
+      <div class="stat-grid" id="summaryGrid" style="margin-bottom:0;"></div>
     </div>
   </main>
 </div>
 
 <script type="module">
-import { requireRole } from "../js/auth-guard.js";
-import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js";
-import { mountIcons } from "../js/icons.js";
-import { listTransactions, listClaims } from "../js/data.js";
-import { money, moneyExact, number, escapeHtml } from "../js/ui.js";
+import { requireRole } from "../js/auth-guard.js?v=20261007e";
+import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261007e";
+import { mountIcons } from "../js/icons.js?v=20261007e";
+import { listTransactions, listClaims, listRefunds, listPlans } from "../js/data.js?v=20261007e";
+import { money, moneyExact, number, escapeHtml, renderComparisonBars, trendDelta, pointDelta, sumInMonth, countInMonth, countBefore, monthBounds, rateOf } from "../js/ui.js?v=20261007e";
+import { exportReportPdf, exportReportExcel } from "../js/report-export.js?v=20261007e";
 
 mountSidebarNav({ role: "partner", active: "reports" });
 const session = await requireRole("partner", "login.html");
-let txns = [], claims = [];
+let data = null; // last computed report model, for export
 
 if (session) {
   setSidebarUser({ displayName: session.profile.companyName || "Partner", roleLabel: `${session.profile.companyName || "Insurance"} · Insurance Partner` });
+  document.getElementById("asOfLabel").textContent = `As of ${new Date().toLocaleDateString("en-MY", { day: "numeric", month: "long", year: "numeric" })}`;
   await load();
+  document.getElementById("rangeFilter").addEventListener("change", load);
 }
 
-function statCard(label, value, icon) {
-  return `<div class="card stat-card"><div class="stat-top"><div class="stat-icon"><span data-icon="${icon}"></span></div><div class="stat-label">${label}</div></div><div class="stat-value">${value}</div><div class="stat-delta">↑ 2.4% from last month</div></div>`;
+function statCard(label, value, icon, delta) {
+  const deltaHtml = delta ? `<div class="stat-delta${delta.up === false ? " down" : ""}">${delta.text}</div>` : "";
+  return `<div class="card stat-card"><div class="stat-top"><div class="stat-icon"><span data-icon="${icon}"></span></div><div class="stat-label">${label}</div></div><div class="stat-value">${value}</div>${deltaHtml}</div>`;
 }
+
+function plainCard(label, value) {
+  return `<div class="card stat-card"><div class="stat-label">${label}</div><div class="stat-value">${value}</div></div>`;
+}
+
+/** Matches a transaction/claim/refund to a plan: by planId when the record
+ * has one (real mobile-app purchases always do), falling back to a
+ * case-insensitive plan-name match otherwise (console-seeded demo data has
+ * no planId — see lib/repositories/insurance_repository.dart vs
+ * admin_web/js/seed.js). */
+function belongsToPlan(item, plan) {
+  if (item.planId) return item.planId === plan.id;
+  return (item.planName || "").trim().toLowerCase() === (plan.name || "").trim().toLowerCase();
+}
+
+/** Average days between a claim/refund's createdAt and the timeline entry
+ * that first reached its current terminal status (approved/rejected).
+ * Items still open (new/under_review) are excluded — there's no
+ * "processing time" for a case that hasn't finished yet. Returns null if
+ * nothing resolved yet, so the caller can show "—" instead of "0 days". */
+function avgProcessingDays(items) {
+  const diffs = items
+    .filter((i) => i.status === "approved" || i.status === "rejected")
+    .map((i) => {
+      const created = i.createdAt?.toDate ? i.createdAt.toDate() : null;
+      const entry = (i.timeline || []).find((t) => t.status === i.status);
+      const resolvedAt = entry ? new Date(entry.at) : (i.updatedAt?.toDate ? i.updatedAt.toDate() : null);
+      if (!created || !resolvedAt || isNaN(resolvedAt)) return null;
+      return Math.max(0, (resolvedAt - created) / 86400000);
+    })
+    .filter((d) => d !== null);
+  if (!diffs.length) return null;
+  return diffs.reduce((s, d) => s + d, 0) / diffs.length;
+}
+
+const STATUS_ROWS = [["new", "Pending"], ["under_review", "In Progress"], ["approved", "Approved"], ["rejected", "Rejected"]];
 
 async function load() {
-  [txns, claims] = await Promise.all([listTransactions(session.uid), listClaims(session.uid)]);
+  const months = Number(document.getElementById("rangeFilter").value);
+  const [txns, claims, refunds, plans] = await Promise.all([
+    listTransactions(session.uid), listClaims(session.uid), listRefunds(session.uid), listPlans(session.uid),
+  ]);
   const paid = txns.filter((t) => t.status === "paid");
-  const revenue = paid.reduce((s, t) => s + (Number(t.premium) || 0), 0);
-  const approvedCount = claims.filter((c) => c.status === "approved").length;
-  const rate = claims.length ? Math.round((approvedCount / claims.length) * 1000) / 10 : 0;
+  const value = paid.reduce((s, t) => s + (Number(t.premium) || 0), 0);
+  const activePlans = plans.filter((p) => p.status === "active");
+  const pendingClaims = claims.filter((c) => c.status === "new" || c.status === "under_review").length;
+  const pendingRefunds = refunds.filter((r) => r.status === "new" || r.status === "under_review").length;
 
+  const { start: reportsThisMonthStart } = monthBounds(0);
+  const activePlansDelta = trendDelta(activePlans.length, countBefore(activePlans, "createdAt", reportsThisMonthStart));
+  const purchasesDelta = trendDelta(countInMonth(paid, "createdAt", 0), countInMonth(paid, "createdAt", 1));
+  const valueDelta = trendDelta(
+    sumInMonth(paid, "createdAt", (t) => Number(t.premium) || 0, 0),
+    sumInMonth(paid, "createdAt", (t) => Number(t.premium) || 0, 1),
+  );
   document.getElementById("statGrid").innerHTML = [
-    statCard("Revenue", money(revenue), "coin"),
-    statCard("Policies sold", number(paid.length), "shield-check"),
-    statCard("Total claims", number(claims.length), "doc-text"),
-    statCard("Approval rate", `${rate}%`, "percent"),
+    statCard("Active plans", number(activePlans.length), "shield-check", activePlansDelta),
+    statCard("Total purchases", number(paid.length), "swap", purchasesDelta),
+    statCard("Transaction value", money(value), "coin", valueDelta),
+    plainCard("Pending claims", number(pendingClaims)),
+    plainCard("Pending refunds", number(pendingRefunds)),
   ].join("");
 
-  const months = [];
+  // Monthly plan purchases — purchase COUNT per month, not revenue.
+  const monthList = [];
   const now = new Date();
-  for (let i = 5; i >= 0; i--) {
+  for (let i = months - 1; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    months.push({ label: d.toLocaleDateString("en-MY", { month: "short" }), key: `${d.getFullYear()}-${d.getMonth()}`, revenue: 0 });
+    monthList.push({ label: d.toLocaleDateString("en-MY", { month: "short" }), key: `${d.getFullYear()}-${d.getMonth()}`, count: 0 });
   }
   paid.forEach((t) => {
     if (!t.createdAt?.toDate) return;
     const d = t.createdAt.toDate();
-    const key = `${d.getFullYear()}-${d.getMonth()}`;
-    const m = months.find((m) => m.key === key);
-    if (m) m.revenue += Number(t.premium) || 0;
+    const m = monthList.find((m) => m.key === `${d.getFullYear()}-${d.getMonth()}`);
+    if (m) m.count++;
   });
-  const max = Math.max(1, ...months.map((m) => m.revenue));
-  document.getElementById("chartBars").innerHTML = months.map((m, i) => `<div class="bar-col"><div class="bar${i % 2 ? " alt" : ""}" style="height:${Math.max(6, (m.revenue / max) * 100)}%"></div></div>`).join("");
-  document.getElementById("chartLabels").innerHTML = months.map((m) => `<span>${m.label}</span>`).join("");
+  const maxCount = Math.max(1, ...monthList.map((m) => m.count));
+  document.getElementById("purchaseBars").innerHTML = monthList.map((m, i) => `<div class="bar-col"><div class="bar${i % 2 ? " alt" : ""}" style="height:${Math.max(6, (m.count / maxCount) * 100)}%"></div></div>`).join("");
+  document.getElementById("purchaseLabels").innerHTML = monthList.map((m) => `<span>${m.label}</span>`).join("");
 
-  const byCategory = {};
-  claims.forEach((c) => {
-    const cat = c.category || "Other";
-    byCategory[cat] = byCategory[cat] || { count: 0, amount: 0 };
-    byCategory[cat].count++;
-    byCategory[cat].amount += Number(c.amount) || 0;
+  // Claim/refund status distribution
+  const claimCounts = STATUS_ROWS.map(([k]) => claims.filter((c) => c.status === k).length);
+  const refundCounts = STATUS_ROWS.map(([k]) => refunds.filter((r) => r.status === k).length);
+  renderComparisonBars("statusChart", STATUS_ROWS.map(([, label], i) => ({ label, values: [claimCounts[i], refundCounts[i]] })), [
+    { label: "Claims", color: "var(--teal-600)" },
+    { label: "Refunds", color: "var(--accent-indigo)" },
+  ]);
+
+  // Insurance Plan Performance
+  const planRows = plans.map((p) => {
+    const planTxns = paid.filter((t) => belongsToPlan(t, p));
+    const planClaims = claims.filter((c) => belongsToPlan(c, p));
+    const planRefunds = refunds.filter((r) => belongsToPlan(r, p));
+    return {
+      name: p.name || "—",
+      state: p.status || "—",
+      purchases: planTxns.length,
+      value: planTxns.reduce((s, t) => s + (Number(t.premium) || 0), 0),
+      claims: planClaims.length,
+      refunds: planRefunds.length,
+      avgDays: avgProcessingDays([...planClaims, ...planRefunds]),
+    };
   });
-  const rows = Object.entries(byCategory).sort((a, b) => b[1].amount - a[1].amount);
-  document.getElementById("categoryBody").innerHTML = rows.length
-    ? rows.map(([cat, d]) => `<tr><td class="cell-strong">${escapeHtml(cat)}</td><td class="muted">${number(d.count)}</td><td class="muted">${moneyExact(d.amount)}</td></tr>`).join("")
-    : `<tr><td colspan="3" class="muted" style="text-align:center;padding:24px 0;">No claims recorded yet.</td></tr>`;
+  document.getElementById("planBody").innerHTML = planRows.length
+    ? planRows.map((r) => `
+        <tr>
+          <td class="cell-strong">${escapeHtml(r.name)}</td>
+          <td class="muted" style="text-transform:capitalize;">${escapeHtml(r.state)}</td>
+          <td class="muted">${number(r.purchases)}</td>
+          <td class="muted">${moneyExact(r.value)}</td>
+          <td class="muted">${number(r.claims)}</td>
+          <td class="muted">${number(r.refunds)}</td>
+          <td class="muted">${r.avgDays === null ? "—" : r.avgDays.toFixed(1) + " days"}</td>
+        </tr>`).join("")
+    : `<tr><td colspan="7" class="muted" style="text-align:center;padding:24px 0;">No plans yet.</td></tr>`;
+
+  // Partner performance summary — claim/refund approval rates per spec:
+  // approved / (approved + rejected), excluding still-open cases.
+  const approvalRate = (items) => {
+    const approved = items.filter((i) => i.status === "approved").length;
+    const rejected = items.filter((i) => i.status === "rejected").length;
+    return approved + rejected ? Math.round((approved / (approved + rejected)) * 1000) / 10 : null;
+  };
+  const claimRate = approvalRate(claims);
+  const refundRate = approvalRate(refunds);
+  document.getElementById("summaryGrid").innerHTML = [
+    plainCard("Total claims", number(claims.length)),
+    plainCard("Total refunds", number(refunds.length)),
+    plainCard("Claim approval rate", claimRate === null ? "—" : `${claimRate}%`),
+    plainCard("Refund approval rate", refundRate === null ? "—" : `${refundRate}%`),
+  ].join("");
 
   mountIcons(document);
+
+  const periodStart = new Date(now.getFullYear(), now.getMonth() - (months - 1), 1);
+  data = {
+    statGrid: { activePlans: activePlans.length, purchases: paid.length, value, pendingClaims, pendingRefunds },
+    monthList, claims, refunds, planRows, claimRate, refundRate,
+    claimStatusCounts: claimCounts,
+    period: { start: periodStart, end: now },
+  };
 }
 
-document.getElementById("exportBtn").addEventListener("click", () => {
-  const rows = [["Type", "Reference", "Name", "Amount (RM)", "Status", "Date"]];
-  txns.forEach((t) => rows.push(["Transaction", t.txnRef || t.id, t.customerName || "", (Number(t.premium) || 0).toFixed(2), t.status || "", t.createdAt?.toDate ? t.createdAt.toDate().toISOString() : ""]));
-  claims.forEach((c) => rows.push(["Claim", c.claimRef, c.policyholderName || "", (Number(c.amount) || 0).toFixed(2), c.status || "", c.createdAt?.toDate ? c.createdAt.toDate().toISOString() : ""]));
-  const csv = rows.map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `voya-partner-report-${new Date().toISOString().slice(0, 10)}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
+document.getElementById("exportPdfBtn").addEventListener("click", () => {
+  if (!data) return;
+  try {
+    const avgDaysAll = avgProcessingDays([...data.claims, ...data.refunds]);
+    exportReportPdf({
+      filename: `voya-insurance-operations-${new Date().toISOString().slice(0, 10)}`,
+      title: "Insurance Operations Report",
+      reportCode: "IOR",
+      period: data.period,
+      extraLine: `Provider: ${session.profile.companyName || "Insurance Partner"}`,
+      stats: [
+        { label: "Total Purchases", value: number(data.statGrid.purchases) },
+        { label: "Transaction Value", value: money(data.statGrid.value) },
+        { label: "Pending Claims", value: number(data.statGrid.pendingClaims) },
+        { label: "Pending Refunds", value: number(data.statGrid.pendingRefunds) },
+      ],
+      lineChart: {
+        title: "Monthly Insurance Purchases",
+        labels: data.monthList.map((m) => m.label),
+        values: data.monthList.map((m) => m.count),
+      },
+      barChart: {
+        title: "Claims by Status",
+        labels: ["Pending", "In Progress", "Approved", "Rejected"],
+        values: data.claimStatusCounts,
+        horizontal: true,
+      },
+      table: {
+        title: "Insurance Plan Performance",
+        head: ["Insurance Plan", "Purchases", "Value (RM)", "Claims", "Refunds", "Avg. Processing Days"],
+        body: data.planRows.map((r) => [r.name, number(r.purchases), moneyExact(r.value), number(r.claims), number(r.refunds), r.avgDays === null ? "—" : `${r.avgDays.toFixed(1)} days`]),
+        totalRow: [
+          "Total",
+          number(data.statGrid.purchases),
+          moneyExact(data.statGrid.value),
+          number(data.claims.length),
+          number(data.refunds.length),
+          avgDaysAll === null ? "—" : `${avgDaysAll.toFixed(1)} days`,
+        ],
+      },
+    });
+  } catch (err) {
+    alert(err.message || "Couldn't export PDF.");
+  }
+});
+
+document.getElementById("exportExcelBtn").addEventListener("click", () => {
+  if (!data) return;
+  try {
+    exportReportExcel({
+      filename: `voya-insurance-operations-${new Date().toISOString().slice(0, 10)}`,
+      sheets: [
+        {
+          name: "Summary",
+          rows: [
+            ["Metric", "Value"],
+            ["Active plans", data.statGrid.activePlans],
+            ["Total purchases", data.statGrid.purchases],
+            ["Transaction value (RM)", data.statGrid.value.toFixed(2)],
+            ["Pending claims", data.statGrid.pendingClaims],
+            ["Pending refunds", data.statGrid.pendingRefunds],
+            ["Total claims", data.claims.length],
+            ["Total refunds", data.refunds.length],
+            ["Claim approval rate (%)", data.claimRate === null ? "" : data.claimRate],
+            ["Refund approval rate (%)", data.refundRate === null ? "" : data.refundRate],
+          ],
+        },
+        {
+          name: "Monthly Purchases",
+          rows: [["Month", "Purchases"], ...data.monthList.map((m) => [m.label, m.count])],
+        },
+        {
+          name: "Plan Performance",
+          rows: [
+            ["Plan", "State", "Purchases", "Value (RM)", "Claims", "Refunds", "Avg. processing (days)"],
+            ...data.planRows.map((r) => [r.name, r.state, r.purchases, r.value.toFixed(2), r.claims, r.refunds, r.avgDays === null ? "" : r.avgDays.toFixed(1)]),
+          ],
+        },
+      ],
+    });
+  } catch (err) {
+    alert(err.message || "Couldn't export Excel.");
+  }
 });
 </script>
 </body>

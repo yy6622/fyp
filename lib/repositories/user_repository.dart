@@ -6,7 +6,6 @@ class AppUser {
   final String name;
   final String email;
   final String phone;
-  final bool favorited;
   final String avatarUrl;
   final String country;
   final String currencyCode;
@@ -38,12 +37,26 @@ class AppUser {
   final double? lastLng;
   final DateTime? locationUpdatedAt;
 
+  /// Privacy and Security's "Public Profile" switch — when true (the
+  /// default, matching that switch's default-on state), tapping this
+  /// user's name on a Community post opens their profile and shows the
+  /// trips they've posted (see AuthorProfilePage); when false, everyone
+  /// but the user themself sees a plain "this profile is private"
+  /// notice there instead. Was local-only UI state before this field
+  /// existed — PrivacySecurityController now reads/writes it for real.
+  final bool publicProfile;
+
+  /// Privacy and Security's "Two-Factor Authentication" switch — real now
+  /// (was a local-only `_twoFactor` stub on [PrivacySecurityController]
+  /// before, that reset to off every time the app restarted). Backs the
+  /// admin console's User Account Report "2FA adoption" figure.
+  final bool twoFactorEnabled;
+
   const AppUser({
     required this.uid,
     required this.name,
     required this.email,
     this.phone = '',
-    this.favorited = false,
     this.avatarUrl = '',
     this.country = '',
     this.currencyCode = '',
@@ -53,6 +66,8 @@ class AppUser {
     this.lastLat,
     this.lastLng,
     this.locationUpdatedAt,
+    this.publicProfile = true,
+    this.twoFactorEnabled = false,
   });
 
   factory AppUser.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
@@ -62,7 +77,6 @@ class AppUser {
       name: (data['name'] as String?) ?? '',
       email: (data['email'] as String?) ?? '',
       phone: (data['phone'] as String?) ?? '',
-      favorited: (data['favorited'] as bool?) ?? false,
       avatarUrl: (data['avatarUrl'] as String?) ?? '',
       country: (data['country'] as String?) ?? '',
       currencyCode: (data['currencyCode'] as String?) ?? '',
@@ -72,6 +86,8 @@ class AppUser {
       lastLat: (data['lastLat'] as num?)?.toDouble(),
       lastLng: (data['lastLng'] as num?)?.toDouble(),
       locationUpdatedAt: (data['locationUpdatedAt'] as Timestamp?)?.toDate(),
+      publicProfile: (data['publicProfile'] as bool?) ?? true,
+      twoFactorEnabled: (data['twoFactorEnabled'] as bool?) ?? false,
     );
   }
 }
@@ -88,13 +104,14 @@ class UserRepository {
       'name': name,
       'email': email.toLowerCase(),
       'phone': '',
-      'favorited': false,
       'avatarUrl': '',
       'country': '',
       'currencyCode': '',
       'languageCode': '',
       'homeAirportCode': '',
       'shareLocation': false,
+      'publicProfile': true,
+      'twoFactorEnabled': false,
       'createdAt': FieldValue.serverTimestamp(),
     });
   }
@@ -106,10 +123,6 @@ class UserRepository {
   Future<AppUser?> fetchProfile(String uid) async {
     final doc = await _users.doc(uid).get();
     return doc.exists ? AppUser.fromDoc(doc) : null;
-  }
-
-  Future<void> setFavorited(String uid, bool value) {
-    return _users.doc(uid).update({'favorited': value});
   }
 
   Future<void> updateProfile(String uid,
@@ -140,6 +153,18 @@ class UserRepository {
   /// the "last seen" position right as it stops being updated.
   Future<void> setShareLocation(String uid, bool value) {
     return _users.doc(uid).update({'shareLocation': value});
+  }
+
+  /// Flips Privacy and Security's "Public Profile" switch — see
+  /// [AppUser.publicProfile].
+  Future<void> setPublicProfile(String uid, bool value) {
+    return _users.doc(uid).update({'publicProfile': value});
+  }
+
+  /// Flips Privacy and Security's "Two-Factor Authentication" switch —
+  /// see [AppUser.twoFactorEnabled].
+  Future<void> setTwoFactorEnabled(String uid, bool value) {
+    return _users.doc(uid).update({'twoFactorEnabled': value});
   }
 
   /// Records a fresh on-demand position read — called right when the

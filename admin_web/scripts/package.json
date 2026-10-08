@@ -1,0 +1,10 @@
+{
+  "name": "voya-seed-scripts",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "One-off Firestore seed scripts for the Voya admin/partner console — not part of the web console itself, run manually from a terminal.",
+  "dependencies": {
+    "firebase": "^10.14.1"
+  }
+}

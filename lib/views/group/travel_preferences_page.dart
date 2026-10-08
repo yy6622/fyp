@@ -48,13 +48,13 @@ class TravelPreferencesPage extends StatelessWidget {
                   onTap: () => _editBudget(context, trip)),
               _navRow(context, 'Travel Style', trip.travelStyle.isEmpty ? 'Not set' : trip.travelStyle,
                   onTap: () => _pickSingle(context, title: 'Travel Style', options: _travelStyleOptions, current: trip.travelStyle,
-                      onPicked: (v) => TripRepository.instance.updateSettings(tripId, travelStyle: v))),
+                      onPicked: (v) => TripRepository.instance.updateSettings(tripId, travelStyle: v, actorUid: _uid))),
               _navRow(context, 'Accommodation', trip.accommodation.isEmpty ? 'Not set' : trip.accommodation,
                   onTap: () => _pickSingle(context, title: 'Accommodation', options: _accommodationOptions, current: trip.accommodation,
-                      onPicked: (v) => TripRepository.instance.updateSettings(tripId, accommodation: v))),
+                      onPicked: (v) => TripRepository.instance.updateSettings(tripId, accommodation: v, actorUid: _uid))),
               _navRow(context, 'Food Preference', trip.foodPreference.isEmpty ? 'Not set' : trip.foodPreference,
                   onTap: () => _pickSingle(context, title: 'Food Preference', options: _foodPreferenceOptions, current: trip.foodPreference,
-                      onPicked: (v) => TripRepository.instance.updateSettings(tripId, foodPreference: v))),
+                      onPicked: (v) => TripRepository.instance.updateSettings(tripId, foodPreference: v, actorUid: _uid))),
               const SizedBox(height: 18),
               const Text('Interests', style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: AppColors.navy)),
               const SizedBox(height: 10),
@@ -71,7 +71,7 @@ class TravelPreferencesPage extends StatelessWidget {
                       } else {
                         next.add(label);
                       }
-                      TripRepository.instance.updateSettings(tripId, interests: next);
+                      TripRepository.instance.updateSettings(tripId, interests: next, actorUid: _uid);
                     },
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
@@ -132,7 +132,7 @@ class TravelPreferencesPage extends StatelessWidget {
     if (result != true) return;
     final parsed = double.tryParse(budgetController.text.trim());
     if (parsed == null || parsed < 0) return;
-    await TripRepository.instance.updateSettings(tripId, budgetPerPerson: parsed);
+    await TripRepository.instance.updateSettings(tripId, budgetPerPerson: parsed, actorUid: _uid);
   }
 
   /// A simple single-select bottom sheet — matches [GroupSettingPage]'s

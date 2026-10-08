@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Refund Detail — Voya Insurance Partner</title>
+<link rel="stylesheet" href="../css/tokens.css?v=20261006b" />
+<link rel="stylesheet" href="../css/base.css?v=20261006b" />
+<link rel="stylesheet" href="../css/layout.css?v=20261006b" />
+<link rel="stylesheet" href="../css/components.css?v=20261006b" />
+</head>
+<body>
+<div class="shell">
+  <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+  <aside class="sidebar" id="sidebar">
+    <img class="sidebar-brand" src="../img/voya-logo-white.png" alt="Voya" />
+    <div class="sidebar-user">
+      <div class="name" id="sbUserName">Loading…</div>
+      <div class="role" id="sbUserRole">Partner workspace</div>
+    </div>
+    <nav class="nav" id="sidebarNav"></nav>
+    <button class="sidebar-logout" id="logoutBtn"><span data-icon="log-out"></span>Log out</button>
+  </aside>
+
+  <main class="content">
+    <div class="topbar">
+      <div>
+        <button class="menu-toggle" id="menuToggle"><span data-icon="menu"></span></button>
+        <a href="claims.html?type=refund" class="inline-flex" style="color:var(--text-500);font-weight:700;font-size:13.5px;margin-bottom:10px;">
+          <span data-icon="arrow-left" data-icon-size="14"></span>Back to refunds
+        </a>
+        <h1 class="h1" id="refundTitle">Refund</h1>
+        <div id="refundStatusBadge" style="margin-top:8px;"></div>
+      </div>
+    </div>
+
+    <div id="body">
+      <div class="skeleton" style="height:200px;"></div>
+    </div>
+  </main>
+</div>
+
+<script type="module">
+import { requireRole } from "../js/auth-guard.js?v=20261007";
+import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261007";
+import { mountIcons } from "../js/icons.js?v=20261007";
+import { getRefund, updateRefundStatus } from "../js/data.js?v=20261007";
+import { moneyExact, statusBadge, escapeHtml, fullDate, toast, confirmDialog } from "../js/ui.js?v=20261007";
+
+mountSidebarNav({ role: "partner", active: "claims" });
+const session = await requireRole("partner", "login.html");
+const refundId = new URLSearchParams(location.search).get("id");
+
+if (session) {
+  setSidebarUser({ displayName: session.profile.companyName || "Partner", roleLabel: `${session.profile.companyName || "Insurance"} · Insurance Partner` });
+  if (!refundId) {
+    document.getElementById("body").innerHTML = `<p class="muted">No refund selected.</p>`;
+  } else {
+    await load();
+  }
+}
+
+async function load() {
+  const refund = await getRefund(refundId);
+  if (!refund || refund.partnerId !== session.uid) {
+    document.getElementById("body").innerHTML = `<div class="empty-state"><span data-icon="doc-text" class="icon-lg"></span><div class="h3">Refund not found</div></div>`;
+    mountIcons(document);
+    return;
+  }
+  document.getElementById("refundTitle").textContent = `Refund ${refund.refundRef}`;
+  document.getElementById("refundStatusBadge").innerHTML = statusBadge(refund.status);
+
+  const timeline = (refund.timeline || []).slice().reverse();
+  document.getElementById("body").innerHTML = `
+    <div class="detail-grid">
+      <div>
+        <div class="card detail-card">
+          <h3 class="h3">Policyholder</h3>
+          <p class="value">${escapeHtml(refund.policyholderName || "—")} · ${escapeHtml(refund.policyholderEmail || "—")}</p>
+        </div>
+        <div class="card detail-card">
+          <h3 class="h3">Policy</h3>
+          <p class="value">${escapeHtml(refund.planName || "—")}</p>
+        </div>
+        <div class="card detail-card">
+          <h3 class="h3">Refund details</h3>
+          <p class="value">${moneyExact(refund.amount)} · ${escapeHtml(refund.category || "—")}</p>
+        </div>
+        <div class="card detail-card">
+          <h3 class="h3">Documents</h3>
+          <p class="value">${(refund.documents || []).length ? refund.documents.map(escapeHtml).join(" · ") : "No documents attached."}</p>
+        </div>
+        <div class="card detail-card">
+          <h3 class="h3">Review timeline</h3>
+          ${timeline.length ? timeline.map((t) => `
+            <div style="padding:8px 0;border-top:1px solid var(--border);">
+              <p class="value" style="font-weight:700;">${escapeHtml((t.status || "").replace(/_/g, " ").replace(/^\w/, (c) => c.toUpperCase()))}</p>
+              <p class="muted small">${fullDate(t.at)}${t.note ? " · " + escapeHtml(t.note) : ""}</p>
+            </div>`).join("") : `<p class="value muted">No activity yet.</p>`}
+        </div>
+        <div class="card detail-card">
+          <h3 class="h3">Assignee</h3>
+          <p class="value">${escapeHtml(refund.assignee?.name || "Unassigned")} · ${escapeHtml(refund.assignee?.role || "—")}</p>
+        </div>
+      </div>
+      <div></div>
+    </div>
+    <div class="form-actions" style="margin-top:4px;">
+      <button class="btn btn-danger-outline" id="rejectBtn"><span data-icon="x" data-icon-size="14"></span>Reject refund</button>
+      <button class="btn btn-outline" id="infoBtn"><span data-icon="eye" data-icon-size="14"></span>Request info</button>
+      <button class="btn btn-primary" id="approveBtn"><span data-icon="check-circle" data-icon-size="14"></span>Approve</button>
+    </div>`;
+  mountIcons(document);
+
+  document.getElementById("rejectBtn").addEventListener("click", () => act("rejected", "Refund rejected", true));
+  document.getElementById("infoBtn").addEventListener("click", () => act("under_review", "Requested more information from the policyholder", false));
+  document.getElementById("approveBtn").addEventListener("click", () => act("approved", "Approved for payout", true));
+}
+
+async function act(status, note, needsConfirm) {
+  if (needsConfirm) {
+    const ok = await confirmDialog({
+      title: status === "approved" ? "Approve this refund?" : "Reject this refund?",
+      body: status === "approved" ? "The policyholder will be marked as approved for payout." : "The policyholder will be notified the refund was rejected.",
+      confirmText: status === "approved" ? "Approve" : "Reject", danger: status !== "approved",
+    });
+    if (!ok) return;
+  }
+  try {
+    await updateRefundStatus(refundId, status, note);
+    toast("Refund updated.", "success");
+    await load();
+  } catch (err) {
+    toast(err.message || "Couldn't update refund.", "error");
+  }
+}
+</script>
+</body>
+</html>

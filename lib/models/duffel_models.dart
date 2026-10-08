@@ -128,6 +128,12 @@ class DuffelStayResult {
   final String cheapestCurrency;
   final DateTime checkInDate;
   final DateTime checkOutDate;
+  /// Real per-hotel amenity names — Duffel's `accommodation.amenities`
+  /// (each entry's `description`, falling back to `type`) or RollingGo's
+  /// `hotelAmenities` (already plain strings). Empty when the source
+  /// result just didn't have any, same "don't fabricate" rule as
+  /// [reviewScore]/[reviewCount].
+  final List<String> amenities;
 
   const DuffelStayResult({
     required this.searchResultId,
@@ -142,6 +148,7 @@ class DuffelStayResult {
     required this.cheapestCurrency,
     required this.checkInDate,
     required this.checkOutDate,
+    this.amenities = const [],
   });
 
   factory DuffelStayResult.fromJson(Map<String, dynamic> json) {
@@ -167,6 +174,25 @@ class DuffelStayResult {
 
     DateTime parseDate(dynamic v) => DateTime.tryParse(v as String? ?? '') ?? DateTime.now();
 
+    // Duffel's accommodation.amenities is a list of {type, description}
+    // objects (e.g. {"type": "wifi", "description": "WiFi"}) — prefer the
+    // human-readable description, fall back to the type code, and drop
+    // anything that ends up with neither rather than showing a blank chip.
+    final amenitiesField = accommodation['amenities'];
+    final amenities = <String>[];
+    if (amenitiesField is List) {
+      for (final entry in amenitiesField) {
+        if (entry is Map) {
+          final label = (entry['description'] as String?)?.trim();
+          final type = (entry['type'] as String?)?.trim();
+          final value = (label != null && label.isNotEmpty) ? label : type;
+          if (value != null && value.isNotEmpty) amenities.add(value);
+        } else if (entry is String && entry.trim().isNotEmpty) {
+          amenities.add(entry.trim());
+        }
+      }
+    }
+
     return DuffelStayResult(
       searchResultId: (json['id'] as String?) ?? '',
       accommodationId: (accommodation['id'] as String?) ?? '',
@@ -180,6 +206,7 @@ class DuffelStayResult {
       cheapestCurrency: (json['cheapest_rate_currency'] as String?) ?? '',
       checkInDate: parseDate(json['check_in_date']),
       checkOutDate: parseDate(json['check_out_date']),
+      amenities: amenities,
     );
   }
 
@@ -198,6 +225,7 @@ class DuffelStayResult {
         'cheapestCurrency': cheapestCurrency,
         'checkInDate': checkInDate.toIso8601String(),
         'checkOutDate': checkOutDate.toIso8601String(),
+        'amenities': amenities,
       };
 
   factory DuffelStayResult.fromCacheMap(Map<String, dynamic> m) => DuffelStayResult(
@@ -213,6 +241,7 @@ class DuffelStayResult {
         cheapestCurrency: (m['cheapestCurrency'] as String?) ?? '',
         checkInDate: DateTime.tryParse((m['checkInDate'] as String?) ?? '') ?? DateTime.now(),
         checkOutDate: DateTime.tryParse((m['checkOutDate'] as String?) ?? '') ?? DateTime.now(),
+        amenities: List<String>.from(m['amenities'] as List? ?? const []),
       );
 
   /// Same shape, sourced from [RollingGoApiService.searchStays]'s
@@ -249,6 +278,15 @@ class DuffelStayResult {
         photoUrl = first is String ? first : (first is Map ? _rgString(first['url']) : null);
       }
     }
+    // RollingGo's searchHotels response carries `hotelAmenities` as a
+    // sibling field on each hotel object, already a plain list of strings
+    // (e.g. ["Bar", "Gym", "Pool", "SPA", "Parking", "WIFI"]) — no
+    // {type, description} unwrapping needed the way Duffel's shape does.
+    final amenitiesField = json['hotelAmenities'];
+    final amenities = amenitiesField is List
+        ? amenitiesField.map((e) => _rgString(e)).whereType<String>().toList()
+        : <String>[];
+
     return DuffelStayResult(
       searchResultId: hotelId,
       accommodationId: hotelId,
@@ -267,6 +305,7 @@ class DuffelStayResult {
       cheapestCurrency: _rgString(price['currency']) ?? '',
       checkInDate: checkIn,
       checkOutDate: checkOut,
+      amenities: amenities,
     );
   }
 

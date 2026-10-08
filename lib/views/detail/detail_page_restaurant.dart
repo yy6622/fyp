@@ -123,20 +123,6 @@ class _DetailPageRestaurantState extends State<DetailPageRestaurant> {
                             if (r.phone.isNotEmpty && r.website.isNotEmpty) const SizedBox(height: 10),
                             if (r.website.isNotEmpty) _contactRow(Icons.language_outlined, r.website, () => confirmAndLaunch(context, ContactAction.website, r.website)),
                           ],
-                          const SizedBox(height: 24),
-                          ReviewsSection(
-                            title: r.name,
-                            ratingSummary: '${r.rating} (${r.reviews} reviews)',
-                            reviewsStream: CatalogRepository.instance.watchRestaurantReviews(r.id).map((list) => list.map(reviewDataFromPlace).toList()),
-                            onSubmitReview: ({required authorId, required authorName, required rating, required comment}) =>
-                                CatalogRepository.instance.addRestaurantReview(
-                              r.id,
-                              authorId: authorId,
-                              authorName: authorName,
-                              rating: rating,
-                              comment: comment,
-                            ),
-                          ),
                         ],
                       ),
                     ),

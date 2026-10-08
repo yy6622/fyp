@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'repositories/user_repository.dart';
+
 /// Shared color palette for the whole app, pulled from the Figma design.
 class AppColors {
   // Main Color
@@ -134,18 +136,35 @@ class PillTabBar extends StatelessWidget {
               onTap: () => onSelected(i),
               child: Container(
                 height: 50,
+                padding: const EdgeInsets.symmetric(horizontal: 4),
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: const BorderRadius.only(bottomLeft: Radius.circular(10), bottomRight: Radius.circular(10)),
                   border: Border(bottom: BorderSide(color: selected ? AppColors.primary : Colors.white, width: 2)),
                 ),
+                // A longer label (e.g. "Rating & Review") plus the icon
+                // could add up to more than this pill's share of the row
+                // once there are 3-4 tabs — mainAxisSize.min here used to
+                // let the Row size itself to its children's natural width
+                // regardless of how little space the pill actually had,
+                // which overflowed instead of shrinking. The label now
+                // sizes to whatever's left after the icon and ellipsizes
+                // if it still doesn't fit, rather than spilling outside
+                // the pill.
                 child: Row(
-                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Icon(tab.icon, size: 15, color: selected ? AppColors.primary : AppColors.textGrey),
                     const SizedBox(width: 5),
-                    Text(tab.label, style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: selected ? AppColors.primary : AppColors.textGrey)),
+                    Flexible(
+                      child: Text(
+                        tab.label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: selected ? AppColors.primary : AppColors.textGrey),
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -181,6 +200,94 @@ class AppImage extends StatelessWidget {
         alignment: Alignment.center,
         child: const Icon(Icons.image_not_supported_outlined, color: AppColors.textGrey, size: 20),
       ),
+    );
+  }
+}
+
+/// A circular avatar that falls back to [fallbackIcon] both when there's no
+/// [imageUrl] yet and when loading one fails (a dead link, Storage object
+/// removed, offline, ...) — `CircleAvatar.backgroundImage` alone has no
+/// such fallback: a failed load just reports an uncaught image-decode
+/// error and leaves a blank circle, it doesn't fall through to [child] the
+/// way an empty/null backgroundImage does.
+class AppAvatar extends StatefulWidget {
+  final String? imageUrl;
+  final double radius;
+  final Color backgroundColor;
+  final IconData fallbackIcon;
+  final double? iconSize;
+  /// Shown instead of the fallback icon while this is non-null (e.g. an
+  /// upload-in-progress spinner) — same spot [CircleAvatar.child] takes.
+  final Widget? child;
+
+  const AppAvatar({
+    super.key,
+    required this.imageUrl,
+    required this.radius,
+    this.backgroundColor = AppColors.chipGrey,
+    this.fallbackIcon = Icons.person,
+    this.iconSize,
+    this.child,
+  });
+
+  @override
+  State<AppAvatar> createState() => _AppAvatarState();
+}
+
+class _AppAvatarState extends State<AppAvatar> {
+  bool _failed = false;
+
+  @override
+  void didUpdateWidget(covariant AppAvatar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // A new URL (e.g. just finished uploading a replacement photo)
+    // deserves its own fresh attempt rather than staying stuck on the
+    // previous URL's failure.
+    if (oldWidget.imageUrl != widget.imageUrl) _failed = false;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final hasUrl = (widget.imageUrl ?? '').isNotEmpty && !_failed;
+    return CircleAvatar(
+      radius: widget.radius,
+      backgroundColor: widget.backgroundColor,
+      backgroundImage: hasUrl ? NetworkImage(widget.imageUrl!) : null,
+      onBackgroundImageError: hasUrl
+          ? (_, __) {
+              if (mounted) setState(() => _failed = true);
+            }
+          : null,
+      child: widget.child ?? (hasUrl ? null : Icon(widget.fallbackIcon, size: widget.iconSize ?? widget.radius, color: AppColors.textGrey)),
+    );
+  }
+}
+
+/// Shows someone's current avatar from just their uid — a thin
+/// [StreamBuilder] wrapper around [AppAvatar] for the many spots (a
+/// friend row, a pending-request row, an invite picker, a blocked-user
+/// row) that only ever have a uid on hand, not a full loaded [AppUser].
+/// Previously every one of these just showed a flat grey circle with no
+/// image at all, since nothing there ever looked the photo up. Reads
+/// `users/{uid}` live, so it also stays correct if that person changes
+/// their photo later, instead of freezing whatever was true the moment a
+/// friendship/membership was created.
+class UserAvatar extends StatelessWidget {
+  final String uid;
+  final double radius;
+  final Color backgroundColor;
+  const UserAvatar({super.key, required this.uid, required this.radius, this.backgroundColor = AppColors.chipGrey});
+
+  @override
+  Widget build(BuildContext context) {
+    if (uid.isEmpty) {
+      return AppAvatar(imageUrl: null, radius: radius, backgroundColor: backgroundColor);
+    }
+    return StreamBuilder<AppUser?>(
+      stream: UserRepository.instance.watchProfile(uid),
+      builder: (context, snapshot) {
+        return AppAvatar(imageUrl: snapshot.data?.avatarUrl, radius: radius, backgroundColor: backgroundColor);
+      },
     );
   }
 }

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../controllers/vote_controller.dart';
 import '../../theme.dart';
 import '../shared/nice_pickers.dart';
+import 'saved_item_picker_sheet.dart';
 
 // ---------------------------------------------------------------------
 // Create Vote
@@ -24,6 +25,12 @@ class _CreateVotePageState extends State<CreateVotePage> {
     super.dispose();
   }
 
+  Future<void> _addFromSaved() async {
+    final picked = await showSavedItemPicker(context, tripId: widget.tripId, alreadyAdded: controller.savedDedupeKeys);
+    if (picked == null || picked.isEmpty || !mounted) return;
+    controller.addOptions(picked);
+  }
+
   Future<void> _submit() async {
     final ok = await controller.create();
     if (!mounted) return;
@@ -31,7 +38,7 @@ class _CreateVotePageState extends State<CreateVotePage> {
       Navigator.of(context).maybePop();
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Add a title and at least 2 options first')),
+        SnackBar(content: Text(controller.lastError ?? 'Add a title and at least 2 options first')),
       );
     }
   }
@@ -57,16 +64,37 @@ class _CreateVotePageState extends State<CreateVotePage> {
                   const SizedBox(height: 20),
                   const Text('Add Options', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.black)),
                   const SizedBox(height: 8),
-                  ...controller.optionControllers.asMap().entries.map((e) => _optionRow(e.key, e.value)),
-                  OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(
-                      minimumSize: const Size.fromHeight(48),
-                      side: const BorderSide(color: Color(0xFFECECEC)),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                    onPressed: controller.addOption,
-                    icon: const Icon(Icons.add, color: AppColors.primary, size: 18),
-                    label: const Text('Add Options', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.w600)),
+                  ...controller.optionDrafts.asMap().entries.map(
+                        (e) => e.value.isSaved ? _savedOptionCard(e.key, e.value) : _optionRow(e.key, e.value.textController!),
+                      ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            minimumSize: const Size.fromHeight(48),
+                            side: const BorderSide(color: Color(0xFFECECEC)),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          onPressed: controller.addOption,
+                          icon: const Icon(Icons.add, color: AppColors.primary, size: 18),
+                          label: const Text('Type Option', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.w600)),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            minimumSize: const Size.fromHeight(48),
+                            side: const BorderSide(color: Color(0xFFECECEC)),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          onPressed: _addFromSaved,
+                          icon: const Icon(Icons.bookmark_outline, color: AppColors.primary, size: 18),
+                          label: const Text('From Saved', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.w600)),
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 20),
                   _switchRow('Allow members to add options', controller.allowAddOptions, controller.setAllowAddOptions),
@@ -182,7 +210,72 @@ class _CreateVotePageState extends State<CreateVotePage> {
               style: const TextStyle(fontSize: 12.5, color: Colors.black),
             ),
           ),
-          if (controller.optionControllers.length > 2)
+          if (controller.optionDrafts.length > 2)
+            IconButton(
+              icon: const Icon(Icons.cancel_outlined, size: 20, color: AppColors.textGrey),
+              onPressed: () => controller.removeOptionAt(index),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// An option picked "From Saved" — shown as a small card (thumbnail,
+  /// name, subtitle, rating) instead of a plain text field, same idea as
+  /// the picker sheet's own rows and the Vote tab's option cards, so a
+  /// saved pick looks like the real listing it is from the moment it's
+  /// added, not just a name. Read-only (there's a real catalog item
+  /// behind it, nothing to type) — the only action is removing it.
+  Widget _savedOptionCard(int index, VoteOptionDraft draft) {
+    final item = draft.saved!;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(border: Border.all(color: const Color(0xFFECECEC)), borderRadius: BorderRadius.circular(12)),
+      child: Row(
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: Container(
+              width: 40,
+              height: 40,
+              color: AppColors.chipGrey,
+              child: item.imageUrl.isEmpty
+                  ? Icon(item.fallbackIcon, size: 18, color: AppColors.textGrey)
+                  : Image.network(
+                      item.imageUrl,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => Icon(item.fallbackIcon, size: 18, color: AppColors.textGrey),
+                    ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(item.label, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: Colors.black)),
+                if (item.subtitle.isNotEmpty || item.rating.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Row(
+                    children: [
+                      if (item.rating.isNotEmpty) ...[
+                        const Icon(Icons.star, size: 11, color: AppColors.orange),
+                        const SizedBox(width: 2),
+                        Text(item.rating, style: const TextStyle(fontSize: 10.5, color: AppColors.textGrey)),
+                        if (item.subtitle.isNotEmpty) const SizedBox(width: 6),
+                      ],
+                      if (item.subtitle.isNotEmpty)
+                        Expanded(
+                          child: Text(item.subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 10.5, color: AppColors.textGrey)),
+                        ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
+          if (controller.optionDrafts.length > 2)
             IconButton(
               icon: const Icon(Icons.cancel_outlined, size: 20, color: AppColors.textGrey),
               onPressed: () => controller.removeOptionAt(index),

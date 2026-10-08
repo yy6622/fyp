@@ -13,4 +13,4 @@
 // Places now. The only condition is attribution, which the import modal in
 // admin/attractions.html already shows ("Data © OpenStreetMap
 // contributors, via Geoapify") — keep that notice if you customise the UI.
-export const GEOAPIFY_API_KEY = "PASTE_YOUR_GEOAPIFY_API_KEY_HERE";
+export const GEOAPIFY_API_KEY = "4a7ab13c50b44573bdb16b4be226da6f";

@@ -1,0 +1,36 @@
+{
+  "model": "gemini-3.5-flash",
+  "label": "base",
+  "splits": {
+    "test_seen": {
+      "n": 60,
+      "valid_json": 98.3,
+      "add_f1": 90.8,
+      "add_p": 87.7,
+      "add_r": 94.0,
+      "add_exact_f1": 80.9,
+      "time_acc": 98.4,
+      "saved_acc": 100.0,
+      "update_f1": 96.7,
+      "remove_f1": 100.0,
+      "change_p": 100.0,
+      "unresolved_f1": 82.0,
+      "exact": 0.0
+    },
+    "test_unseen": {
+      "n": 60,
+      "valid_json": 98.3,
+      "add_f1": 88.2,
+      "add_p": 86.6,
+      "add_r": 89.9,
+      "add_exact_f1": 73.7,
+      "time_acc": 99.0,
+      "saved_acc": 99.7,
+      "update_f1": 91.1,
+      "remove_f1": 94.7,
+      "change_p": 96.4,
+      "unresolved_f1": 73.1,
+      "exact": 0.0
+    }
+  }
+}

@@ -1,4 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter_facebook_auth/flutter_facebook_auth.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 
 /// Thin wrapper around [FirebaseAuth] — the one place that talks to Firebase
 /// Authentication directly, so every screen gets the same error handling.
@@ -7,10 +9,17 @@ class AuthService {
   static final AuthService instance = AuthService._();
 
   FirebaseAuth get _auth => FirebaseAuth.instance;
+  final GoogleSignIn _googleSignIn = GoogleSignIn();
 
   Stream<User?> authStateChanges() => _auth.authStateChanges();
 
   User? get currentUser => _auth.currentUser;
+
+  /// True the first time this Firebase account has ever signed in (no
+  /// sign-in before this one) — Google/Facebook sign-in skips the normal
+  /// Sign Up form, so this is how the caller tells "brand new account,
+  /// go through onboarding" apart from "welcome back, go straight in".
+  bool isNewUser(UserCredential cred) => cred.additionalUserInfo?.isNewUser ?? false;
 
   Future<User> signUp({required String email, required String password}) async {
     try {
@@ -62,7 +71,66 @@ class AuthService {
     return _auth.currentUser?.emailVerified ?? false;
   }
 
-  Future<void> signOut() => _auth.signOut();
+  /// Opens Google's account picker and signs in to Firebase with whatever
+  /// account is chosen, creating the Firebase account automatically the
+  /// first time. Returns null if the person closed the picker without
+  /// choosing an account — that's a cancel, not an error, so nothing is
+  /// shown for it.
+  Future<UserCredential?> signInWithGoogle() async {
+    try {
+      final googleUser = await _googleSignIn.signIn();
+      if (googleUser == null) return null;
+      final googleAuth = await googleUser.authentication;
+      final credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+      return await _auth.signInWithCredential(credential);
+    } on FirebaseAuthException catch (e) {
+      throw AuthFailure(_message(e));
+    } catch (_) {
+      // GoogleSignIn itself throws plain PlatformExceptions (wrong SHA-1
+      // fingerprint registered in Firebase, Play Services missing on the
+      // device/emulator, no internet, ...), not FirebaseAuthException —
+      // there's nothing a person can act on in that raw error, so it's
+      // collapsed to one message same as the other providers below.
+      throw AuthFailure('Google sign-in failed. Please try again.');
+    }
+  }
+
+  /// Same shape as [signInWithGoogle], for Facebook Login.
+  Future<UserCredential?> signInWithFacebook() async {
+    try {
+      final result = await FacebookAuth.instance.login(permissions: const ['email', 'public_profile']);
+      if (result.status == LoginStatus.cancelled) return null;
+      final token = result.accessToken;
+      if (result.status != LoginStatus.success || token == null) {
+        throw AuthFailure(result.message ?? 'Facebook sign-in failed. Please try again.');
+      }
+      final credential = FacebookAuthProvider.credential(token.tokenString);
+      return await _auth.signInWithCredential(credential);
+    } on FirebaseAuthException catch (e) {
+      throw AuthFailure(_message(e));
+    } on AuthFailure {
+      rethrow;
+    } catch (_) {
+      throw AuthFailure('Facebook sign-in failed. Please try again.');
+    }
+  }
+
+  /// Signs out of Firebase and of whichever social provider session might
+  /// still be active — best-effort: an email/password user has no Google/
+  /// Facebook session to end, and those calls would just no-op/throw
+  /// harmlessly, which must never block the actual Firebase sign-out.
+  Future<void> signOut() async {
+    await _auth.signOut();
+    try {
+      await _googleSignIn.signOut();
+    } catch (_) {}
+    try {
+      await FacebookAuth.instance.logOut();
+    } catch (_) {}
+  }
 
   String _message(FirebaseAuthException e) {
     switch (e.code) {
@@ -83,6 +151,8 @@ class AuthService {
         return 'Network error — check your connection and try again.';
       case 'too-many-requests':
         return 'Too many attempts. Please wait a moment and try again.';
+      case 'account-exists-with-different-credential':
+        return 'An account already exists for this email, signed up a different way (e.g. email/password or another provider). Log in with that method instead.';
       default:
         return e.message ?? 'Something went wrong (${e.code}).';
     }

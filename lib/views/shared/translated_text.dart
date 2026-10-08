@@ -43,19 +43,38 @@ class _TranslatedTextState extends State<TranslatedText> {
   @override
   void initState() {
     super.initState();
+    // Listens directly for the language becoming known/changing, rather
+    // than only ever re-checking it when something else happens to
+    // rebuild this widget (see LanguageService's doc comment for why that
+    // used to leave some names — Attraction/Restaurant's in particular —
+    // untranslated forever instead of just briefly, until the language
+    // loaded).
+    LanguageService.instance.addListener(_onLanguageChanged);
     _maybeTranslate();
   }
 
   @override
   void didUpdateWidget(TranslatedText old) {
     super.didUpdateWidget(old);
-    // The name itself changed (a different card reused this element) or
-    // the person switched language mid-session — either way the
-    // previously-resolved translation no longer applies.
-    if (old.text != widget.text || _forLanguage != LanguageService.instance.lastKnownLanguageCode) {
+    // The name itself changed (a different card reused this element).
+    if (old.text != widget.text) {
       _translated = null;
       _maybeTranslate();
     }
+  }
+
+  void _onLanguageChanged() {
+    if (!mounted) return;
+    if (_forLanguage != LanguageService.instance.lastKnownLanguageCode) {
+      setState(() => _translated = null);
+      _maybeTranslate();
+    }
+  }
+
+  @override
+  void dispose() {
+    LanguageService.instance.removeListener(_onLanguageChanged);
+    super.dispose();
   }
 
   Future<void> _maybeTranslate() async {

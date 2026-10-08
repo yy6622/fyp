@@ -1,152 +1,31 @@
-// Talks to Geoapify's Places API (https://api.geoapify.com) — built on
-// OpenStreetMap data — to search for real-world attractions and map results
-// onto Voya's own catalog_attractions schema (see js/data.js).
+// Talks to Geoapify's Geocoding + Place Details APIs (https://api.geoapify.com)
+// — built on OpenStreetMap data — to look up ONE place by name or location
+// and map it onto Voya's own catalog_attractions schema (see js/data.js), so
+// the Add/Edit Attraction form (admin/attraction-form.html) can auto-fill
+// itself from a single text search instead of the admin typing everything
+// by hand.
 //
 // Chosen over Google Places API specifically because of storage rights:
 // Google's terms only allow keeping the bare Place ID indefinitely — every
 // other field (name, address, photos...) must be dropped or re-fetched
-// within 30 days, which rules out "import once, keep forever in Firestore".
-// Geoapify's terms explicitly allow permanently caching/storing results in
-// your own database, as long as you keep attribution to OpenStreetMap (and,
-// on the free plan, to Geoapify) — see the notice in the import modal in
-// admin/attractions.html. Docs: https://apidocs.geoapify.com/docs/places/
+// within 30 days, which rules out "look it up once, keep the result forever
+// in Firestore". Geoapify's terms explicitly allow permanently caching/
+// storing results in your own database, as long as you keep attribution to
+// OpenStreetMap (and, on the free plan, to Geoapify). Docs:
+// https://apidocs.geoapify.com/docs/geocoding/ and
+// https://apidocs.geoapify.com/docs/places/#place-details
 import { GEOAPIFY_API_KEY } from "./places-config.js";
 
 const GEOCODE_URL = "https://api.geoapify.com/v1/geocode/search";
-const PLACES_URL = "https://api.geoapify.com/v2/places";
 const PLACE_DETAILS_URL = "https://api.geoapify.com/v2/place-details";
+// Wikipedia's own public REST/API endpoints — free, no key, CORS-enabled
+// (Wikimedia serves Access-Control-Allow-Origin: * on these), used only as
+// a fallback image source when Geoapify's Place Details didn't return one.
+const WIKI_SUMMARY_URL = "https://en.wikipedia.org/api/rest_v1/page/summary/";
+const WIKI_SEARCH_URL = "https://en.wikipedia.org/w/api.php";
 
 export function hasApiKey() {
   return !!GEOAPIFY_API_KEY && GEOAPIFY_API_KEY !== "PASTE_YOUR_GEOAPIFY_API_KEY_HERE";
-}
-
-/**
- * Friendly category groups shown as chips in the sweep UI, mapped to the
- * real (dotted) Geoapify category codes their Places API expects. A value
- * can be a comma-separated list — Geoapify treats that as OR. If an admin
- * types a category that isn't in this dictionary, it's passed straight
- * through as a raw category code (see categoriesForLabel below), so a
- * specific code from Geoapify's own category list still works even though
- * it isn't one of these friendly presets.
- */
-const CATEGORY_GROUPS = {
-  "Tourist attractions": "tourism.attraction",
-  "Landmarks & sights": "tourism.sights",
-  "Museums": "entertainment.museum",
-  "Art & culture": "entertainment.culture",
-  "Zoos & aquariums": "entertainment.zoo,entertainment.aquarium",
-  "Theme parks": "entertainment.theme_park",
-  "Parks & gardens": "leisure.park",
-  "Nature reserves": "natural.protected_area,natural.forest",
-  "Mountains & caves": "natural.mountain",
-  "Water & coast": "natural.water,natural.coastal",
-  "Heritage sites": "heritage",
-  "Shopping": "commercial.shopping_mall,commercial.marketplace",
-};
-export const DEFAULT_SWEEP_KEYWORDS = Object.keys(CATEGORY_GROUPS);
-
-function categoriesForLabel(label) {
-  return CATEGORY_GROUPS[label] || label;
-}
-
-/** Resolves a free-text location ("Penang, Malaysia") to a Geoapify boundary place_id. */
-export async function geocodeLocation(text) {
-  if (!hasApiKey()) {
-    throw new Error("Geoapify API key isn't set — open js/places-config.js and paste your key in.");
-  }
-  const url = `${GEOCODE_URL}?text=${encodeURIComponent(text)}&limit=1&format=json&apiKey=${GEOAPIFY_API_KEY}`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Geocoding failed (HTTP ${res.status})`);
-  const body = await res.json();
-  const hit = body.results?.[0];
-  if (!hit) throw new Error(`Couldn't find "${text}" — try a more specific name.`);
-  return { placeId: hit.place_id, lat: hit.lat, lon: hit.lon, formatted: hit.formatted || text };
-}
-
-/** One Places search: everything matching `categoriesCsv` within boundary `placeId`. */
-export async function searchGeoapifyPlaces(categoriesCsv, placeId, { limit = 50 } = {}) {
-  if (!hasApiKey()) {
-    throw new Error("Geoapify API key isn't set — open js/places-config.js and paste your key in.");
-  }
-  const url = `${PLACES_URL}?categories=${encodeURIComponent(categoriesCsv)}&filter=place:${placeId}&limit=${limit}&apiKey=${GEOAPIFY_API_KEY}`;
-  const res = await fetch(url);
-  if (!res.ok) {
-    const errBody = await res.json().catch(() => ({}));
-    throw new Error(errBody?.message || `Places API error (HTTP ${res.status})`);
-  }
-  const body = await res.json();
-  return body.features || [];
-}
-
-/**
- * Runs one Places search per (location × category) combination, merges the
- * results into a single deduped list (by place_id — the same real place
- * can match more than one category), then fetches full Place Details
- * (website, phone, opening hours, an image if one exists) for EVERY unique
- * place found — not just ones the admin later selects — so the review
- * list already shows complete info before anything is imported. Each
- * location is geocoded once (cached per sweep) to resolve its search
- * boundary. This is the closest practical approximation of "get every
- * attraction": broad category coverage across every location given, not a
- * literal full-database export — no Places provider (Geoapify included)
- * offers that.
- *
- * Because every unique result gets its own Place Details call, API usage
- * scales with how many distinct places the sweep finds, not with how many
- * the admin ends up importing — keep the location/category lists to what
- * you actually need swept if you're watching the daily credit budget.
- *
- * `onProgress(phase, done, total, label)` fires after each step so the
- * caller can show real progress instead of a frozen button. `phase` is
- * "search" during the location×category sweep and "details" while
- * enriching the deduped results. A small delay between calls in both
- * phases avoids firing the whole batch at once.
- */
-export async function sweepGeoapifyPlaces(locations, categoryLabels, { onProgress } = {}) {
-  const combos = [];
-  for (const location of locations) for (const label of categoryLabels) combos.push({ location, label });
-
-  const geocodeCache = new Map();
-  const byId = new Map();
-
-  for (let i = 0; i < combos.length; i++) {
-    const { location, label } = combos[i];
-    try {
-      let geo = geocodeCache.get(location);
-      if (!geo) {
-        geo = await geocodeLocation(location);
-        geocodeCache.set(location, geo);
-      }
-      const features = await searchGeoapifyPlaces(categoriesForLabel(label), geo.placeId);
-      for (const feature of features) {
-        const placeId = feature.properties?.place_id;
-        if (placeId && !byId.has(placeId)) {
-          byId.set(placeId, mapPlaceToAttraction(feature, { location: geo.formatted }));
-        }
-      }
-    } catch (err) {
-      // One bad combo (typo'd location, empty category match) shouldn't
-      // abort the whole sweep — note it in the progress label and continue.
-      onProgress?.("search", i + 1, combos.length, `"${label}" in "${location}" failed: ${err.message}`);
-      continue;
-    }
-    onProgress?.("search", i + 1, combos.length, `"${label}" in "${location}"`);
-    if (i < combos.length - 1) await new Promise((r) => setTimeout(r, 180));
-  }
-
-  const results = Array.from(byId.values());
-  for (let i = 0; i < results.length; i++) {
-    const details = await enrichPlaceDetails(results[i].sourcePlaceId);
-    results[i].website = details.website || results[i].website;
-    results[i].phone = details.phone || results[i].phone;
-    results[i].openingHours = details.openingHours || results[i].openingHours;
-    results[i].highlights = details.highlights?.length ? details.highlights : results[i].highlights;
-    results[i].image = details.image || results[i].image;
-    results[i].images = details.image ? [details.image] : results[i].images;
-    onProgress?.("details", i + 1, results.length, results[i].name || "");
-    if (i < results.length - 1) await new Promise((r) => setTimeout(r, 150));
-  }
-  return results;
 }
 
 // Geoapify's category taxonomy is much finer-grained than Voya's category
@@ -179,42 +58,27 @@ export function categoryFromGeoapifyCategories(categories = []) {
 }
 
 /**
- * Maps one Places search result onto Voya's catalog_attractions field
- * shape. Only basic search fields are available at this point (no
- * website/phone/hours/image yet — sweepGeoapifyPlaces fills those in for
- * every result via enrichPlaceDetails right after this runs). Geoapify/OSM
- * has no star-rating or review-count data, so those fields are left at
- * "0" — same placeholder convention already used for "no data yet" fields
- * elsewhere in this form.
+ * Maps one Geoapify result (a Places-search feature's `.properties`, or the
+ * equivalent flat object the Geocoding API returns) onto Voya's
+ * catalog_attractions field shape. Geoapify/OSM has no star-rating or
+ * review-count data, so those are left out entirely here — the form keeps
+ * whatever the admin already typed (or its own "0" placeholder) rather than
+ * this function inventing a value.
  */
-export function mapPlaceToAttraction(feature, { location = "" } = {}) {
-  const p = feature.properties || {};
+function mapPlaceToAttraction(p, { location = "" } = {}) {
   const category = categoryFromGeoapifyCategories(p.categories);
   return {
     name: p.name || p.address_line1 || "",
     category,
     categories: [category],
-    rating: "0",
-    reviews: "0",
-    price: "Free entry",
-    fees: {},
-    image: "",
-    images: [],
     location: location || p.city || p.state || "",
     address: p.formatted || "",
     phone: "",
     website: "",
-    recommendedDuration: "",
     openingHours: "",
-    openingHoursByDay: {},
-    facilities: [],
     highlights: [],
-    // Imported rows start as "pending" purely as an admin-side reminder to
-    // review/fill in fees + photos before treating them as real listings —
-    // the mobile app doesn't read `status` at all, so this doesn't hide
-    // them from Explore on its own (see the note in js/data.js).
-    status: "pending",
-    sourcePlaceId: p.place_id,
+    image: "",
+    sourcePlaceId: p.place_id || "",
     source: "Geoapify",
   };
 }
@@ -222,14 +86,12 @@ export function mapPlaceToAttraction(feature, { location = "" } = {}) {
 /**
  * Fetches the richer Place Details fields (website, phone, an OSM-format
  * opening-hours string, a short description, an image if OSM/Wikidata has
- * one) for ONE place. Called by sweepGeoapifyPlaces for every unique result
- * it finds. Best-effort: a failed lookup returns {} rather than throwing,
- * so one bad detail fetch doesn't block enriching/importing the rest.
- * Geoapify's opening_hours is a single raw OSM-syntax string (e.g.
- * "Mo-Fr 09:00-18:00; Sa 09:00-13:00"), not split per day the way Google's
- * response was — parsing that syntax reliably is its own project, so it's
- * stored as-is in `openingHours` and left for the admin to split into
- * `openingHoursByDay` from the Edit form if they want that detail.
+ * one) for ONE place by its Geoapify place_id. Best-effort: a failed lookup
+ * returns {} rather than throwing, so a missing detail doesn't block the
+ * rest of the auto-fill. Geoapify's opening_hours is a single raw
+ * OSM-syntax string (e.g. "Mo-Fr 09:00-18:00; Sa 09:00-13:00"), not split
+ * per day — stored as-is and left for the admin to tidy up or split into
+ * per-day hours on the form if they want that detail.
  */
 export async function enrichPlaceDetails(placeId) {
   if (!hasApiKey() || !placeId) return {};
@@ -250,4 +112,88 @@ export async function enrichPlaceDetails(placeId) {
   } catch {
     return {};
   }
+}
+
+/**
+ * Looks up a page image on Wikipedia for a place name, as a fallback for
+ * when Geoapify's Place Details has no `wiki_and_media.image` — that field
+ * only exists when OSM explicitly links the place to a Wikidata entry,
+ * which plenty of real, well-known places are missing even though they
+ * have a normal Wikipedia article. Tries the name as an exact article title
+ * first (fast path via Wikipedia's REST summary endpoint), and if that
+ * doesn't resolve, falls back to Wikipedia's own search API with
+ * "name + location" to find the closest matching article and tries that
+ * title instead. Best-effort and silent on failure (network blocked, no
+ * match, ambiguous name) — returns "" rather than throwing, so a miss here
+ * just leaves the Photos section empty for the admin to fill in by hand,
+ * same as before this existed.
+ */
+async function fetchWikiSummaryImage(title) {
+  try {
+    const res = await fetch(`${WIKI_SUMMARY_URL}${encodeURIComponent(title)}`);
+    if (!res.ok) return "";
+    const body = await res.json().catch(() => null);
+    return body?.thumbnail?.source || body?.originalimage?.source || "";
+  } catch {
+    return "";
+  }
+}
+
+async function findWikipediaImage(name, location = "") {
+  if (!name) return "";
+  const direct = await fetchWikiSummaryImage(name);
+  if (direct) return direct;
+  try {
+    const searchTerm = location ? `${name} ${location}` : name;
+    const searchUrl = `${WIKI_SEARCH_URL}?action=query&list=search&srsearch=${encodeURIComponent(searchTerm)}&srlimit=1&format=json&origin=*`;
+    const res = await fetch(searchUrl);
+    if (!res.ok) return "";
+    const body = await res.json().catch(() => null);
+    const title = body?.query?.search?.[0]?.title;
+    return title ? await fetchWikiSummaryImage(title) : "";
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * The single lookup behind the small "find on OpenStreetMap" button next to
+ * the Name field on admin/attraction-form.html. Takes whatever the admin
+ * typed — a specific name ("Senso-ji Temple") or just a location
+ * ("Asakusa, Tokyo") — runs it through Geoapify's Geocoding API (the same
+ * OSM-backed dataset the Places API uses, so a well-known POI's name
+ * resolves straight to it), then fetches Place Details for the match to
+ * fill in website/phone/hours/image — and if Geoapify didn't have an image,
+ * tries Wikipedia directly as a fallback (see findWikipediaImage above).
+ * Returns a plain object the caller applies onto the form; throws a
+ * user-facing message if nothing matched.
+ */
+export async function findAndFillFromOsm(query) {
+  if (!hasApiKey()) {
+    throw new Error("Geoapify API key isn't set — open js/places-config.js and paste your key in.");
+  }
+  const text = (query || "").trim();
+  if (!text) throw new Error("Type a name or location first.");
+
+  const url = `${GEOCODE_URL}?text=${encodeURIComponent(text)}&limit=1&format=json&apiKey=${GEOAPIFY_API_KEY}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`OpenStreetMap search failed (HTTP ${res.status})`);
+  const body = await res.json();
+  const hit = body.results?.[0];
+  if (!hit) throw new Error(`Couldn't find "${text}" on OpenStreetMap — try a different spelling, or add the city/country.`);
+
+  const result = mapPlaceToAttraction(hit, { location: hit.city || hit.state || "" });
+
+  if (hit.place_id) {
+    const details = await enrichPlaceDetails(hit.place_id);
+    result.website = details.website || result.website;
+    result.phone = details.phone || result.phone;
+    result.openingHours = details.openingHours || result.openingHours;
+    result.highlights = details.highlights?.length ? details.highlights : result.highlights;
+    result.image = details.image || result.image;
+  }
+  if (!result.image) {
+    result.image = await findWikipediaImage(result.name, result.location);
+  }
+  return result;
 }

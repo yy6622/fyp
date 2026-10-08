@@ -2,6 +2,28 @@ import 'package:flutter/material.dart';
 
 import '../models/booking_details.dart';
 
+/// Shared format checks for the contact/guest fields collected by both
+/// [FlightPassengerDetailsController] and [HotelGuestDetailsController] —
+/// pulled out so the two validate() methods below apply the exact same
+/// rule rather than two independently-drifting regexes. These are
+/// deliberately permissive (international phone formats vary a lot) and
+/// only catch the obviously-wrong cases: a missing "@"/domain, or a phone
+/// number with too few digits to be real.
+final RegExp _emailPattern = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
+
+bool isValidEmailFormat(String value) => _emailPattern.hasMatch(value.trim());
+
+bool isValidPhoneFormat(String value) {
+  final trimmed = value.trim();
+  if (trimmed.isEmpty) return false;
+  // Only digits, spaces, '+', '-', '(', ')' allowed, and at least 7 digits
+  // overall — enough to reject stray text without rejecting any real
+  // international format.
+  if (!RegExp(r'^[0-9+\-\s()]+$').hasMatch(trimmed)) return false;
+  final digitCount = trimmed.replaceAll(RegExp(r'[^0-9]'), '').length;
+  return digitCount >= 7 && digitCount <= 15;
+}
+
 /// Controller for [FlightPassengerDetailsPage] — one [PassengerDetail] per
 /// seat, kept in lockstep with the seat/quantity count (same idea as
 /// [TravellerDetailsController] for Insurance, which this flow is modelled
@@ -82,7 +104,9 @@ class FlightPassengerDetailsController extends ChangeNotifier {
       if (p.passportExpiry == null) return "$who's passport expiry date is required.";
     }
     if (contactEmail.trim().isEmpty) return 'A contact email is required.';
+    if (!isValidEmailFormat(contactEmail)) return 'Please enter a valid contact email address.';
     if (contactPhone.trim().isEmpty) return 'A contact phone number is required.';
+    if (!isValidPhoneFormat(contactPhone)) return 'Please enter a valid contact phone number.';
     return null;
   }
 }
@@ -138,7 +162,9 @@ class HotelGuestDetailsController extends ChangeNotifier {
   String? validate() {
     if (fullName.trim().isEmpty) return "The guest's full name is required.";
     if (email.trim().isEmpty) return 'A contact email is required.';
+    if (!isValidEmailFormat(email)) return 'Please enter a valid email address.';
     if (phone.trim().isEmpty) return 'A contact phone number is required.';
+    if (!isValidPhoneFormat(phone)) return 'Please enter a valid phone number.';
     if (idNumber.trim().isEmpty) return 'A passport/ID number is required.';
     if (checkIn == null || checkOut == null) return 'Please select check-in and check-out dates.';
     return null;

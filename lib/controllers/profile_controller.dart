@@ -13,7 +13,6 @@ import '../services/location_service.dart';
 class ProfileController extends ChangeNotifier {
   AppUser? _profile;
   AppUser? get profile => _profile;
-  bool get favorited => _profile?.favorited ?? false;
 
   bool _loading = true;
   bool get loading => _loading;
@@ -33,12 +32,6 @@ class ProfileController extends ChangeNotifier {
     }
   }
 
-  void toggleFavorited() {
-    final uid = AuthService.instance.currentUser?.uid;
-    if (uid == null) return;
-    UserRepository.instance.setFavorited(uid, !favorited);
-  }
-
   @override
   void dispose() {
     _sub?.cancel();
@@ -53,6 +46,9 @@ class FriendsController extends ChangeNotifier {
   List<FriendEntry> get friends => _friends;
   Set<String> _blockedIds = {};
 
+  List<SentFriendRequest> _sentRequests = [];
+  List<SentFriendRequest> get sentRequests => _sentRequests;
+
   bool _loading = true;
   bool get loading => _loading;
 
@@ -60,6 +56,7 @@ class FriendsController extends ChangeNotifier {
 
   StreamSubscription<List<FriendEntry>>? _friendsSub;
   StreamSubscription<Set<String>>? _blockedSub;
+  StreamSubscription<List<SentFriendRequest>>? _sentSub;
 
   String get _uid => AuthService.instance.currentUser?.uid ?? '';
 
@@ -73,6 +70,10 @@ class FriendsController extends ChangeNotifier {
       });
       _blockedSub = FriendsRepository.instance.watchBlockedIds(uid).listen((ids) {
         _blockedIds = ids;
+        notifyListeners();
+      });
+      _sentSub = FriendsRepository.instance.watchSentRequests(uid).listen((list) {
+        _sentRequests = list;
         notifyListeners();
       });
     } else {
@@ -102,19 +103,34 @@ class FriendsController extends ChangeNotifier {
     return nowBlocked;
   }
 
-  /// Looks [query] up (email or username) and adds them as a friend.
-  /// Returns the matched friend's name, or null if nobody matched.
-  Future<String?> addFriend(String query) async {
+  /// Looks [query] up (email or username) and sends them a friend
+  /// request — see [FriendRequestOutcome] for what can come back.
+  Future<FriendRequestOutcome> sendFriendRequest(String query) async {
     final uid = AuthService.instance.currentUser?.uid;
-    if (uid == null) return null;
+    if (uid == null) return const FriendRequestOutcome(status: FriendRequestStatus.noMatch);
     final me = await UserRepository.instance.fetchProfile(uid);
-    return FriendsRepository.instance.addFriend(myUid: uid, myName: me?.name ?? 'Traveller', query: query);
+    return FriendsRepository.instance.sendFriendRequest(myUid: uid, myName: me?.name ?? 'Traveller', query: query);
+  }
+
+  Future<void> resendRequest(SentFriendRequest request) async {
+    final me = await UserRepository.instance.fetchProfile(_uid);
+    await FriendsRepository.instance.resendFriendRequest(
+      fromUid: _uid,
+      fromName: me?.name ?? 'Traveller',
+      toUid: request.toUid,
+      toName: request.toName,
+    );
+  }
+
+  Future<void> cancelRequest(SentFriendRequest request) {
+    return FriendsRepository.instance.cancelFriendRequest(fromUid: _uid, toUid: request.toUid);
   }
 
   @override
   void dispose() {
     _friendsSub?.cancel();
     _blockedSub?.cancel();
+    _sentSub?.cancel();
     search.dispose();
     super.dispose();
   }
@@ -158,17 +174,6 @@ class BlockedUsersController extends ChangeNotifier {
   void dispose() {
     _sub?.cancel();
     super.dispose();
-  }
-}
-
-/// Controller for [ChatSettingPage].
-class ChatSettingController extends ChangeNotifier {
-  bool _saveMedia = true;
-  bool get saveMedia => _saveMedia;
-
-  void setSaveMedia(bool v) {
-    _saveMedia = v;
-    notifyListeners();
   }
 }
 
@@ -265,9 +270,14 @@ class ReportAttractionController extends ChangeNotifier {
 /// streams `users/{uid}.shareLocation` and flipping it on captures one
 /// real device position (see [LocationService.getCurrentPosition]) so
 /// Group Info > Member Location has something to show right away instead
-/// of an empty "last updated: never". [profileVisible]/[twoFactor] stay
-/// local UI state — this project has no follow-graph or 2FA flow to
-/// actually back them with.
+/// of an empty "last updated: never". [profileVisible] is also real now
+/// (streams/writes `users/{uid}.publicProfile` — see
+/// [AppUser.publicProfile] and AuthorProfilePage, which is what actually
+/// gates on it). [twoFactor] is real too now (streams/writes
+/// `users/{uid}.twoFactorEnabled` — see [AppUser.twoFactorEnabled]); it
+/// used to be local-only UI state that reset to off on every app
+/// restart, which is also why the admin console's User Account Report
+/// couldn't show a real 2FA-adoption figure before this.
 class PrivacySecurityController extends ChangeNotifier {
   String get _uid => AuthService.instance.currentUser?.uid ?? '';
 
@@ -289,6 +299,8 @@ class PrivacySecurityController extends ChangeNotifier {
     if (uid != null) {
       _sub = UserRepository.instance.watchProfile(uid).listen((user) {
         _shareLocation = user?.shareLocation ?? false;
+        _profileVisible = user?.publicProfile ?? true;
+        _twoFactor = user?.twoFactorEnabled ?? false;
         _locationLoading = false;
         notifyListeners();
       });
@@ -297,9 +309,14 @@ class PrivacySecurityController extends ChangeNotifier {
     }
   }
 
-  void setProfileVisible(bool v) {
+  Future<void> setProfileVisible(bool v) async {
+    final uid = _uid;
+    if (uid.isEmpty) return;
+    // Optimistic, same pattern as setShareLocation below — the stream
+    // above reconciles once the write lands.
     _profileVisible = v;
     notifyListeners();
+    await UserRepository.instance.setPublicProfile(uid, v);
   }
 
   Future<void> setShareLocation(bool v) async {
@@ -317,14 +334,18 @@ class PrivacySecurityController extends ChangeNotifier {
     }
   }
 
+  Future<void> setTwoFactor(bool v) async {
+    final uid = _uid;
+    if (uid.isEmpty) return;
+    // Optimistic, same pattern as setShareLocation/setProfileVisible above.
+    _twoFactor = v;
+    notifyListeners();
+    await UserRepository.instance.setTwoFactorEnabled(uid, v);
+  }
+
   @override
   void dispose() {
     _sub?.cancel();
     super.dispose();
-  }
-
-  void setTwoFactor(bool v) {
-    _twoFactor = v;
-    notifyListeners();
   }
 }

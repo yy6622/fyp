@@ -3,6 +3,18 @@ service cloud.firestore {
   match /databases/{database}/documents {
     function isSignedIn() { return request.auth != null; }
     function isOwner(uid) { return isSignedIn() && request.auth.uid == uid; }
+    // Moved up from the Insurance section below (where they used to be
+    // defined) so earlier rules — the posts/{postId} moderation bypass in
+    // particular — can also call them. Function order doesn't change how
+    // the ruleset evaluates, but defining them once, up top, means every
+    // match block below can rely on them without hunting for where
+    // they're declared.
+    function isAdmin() {
+      return isSignedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+    function isInsurancePartner() {
+      return isSignedIn() && exists(/databases/$(database)/documents/insurance_partners/$(request.auth.uid));
+    }
 
     match /users/{uid} {
       // Any signed-in user can look someone up (Add Friend searches by
@@ -13,10 +25,29 @@ service cloud.firestore {
       allow delete: if false;
 
       match /friends/{friendId} {
-        allow read, write: if isOwner(uid);
+        allow read: if isOwner(uid);
+        // You can always manage your own friends list. You may also write
+        // or delete the entry that is *yourself* (friendId == your own
+        // uid) into someone else's list — never any other entry — which is
+        // what completes a mutual friendship when you accept their request
+        // (see FriendsRepository.respondToFriendRequest, which writes both
+        // halves of the pair in one batch: your own friends/{them} as
+        // yourself, and their friends/{you} also as yourself).
+        allow write, delete: if isOwner(uid) || (isSignedIn() && friendId == request.auth.uid);
       }
       match /blocked/{blockedId} {
         allow read, write: if isOwner(uid);
+      }
+      // A real in-app notification inbox (Home's bell icon) — the owner
+      // reads/marks-read/deletes their own; anyone signed in may drop one
+      // into someone else's inbox (a friend request, an accepted request,
+      // ...), the same trust level already given elsewhere in these rules
+      // to liking a post or joining a trip by invite link.
+      match /notifications/{notifId} {
+        allow read, update, delete: if isOwner(uid);
+        allow create: if isSignedIn() &&
+          request.resource.data.keys().hasAll(['type', 'title', 'body', 'read', 'createdAt']) &&
+          request.resource.data.read == false;
       }
       match /bookings/{bookingId} {
         allow read, create: if isOwner(uid);
@@ -29,6 +60,42 @@ service cloud.firestore {
       }
     }
 
+    // A friend request, addressed from one user to another (doc id
+    // "{fromUid}_{toUid}", deterministic so either side can .doc(id) it
+    // directly). Top-level rather than nested under users/{uid} so the
+    // recipient doesn't need write access inside the sender's own
+    // subcollection (or vice versa) just to accept/decline/cancel one —
+    // both sides are simply whoever the fromUid/toUid fields name.
+    // Accepting deletes this doc and writes the mutual friends/ entries
+    // instead of leaving an "accepted" record lying around (see
+    // FriendsRepository.respondToFriendRequest).
+    match /friendRequests/{reqId} {
+      // `resource == null` covers the common case of checking whether a
+      // request with this deterministic id exists at all yet (see
+      // FriendsRepository.sendFriendRequest's duplicate/reverse-request
+      // checks) — without it, a .get() on a not-yet-created doc id would
+      // be denied before it ever reaches the "does it exist" check below,
+      // since there would be no resource.data to evaluate.
+      allow read: if isSignedIn() &&
+        (resource == null || resource.data.fromUid == request.auth.uid || resource.data.toUid == request.auth.uid);
+      allow create: if isSignedIn() &&
+        request.resource.data.fromUid == request.auth.uid &&
+        request.resource.data.status == 'pending';
+      // The one allowed update: the original sender bumping createdAt to
+      // re-notify a still-pending request (see
+      // FriendsRepository.resendFriendRequest) — nothing else about a
+      // request can change after it's created; accept/decline/cancel all
+      // delete it instead of mutating it further.
+      allow update: if isSignedIn() &&
+        resource.data.fromUid == request.auth.uid &&
+        resource.data.status == 'pending' &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['createdAt']);
+      // Either side can remove it: the sender cancelling, or the
+      // recipient declining (or accepting, which deletes it as part of
+      // the same batch that writes the friendship).
+      allow delete: if isSignedIn() && (resource.data.fromUid == request.auth.uid || resource.data.toUid == request.auth.uid);
+    }
+
     // Shared cache of Duffel's "popular destinations" flight/hotel
     // search results (see CatalogRepository.getPopularFlights/
     // getPopularStays) — refreshed by whichever signed-in user's Explore
@@ -38,17 +105,77 @@ service cloud.firestore {
       allow read, write: if isSignedIn();
     }
 
+    // Monthly aggregate of community-post views — one doc per "YYYY-MM",
+    // field viewCount bumped by FieldValue.increment every time
+    // CommunityRepository.recordView fires (any post, any viewer). Backs
+    // the Community Post Analysis Report's "monthly viewing trend" chart.
+    // Not user-specific and never read back by the Flutter app, so any
+    // signed-in user may create/increment it; only an admin reads it.
+    match /post_view_stats/{monthKey} {
+      allow read: if isAdmin();
+      allow create, update: if isSignedIn();
+      allow delete: if false;
+    }
+
+    // Collection-group counterpart to the posts/{postId}/viewers/{uid}
+    // rule nested below — that rule only covers reads scoped to a single
+    // post's own subcollection path. admin_web's listPostViewers() runs a
+    // collectionGroup("viewers") query spanning every post at once (for
+    // the Community Post Analysis Report's platform-wide unique-viewer
+    // count), and Firestore requires a separate {path=**} wildcard rule
+    // to authorize that — without this, the query was being rejected
+    // with "Missing or insufficient permissions" even though the nested
+    // rule below looked like it already covered "viewers". Admin-only,
+    // same as post_view_stats above.
+    match /{path=**}/viewers/{uid} {
+      allow read: if isAdmin();
+    }
+
+    // Audit trail for admin/content-moderation.html's approve/reject
+    // actions (admin_web/js/data.js logModerationAction/countModerationToday)
+    // — had NO rule at all before this, so every read/write silently hit
+    // Firestore's default-deny and the page's stat cards never resolved.
+    match /moderation_log/{id} {
+      allow read: if isAdmin();
+      allow create: if isAdmin() && request.resource.data.adminUid == request.auth.uid;
+    }
+
     match /posts/{postId} {
       allow read: if isSignedIn();
       allow create: if isSignedIn() && request.resource.data.authorId == request.auth.uid;
-      // The author can change anything; anyone else signed in may only
-      // touch likedBy/savedBy/ratings (liking, saving, rating a post).
+      // The author can change anything, and an admin can change anything
+      // too (the content-moderation console's approve/reject actions —
+      // admin_web/js/data.js approvePostReport/rejectPost — previously had
+      // no rule actually granting this, so moderation was silently broken;
+      // this is the fix). Beyond that, anyone else signed in may only
+      // touch one of three narrow slices:
+      //  - likedBy/ratings — liking or rating a post (unchanged).
+      //  - viewCount/uniqueViewerCount — bumped by
+      //    CommunityRepository.recordView every time anyone opens the
+      //    post, for the Community Post Analysis Report.
+      //  - reported/reportedBy/reportReason/reportedAt/reportCount —
+      //    bumped by CommunityRepository.reportPost, pinned to the
+      //    reporter's own uid so no one can file a report "as" someone
+      //    else. reportCount persists across moderation actions (unlike
+      //    the other four, which approvePostReport clears) so it stays a
+      //    true lifetime count for the report, even after a report is
+      //    dismissed.
+      // There used to be a separate savedBy array for a bookmark toggle,
+      // but that was dropped in favor of just "like" — old posts may
+      // still carry a stale savedBy field, it's just never read or
+      // written anymore.
       allow update: if isSignedIn() && (
         request.auth.uid == resource.data.authorId ||
-        request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['likedBy', 'savedBy', 'ratings'])
+        isAdmin() ||
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likedBy', 'ratings']) ||
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['viewCount', 'uniqueViewerCount']) ||
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reported', 'reportedBy', 'reportReason', 'reportedAt', 'reportCount']) &&
+          request.resource.data.reportedBy == request.auth.uid)
       );
-      allow delete: if isSignedIn() && request.auth.uid == resource.data.authorId;
+      // Admin bypass added for the same reason as update above —
+      // rejectPost deletes the post outright and previously had no rule
+      // allowing an admin to do that.
+      allow delete: if isSignedIn() && (request.auth.uid == resource.data.authorId || isAdmin());
 
       // A post's written reviews — separate from the quick 1-tap star
       // rating above (that's the 'ratings' map on the post doc itself).
@@ -58,6 +185,18 @@ service cloud.firestore {
         allow read: if isSignedIn();
         allow create: if isSignedIn() && request.resource.data.authorId == request.auth.uid;
         allow update, delete: if false;
+      }
+
+      // One marker doc per uid who has ever opened this post — exists
+      // purely so CommunityRepository.recordView's transaction can tell a
+      // first-time view (bump uniqueViewerCount) from a repeat one
+      // (don't), without trusting the client to self-report which is
+      // which. Not read by the Flutter app; the admin console only needs
+      // the count, which lives on the post doc itself.
+      match /viewers/{uid} {
+        allow read: if isOwner(uid) || isAdmin();
+        allow create, update: if isOwner(uid);
+        allow delete: if false;
       }
     }
 
@@ -180,24 +319,52 @@ service cloud.firestore {
       }
     }
 
+    // A curated, pre-scraped OSM dataset (name/photo/translation per
+    // place) populated from outside this app — not by CatalogRepository
+    // or any Flutter client write, which is why there's no `create`/
+    // `update` here the way catalog_attractions has. Explore reads it
+    // (see CatalogRepository.refreshAttractions) to seed
+    // catalog_attractions, which is still what the UI itself watches and
+    // where favoriting/reviews/live edits actually happen.
+    // TEMPORARY: `delete` is allowed for admins only so the one-off
+    // admin/migrate-places.html tool can empty this collection once its
+    // rows have been copied into `catalog_places` (see that collection's
+    // rule block below, and js/data.js's CATALOG PLACES MIGRATION
+    // section). Safe to drop back to `allow write: if false` once the
+    // migration has been run and confirmed.
+    match /places/{id} {
+      allow read: if isSignedIn();
+      allow create, update: if false;
+      allow delete: if isAdmin();
+    }
+
+    // The retired/renamed destination for the old `places` collection
+    // above (see admin/migrate-places.html) — not yet read by any
+    // Flutter code; CatalogRepository's [_places] getter now points here
+    // instead of `places`. `create`/`delete` are admin-only so the
+    // migration tool can populate and, if ever needed again, clear it;
+    // `update` stays false to preserve the scraped dataset's immutability,
+    // matching the original `places` design intent above.
+    match /catalog_places/{id} {
+      allow read: if isSignedIn();
+      allow create, delete: if isAdmin();
+      allow update: if false;
+    }
+
     // ---------------- Insurance (admin_web partner console + Flutter app) --
     // Plans are authored in the admin/partner web console (admin_web/); the
     // Flutter app only ever reads them. admins/{uid} and
     // insurance_partners/{uid} are role-marker docs — the same pattern
     // admin_web's requireRole() already assumes (a doc keyed by the
-    // signed-in user's own uid means they hold that role).
-    function isAdmin() {
-      return isSignedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
-    }
-    function isInsurancePartner() {
-      return isSignedIn() && exists(/databases/$(database)/documents/insurance_partners/$(request.auth.uid));
-    }
+    // signed-in user's own uid means they hold that role). isAdmin()/
+    // isInsurancePartner() themselves are defined up top now, alongside
+    // isSignedIn()/isOwner(), so earlier rules can use them too.
 
     match /admins/{uid} {
-      allow read: if isSignedIn();
       // No self-serve admin signup — an admin marker doc can only be
       // created by an existing admin (the very first one is provisioned
       // directly in Firebase Console, outside client rules).
+      allow read: if isSignedIn();
       allow create, update: if isAdmin();
       allow delete: if false;
     }
@@ -250,6 +417,23 @@ service cloud.firestore {
     match /claims/{id} {
       // Same shape as insurance_transactions above — a rider files their
       // own claim, or a partner/admin logs one on the console.
+      allow read: if isSignedIn() && (
+        resource.data.buyerId == request.auth.uid || isAdmin() ||
+        (isInsurancePartner() && resource.data.partnerId == request.auth.uid)
+      );
+      allow create: if isSignedIn() && (
+        request.resource.data.buyerId == request.auth.uid || isAdmin() || isInsurancePartner()
+      );
+      allow update: if isAdmin() ||
+        (isInsurancePartner() && resource.data.partnerId == request.auth.uid);
+      allow delete: if false;
+    }
+
+    // A refund is its own thing, not a claim — e.g. a premium refund for a
+    // cancelled policy, or a duplicate-payment refund — tracked separately
+    // from claims so the two can be reported on independently (claim vs.
+    // refund counts/approval rates). Same access shape as claims/{id}.
+    match /refunds/{id} {
       allow read: if isSignedIn() && (
         resource.data.buyerId == request.auth.uid || isAdmin() ||
         (isInsurancePartner() && resource.data.partnerId == request.auth.uid)

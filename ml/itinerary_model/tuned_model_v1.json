@@ -1,0 +1,8 @@
+{
+  "job": "projects/1020854066179/locations/us-central1/tuningJobs/2134339957152546816",
+  "base_model": "gemini-3.5-flash",
+  "endpoint": "projects/1020854066179/locations/us/endpoints/6652590705812176896",
+  "model": "projects/1020854066179/locations/us/models/6769613927379632128@1",
+  "epochs": 3,
+  "adapter_size": 4
+}

@@ -171,7 +171,12 @@ table.data-table { width: 100%; border-collapse: collapse; font-size: 14px; min-
 
 /* ---------------- Tabs ---------------- */
 .tabs { display: flex; gap: 6px; border-bottom: 1px solid var(--border); margin-bottom: 22px; }
-.tab-btn { padding: 12px 6px; margin-right: 20px; font-weight: 700; font-size: 14px; color: var(--text-500); border-bottom: 2px solid transparent; }
+.tab-btn {
+  padding: 12px 6px; margin-right: 20px; font-weight: 700; font-size: 14px; color: var(--text-500);
+  background: none; border: none; border-radius: 0; border-bottom: 2px solid transparent;
+  cursor: pointer; transition: color .15s ease, border-color .15s ease;
+}
+.tab-btn:hover { color: var(--navy-800); }
 .tab-btn.active { color: var(--navy-800); border-color: var(--teal-600); }
 
 /* ---------------- Misc ---------------- */

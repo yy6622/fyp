@@ -4,16 +4,16 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Register — Voya Insurance Partner</title>
-<link rel="stylesheet" href="../css/tokens.css" />
-<link rel="stylesheet" href="../css/base.css" />
-<link rel="stylesheet" href="../css/components.css" />
-<link rel="stylesheet" href="../css/auth.css" />
+<link rel="stylesheet" href="../css/tokens.css?v=20261006b" />
+<link rel="stylesheet" href="../css/base.css?v=20261006b" />
+<link rel="stylesheet" href="../css/components.css?v=20261006b" />
+<link rel="stylesheet" href="../css/auth.css?v=20261006b" />
 <style>.auth-card{max-width:520px;}</style>
 </head>
 <body>
 <div class="auth-shell">
   <div class="auth-side">
-    <div class="brand">Voya</div>
+    <img class="brand" src="../img/voya-logo-white.png" alt="Voya" />
     <h1>Bring your cover to every traveller.</h1>
     <p class="lede">Register your organization to list plans, manage transactions, and handle claims on Voya.</p>
     <div class="auth-points">
@@ -57,9 +57,9 @@
 </div>
 
 <script type="module">
-import { mountIcons } from "../js/icons.js";
-import { registerWithRole, authErrorMessage } from "../js/auth-guard.js";
-import { setBusy } from "../js/ui.js";
+import { mountIcons } from "../js/icons.js?v=20261007";
+import { registerWithRole, authErrorMessage } from "../js/auth-guard.js?v=20261007";
+import { setBusy } from "../js/ui.js?v=20261007";
 
 mountIcons(document);
 const errBox = document.getElementById("authError");

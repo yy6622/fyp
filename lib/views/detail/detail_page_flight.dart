@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../controllers/detail_page_controller.dart';
 import '../../repositories/trip_repository.dart';
+import '../../services/auth_service.dart';
 import '../../theme.dart';
 import 'detail_widgets.dart';
 
@@ -200,6 +201,7 @@ class _DetailPageFlightState extends State<DetailPageFlight> {
                             routeCode: '${widget.fromCode} → ${widget.toCode}',
                             routeCities: '${widget.fromCity} → ${widget.toCity}',
                             dateTime: '${widget.date} ${widget.depTime}',
+                            arrivalTime: '${widget.date} ${widget.arrTime}',
                             terminal: '',
                             // The real Stripe PaymentIntent id this charge
                             // went through under — a genuine reference tied
@@ -210,7 +212,9 @@ class _DetailPageFlightState extends State<DetailPageFlight> {
                             passengerDetails: confirmation.passengerDetails,
                             contactEmail: confirmation.contactEmail,
                             contactPhone: confirmation.contactPhone,
+                            forMemberUids: confirmation.forMemberUids,
                           ),
+                          actorUid: AuthService.instance.currentUser?.uid,
                         ),
               ),
             ],

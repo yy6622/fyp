@@ -4,16 +4,16 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>System Settings — Voya Admin</title>
-<link rel="stylesheet" href="../css/tokens.css" />
-<link rel="stylesheet" href="../css/base.css" />
-<link rel="stylesheet" href="../css/layout.css" />
-<link rel="stylesheet" href="../css/components.css" />
+<link rel="stylesheet" href="../css/tokens.css?v=20261006b" />
+<link rel="stylesheet" href="../css/base.css?v=20261006b" />
+<link rel="stylesheet" href="../css/layout.css?v=20261006b" />
+<link rel="stylesheet" href="../css/components.css?v=20261006b" />
 </head>
 <body>
 <div class="shell">
   <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
   <aside class="sidebar" id="sidebar">
-    <div class="sidebar-brand">Voya</div>
+    <img class="sidebar-brand" src="../img/voya-logo-white.png" alt="Voya" />
     <div class="sidebar-user">
       <div class="name" id="sbUserName">Loading…</div>
       <div class="role" id="sbUserRole">Administrator</div>
@@ -27,18 +27,7 @@
       <div>
         <button class="menu-toggle" id="menuToggle"><span data-icon="menu"></span></button>
         <h1 class="h1">System Settings</h1>
-        <p class="subtitle">Admin accounts, partner approvals, and platform info</p>
-      </div>
-    </div>
-
-    <div class="card card-pad" style="margin-bottom:20px;">
-      <div class="section-head"><h3 class="h3">Partner approvals</h3></div>
-      <p class="subtitle" style="margin-bottom:16px;">New insurance partners land here as "Pending" until you approve them — approval is required before they can publish plans or handle claims.</p>
-      <div class="table-wrap scroll-x">
-        <table class="data-table">
-          <thead><tr><th>Organization</th><th>Email</th><th>Registered</th><th>Status</th><th></th></tr></thead>
-          <tbody id="partnersBody"><tr><td colspan="5"><div class="skeleton" style="height:36px;"></div></td></tr></tbody>
-        </table>
+        <p class="subtitle">Admin accounts and platform info</p>
       </div>
     </div>
 
@@ -70,16 +59,15 @@
 </div>
 
 <script type="module">
-import { requireRole } from "../js/auth-guard.js";
-import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js";
-import { mountIcons } from "../js/icons.js";
-import { listPartners, listAdmins, setPartnerStatus } from "../js/data.js";
-import { clearDemoData } from "../js/seed.js";
-import { fullDate, statusBadge, escapeHtml, toast, setBusy, confirmDialog } from "../js/ui.js";
+import { requireRole } from "../js/auth-guard.js?v=20261007e";
+import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261007e";
+import { mountIcons } from "../js/icons.js?v=20261007e";
+import { listAdmins } from "../js/data.js?v=20261007e";
+import { clearDemoData } from "../js/seed.js?v=20261007e";
+import { fullDate, escapeHtml, toast, setBusy, confirmDialog } from "../js/ui.js?v=20261007e";
 
 mountSidebarNav({ role: "admin", active: "settings" });
 const session = await requireRole("admin", "login.html");
-let partners = [];
 
 if (session) {
   setSidebarUser({ displayName: session.profile.name || "Admin", roleLabel: "Administrator" });
@@ -88,33 +76,11 @@ if (session) {
 }
 
 async function load() {
-  const [p, a] = await Promise.all([listPartners(), listAdmins()]);
-  partners = p;
-  renderPartners();
+  const a = await listAdmins();
   document.getElementById("adminsBody").innerHTML = a.length
     ? a.map((x) => `<tr><td class="cell-strong">${escapeHtml(x.name || "—")}</td><td class="muted">${escapeHtml(x.email || "—")}</td><td class="muted">${fullDate(x.createdAt)}</td></tr>`).join("")
     : `<tr><td colspan="3" class="muted" style="text-align:center;padding:24px 0;">No admin accounts found.</td></tr>`;
   mountIcons(document);
-}
-
-function renderPartners() {
-  const body = document.getElementById("partnersBody");
-  body.innerHTML = partners.length
-    ? partners.map((p) => `
-        <tr>
-          <td class="cell-strong">${escapeHtml(p.companyName || "—")}</td>
-          <td class="muted">${escapeHtml(p.email || "—")}</td>
-          <td class="muted">${fullDate(p.createdAt)}</td>
-          <td>${statusBadge(p.status === "approved" ? "active" : p.status)}</td>
-          <td>
-            <div class="row-actions">
-              ${p.status !== "approved" ? `<button class="btn btn-primary btn-sm" data-approve="${p.id}">Approve</button>` : `<button class="btn btn-danger-outline btn-sm" data-suspend="${p.id}">Suspend</button>`}
-            </div>
-          </td>
-        </tr>`).join("")
-    : `<tr><td colspan="5" class="muted" style="text-align:center;padding:24px 0;">No insurance partners have registered yet.</td></tr>`;
-  body.querySelectorAll("[data-approve]").forEach((b) => b.addEventListener("click", () => setStatus(b.dataset.approve, "approved", b)));
-  body.querySelectorAll("[data-suspend]").forEach((b) => b.addEventListener("click", () => setStatus(b.dataset.suspend, "suspended", b)));
 }
 
 document.getElementById("clearBtn").addEventListener("click", async (e) => {
@@ -130,25 +96,6 @@ document.getElementById("clearBtn").addEventListener("click", async (e) => {
     setBusy(e.currentTarget, false);
   }
 });
-
-async function setStatus(uid, status, btn) {
-  if (status === "suspended") {
-    const ok = await confirmDialog({ title: "Suspend this partner?", body: "They'll lose access to publish plans or handle claims until re-approved.", confirmText: "Suspend", danger: true });
-    if (!ok) return;
-  }
-  setBusy(btn, true, "Working…");
-  try {
-    await setPartnerStatus(uid, status);
-    const p = partners.find((x) => x.id === uid);
-    if (p) p.status = status;
-    renderPartners();
-    mountIcons(document);
-    toast(status === "approved" ? "Partner approved." : "Partner suspended.", "success");
-  } catch (err) {
-    toast(err.message || "Couldn't update partner.", "error");
-    setBusy(btn, false);
-  }
-}
 </script>
 </body>
 </html>

@@ -1,0 +1,1287 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Reports — Voya Admin</title>
+<link rel="stylesheet" href="../css/tokens.css?v=20261006b" />
+<link rel="stylesheet" href="../css/base.css?v=20261006b" />
+<link rel="stylesheet" href="../css/layout.css?v=20261006b" />
+<link rel="stylesheet" href="../css/components.css?v=20261006b" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.5.1/chart.umd.min.js"></script>
+</head>
+<body>
+<div class="shell">
+  <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+  <aside class="sidebar" id="sidebar">
+    <img class="sidebar-brand" src="../img/voya-logo-white.png" alt="Voya" />
+    <div class="sidebar-user">
+      <div class="name" id="sbUserName">Loading…</div>
+      <div class="role" id="sbUserRole">Administrator</div>
+    </div>
+    <nav class="nav" id="sidebarNav"></nav>
+    <button class="sidebar-logout" id="logoutBtn"><span data-icon="log-out"></span>Log out</button>
+  </aside>
+
+  <main class="content">
+    <div class="topbar">
+      <div>
+        <button class="menu-toggle" id="menuToggle"><span data-icon="menu"></span></button>
+        <h1 class="h1">Reports</h1>
+        <p class="subtitle">Select a report category, then preview and export</p>
+      </div>
+      <div class="inline-flex" style="gap:10px;" id="exportButtons">
+        <button class="btn btn-outline" id="exportExcelBtn"><span data-icon="download"></span>Export Excel</button>
+        <button class="btn btn-primary" id="exportPdfBtn"><span data-icon="download"></span>Export PDF</button>
+      </div>
+    </div>
+
+    <div class="tabs" id="categoryTabs">
+      <button class="tab-btn active" data-cat="overview">Platform Overview</button>
+      <button class="tab-btn" data-cat="posts">Community Post Analysis</button>
+      <button class="tab-btn" data-cat="insurance">Insurance Operations</button>
+      <button class="tab-btn" data-cat="users">User Account Reports</button>
+    </div>
+
+    <div id="reportBody">
+      <div class="skeleton" style="height:200px;"></div>
+    </div>
+  </main>
+</div>
+
+<script type="module">
+import { requireRole } from "../js/auth-guard.js?v=20261007f";
+import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261007f";
+import { mountIcons } from "../js/icons.js?v=20261007f";
+import { listTransactions, listClaims, listRefunds, listPlans, listPartners, listUsers, listAllPosts, listPostViewStats, listPostViewers } from "../js/data.js?v=20261007f";
+import { money, moneyExact, number, escapeHtml, renderComparisonBars } from "../js/ui.js?v=20261007f";
+import { exportReportPdf, exportReportExcel } from "../js/report-export.js?v=20261007f";
+
+mountSidebarNav({ role: "admin", active: "reports" });
+const session = await requireRole("admin", "login.html");
+let category = "overview";
+// Which sub-page of "User Account Reports" is showing — the spec keeps
+// Traveller and Insurance Partner on separate detailed pages rather than
+// one combined table, so the volume difference between the two account
+// types doesn't drown the (much smaller) partner numbers out.
+let uarSubTab = "traveller";
+let data = null; // last computed report model for the active category, for export
+
+if (session) {
+  setSidebarUser({ displayName: session.profile.name || "Admin", roleLabel: "Administrator" });
+  wireTabs();
+  await render();
+}
+
+function wireTabs() {
+  document.querySelectorAll("#categoryTabs .tab-btn").forEach((b) => b.addEventListener("click", async () => {
+    if (b.dataset.cat === category) return;
+    category = b.dataset.cat;
+    document.querySelectorAll("#categoryTabs .tab-btn").forEach((t) => t.classList.toggle("active", t === b));
+    await render();
+  }));
+}
+
+async function render() {
+  data = null;
+  document.getElementById("exportButtons").style.display =
+    (category === "insurance" || category === "overview" || category === "posts" || category === "users") ? "flex" : "none";
+  if (category === "overview") {
+    document.getElementById("reportBody").innerHTML = `<div class="skeleton" style="height:200px;"></div>`;
+    await renderPlatformOverview();
+  } else if (category === "insurance") {
+    document.getElementById("reportBody").innerHTML = `<div class="skeleton" style="height:200px;"></div>`;
+    await renderInsuranceOperations();
+  } else if (category === "posts") {
+    document.getElementById("reportBody").innerHTML = `<div class="skeleton" style="height:200px;"></div>`;
+    await renderCommunityPostAnalysis();
+  } else if (category === "users") {
+    document.getElementById("reportBody").innerHTML = `<div class="skeleton" style="height:200px;"></div>`;
+    await renderUserAccountReports();
+  }
+}
+
+function statCard(label, value, icon, delta) {
+  const deltaHtml = delta ? `<div class="stat-delta${delta.up === false ? " down" : ""}">${delta.text}</div>` : "";
+  return `<div class="card stat-card"><div class="stat-top"><div class="stat-icon"><span data-icon="${icon}"></span></div><div class="stat-label">${label}</div></div><div class="stat-value">${value}</div>${deltaHtml}</div>`;
+}
+
+/** Start (inclusive) / end (exclusive) of the calendar month `monthsAgo`
+ * months before the current one — monthsAgo=0 is this month, 1 is last
+ * month. Shared by every delta computation below. */
+function monthBounds(monthsAgo = 0) {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth() - monthsAgo, 1);
+  const end = new Date(now.getFullYear(), now.getMonth() - monthsAgo + 1, 1);
+  return { start, end };
+}
+
+/** Real "vs last month" delta for a stat card — replaces what used to be
+ * a hardcoded "↑ 2.4%" on every card. `current`/`previous` are whatever
+ * comparable pair the caller computed (a monthly flow, or a point-in-time
+ * count as of a month ago — see each load*() function for which, since
+ * that differs per metric). Returns null when there's no honest baseline
+ * to compare against, so the caller omits the delta line entirely rather
+ * than show a placeholder. */
+function monthDelta(current, previous) {
+  if (current === null || current === undefined || previous === null || previous === undefined) return null;
+  if (previous === 0) return current === 0 ? null : { text: "New this month", up: true };
+  const pct = ((current - previous) / previous) * 100;
+  if (Math.abs(pct) < 0.05) return { text: "No change from last month", up: true };
+  const up = pct > 0;
+  return { text: `${up ? "↑" : "↓"} ${Math.abs(pct).toFixed(1)}% from last month`, up };
+}
+
+/** Same as [monthDelta], but for a value that's already a percentage
+ * (e.g. an approval rate) — shown as a point difference rather than a
+ * relative percentage change of a percentage, which would read as
+ * confusing (e.g. "40% → 44%" is "+4 pts", not "+10%"). */
+function pointDelta(current, previous) {
+  if (current === null || current === undefined || previous === null || previous === undefined) return null;
+  const diff = current - previous;
+  if (Math.abs(diff) < 0.05) return { text: "No change from last month", up: true };
+  const up = diff > 0;
+  return { text: `${up ? "↑" : "↓"} ${Math.abs(diff).toFixed(1)} pts from last month`, up };
+}
+
+/** Sums valueFn(item) over items whose [dateField] Timestamp falls inside
+ * the calendar month `monthsAgo` months before now (0 = this month, 1 =
+ * last month) — the building block for every "monthly flow" delta
+ * (revenue, purchase count, post views, ...). */
+function sumInMonth(items, dateField, valueFn, monthsAgo) {
+  const { start, end } = monthBounds(monthsAgo);
+  return items.reduce((s, item) => {
+    const d = item[dateField]?.toDate ? item[dateField].toDate() : null;
+    if (!d || d < start || d >= end) return s;
+    return s + valueFn(item);
+  }, 0);
+}
+function countInMonth(items, dateField, monthsAgo) {
+  return sumInMonth(items, dateField, () => 1, monthsAgo);
+}
+
+/** Counts items whose [dateField] Timestamp is strictly before `cutoff` —
+ * the building block for every "cumulative total as of a month ago"
+ * delta (registered partners, published posts, ...). */
+function countBefore(items, dateField, cutoff) {
+  return items.filter((item) => {
+    const d = item[dateField]?.toDate ? item[dateField].toDate() : null;
+    return d && d < cutoff;
+  }).length;
+}
+
+/** Counts items whose [dateField] Timestamp falls inside [start, end) —
+ * used by User Account Reports' cohort/month-bucket logic below, where
+ * countInMonth's fixed "N months ago" framing doesn't fit (that report is
+ * year-to-date, not a rolling window). */
+function countBetween(items, dateField, start, end) {
+  return items.filter((item) => {
+    const d = item[dateField]?.toDate ? item[dateField].toDate() : null;
+    return d && d >= start && d < end;
+  }).length;
+}
+
+/** January 1st of the current year through the start of the current month
+ * — the annual framing User Account Reports uses (distinct from the 6/12
+ * -month rolling window the other report tabs use), as one `{label, start,
+ * end}` bound per month so callers can both count a monthly cohort and
+ * sum/label a chart from the same list. */
+function yearToDateMonths() {
+  const now = new Date();
+  const months = [];
+  for (let m = 0; m <= now.getMonth(); m++) {
+    const start = new Date(now.getFullYear(), m, 1);
+    const end = new Date(now.getFullYear(), m + 1, 1);
+    months.push({ label: start.toLocaleDateString("en-MY", { month: "short", year: "numeric" }), start, end });
+  }
+  return months;
+}
+function plainCard(label, value) {
+  return `<div class="card stat-card"><div class="stat-label">${label}</div><div class="stat-value">${value}</div></div>`;
+}
+
+/** Shared failure state for every report tab's load*() function — a
+ * permission-denied read (e.g. Firestore rules not deployed yet) or any
+ * other fetch error used to leave the tab stuck on its grey skeleton
+ * forever with no indication anything had gone wrong. This replaces that
+ * with a visible message instead. */
+function renderLoadError(err) {
+  document.getElementById("reportBody").innerHTML = `
+    <div class="card card-pad">
+      <div class="empty-state" style="padding:40px 0;">
+        <span data-icon="alert-triangle" class="icon-lg"></span>
+        <div class="h3">Couldn't load this report</div>
+        <p class="small">${escapeHtml(err?.message || "Something went wrong — check your connection and try again.")}</p>
+      </div>
+    </div>`;
+  mountIcons(document);
+}
+
+/** General platform KPIs — absorbs the old standalone Analytics & Reporting
+ * page, folded in here as a tab so the sidebar doesn't carry two
+ * near-identical "reports" entries. Same metrics/logic that page had. */
+async function renderPlatformOverview() {
+  document.getElementById("reportBody").innerHTML = `
+    <div class="stat-grid" id="ovStatGrid"><div class="skeleton" style="height:90px;grid-column:1/-1;"></div></div>
+    <div style="display:grid;grid-template-columns:1.6fr 1fr;gap:20px;align-items:start;" class="detail-grid">
+      <div class="card card-pad">
+        <h3 class="h3" style="margin-bottom:18px;">Revenue & Policy Trend</h3>
+        <div class="bars" id="ovTrendBars"></div>
+        <div class="bars-labels" id="ovTrendLabels"></div>
+      </div>
+      <div class="card card-pad">
+        <h3 class="h3" style="margin-bottom:18px;">Top Insurance Partners</h3>
+        <div class="rank-list" id="ovPartnerRank"></div>
+      </div>
+    </div>
+    <div class="card card-pad" style="margin-top:20px;">
+      <h3 class="h3" style="margin-bottom:18px;">Top Destinations</h3>
+      <div class="table-wrap scroll-x" style="border:none;">
+        <table class="data-table">
+          <thead><tr><th>Destination</th><th>Policies</th><th>Revenue</th><th>Share</th></tr></thead>
+          <tbody id="ovDestBody"></tbody>
+        </table>
+      </div>
+    </div>`;
+  await loadPlatformOverview();
+}
+
+async function loadPlatformOverview() {
+  let txns, claims, users;
+  try {
+    [txns, claims, users] = await Promise.all([listTransactions(), listClaims(), listUsers()]);
+  } catch (err) {
+    renderLoadError(err);
+    return;
+  }
+  const paid = txns.filter((t) => t.status === "paid");
+  const revenue = paid.reduce((s, t) => s + (Number(t.premium) || 0), 0);
+  const approvedCount = claims.filter((c) => c.status === "approved").length;
+  const approvalRate = claims.length ? Math.round((approvedCount / claims.length) * 1000) / 10 : 0;
+  const activeTravellers = users.filter((u) => u.status !== "suspended").length;
+
+  // Real month-over-month deltas (see monthDelta/pointDelta/sumInMonth/
+  // countBefore above the renderPlatformOverview section). Revenue and
+  // Policies sold compare this calendar month's flow to last month's;
+  // Claims approved compares this month's resolution rate to last
+  // month's, in percentage points. Active travellers has no historical
+  // suspension record to replay (status is current-only), so its delta
+  // approximates "how many of today's active travellers had already
+  // signed up before this month" — real signup dates, just not a true
+  // historical snapshot of who was active back then.
+  const { start: ovThisMonthStart } = monthBounds(0);
+  const revenueDelta = monthDelta(
+    sumInMonth(paid, "createdAt", (t) => Number(t.premium) || 0, 0),
+    sumInMonth(paid, "createdAt", (t) => Number(t.premium) || 0, 1),
+  );
+  const policiesDelta = monthDelta(countInMonth(paid, "createdAt", 0), countInMonth(paid, "createdAt", 1));
+  const { start: lastMonthStart, end: lastMonthEnd } = monthBounds(1);
+  const claimDateOf = (c) => (c.createdAt?.toDate ? c.createdAt.toDate() : null);
+  const claimsThisMonth = claims.filter((c) => { const d = claimDateOf(c); return d && d >= ovThisMonthStart; });
+  const claimsLastMonth = claims.filter((c) => { const d = claimDateOf(c); return d && d >= lastMonthStart && d < lastMonthEnd; });
+  const approvalRateOf = (list) => (list.length ? Math.round((list.filter((c) => c.status === "approved").length / list.length) * 1000) / 10 : null);
+  const approvalRateDelta = pointDelta(approvalRateOf(claimsThisMonth), approvalRateOf(claimsLastMonth));
+  const activeTravellersDelta = monthDelta(
+    activeTravellers,
+    users.filter((u) => {
+      if (u.status === "suspended") return false;
+      const d = u.createdAt?.toDate ? u.createdAt.toDate() : null;
+      return d && d < ovThisMonthStart;
+    }).length,
+  );
+
+  document.getElementById("ovStatGrid").innerHTML = [
+    statCard("Revenue", money(revenue), "coin", revenueDelta),
+    statCard("Policies sold", number(paid.length), "shield-check", policiesDelta),
+    statCard("Claims approved", `${approvalRate}%`, "check-circle", approvalRateDelta),
+    statCard("Active travellers", number(activeTravellers), "user", activeTravellersDelta),
+  ].join("");
+
+  const months = [];
+  const now = new Date();
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    months.push({ label: d.toLocaleDateString("en-MY", { month: "short" }), key: `${d.getFullYear()}-${d.getMonth()}`, revenue: 0 });
+  }
+  paid.forEach((t) => {
+    if (!t.createdAt?.toDate) return;
+    const d = t.createdAt.toDate();
+    const m = months.find((m) => m.key === `${d.getFullYear()}-${d.getMonth()}`);
+    if (m) m.revenue += Number(t.premium) || 0;
+  });
+  const maxRev = Math.max(1, ...months.map((m) => m.revenue));
+  document.getElementById("ovTrendBars").innerHTML = months.map((m, i) => `<div class="bar-col"><div class="bar${i % 2 ? " alt" : ""}" style="height:${Math.max(6, (m.revenue / maxRev) * 100)}%"></div></div>`).join("");
+  document.getElementById("ovTrendLabels").innerHTML = months.map((m) => `<span>${m.label}</span>`).join("");
+
+  // Top insurance partners by revenue. "Sales by Channel" used to live
+  // here, but every real mobile-app purchase writes channel: "Mobile App"
+  // (see lib/repositories/insurance_repository.dart) — only demo-seeded
+  // rows ever vary it — so that chart collapsed to one meaningless,
+  // unlabeled full-height bar once real data was in play. Partner/provider
+  // genuinely varies, and this shows the real policy count + revenue per
+  // partner as text, not just a bar with no visible number.
+  const byProvider = {};
+  paid.forEach((t) => {
+    const name = t.providerName || "Unknown provider";
+    byProvider[name] = byProvider[name] || { policies: 0, revenue: 0 };
+    byProvider[name].policies++;
+    byProvider[name].revenue += Number(t.premium) || 0;
+  });
+  const providerEntries = Object.entries(byProvider).sort((a, b) => b[1].revenue - a[1].revenue).slice(0, 5);
+  document.getElementById("ovPartnerRank").innerHTML = providerEntries.length
+    ? providerEntries.map(([name, d], i) => `
+        <div class="rank-row">
+          <div class="rank-num">${i + 1}</div>
+          <div><div class="rank-name">${escapeHtml(name)}</div><div class="rank-sub">${number(d.policies)} polic${d.policies === 1 ? "y" : "ies"} · ${moneyExact(d.revenue)}</div></div>
+        </div>`).join("")
+    : `<p class="muted small" style="padding:20px 0;">No policy sales recorded yet.</p>`;
+
+  const byDest = {};
+  paid.forEach((t) => {
+    const dest = t.destination || "Unspecified";
+    byDest[dest] = byDest[dest] || { policies: 0, revenue: 0 };
+    byDest[dest].policies++;
+    byDest[dest].revenue += Number(t.premium) || 0;
+  });
+  const totalRevenue = Object.values(byDest).reduce((s, d) => s + d.revenue, 0) || 1;
+  const destRows = Object.entries(byDest).sort((a, b) => b[1].revenue - a[1].revenue).slice(0, 6)
+    .map(([dest, d]) => ({ dest, policies: d.policies, revenue: d.revenue, share: (d.revenue / totalRevenue) * 100 }));
+  document.getElementById("ovDestBody").innerHTML = destRows.length
+    ? destRows.map((r) => `
+        <tr>
+          <td class="cell-strong">${escapeHtml(r.dest)}</td>
+          <td class="muted">${number(r.policies)}</td>
+          <td class="muted">${moneyExact(r.revenue)}</td>
+          <td class="muted">${r.share.toFixed(1)}%</td>
+        </tr>`).join("")
+    : `<tr><td colspan="4" class="muted" style="text-align:center;padding:30px 0;">No policy sales recorded yet.</td></tr>`;
+
+  mountIcons(document);
+
+  data = {
+    stats: { revenue, policiesSold: paid.length, approvalRate, activeTravellers },
+    months, providerEntries, destRows,
+    period: { start: monthBounds(5).start, end: new Date() },
+  };
+}
+
+/** Same planId-first, name-fallback match used on the partner side (see
+ * partner/reports.html) — real mobile purchases always carry planId;
+ * console-seeded demo data falls back to a plan-name match. */
+function belongsToPlan(item, plan) {
+  if (item.planId) return item.planId === plan.id;
+  return (item.planName || "").trim().toLowerCase() === (plan.name || "").trim().toLowerCase();
+}
+
+function avgProcessingDays(items) {
+  const diffs = items
+    .filter((i) => i.status === "approved" || i.status === "rejected")
+    .map((i) => {
+      const created = i.createdAt?.toDate ? i.createdAt.toDate() : null;
+      const entry = (i.timeline || []).find((t) => t.status === i.status);
+      const resolvedAt = entry ? new Date(entry.at) : (i.updatedAt?.toDate ? i.updatedAt.toDate() : null);
+      if (!created || !resolvedAt || isNaN(resolvedAt)) return null;
+      return Math.max(0, (resolvedAt - created) / 86400000);
+    })
+    .filter((d) => d !== null);
+  if (!diffs.length) return null;
+  return diffs.reduce((s, d) => s + d, 0) / diffs.length;
+}
+
+const STATUS_ROWS = [["new", "Pending"], ["under_review", "In Progress"], ["approved", "Approved"], ["rejected", "Rejected"]];
+
+async function renderInsuranceOperations() {
+  document.getElementById("reportBody").innerHTML = `
+    <div class="filter-bar">
+      <select class="select" id="rangeFilter">
+        <option value="6">Last 6 months</option>
+        <option value="12">Last 12 months</option>
+      </select>
+      <p class="small muted" id="asOfLabel" style="margin-left:auto;">As of ${new Date().toLocaleDateString("en-MY", { day: "numeric", month: "long", year: "numeric" })}</p>
+    </div>
+    <div class="stat-grid" id="statGrid"><div class="skeleton" style="height:90px;grid-column:1/-1;"></div></div>
+    <div style="display:grid;grid-template-columns:1.4fr 1fr;gap:20px;align-items:start;" class="detail-grid">
+      <div class="card card-pad">
+        <h3 class="h3" style="margin-bottom:18px;">Monthly Insurance Purchases</h3>
+        <div class="bars" id="purchaseBars"></div>
+        <div class="bars-labels" id="purchaseLabels"></div>
+      </div>
+      <div class="card card-pad">
+        <h3 class="h3" style="margin-bottom:6px;">Claim & Refund Status Distribution</h3>
+        <div id="statusChart"></div>
+      </div>
+    </div>
+    <div class="card card-pad" style="margin-top:20px;">
+      <h3 class="h3" style="margin-bottom:16px;">Insurance Provider Summary</h3>
+      <div class="table-wrap scroll-x" style="border:none;">
+        <table class="data-table">
+          <thead><tr><th>Provider</th><th>Active plans</th><th>Purchases</th><th>Value</th><th>Claims</th><th>Refunds</th><th>Avg. processing</th></tr></thead>
+          <tbody id="providerBody"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card card-pad" style="margin-top:20px;">
+      <h3 class="h3" style="margin-bottom:16px;">Administrative Control Summary</h3>
+      <div class="stat-grid" id="summaryGrid" style="margin-bottom:0;"></div>
+    </div>`;
+  document.getElementById("rangeFilter").addEventListener("change", loadInsuranceOperations);
+  await loadInsuranceOperations();
+}
+
+async function loadInsuranceOperations() {
+  const months = Number(document.getElementById("rangeFilter").value);
+  let txns, claims, refunds, plans, partners;
+  try {
+    [txns, claims, refunds, plans, partners] = await Promise.all([
+      listTransactions(), listClaims(), listRefunds(), listPlans(), listPartners(),
+    ]);
+  } catch (err) {
+    renderLoadError(err);
+    return;
+  }
+  const paid = txns.filter((t) => t.status === "paid");
+  const value = paid.reduce((s, t) => s + (Number(t.premium) || 0), 0);
+  const activePlans = plans.filter((p) => p.status === "active");
+  const pendingClaims = claims.filter((c) => c.status === "new" || c.status === "under_review").length;
+  const pendingRefunds = refunds.filter((r) => r.status === "new" || r.status === "under_review").length;
+
+  // Real month-over-month deltas (see monthDelta/sumInMonth/countBefore,
+  // defined above renderPlatformOverview). Registered partners is a
+  // cumulative total-to-date comparison. Active plans has no historical
+  // status record to replay (status is current-only, same limitation as
+  // Active travellers on the Platform Overview tab), so its delta
+  // approximates "how many of today's active plans already existed
+  // before this month". Total purchases/Transaction value compare this
+  // month's flow to last month's.
+  const { start: ioThisMonthStart } = monthBounds(0);
+  const partnersDelta = monthDelta(partners.length, countBefore(partners, "createdAt", ioThisMonthStart));
+  const activePlansDelta = monthDelta(
+    activePlans.length,
+    activePlans.filter((p) => { const d = p.createdAt?.toDate ? p.createdAt.toDate() : null; return d && d < ioThisMonthStart; }).length,
+  );
+  const purchasesDelta = monthDelta(countInMonth(paid, "createdAt", 0), countInMonth(paid, "createdAt", 1));
+  const valueDelta = monthDelta(
+    sumInMonth(paid, "createdAt", (t) => Number(t.premium) || 0, 0),
+    sumInMonth(paid, "createdAt", (t) => Number(t.premium) || 0, 1),
+  );
+
+  document.getElementById("statGrid").innerHTML = [
+    statCard("Registered partners", number(partners.length), "briefcase", partnersDelta),
+    statCard("Active plans", number(activePlans.length), "shield-check", activePlansDelta),
+    statCard("Total purchases", number(paid.length), "swap", purchasesDelta),
+    statCard("Transaction value", money(value), "coin", valueDelta),
+  ].join("");
+
+  const monthList = [];
+  const now = new Date();
+  for (let i = months - 1; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    monthList.push({ label: d.toLocaleDateString("en-MY", { month: "short" }), key: `${d.getFullYear()}-${d.getMonth()}`, count: 0 });
+  }
+  paid.forEach((t) => {
+    if (!t.createdAt?.toDate) return;
+    const d = t.createdAt.toDate();
+    const m = monthList.find((m) => m.key === `${d.getFullYear()}-${d.getMonth()}`);
+    if (m) m.count++;
+  });
+  const maxCount = Math.max(1, ...monthList.map((m) => m.count));
+  document.getElementById("purchaseBars").innerHTML = monthList.map((m, i) => `<div class="bar-col"><div class="bar${i % 2 ? " alt" : ""}" style="height:${Math.max(6, (m.count / maxCount) * 100)}%"></div></div>`).join("");
+  document.getElementById("purchaseLabels").innerHTML = monthList.map((m) => `<span>${m.label}</span>`).join("");
+
+  const claimCounts = STATUS_ROWS.map(([k]) => claims.filter((c) => c.status === k).length);
+  const refundCounts = STATUS_ROWS.map(([k]) => refunds.filter((r) => r.status === k).length);
+  renderComparisonBars("statusChart", STATUS_ROWS.map(([, label], i) => ({ label, values: [claimCounts[i], refundCounts[i]] })), [
+    { label: "Claims", color: "var(--teal-600)" },
+    { label: "Refunds", color: "var(--accent-indigo)" },
+  ]);
+
+  const providerRows = partners.map((partner) => {
+    const providerPlans = plans.filter((p) => p.partnerId === partner.id);
+    const providerActivePlans = providerPlans.filter((p) => p.status === "active");
+    const providerTxns = paid.filter((t) => t.partnerId === partner.id);
+    const providerClaims = claims.filter((c) => c.partnerId === partner.id);
+    const providerRefunds = refunds.filter((r) => r.partnerId === partner.id);
+    return {
+      name: partner.companyName || partner.name || "Insurance Partner",
+      activePlans: providerActivePlans.length,
+      purchases: providerTxns.length,
+      value: providerTxns.reduce((s, t) => s + (Number(t.premium) || 0), 0),
+      claims: providerClaims.length,
+      refunds: providerRefunds.length,
+      avgDays: avgProcessingDays([...providerClaims, ...providerRefunds]),
+    };
+  });
+  document.getElementById("providerBody").innerHTML = providerRows.length
+    ? providerRows.map((r) => `
+        <tr>
+          <td class="cell-strong">${escapeHtml(r.name)}</td>
+          <td class="muted">${number(r.activePlans)}</td>
+          <td class="muted">${number(r.purchases)}</td>
+          <td class="muted">${moneyExact(r.value)}</td>
+          <td class="muted">${number(r.claims)}</td>
+          <td class="muted">${number(r.refunds)}</td>
+          <td class="muted">${r.avgDays === null ? "—" : r.avgDays.toFixed(1) + " days"}</td>
+        </tr>`).join("")
+    : `<tr><td colspan="7" class="muted" style="text-align:center;padding:24px 0;">No registered partners yet.</td></tr>`;
+
+  document.getElementById("summaryGrid").innerHTML = [
+    plainCard("Total claims", number(claims.length)),
+    plainCard("Total refunds", number(refunds.length)),
+    plainCard("Pending claims", number(pendingClaims)),
+    plainCard("Pending refunds", number(pendingRefunds)),
+  ].join("");
+
+  mountIcons(document);
+
+  data = {
+    stats: { partners: partners.length, activePlans: activePlans.length, purchases: paid.length, value, pendingClaims, pendingRefunds },
+    monthList, providerRows,
+    period: { start: monthBounds(months - 1).start, end: new Date() },
+    claimStatusCounts: claimCounts,
+    avgProcessingDaysAll: avgProcessingDays([...claims, ...refunds]),
+  };
+}
+
+/** Community Post Analysis Report — see Report Design spec. Post
+ * "destination" is the post's `location` field: the only place-ish value
+ * a post carries (set from the attached itinerary's title at compose
+ * time, or "Unknown" with nothing attached — see
+ * CommunityRepository.createPost). */
+async function renderCommunityPostAnalysis() {
+  document.getElementById("reportBody").innerHTML = `
+    <div class="filter-bar">
+      <select class="select" id="postsRangeFilter">
+        <option value="6">Last 6 months</option>
+        <option value="12">Last 12 months</option>
+      </select>
+      <p class="small muted" id="postsAsOfLabel" style="margin-left:auto;">As of ${new Date().toLocaleDateString("en-MY", { day: "numeric", month: "long", year: "numeric" })}</p>
+    </div>
+    <div class="stat-grid" id="postsStatGrid"><div class="skeleton" style="height:90px;grid-column:1/-1;"></div></div>
+    <div style="display:grid;grid-template-columns:1.4fr 1fr;gap:20px;align-items:start;" class="detail-grid">
+      <div class="card card-pad">
+        <h3 class="h3" style="margin-bottom:18px;">Monthly Post Views</h3>
+        <div class="bars" id="postsTrendBars"></div>
+        <div class="bars-labels" id="postsTrendLabels"></div>
+      </div>
+      <div class="card card-pad">
+        <h3 class="h3" style="margin-bottom:18px;">Views by Destination</h3>
+        <div class="bars" id="postsDestBars"></div>
+        <div class="bars-labels" id="postsDestLabels"></div>
+      </div>
+    </div>
+    <div class="card card-pad" style="margin-top:20px;">
+      <h3 class="h3" style="margin-bottom:16px;">Community Post Detail</h3>
+      <div class="table-wrap scroll-x" style="border:none;">
+        <table class="data-table">
+          <thead><tr><th>Post title</th><th>Destination</th><th>Total views</th><th>Unique viewers</th><th>Rating</th><th>User reports</th></tr></thead>
+          <tbody id="postsDetailBody"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card card-pad" style="margin-top:20px;">
+      <h3 class="h3" style="margin-bottom:16px;">Community Engagement Summary</h3>
+      <div class="stat-grid" id="postsEngagementGrid" style="margin-bottom:0;"></div>
+    </div>`;
+  document.getElementById("postsRangeFilter").addEventListener("change", loadCommunityPostAnalysis);
+  await loadCommunityPostAnalysis();
+}
+
+async function loadCommunityPostAnalysis() {
+  const months = Number(document.getElementById("postsRangeFilter").value);
+  let posts, viewStats, viewerRecords;
+  try {
+    [posts, viewStats, viewerRecords] = await Promise.all([listAllPosts(), listPostViewStats(), listPostViewers()]);
+  } catch (err) {
+    renderLoadError(err);
+    return;
+  }
+
+  const totalViews = posts.reduce((s, p) => s + (Number(p.viewCount) || 0), 0);
+  const totalUniqueViewers = new Set(viewerRecords.map((r) => r.id)).size;
+  const totalPosts = posts.length;
+  const allRatingValues = posts.flatMap((p) => Object.values(p.ratings || {}).map((v) => Number(v) || 0));
+  const avgRating = allRatingValues.length ? allRatingValues.reduce((s, v) => s + v, 0) / allRatingValues.length : 0;
+
+  // Monthly post-view aggregate (post_view_stats/{YYYY-MM}) — computed
+  // here, ahead of the stat grid, so both the "Total post views" delta
+  // below and the monthly chart further down can reuse it.
+  const statsByKey = {};
+  viewStats.forEach((s) => { statsByKey[s.id] = Number(s.viewCount) || 0; });
+  const keyFor = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+
+  // First-ever-viewed-anything date per uid, across every post they've
+  // opened (the min of their viewer-marker docs' firstViewedAt) — so a
+  // traveller who viewed 3 posts only counts once, at whenever the
+  // earliest of those three happened. Used only for the "Unique viewers"
+  // delta below (the headline total above stays a plain distinct count,
+  // so it's never short a viewer whose firstViewedAt hasn't synced yet).
+  const firstSeenByUid = {};
+  viewerRecords.forEach((r) => {
+    const d = r.firstViewedAt?.toDate ? r.firstViewedAt.toDate() : null;
+    if (!d) return;
+    if (!firstSeenByUid[r.id] || d < firstSeenByUid[r.id]) firstSeenByUid[r.id] = d;
+  });
+
+  // Real month-over-month deltas (see monthDelta/monthBounds/countBefore,
+  // defined above renderPlatformOverview). Published posts is a
+  // cumulative total-to-date comparison. Average rating has no
+  // per-rating timestamp to compare against — ratings are stored as a
+  // single {uid: stars} map with no history — so its delta is honestly
+  // left out (null) rather than guessed.
+  const { start: pcThisMonthStart } = monthBounds(0);
+  const viewsDelta = monthDelta(statsByKey[keyFor(pcThisMonthStart)] || 0, statsByKey[keyFor(monthBounds(1).start)] || 0);
+  const uniqueViewersDelta = monthDelta(
+    totalUniqueViewers,
+    Object.values(firstSeenByUid).filter((d) => d < pcThisMonthStart).length,
+  );
+  const postsDelta = monthDelta(totalPosts, countBefore(posts, "createdAt", pcThisMonthStart));
+
+  document.getElementById("postsStatGrid").innerHTML = [
+    statCard("Total post views", number(totalViews), "eye", viewsDelta),
+    statCard("Unique viewers", number(totalUniqueViewers), "user", uniqueViewersDelta),
+    statCard("Published posts", number(totalPosts), "doc-text", postsDelta),
+    statCard("Average rating", avgRating ? avgRating.toFixed(1) : "—", "star", null),
+  ].join("");
+
+  const monthList = [];
+  const now = new Date();
+  for (let i = months - 1; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const key = keyFor(d);
+    monthList.push({ label: d.toLocaleDateString("en-MY", { month: "short" }), key, views: statsByKey[key] || 0 });
+  }
+  const maxViews = Math.max(1, ...monthList.map((m) => m.views));
+  document.getElementById("postsTrendBars").innerHTML = monthList.map((m, i) => `<div class="bar-col"><div class="bar${i % 2 ? " alt" : ""}" style="height:${Math.max(6, (m.views / maxViews) * 100)}%"></div></div>`).join("");
+  document.getElementById("postsTrendLabels").innerHTML = monthList.map((m) => `<span>${m.label}</span>`).join("");
+
+  // Views by destination — summed from each post's own viewCount, grouped
+  // by its `location` field.
+  const byDest = {};
+  posts.forEach((p) => {
+    const dest = p.location || "Unknown";
+    byDest[dest] = (byDest[dest] || 0) + (Number(p.viewCount) || 0);
+  });
+  const destEntries = Object.entries(byDest).sort((a, b) => b[1] - a[1]).slice(0, 6);
+  const maxDest = Math.max(1, ...destEntries.map(([, v]) => v));
+  document.getElementById("postsDestBars").innerHTML = destEntries.length
+    ? destEntries.map(([, v], i) => `<div class="bar-col"><div class="bar${i % 2 ? " alt" : ""}" style="height:${Math.max(6, (v / maxDest) * 100)}%"></div></div>`).join("")
+    : `<p class="muted small" style="padding-top:60px;">No views recorded yet.</p>`;
+  document.getElementById("postsDestLabels").innerHTML = destEntries.map(([d]) => `<span style="font-size:10.5px;">${escapeHtml(d)}</span>`).join("");
+
+  const detailRows = posts
+    .map((p) => {
+      const ratingValues = Object.values(p.ratings || {}).map((v) => Number(v) || 0);
+      return {
+        title: p.title || "Untitled post",
+        destination: p.location || "Unknown",
+        views: Number(p.viewCount) || 0,
+        uniqueViewers: Number(p.uniqueViewerCount) || 0,
+        avgRating: ratingValues.length ? ratingValues.reduce((s, v) => s + v, 0) / ratingValues.length : 0,
+        ratingCount: ratingValues.length,
+        reportCount: Number(p.reportCount) || 0,
+      };
+    })
+    .sort((a, b) => b.views - a.views);
+  document.getElementById("postsDetailBody").innerHTML = detailRows.length
+    ? detailRows.map((r) => `
+        <tr>
+          <td class="cell-strong">${escapeHtml(r.title)}</td>
+          <td class="muted">${escapeHtml(r.destination)}</td>
+          <td class="muted">${number(r.views)}</td>
+          <td class="muted">${number(r.uniqueViewers)}</td>
+          <td class="muted">${r.ratingCount ? `${r.avgRating.toFixed(1)} (${r.ratingCount})` : "—"}</td>
+          <td class="muted">${number(r.reportCount)}</td>
+        </tr>`).join("")
+    : `<tr><td colspan="6" class="muted" style="text-align:center;padding:30px 0;">No community posts published yet.</td></tr>`;
+
+  const viewToUserRatio = totalUniqueViewers ? totalViews / totalUniqueViewers : 0;
+  const totalRatingResponses = allRatingValues.length;
+  const reportedPostsCount = posts.filter((p) => (Number(p.reportCount) || 0) > 0).length;
+  const topDestination = destEntries.length ? destEntries[0][0] : "—";
+
+  document.getElementById("postsEngagementGrid").innerHTML = [
+    plainCard("View-to-user ratio", viewToUserRatio ? viewToUserRatio.toFixed(1) : "—"),
+    plainCard("Total rating responses", number(totalRatingResponses)),
+    plainCard("Reported posts", number(reportedPostsCount)),
+    plainCard("Top destination", escapeHtml(topDestination)),
+  ].join("");
+
+  mountIcons(document);
+
+  data = {
+    stats: { totalViews, totalUniqueViewers, totalPosts, avgRating },
+    monthList, destEntries, detailRows,
+    engagement: { viewToUserRatio, totalRatingResponses, reportedPostsCount, topDestination },
+    period: { start: monthBounds(months - 1).start, end: new Date() },
+  };
+}
+
+function exportCommunityPostAnalysisPdf() {
+  exportReportPdf({
+    filename: `voya-community-post-analysis-${new Date().toISOString().slice(0, 10)}`,
+    title: "Community Post Analysis Report",
+    reportCode: "CPAR",
+    period: data.period,
+    stats: [
+      { label: "Total Views", value: number(data.stats.totalViews) },
+      { label: "Unique Viewers", value: number(data.stats.totalUniqueViewers) },
+      { label: "Total Posts", value: number(data.stats.totalPosts) },
+      { label: "Avg. Rating", value: data.stats.avgRating ? data.stats.avgRating.toFixed(1) : "—" },
+    ],
+    lineChart: {
+      title: "Monthly Post Views",
+      labels: data.monthList.map((m) => m.label),
+      values: data.monthList.map((m) => m.views),
+    },
+    barChart: {
+      title: "Views by Destination",
+      labels: data.destEntries.map(([d]) => d),
+      values: data.destEntries.map(([, v]) => v),
+      horizontal: true,
+    },
+    table: {
+      title: "Community Post Detail",
+      head: ["Post title", "Destination", "Total views", "Unique viewers", "Rating", "User reports"],
+      body: data.detailRows.map((r) => [r.title, r.destination, number(r.views), number(r.uniqueViewers), r.ratingCount ? `${r.avgRating.toFixed(1)} (${r.ratingCount})` : "—", number(r.reportCount)]),
+    },
+  });
+}
+
+function exportCommunityPostAnalysisExcel() {
+  exportReportExcel({
+    filename: `voya-community-post-analysis-${new Date().toISOString().slice(0, 10)}`,
+    sheets: [
+      {
+        name: "Summary",
+        rows: [
+          ["Metric", "Value"],
+          ["Total post views", data.stats.totalViews],
+          ["Unique viewers", data.stats.totalUniqueViewers],
+          ["Published posts", data.stats.totalPosts],
+          ["Average rating", data.stats.avgRating.toFixed(1)],
+          ["View-to-user ratio", data.engagement.viewToUserRatio.toFixed(1)],
+          ["Total rating responses", data.engagement.totalRatingResponses],
+          ["Reported posts", data.engagement.reportedPostsCount],
+          ["Top destination", data.engagement.topDestination],
+        ],
+      },
+      { name: "Monthly Views", rows: [["Month", "Views"], ...data.monthList.map((m) => [m.label, m.views])] },
+      { name: "Views by Destination", rows: [["Destination", "Views"], ...data.destEntries.map(([d, v]) => [d, v])] },
+      {
+        name: "Post Detail",
+        rows: [
+          ["Post title", "Destination", "Total views", "Unique viewers", "Avg rating", "Rating count", "User reports"],
+          ...data.detailRows.map((r) => [r.title, r.destination, r.views, r.uniqueViewers, r.ratingCount ? r.avgRating.toFixed(1) : "", r.ratingCount, r.reportCount]),
+        ],
+      },
+    ],
+  });
+}
+
+function exportInsuranceOperationsPdf() {
+  const totalClaims = data.providerRows.reduce((s, r) => s + r.claims, 0);
+  const totalRefunds = data.providerRows.reduce((s, r) => s + r.refunds, 0);
+  exportReportPdf({
+    filename: `voya-insurance-operations-admin-${new Date().toISOString().slice(0, 10)}`,
+    title: "Insurance Operations Report",
+    reportCode: "IOR",
+    period: data.period,
+    stats: [
+      { label: "Total Purchases", value: number(data.stats.purchases) },
+      { label: "Transaction Value", value: money(data.stats.value) },
+      { label: "Pending Claims", value: number(data.stats.pendingClaims) },
+      { label: "Pending Refunds", value: number(data.stats.pendingRefunds) },
+    ],
+    lineChart: {
+      title: "Monthly Insurance Purchases",
+      labels: data.monthList.map((m) => m.label),
+      values: data.monthList.map((m) => m.count),
+    },
+    barChart: {
+      title: "Claims by Status",
+      labels: ["Pending", "In Progress", "Approved", "Rejected"],
+      values: data.claimStatusCounts,
+      horizontal: true,
+    },
+    table: {
+      title: "Insurance Operations Detail",
+      head: ["Provider", "Active plans", "Purchases", "Value", "Claims", "Refunds", "Avg. processing"],
+      body: data.providerRows.map((r) => [r.name, number(r.activePlans), number(r.purchases), moneyExact(r.value), number(r.claims), number(r.refunds), r.avgDays === null ? "—" : `${r.avgDays.toFixed(1)} days`]),
+      totalRow: ["Total", "—", number(data.stats.purchases), moneyExact(data.stats.value), number(totalClaims), number(totalRefunds), data.avgProcessingDaysAll === null ? "—" : `${data.avgProcessingDaysAll.toFixed(1)} days`],
+    },
+  });
+}
+
+function exportInsuranceOperationsExcel() {
+  exportReportExcel({
+    filename: `voya-insurance-operations-admin-${new Date().toISOString().slice(0, 10)}`,
+    sheets: [
+      {
+        name: "Summary",
+        rows: [
+          ["Metric", "Value"],
+          ["Registered partners", data.stats.partners],
+          ["Active plans", data.stats.activePlans],
+          ["Total purchases", data.stats.purchases],
+          ["Transaction value (RM)", data.stats.value.toFixed(2)],
+          ["Pending claims", data.stats.pendingClaims],
+          ["Pending refunds", data.stats.pendingRefunds],
+        ],
+      },
+      { name: "Monthly Purchases", rows: [["Month", "Purchases"], ...data.monthList.map((m) => [m.label, m.count])] },
+      {
+        name: "Provider Summary",
+        rows: [
+          ["Provider", "Active plans", "Purchases", "Value (RM)", "Claims", "Refunds", "Avg. processing (days)"],
+          ...data.providerRows.map((r) => [r.name, r.activePlans, r.purchases, r.value.toFixed(2), r.claims, r.refunds, r.avgDays === null ? "" : r.avgDays.toFixed(1)]),
+        ],
+      },
+    ],
+  });
+}
+
+function exportPlatformOverviewPdf() {
+  const totalPolicies = data.destRows.reduce((s, r) => s + r.policies, 0);
+  const totalRevenue = data.destRows.reduce((s, r) => s + r.revenue, 0);
+  exportReportPdf({
+    filename: `voya-platform-overview-${new Date().toISOString().slice(0, 10)}`,
+    title: "Platform Overview Report",
+    reportCode: "POR",
+    period: data.period,
+    stats: [
+      { label: "Revenue", value: money(data.stats.revenue) },
+      { label: "Policies Sold", value: number(data.stats.policiesSold) },
+      { label: "Claims Approved", value: `${data.stats.approvalRate}%` },
+      { label: "Active Travellers", value: number(data.stats.activeTravellers) },
+    ],
+    lineChart: {
+      title: "Revenue Trend",
+      labels: data.months.map((m) => m.label),
+      values: data.months.map((m) => m.revenue),
+    },
+    barChart: {
+      title: "Top Insurance Partners",
+      labels: data.providerEntries.map(([name]) => name),
+      values: data.providerEntries.map(([, d]) => d.revenue),
+      horizontal: true,
+    },
+    table: {
+      title: "Top Destinations",
+      head: ["Destination", "Policies", "Revenue", "Share"],
+      body: data.destRows.map((r) => [r.dest, number(r.policies), moneyExact(r.revenue), `${r.share.toFixed(1)}%`]),
+      totalRow: ["Total", number(totalPolicies), moneyExact(totalRevenue), "100.0%"],
+    },
+  });
+}
+
+function exportPlatformOverviewExcel() {
+  exportReportExcel({
+    filename: `voya-platform-overview-${new Date().toISOString().slice(0, 10)}`,
+    sheets: [
+      {
+        name: "Summary",
+        rows: [
+          ["Metric", "Value"],
+          ["Revenue (RM)", data.stats.revenue.toFixed(2)],
+          ["Policies sold", data.stats.policiesSold],
+          ["Claims approved (%)", data.stats.approvalRate],
+          ["Active travellers", data.stats.activeTravellers],
+        ],
+      },
+      { name: "Revenue Trend", rows: [["Month", "Revenue (RM)"], ...data.months.map((m) => [m.label, m.revenue.toFixed(2)])] },
+      { name: "Top Insurance Partners", rows: [["Provider", "Policies", "Revenue (RM)"], ...data.providerEntries.map(([name, d]) => [name, d.policies, d.revenue.toFixed(2)])] },
+      {
+        name: "Top Destinations",
+        rows: [
+          ["Destination", "Policies", "Revenue (RM)", "Share (%)"],
+          ...data.destRows.map((r) => [r.dest, r.policies, r.revenue.toFixed(2), r.share.toFixed(1)]),
+        ],
+      },
+    ],
+  });
+}
+
+/** User Account Reports — see Report Design spec. Traveller and Insurance
+ * Partner stay on separate sub-pages (see `uarSubTab`) rather than one
+ * combined table, since the two account types' volumes aren't comparable.
+ * Framed year-to-date (Jan 1 of the current year through this month),
+ * unlike the other three tabs' rolling 6/12-month window — matches the
+ * spec's "annual" framing for this report. */
+async function renderUserAccountReports() {
+  document.getElementById("reportBody").innerHTML = `
+    <div class="filter-bar" style="margin-bottom:20px;">
+      <select class="select" id="uarSubSelect">
+        <option value="traveller">Traveller</option>
+        <option value="partner">Insurance Partner</option>
+      </select>
+    </div>
+    <div id="uarSubBody"><div class="skeleton" style="height:200px;"></div></div>`;
+  document.getElementById("uarSubSelect").value = uarSubTab;
+  document.getElementById("uarSubSelect").addEventListener("change", async (e) => {
+    uarSubTab = e.target.value;
+    data = null;
+    await renderUserAccountSubPage();
+  });
+  await renderUserAccountSubPage();
+}
+
+async function renderUserAccountSubPage() {
+  if (uarSubTab === "traveller") await renderTravellerAccountReport();
+  else await renderPartnerAccountReport();
+}
+
+async function renderTravellerAccountReport() {
+  document.getElementById("uarSubBody").innerHTML = `
+    <p class="small muted" style="margin-bottom:14px;">Year to date — as of ${new Date().toLocaleDateString("en-MY", { day: "numeric", month: "long", year: "numeric" })}</p>
+    <div class="stat-grid" id="travStatGrid"><div class="skeleton" style="height:90px;grid-column:1/-1;"></div></div>
+    <div style="display:grid;grid-template-columns:1.4fr 1fr;gap:20px;align-items:start;" class="detail-grid">
+      <div class="card card-pad">
+        <h3 class="h3" style="margin-bottom:18px;">Monthly Traveller Registrations</h3>
+        <div class="bars" id="travTrendBars"></div>
+        <div class="bars-labels" id="travTrendLabels"></div>
+      </div>
+      <div class="card card-pad">
+        <h3 class="h3" style="margin-bottom:18px;">Year-End Account Status</h3>
+        <div class="bars" id="travStatusBars"></div>
+        <div class="bars-labels" id="travStatusLabels"></div>
+      </div>
+    </div>
+    <div class="card card-pad" style="margin-top:20px;">
+      <h3 class="h3" style="margin-bottom:16px;">Monthly Traveller Account Detail</h3>
+      <div class="table-wrap scroll-x" style="border:none;">
+        <table class="data-table">
+          <thead><tr><th>Month</th><th>New Registrations</th><th>Active Users</th><th>Inactive Users</th><th>Suspended</th></tr></thead>
+          <tbody id="travDetailBody"></tbody>
+        </table>
+      </div>
+    </div>`;
+  await loadTravellerAccountReport();
+}
+
+async function loadTravellerAccountReport() {
+  let users;
+  try {
+    users = await listUsers();
+  } catch (err) {
+    renderLoadError(err);
+    return;
+  }
+  const statusOf = (u) => u.status || "active";
+  const createdAtOf = (u) => (u.createdAt?.toDate ? u.createdAt.toDate() : null);
+  const totalTravellers = users.length;
+  const activeUsers = users.filter((u) => statusOf(u) === "active").length;
+  const inactiveUsers = users.filter((u) => statusOf(u) === "pending").length;
+  const suspendedUsers = users.filter((u) => statusOf(u) === "suspended").length;
+
+  const now = new Date();
+  const ytdStart = new Date(now.getFullYear(), 0, 1);
+  const ytdEnd = new Date(now.getFullYear() + 1, 0, 1);
+  const newRegistrationsYtd = countBetween(users, "createdAt", ytdStart, ytdEnd);
+
+  // Real month-over-month deltas (see monthDelta/monthBounds/countBefore/
+  // countInMonth, defined above renderPlatformOverview). Active users has
+  // no historical status log to replay, so its delta approximates "how
+  // many of today's active travellers already had that same current
+  // state before this month" — same approximation already used by
+  // Platform Overview's Active travellers.
+  const { start: travThisMonthStart } = monthBounds(0);
+  const totalDelta = monthDelta(totalTravellers, countBefore(users, "createdAt", travThisMonthStart));
+  const newRegDelta = monthDelta(countInMonth(users, "createdAt", 0), countInMonth(users, "createdAt", 1));
+  const activeDelta = monthDelta(
+    activeUsers,
+    users.filter((u) => statusOf(u) === "active" && createdAtOf(u) && createdAtOf(u) < travThisMonthStart).length,
+  );
+
+  document.getElementById("travStatGrid").innerHTML = [
+    statCard("Total travellers", number(totalTravellers), "user", totalDelta),
+    statCard("New registrations (YTD)", number(newRegistrationsYtd), "user-plus", newRegDelta),
+    statCard("Active users", number(activeUsers), "check-circle", activeDelta),
+  ].join("");
+
+  const months = yearToDateMonths();
+  months.forEach((m) => { m.count = countBetween(users, "createdAt", m.start, m.end); });
+  const maxCount = Math.max(1, ...months.map((m) => m.count));
+  document.getElementById("travTrendBars").innerHTML = months.map((m, i) => `<div class="bar-col"><div class="bar${i % 2 ? " alt" : ""}" style="height:${Math.max(6, (m.count / maxCount) * 100)}%"></div></div>`).join("");
+  document.getElementById("travTrendLabels").innerHTML = months.map((m) => `<span style="font-size:10.5px;">${m.label.split(" ")[0]}</span>`).join("");
+
+  const statusEntries = [["Active", activeUsers], ["Inactive", inactiveUsers], ["Suspended", suspendedUsers]];
+  const maxStatus = Math.max(1, ...statusEntries.map(([, v]) => v));
+  document.getElementById("travStatusBars").innerHTML = statusEntries.map(([, v], i) => `<div class="bar-col"><div class="bar${i % 2 ? " alt" : ""}" style="height:${Math.max(6, (v / maxStatus) * 100)}%"></div></div>`).join("");
+  document.getElementById("travStatusLabels").innerHTML = statusEntries.map(([label]) => `<span>${label}</span>`).join("");
+
+  // Monthly detail — the last 3 columns approximate "as of end of that
+  // month" using each traveller's CURRENT status (no historical status
+  // log exists to replay, same approximation as the deltas above). Total
+  // row sums New Registrations but takes the LATEST value for the 3
+  // cumulative columns, since those aren't additive across months.
+  const detailRows = months.map((m) => ({
+    label: m.label,
+    newRegistrations: m.count,
+    active: users.filter((u) => statusOf(u) === "active" && createdAtOf(u) && createdAtOf(u) < m.end).length,
+    inactive: users.filter((u) => statusOf(u) === "pending" && createdAtOf(u) && createdAtOf(u) < m.end).length,
+    suspended: users.filter((u) => statusOf(u) === "suspended" && createdAtOf(u) && createdAtOf(u) < m.end).length,
+  }));
+  const travLatest = detailRows[detailRows.length - 1] || { active: 0, inactive: 0, suspended: 0 };
+  document.getElementById("travDetailBody").innerHTML = detailRows.map((r) => `
+        <tr>
+          <td class="cell-strong">${escapeHtml(r.label)}</td>
+          <td class="muted">${number(r.newRegistrations)}</td>
+          <td class="muted">${number(r.active)}</td>
+          <td class="muted">${number(r.inactive)}</td>
+          <td class="muted">${number(r.suspended)}</td>
+        </tr>`).join("") + `
+        <tr style="font-weight:600;">
+          <td class="cell-strong">Total</td>
+          <td>${number(detailRows.reduce((s, r) => s + r.newRegistrations, 0))}</td>
+          <td>${number(travLatest.active)}</td>
+          <td>${number(travLatest.inactive)}</td>
+          <td>${number(travLatest.suspended)}</td>
+        </tr>`;
+
+  mountIcons(document);
+
+  data = {
+    stats: { totalTravellers, newRegistrationsYtd, activeUsers },
+    months, statusEntries, detailRows,
+    period: { start: ytdStart, end: now },
+  };
+}
+
+async function renderPartnerAccountReport() {
+  document.getElementById("uarSubBody").innerHTML = `
+    <p class="small muted" style="margin-bottom:14px;">Year to date — as of ${new Date().toLocaleDateString("en-MY", { day: "numeric", month: "long", year: "numeric" })}</p>
+    <div class="stat-grid" id="partStatGrid"><div class="skeleton" style="height:90px;grid-column:1/-1;"></div></div>
+    <div class="card card-pad" style="margin-bottom:20px;">
+      <h3 class="h3" style="margin-bottom:18px;">Monthly Insurance Partner Registrations</h3>
+      <div class="bars" id="partTrendBars"></div>
+      <div class="bars-labels" id="partTrendLabels"></div>
+    </div>
+    <div class="card card-pad">
+      <h3 class="h3" style="margin-bottom:16px;">Monthly Insurance Partner Account Detail</h3>
+      <div class="table-wrap scroll-x" style="border:none;">
+        <table class="data-table">
+          <thead><tr><th>Month</th><th>New Registrations</th><th>Active</th><th>Inactive</th><th>Rejected</th></tr></thead>
+          <tbody id="partDetailBody"></tbody>
+        </table>
+      </div>
+    </div>`;
+  await loadPartnerAccountReport();
+}
+
+async function loadPartnerAccountReport() {
+  let partners;
+  try {
+    partners = await listPartners();
+  } catch (err) {
+    renderLoadError(err);
+    return;
+  }
+  // approved -> active; rejected -> rejected; pending/suspended (or no
+  // status yet) -> inactive, matching settings.html's partner lifecycle.
+  const bucketOf = (p) => (p.status === "approved" ? "active" : p.status === "rejected" ? "rejected" : "inactive");
+  const createdAtOf = (p) => (p.createdAt?.toDate ? p.createdAt.toDate() : null);
+  const totalPartners = partners.length;
+  const activePartners = partners.filter((p) => bucketOf(p) === "active").length;
+
+  const now = new Date();
+  const ytdStart = new Date(now.getFullYear(), 0, 1);
+  const ytdEnd = new Date(now.getFullYear() + 1, 0, 1);
+  const newRegistrationsYtd = countBetween(partners, "createdAt", ytdStart, ytdEnd);
+
+  const { start: partThisMonthStart } = monthBounds(0);
+  const totalDelta = monthDelta(totalPartners, countBefore(partners, "createdAt", partThisMonthStart));
+  const newRegDelta = monthDelta(countInMonth(partners, "createdAt", 0), countInMonth(partners, "createdAt", 1));
+  const activeDelta = monthDelta(
+    activePartners,
+    partners.filter((p) => bucketOf(p) === "active" && createdAtOf(p) && createdAtOf(p) < partThisMonthStart).length,
+  );
+
+  document.getElementById("partStatGrid").innerHTML = [
+    statCard("Total insurance partners", number(totalPartners), "briefcase", totalDelta),
+    statCard("New registrations (YTD)", number(newRegistrationsYtd), "user-plus", newRegDelta),
+    statCard("Active users", number(activePartners), "check-circle", activeDelta),
+  ].join("");
+
+  const months = yearToDateMonths();
+  months.forEach((m) => { m.count = countBetween(partners, "createdAt", m.start, m.end); });
+  const maxCount = Math.max(1, ...months.map((m) => m.count));
+  document.getElementById("partTrendBars").innerHTML = months.map((m, i) => `<div class="bar-col"><div class="bar${i % 2 ? " alt" : ""}" style="height:${Math.max(6, (m.count / maxCount) * 100)}%"></div></div>`).join("");
+  document.getElementById("partTrendLabels").innerHTML = months.map((m) => `<span style="font-size:10.5px;">${m.label.split(" ")[0]}</span>`).join("");
+
+  // Cohort-based (not cumulative): each month's registrants bucketed by
+  // CURRENT status, so Active+Inactive+Rejected reconciles exactly with
+  // that month's own New Registrations total — unlike the traveller
+  // table above, this doesn't need the "as of end of month" approximation
+  // since every partner falls into exactly one bucket per cohort.
+  const detailRows = months.map((m) => {
+    const cohort = partners.filter((p) => createdAtOf(p) && createdAtOf(p) >= m.start && createdAtOf(p) < m.end);
+    return {
+      label: m.label,
+      newRegistrations: cohort.length,
+      active: cohort.filter((p) => bucketOf(p) === "active").length,
+      inactive: cohort.filter((p) => bucketOf(p) === "inactive").length,
+      rejected: cohort.filter((p) => bucketOf(p) === "rejected").length,
+    };
+  });
+  document.getElementById("partDetailBody").innerHTML = detailRows.map((r) => `
+        <tr>
+          <td class="cell-strong">${escapeHtml(r.label)}</td>
+          <td class="muted">${number(r.newRegistrations)}</td>
+          <td class="muted">${number(r.active)}</td>
+          <td class="muted">${number(r.inactive)}</td>
+          <td class="muted">${number(r.rejected)}</td>
+        </tr>`).join("") + `
+        <tr style="font-weight:600;">
+          <td class="cell-strong">Total</td>
+          <td>${number(detailRows.reduce((s, r) => s + r.newRegistrations, 0))}</td>
+          <td>${number(detailRows.reduce((s, r) => s + r.active, 0))}</td>
+          <td>${number(detailRows.reduce((s, r) => s + r.inactive, 0))}</td>
+          <td>${number(detailRows.reduce((s, r) => s + r.rejected, 0))}</td>
+        </tr>`;
+
+  mountIcons(document);
+
+  data = {
+    stats: { totalPartners, newRegistrationsYtd, activePartners },
+    months, detailRows,
+    period: { start: ytdStart, end: now },
+  };
+}
+
+function exportTravellerAccountPdf() {
+  const latest = data.detailRows[data.detailRows.length - 1] || { active: 0, inactive: 0, suspended: 0 };
+  exportReportPdf({
+    filename: `voya-traveller-account-report-${new Date().toISOString().slice(0, 10)}`,
+    title: "User Account Report",
+    reportCode: "UAR",
+    period: data.period,
+    stats: [
+      { label: "Total Travellers", value: number(data.stats.totalTravellers) },
+      { label: "New Registrations", value: number(data.stats.newRegistrationsYtd) },
+      { label: "Active Users", value: number(data.stats.activeUsers) },
+    ],
+    lineChart: {
+      title: "Monthly User Registrations",
+      labels: data.months.map((m) => m.label.split(" ")[0]),
+      values: data.months.map((m) => m.count),
+    },
+    table: {
+      title: "User Account Activity Detail",
+      head: ["Month", "New Registrations", "Active Users", "Inactive Users", "Suspended"],
+      body: data.detailRows.map((r) => [r.label, number(r.newRegistrations), number(r.active), number(r.inactive), number(r.suspended)]),
+      totalRow: ["Total", number(data.detailRows.reduce((s, r) => s + r.newRegistrations, 0)), number(latest.active), number(latest.inactive), number(latest.suspended)],
+    },
+  });
+}
+
+function exportTravellerAccountExcel() {
+  exportReportExcel({
+    filename: `voya-traveller-account-report-${new Date().toISOString().slice(0, 10)}`,
+    sheets: [
+      {
+        name: "Summary",
+        rows: [
+          ["Metric", "Value"],
+          ["Total travellers", data.stats.totalTravellers],
+          ["New registrations (YTD)", data.stats.newRegistrationsYtd],
+          ["Active users", data.stats.activeUsers],
+        ],
+      },
+      { name: "Monthly Registrations", rows: [["Month", "Registrations"], ...data.months.map((m) => [m.label, m.count])] },
+      {
+        name: "Account Detail",
+        rows: [
+          ["Month", "New Registrations", "Active Users", "Inactive Users", "Suspended"],
+          ...data.detailRows.map((r) => [r.label, r.newRegistrations, r.active, r.inactive, r.suspended]),
+        ],
+      },
+    ],
+  });
+}
+
+function exportPartnerAccountPdf() {
+  exportReportPdf({
+    filename: `voya-partner-account-report-${new Date().toISOString().slice(0, 10)}`,
+    title: "User Account Report",
+    reportCode: "UAR",
+    period: data.period,
+    extraLine: "Account Type: Insurance Partner",
+    stats: [
+      { label: "Total Insurance Partners", value: number(data.stats.totalPartners) },
+      { label: "New Registrations", value: number(data.stats.newRegistrationsYtd) },
+      { label: "Active Users", value: number(data.stats.activePartners) },
+    ],
+    lineChart: {
+      title: "Monthly User Registrations",
+      labels: data.months.map((m) => m.label.split(" ")[0]),
+      values: data.months.map((m) => m.count),
+    },
+    table: {
+      title: "User Account Activity Detail",
+      head: ["Month", "New Registrations", "Active", "Inactive", "Rejected"],
+      body: data.detailRows.map((r) => [r.label, number(r.newRegistrations), number(r.active), number(r.inactive), number(r.rejected)]),
+      totalRow: [
+        "Total",
+        number(data.detailRows.reduce((s, r) => s + r.newRegistrations, 0)),
+        number(data.detailRows.reduce((s, r) => s + r.active, 0)),
+        number(data.detailRows.reduce((s, r) => s + r.inactive, 0)),
+        number(data.detailRows.reduce((s, r) => s + r.rejected, 0)),
+      ],
+    },
+  });
+}
+
+function exportPartnerAccountExcel() {
+  exportReportExcel({
+    filename: `voya-partner-account-report-${new Date().toISOString().slice(0, 10)}`,
+    sheets: [
+      {
+        name: "Summary",
+        rows: [
+          ["Metric", "Value"],
+          ["Total insurance partners", data.stats.totalPartners],
+          ["New registrations (YTD)", data.stats.newRegistrationsYtd],
+          ["Active users", data.stats.activePartners],
+        ],
+      },
+      { name: "Monthly Registrations", rows: [["Month", "Registrations"], ...data.months.map((m) => [m.label, m.count])] },
+      {
+        name: "Account Detail",
+        rows: [
+          ["Month", "New Registrations", "Active", "Inactive", "Rejected"],
+          ...data.detailRows.map((r) => [r.label, r.newRegistrations, r.active, r.inactive, r.rejected]),
+        ],
+      },
+    ],
+  });
+}
+
+document.getElementById("exportPdfBtn").addEventListener("click", () => {
+  if (!data) return;
+  try {
+    if (category === "overview") exportPlatformOverviewPdf();
+    else if (category === "insurance") exportInsuranceOperationsPdf();
+    else if (category === "posts") exportCommunityPostAnalysisPdf();
+    else if (category === "users") (uarSubTab === "traveller" ? exportTravellerAccountPdf : exportPartnerAccountPdf)();
+  } catch (err) {
+    alert(err.message || "Couldn't export PDF.");
+  }
+});
+
+document.getElementById("exportExcelBtn").addEventListener("click", () => {
+  if (!data) return;
+  try {
+    if (category === "overview") exportPlatformOverviewExcel();
+    else if (category === "insurance") exportInsuranceOperationsExcel();
+    else if (category === "posts") exportCommunityPostAnalysisExcel();
+    else if (category === "users") (uarSubTab === "traveller" ? exportTravellerAccountExcel : exportPartnerAccountExcel)();
+  } catch (err) {
+    alert(err.message || "Couldn't export Excel.");
+  }
+});
+</script>
+</body>
+</html>

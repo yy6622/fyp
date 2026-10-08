@@ -46,6 +46,14 @@ class CatalogRepository {
   CollectionReference<Map<String, dynamic>> get _restaurants =>
       FirebaseFirestore.instance.collection('catalog_restaurants');
   CollectionReference<Map<String, dynamic>> get _appCache => FirebaseFirestore.instance.collection('app_cache');
+  // A pre-scraped, worldwide OSM-derived dataset — curated outside this
+  // app (not written by any code here) with real Wikimedia Commons
+  // photos (properly attributed) and a couple of pre-translated name
+  // variants already filled in, which [refreshAttractions] now prefers
+  // over hitting Overpass/Wikipedia live for every refresh. See that
+  // method's doc comment for exactly how it's used and when it falls
+  // back to the old live fetch instead.
+  CollectionReference<Map<String, dynamic>> get _places => FirebaseFirestore.instance.collection('catalog_places');
 
   // ---------------- Short-lived per-user search cache ----------------
   // Separate from the `app_cache` Firestore doc above (that one is a
@@ -59,6 +67,17 @@ class CatalogRepository {
   final Map<String, _CachedSearch<DuffelFlightOffer>> _flightSearchCache = {};
   final Map<String, _CachedSearch<DuffelStayResult>> _staySearchCache = {};
   String _dateKey(DateTime d) => '${d.year}-${d.month}-${d.day}';
+
+  /// Called on sign-out (see `profile_page.dart`'s `_confirmLogout`). The
+  /// cache keys already include uid, so a different account signing in
+  /// afterwards could never read another account's entries anyway — this
+  /// is just belt-and-suspenders so nothing from a finished session lingers
+  /// in memory (and stops the maps from growing across every account that
+  /// ever used this device) once nobody can act on it anymore.
+  void clearSearchCache() {
+    _flightSearchCache.clear();
+    _staySearchCache.clear();
+  }
 
   // ---------------- Flights ----------------
   // [favoritedBy], despite the name kept for symmetry with hotels/attractions,
@@ -194,6 +213,7 @@ class CatalogRepository {
               reviews: _reviewCountLabel(d.data()),
               price: (d.data()['price'] as String?) ?? '',
               image: (d.data()['image'] as String?) ?? '',
+              amenities: List<String>.from(d.data()['amenities'] as List? ?? const []),
               priceAmount: (d.data()['priceAmount'] as num?)?.toDouble(),
               priceCurrency: d.data()['priceCurrency'] as String?,
             ))
@@ -237,6 +257,7 @@ class CatalogRepository {
       'priceAmount': stay.cheapestTotalAmount,
       'priceCurrency': stay.cheapestCurrency,
       'image': stay.photoUrl ?? '',
+      'amenities': stay.amenities,
       'favoritedBy': ['$uid#$tripId'],
     });
     return doc.id;
@@ -549,6 +570,127 @@ class CatalogRepository {
     if (last != null && DateTime.now().difference(last) < _placesRefreshTtl) return;
     final point = await PlacesApiService.instance.geocode(destination);
     if (point == null) return;
+    _attractionsRefreshedAt[key] = DateTime.now();
+    // Prefer the pre-scraped `catalog_places` collection (see the [_places]
+    // getter's doc comment) — it already has a real, properly-attributed
+    // photo and doesn't need a live Overpass+Wikipedia round trip per
+    // place. Only falls back to the old live-OSM fetch below when
+    // [point] has no resolvable country code, or `catalog_places` simply has no
+    // rows for that country yet (the scrape is still country-by-country,
+    // not worldwide from day one) — so a destination not covered yet
+    // still shows *something* instead of an empty Attractions tab.
+    final fromPlaces = point.countryCode == null
+        ? false
+        : await _refreshAttractionsFromPlacesCollection(destination, key, point.countryCode!, point);
+    if (fromPlaces) return;
+    await _refreshAttractionsFromOsm(destination, key, point);
+  }
+
+  /// Fills `catalog_attractions` for [destination] from the curated
+  /// `catalog_places` collection instead of a live OSM fetch — see
+  /// [refreshAttractions]'s doc comment for why this is tried first.
+  /// `catalog_places` is scoped by country (not by city/geohash — see the class
+  /// doc on the [_places] getter), so this pulls every row for
+  /// [countryCode] (every row is attraction-type for now — see the
+  /// query's own comment for why `category` isn't filtered on) and keeps
+  /// the 20 physically closest to [destination]'s geocoded point; for a
+  /// city-level search
+  /// that's effectively "this city's attractions", since anything in the
+  /// same country but a different city is necessarily farther away.
+  /// Returns false (writing nothing) when `catalog_places` has no rows for this
+  /// country yet, so the caller knows to fall back to the live fetch.
+  Future<bool> _refreshAttractionsFromPlacesCollection(
+    String destination,
+    String key,
+    String countryCode,
+    ({double lat, double lon, String? countryCode}) point,
+  ) async {
+    QuerySnapshot<Map<String, dynamic>> snap;
+    try {
+      // `category` here is the specific OSM tourism-tag value this row
+      // was scraped under (e.g. "viewpoint", "zoo", "museum" — only
+      // sometimes the literal "attraction"), not a generic
+      // attraction/restaurant split, so it's not filtered on at all —
+      // `catalog_places` only has attraction-type rows so far anyway. If/when
+      // restaurant rows are added to this same collection, they'll need
+      // their own real way to tell the two apart (e.g. a dedicated
+      // `type: 'attraction'|'restaurant'` field from the scraper) before
+      // this can also source `refreshRestaurants`.
+      snap = await _places.where('country', isEqualTo: countryCode).get();
+    } catch (_) {
+      // A rules/network failure (or, if `catalog_places` ever grows enough rows
+      // per country to need one, a missing-index error — a single
+      // equality filter never needs a composite index, so that's not a
+      // concern today): fall back rather than leave Attractions blank.
+      return false;
+    }
+    if (snap.docs.isEmpty) return false;
+    final withDistance = <({QueryDocumentSnapshot<Map<String, dynamic>> doc, Map<String, dynamic> data, double km})>[];
+    for (final d in snap.docs) {
+      final data = d.data();
+      final lat = (data['lat'] as num?)?.toDouble();
+      final lng = (data['lng'] as num?)?.toDouble();
+      if (lat == null || lng == null) continue;
+      withDistance.add((doc: d, data: data, km: _distanceKm(point.lat, point.lon, lat, lng)));
+    }
+    withDistance.sort((a, b) => a.km.compareTo(b.km));
+    final nearest = withDistance.take(20).toList();
+    // `catalog_places` has no `description` field (the scrape only covers
+    // name/photo/translation, not a text summary) — but it does give an
+    // exact `wikipedia` reference ("en:Amorium"), so this reuses
+    // [PlacesApiService.resolveDescription] exactly as the live-OSM path
+    // below does, just fed that one tag instead of a whole OSM tag map.
+    // Strictly more reliable than a name-guess lookup, since there's no
+    // "is this really the same place" ambiguity to guard against.
+    final descriptions = await Future.wait(nearest.map((e) async {
+      final wikipedia = (e.data['wikipedia'] as String?) ?? '';
+      if (wikipedia.isEmpty) return null;
+      return PlacesApiService.instance.resolveDescription({'wikipedia': wikipedia});
+    }));
+    for (var i = 0; i < nearest.length; i++) {
+      final data = nearest[i].data;
+      final category = (data['category'] as String?) ?? '';
+      final nameEn = (data['nameEn'] as String?)?.trim();
+      final name = (nameEn != null && nameEn.isNotEmpty) ? nameEn : ((data['name'] as String?) ?? '');
+      final imageUrl = data['imageUrl'] as String?;
+      try {
+        await _attractions.doc('place_${nearest[i].doc.id}').set({
+          'name': name,
+          'category': category.isEmpty ? 'Attraction' : _titleCase(category.replaceAll('_', ' ')),
+          'categories': [if (category.isNotEmpty) _titleCase(category.replaceAll('_', ' '))],
+          'price': '',
+          if (imageUrl != null && imageUrl.isNotEmpty) 'image': imageUrl,
+          // Kept even though no detail page reads them yet — a Commons
+          // CC BY-SA photo (see the `catalog_places` sample doc) is only
+          // properly used with its author/license kept alongside it, and
+          // writing them now means showing a credit line later is a UI
+          // change only, not another backfill.
+          if (data['imageAuthor'] != null) 'imageAuthor': data['imageAuthor'],
+          if (data['imageLicense'] != null) 'imageLicense': data['imageLicense'],
+          'location': destination.trim(),
+          'destinationQuery': key,
+          'openingHours': '',
+          'address': '',
+          'phone': '',
+          'website': (data['website'] as String?) ?? '',
+          'description': descriptions[i] ?? '',
+          'rating': 'New',
+          'reviews': '0',
+        }, SetOptions(merge: true));
+      } catch (_) {
+        // One row failing (rules hiccup, transient Firestore error)
+        // shouldn't stop the rest of the batch — same best-effort
+        // handling as the live-OSM path below.
+      }
+    }
+    return true;
+  }
+
+  /// The original live fetch (Nominatim + Overpass + Wikipedia/website
+  /// fallbacks) — now only reached by [refreshAttractions] when `catalog_places`
+  /// has nothing for this destination's country yet. See that method's
+  /// doc comment.
+  Future<void> _refreshAttractionsFromOsm(String destination, String key, ({double lat, double lon, String? countryCode}) point) async {
     final found = await PlacesApiService.instance.searchNearby(
       lat: point.lat,
       lon: point.lon,
@@ -556,11 +698,30 @@ class CatalogRepository {
       radiusMeters: 15000,
       limit: 20,
     );
-    _attractionsRefreshedAt[key] = DateTime.now();
     // Resolved in parallel, same reason fetchNearbyPlaces resolves images
     // in parallel — one Wikipedia round-trip per POI, sequentially, would
-    // make a 20-attraction refresh noticeably slow for no benefit.
-    final descriptions = await Future.wait(found.map((p) => PlacesApiService.instance.resolveDescription(p.tags)));
+    // make a 20-attraction refresh noticeably slow for no benefit. This
+    // used to just write 'image': '' unconditionally and never actually
+    // call resolveImage here at all — Near By's fetchNearbyPlaces already
+    // did (see its own doc comment), but Explore's Attractions/
+    // Restaurants never got the same treatment, so every attraction/
+    // restaurant card showed a blank image regardless of whether OSM/
+    // Wikipedia actually had a real photo for that place.
+    final tagDescriptions = await Future.wait(found.map((p) => PlacesApiService.instance.resolveDescription(p.tags)));
+    final tagImages = await Future.wait(found.map((p) => PlacesApiService.instance.resolveImage(p.tags)));
+    // Most OSM attraction nodes were never tagged with an image/wikipedia
+    // reference at all — a real gap in OSM's own data, not something a
+    // smarter tag lookup can fix. For whichever ones came back null,
+    // _fillGaps tries the place's own website (if OSM has one tagged)
+    // and then a Wikipedia search by name — see its own doc comment for
+    // the order and why name-lookup is attractions-only. Without this,
+    // every attraction OSM had nothing tagged for fell back to the exact
+    // same generic category sentence as every other one in that category.
+    final filled = await Future.wait([
+      for (var i = 0; i < found.length; i++) _fillGaps(found[i], tagImages[i], tagDescriptions[i], allowNameLookup: true),
+    ]);
+    final images = [for (final f in filled) f.image];
+    final descriptions = [for (final f in filled) f.description];
     for (var i = 0; i < found.length; i++) {
       final p = found[i];
       final tourism = p.tags['tourism'] ?? '';
@@ -570,7 +731,10 @@ class CatalogRepository {
           'category': tourism.isEmpty ? 'Attraction' : _titleCase(tourism.replaceAll('_', ' ')),
           'categories': [if (tourism.isNotEmpty) _titleCase(tourism.replaceAll('_', ' '))],
           'price': p.tags['fee'] == 'no' ? 'Free entry' : '',
-          'image': '',
+          // Only written when actually resolved — a transient failure on
+          // this particular refresh shouldn't blank out an image this
+          // same place already got from an earlier successful refresh.
+          if (images[i] != null) 'image': images[i],
           'location': destination.trim(),
           'destinationQuery': key,
           'openingHours': p.tags['opening_hours'] ?? '',
@@ -610,7 +774,21 @@ class CatalogRepository {
       limit: 20,
     );
     _restaurantsRefreshedAt[key] = DateTime.now();
-    final descriptions = await Future.wait(found.map((p) => PlacesApiService.instance.resolveDescription(p.tags)));
+    // See refreshAttractions above — same bug (resolveImage existed but
+    // was never actually called here), same fix.
+    final tagDescriptions = await Future.wait(found.map((p) => PlacesApiService.instance.resolveDescription(p.tags)));
+    final tagImages = await Future.wait(found.map((p) => PlacesApiService.instance.resolveImage(p.tags)));
+    // Most small restaurants have no Wikipedia page, so unlike Attractions
+    // this doesn't fall back to a name search (too likely to collide with
+    // an unrelated article) — but a real restaurant's own website
+    // (`website`/`contact:website`, when OSM has it) is tied to that exact
+    // business, so _fillGaps tries that one extra source here too
+    // (allowNameLookup: false keeps the Wikipedia-by-name step off).
+    final filled = await Future.wait([
+      for (var i = 0; i < found.length; i++) _fillGaps(found[i], tagImages[i], tagDescriptions[i], allowNameLookup: false),
+    ]);
+    final images = [for (final f in filled) f.image];
+    final descriptions = [for (final f in filled) f.description];
     for (var i = 0; i < found.length; i++) {
       final p = found[i];
       final cuisine = p.tags['cuisine'] ?? '';
@@ -624,7 +802,7 @@ class CatalogRepository {
           'location': destination.trim(),
           'destinationQuery': key,
           'priceRange': '',
-          'image': '',
+          if (images[i] != null) 'image': images[i],
           'openingHours': p.tags['opening_hours'] ?? '',
           'address': p.address,
           'phone': p.tags['phone'] ?? p.tags['contact:phone'] ?? '',
@@ -638,6 +816,43 @@ class CatalogRepository {
         // stop the rest of the batch.
       }
     }
+  }
+
+  /// Fills in whichever of [tagImage]/[tagDescription] came back null
+  /// from the OSM tags directly — tried in order of how trustworthy each
+  /// extra source is:
+  /// 1. the place's own `website`/`contact:website` OSM tag, via
+  ///    [PlacesApiService.resolveFromWebsite] — a real source tied to
+  ///    this *exact* business, so trusted for Restaurants too, not just
+  ///    Attractions (see that method's own doc comment);
+  /// 2. only when [allowNameLookup] is true (Attractions only — a small
+  ///    restaurant's name is too likely to collide with an unrelated
+  ///    Wikipedia article, see [PlacesApiService.resolveImageByName]'s
+  ///    doc comment), a Wikipedia search by the place's plain name.
+  /// Either step is skipped once both fields are already filled, and the
+  /// website lookup only runs once per place even when both an image and
+  /// a description are missing (one fetch covers both).
+  Future<({String? image, String? description})> _fillGaps(
+    OsmPlace p,
+    String? tagImage,
+    String? tagDescription, {
+    required bool allowNameLookup,
+  }) async {
+    String? image = tagImage;
+    String? description = tagDescription;
+    if (image == null || description == null) {
+      final website = p.tags['website'] ?? p.tags['contact:website'] ?? '';
+      if (website.isNotEmpty) {
+        final web = await PlacesApiService.instance.resolveFromWebsite(website);
+        image ??= web?.image;
+        description ??= web?.description;
+      }
+    }
+    if (allowNameLookup) {
+      image ??= await PlacesApiService.instance.resolveImageByName(p.name);
+      description ??= await PlacesApiService.instance.resolveDescriptionByName(p.name);
+    }
+    return (image: image, description: description);
   }
 
   String _titleCase(String s) => s.isEmpty ? s : s[0].toUpperCase() + s.substring(1);
@@ -664,6 +879,7 @@ class CatalogHotel extends HotelData {
     required super.reviews,
     required super.price,
     required super.image,
+    super.amenities,
     this.priceAmount,
     this.priceCurrency,
   });

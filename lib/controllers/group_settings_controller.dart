@@ -60,15 +60,15 @@ class GroupSettingController extends ChangeNotifier {
 
   Future<void> saveName(String name) {
     if (name.trim().isEmpty) return Future.value();
-    return TripRepository.instance.updateSettings(tripId, name: name.trim());
+    return TripRepository.instance.updateSettings(tripId, name: name.trim(), actorUid: _uid);
   }
 
   Future<void> saveAbout(String about) {
-    return TripRepository.instance.updateSettings(tripId, about: about.trim());
+    return TripRepository.instance.updateSettings(tripId, about: about.trim(), actorUid: _uid);
   }
 
   Future<void> saveCoverImage(String url) {
-    return TripRepository.instance.updateSettings(tripId, coverImage: url);
+    return TripRepository.instance.updateSettings(tripId, coverImage: url, actorUid: _uid);
   }
 
   Future<void> leaveGroup() {

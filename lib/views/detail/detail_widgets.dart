@@ -361,6 +361,12 @@ class ReviewCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Every reviewer gets a colored circle keyed off their name (same
+    // scheme Community post authors already use via colorValueForName)
+    // with their initial inside it, instead of one flat grey circle that
+    // looked identical for every single review — that sameness read as
+    // "no avatar showing" even though a (blank) circle was there.
+    final initial = data.name.trim().isEmpty ? '?' : data.name.trim()[0].toUpperCase();
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -372,7 +378,11 @@ class ReviewCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              const CircleAvatar(radius: 16, backgroundColor: Color(0xFFD9D9D9)),
+              CircleAvatar(
+                radius: 16,
+                backgroundColor: Color(colorValueForName(data.name)),
+                child: Text(initial, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.white)),
+              ),
               const SizedBox(width: 10),
               Expanded(
                 child: Column(
@@ -394,8 +404,10 @@ class ReviewCard extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 8),
-          Text(data.comment, style: const TextStyle(fontSize: 12, color: Colors.black87)),
+          if (data.comment.trim().isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(data.comment, style: const TextStyle(fontSize: 12, color: Colors.black87)),
+          ],
         ],
       ),
     );
@@ -408,6 +420,11 @@ class ReviewCard extends StatelessWidget {
 /// calls [onSubmit] with the chosen rating/comment. Used by every real
 /// "Reviews" section (see [ReviewsSection]) so Hotel/Restaurant/Attraction/
 /// Community post all write reviews the same way.
+///
+/// The comment is optional — submitting just picks a star rating (defaults
+/// to 5) and leaves the comment blank; [ReviewCard] only shows a comment
+/// line when there actually is one. A tap on "Submit" always counts, same
+/// as the star picker on its own used to.
 Future<void> showWriteReviewDialog(
   BuildContext context, {
   required String title,
@@ -424,12 +441,11 @@ Future<void> showWriteReviewDialog(
     confirmLabel: 'Submit',
     fieldsBuilder: (ctx, setState) => [
       niceStarPicker(rating: rating, onChanged: (v) => setState(() => rating = v)),
-      niceDialogField(commentController, 'Share your experience...', icon: Icons.edit_outlined, maxLines: 4),
+      niceDialogField(commentController, 'Share your experience (optional)...', icon: Icons.edit_outlined, maxLines: 4),
     ],
   );
   if (result != true) return;
   final comment = commentController.text.trim();
-  if (comment.isEmpty) return;
   final profile = await UserRepository.instance.fetchProfile(uid);
   final name = (profile != null && profile.name.isNotEmpty) ? profile.name : 'Traveller';
   await onSubmit(authorId: uid, authorName: name, rating: rating, comment: comment);

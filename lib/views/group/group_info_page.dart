@@ -220,11 +220,11 @@ class GroupInfoPage extends StatelessWidget {
                         shrinkWrap: true,
                         children: friends
                             .map((f) => ListTile(
-                                  leading: const CircleAvatar(radius: 16, backgroundColor: Color(0xFFD9D9D9)),
+                                  leading: UserAvatar(uid: f.uid, radius: 16, backgroundColor: const Color(0xFFD9D9D9)),
                                   title: Text(f.name, style: const TextStyle(fontSize: 13.5)),
                                   trailing: const Icon(Icons.add_circle_outline, color: AppColors.primary),
                                   onTap: () async {
-                                    await TripRepository.instance.addMembers(trip.id, {f.uid: f.name});
+                                    await TripRepository.instance.addMembers(trip.id, {f.uid: f.name}, actorUid: _uid);
                                     if (context.mounted) Navigator.of(context).pop();
                                   },
                                 ))
@@ -254,7 +254,7 @@ class GroupInfoPage extends StatelessWidget {
       destructive: true,
     );
     if (confirmed) {
-      await TripRepository.instance.removeMember(trip.id, memberUid);
+      await TripRepository.instance.removeMember(trip.id, memberUid, actorUid: _uid);
     }
   }
 

@@ -1,0 +1,698 @@
+TRIP
+destination: Bali, Indonesia
+days: 3
+day 1: Sat 12 Dec
+day 2: Sun 13 Dec
+day 3: Mon 14 Dec
+members: Wei Jie, Aisyah, Divya, Yong Yun
+
+SAVED PLACES
+- Ubud Art Market | Ubud | attraction
+- Uluwatu Temple | Uluwatu | attraction
+- Warung Babi Guling Ibu Oka | Ubud | restaurant
+- Waterbom Bali | Kuta | attraction
+- Sisterfields Cafe | Seminyak | restaurant
+- Tegalalang | Ubud | attraction
+
+CURRENT PLAN
+day 1: (nothing yet)
+day 2:
+- 18:00 | Uluwatu Temple | Uluwatu | place
+day 3:
+- 13:30 | Warung Babi Guling Ibu Oka | Ubud | food
+- 18:00 | Tanah Lot Temple | Tabanan | place
+
+DISCUSSION
+Yong Yun: potato head要不要排星期六傍晚
+Aisyah: 可以可以
+Aisyah: 哈哈哈
+Yong Yun: 我今晚转账
+Divya: Waterbom Bali day 2 in the morning?
+Yong Yun: 赞成啦
+Wei Jie: day 2 7:30 pm makan at Bebek Tepi Sawah la
+Aisyah: 不要脏鸭餐啦，去金巴兰比较好
+Yong Yun: 赞成
+Wei Jie: Saturday breakfast lets try Sisterfields Cafe
+Divya: Ok set
+Aisyah: 好，我ok
+Divya: I vote Seminyak Beach Sunday after lunch
+Wei Jie: instead of seminyak why not ubud market
+Yong Yun: 没问题
+Aisyah: 好啊
+Wei Jie: eh passport all valid right
+Aisyah: 最后一天早上10点15分就要去机场了
+
+>>> EXPECTED
+{
+ "add": [
+  {
+   "day": 1,
+   "time": "08:00",
+   "label": "Sisterfields Cafe",
+   "location": "Seminyak",
+   "icon": "food",
+   "saved": true
+  },
+  {
+   "day": 1,
+   "time": "17:00",
+   "label": "Potato Head Beach Club",
+   "location": "Seminyak",
+   "icon": "food",
+   "saved": false
+  },
+  {
+   "day": 2,
+   "time": "10:00",
+   "label": "Waterbom Bali",
+   "location": "Kuta",
+   "icon": "activity",
+   "saved": true
+  },
+  {
+   "day": 2,
+   "time": "14:30",
+   "label": "Ubud Art Market",
+   "location": "Ubud",
+   "icon": "shopping",
+   "saved": true
+  },
+  {
+   "day": 2,
+   "time": "19:30",
+   "label": "Jimbaran Bay Seafood Dinner",
+   "location": "Jimbaran",
+   "icon": "food",
+   "saved": false
+  },
+  {
+   "day": 3,
+   "time": "10:15",
+   "label": "Depart for airport",
+   "location": "Ngurah Rai International Airport (DPS)",
+   "icon": "flight",
+   "saved": false
+  }
+ ],
+ "update": [],
+ "remove": [],
+ "unresolved": []
+}
+
+======================================================================
+
+TRIP
+destination: Bangkok, Thailand
+days: 3
+day 1: Wed 18 Aug
+day 2: Thu 19 Aug
+day 3: Fri 20 Aug
+members: Mei Ling, Arjun, Kai Xuan, Hui Min, Kumar
+
+SAVED PLACES
+- Chatuchak Weekend Market | Chatuchak | attraction
+- Grand Palace | Phra Nakhon | attraction
+- Jodd Fairs Night Market | Rama 9 | restaurant
+- Floating Market | Ratchaburi | attraction
+- Iconsiam | Khlong San | attraction
+- Dinner Cruise | Chao Phraya River | attraction
+- Platinum | Pratunam | attraction
+- Thipsamai Pad Thai | Maha Chai Road | restaurant
+- Chinatown | Samphanthawong | restaurant
+
+CURRENT PLAN
+day 1: (nothing yet)
+day 2:
+- 21:30 | Iconsiam | Khlong San | shopping
+day 3:
+- 21:00 | Jodd Fairs Night Market | Rama 9 | food
+
+DISCUSSION
+Arjun: can we do thipsamai third day dinner time
+Mei Ling: don't want la, tiring ah
+Arjun: ok forget it
+Hui Min: 最后一天下午3点就要去机场了
+Kai Xuan: 没意见
+Kai Xuan: how about chatuchak day 3 after lunch lah
+Mei Ling: 没问题
+Hui Min: +1
+Arjun: remind me to buy sim card
+Kumar: who's bringing the powerbank
+Mei Ling: Eh who handling the money
+Kumar: Booked my leave liao ah
+Mei Ling: my mum ask me buy souvenir
+Arjun: first day 2pm we check in hotel
+Kai Xuan: ok可以
+
+>>> EXPECTED
+{
+ "add": [
+  {
+   "day": 1,
+   "time": "14:00",
+   "label": "Hotel check-in",
+   "location": "",
+   "icon": "hotel",
+   "saved": false
+  },
+  {
+   "day": 3,
+   "time": "14:30",
+   "label": "Chatuchak Weekend Market",
+   "location": "Chatuchak",
+   "icon": "shopping",
+   "saved": true
+  },
+  {
+   "day": 3,
+   "time": "15:00",
+   "label": "Depart for airport",
+   "location": "Suvarnabhumi Airport (BKK)",
+   "icon": "flight",
+   "saved": false
+  }
+ ],
+ "update": [],
+ "remove": [],
+ "unresolved": []
+}
+
+======================================================================
+
+TRIP
+destination: Ho Chi Minh City, Vietnam
+days: 3
+day 1: Sat 23 Jan
+day 2: Sun 24 Jan
+day 3: Mon 25 Jan
+members: Kumar, Ryan, Irfan
+
+SAVED PLACES
+- Mekong Delta Day Tour | My Tho | attraction
+- Nguyen Hue Walking Street | District 1 | attraction
+- Saigon Square | District 1 | attraction
+- Bui Vien | District 1 | attraction
+- Saigon Skydeck (Bitexco Tower) | District 1 | attraction
+- Pho Hoa Pasteur | District 3 | restaurant
+- Saigon Central Post Office | District 1 | attraction
+- Street Food Market | District 1 | restaurant
+
+CURRENT PLAN
+day 1:
+- 10:30 | Saigon Central Post Office | District 1 | place
+day 2:
+- 17:30 | Nguyen Hue Walking Street | District 1 | place
+- 21:30 | Street Food Market | District 1 | food
+day 3:
+- 12:00 | Pho Hoa Pasteur | District 3 | food
+- 14:00 | Saigon Square | District 1 | shopping
+
+DISCUSSION
+Irfan: day 1 jam 5.30 petang letak ben thanh la
+Kumar: Ben Thanh Market not really my thing, Saigon Skydeck (Bitexco Tower) better?
+Irfan: setuju
+Irfan: nguyen hue还是不要了，太赶咯
+Ryan: 好啊
+Ryan: 第一天晚餐过后可以去bui vien吗
+Irfan: malas la yang tu weh
+Ryan: 行，跳过
+Ryan: 护照都没过期吧
+Irfan: Jom makan banh mi huynh hoa hari Ahad time lunch
+Kumar: Ok set
+Ryan: steady
+Kumar: anyone keen on Cu Chi Tunnels?
+Irfan: mungkin, tengok macam mana kot
+Kumar: need to change currency this week lah
+Irfan: hari last pukul 6 petang kita gerak pergi airport la
+Kumar: pho hoa 1:30 pm better, can?
+Irfan: cun
+Irfan: luggage berapa kg eh
+Irfan: ada sapa nak pergi mekong delta?
+Ryan: hmm see first la
+Ryan: passport semua valid kan
+
+>>> EXPECTED
+{
+ "add": [
+  {
+   "day": 1,
+   "time": "17:30",
+   "label": "Saigon Skydeck (Bitexco Tower)",
+   "location": "District 1",
+   "icon": "place",
+   "saved": true
+  },
+  {
+   "day": 2,
+   "time": "12:30",
+   "label": "Banh Mi Huynh Hoa",
+   "location": "District 1",
+   "icon": "food",
+   "saved": false
+  },
+  {
+   "day": 3,
+   "time": "18:00",
+   "label": "Depart for airport",
+   "location": "Tan Son Nhat International Airport (SGN)",
+   "icon": "flight",
+   "saved": false
+  }
+ ],
+ "update": [
+  {
+   "label": "Pho Hoa Pasteur",
+   "from_day": 3,
+   "day": 3,
+   "time": "13:30"
+  }
+ ],
+ "remove": [
+  {
+   "day": 2,
+   "label": "Nguyen Hue Walking Street"
+  }
+ ],
+ "unresolved": [
+  "Cu Chi Tunnels",
+  "Mekong Delta Day Tour"
+ ]
+}
+
+======================================================================
+
+TRIP
+destination: Hong Kong
+days: 3
+day 1: Thu 21 Jan
+day 2: Fri 22 Jan
+day 3: Sat 23 Jan
+members: Michelle, Amir, Irfan, Siti
+
+SAVED PLACES
+(none)
+
+CURRENT PLAN
+day 1:
+- 08:00 | Tim Ho Wan (Sham Shui Po) | Sham Shui Po | food
+day 2:
+- 18:30 | Kam's Roast Goose | Wan Chai | food
+day 3: (nothing yet)
+
+DISCUSSION
+Siti: remind me to buy sim card
+Siti: maks wonton noodle day 1 for lunch, heard it's damn good la
+Irfan: cun
+Amir: 海洋公园要不要排day 1上午
+Irfan: ok set
+Siti: 几点？
+Amir: 早上11点半
+Siti: sounds good
+Amir: 哈哈哈
+Siti: I wanna go Hong Kong Disneyland, day 2 in the morning can?
+Irfan: cun je
+Amir: 庙街放星期四晚餐过后可以吗
+Irfan: Skip la that one
+Amir: ok那算了
+Siti: tim ho wan (sham shui po) 9am better, can?
+Amir: +1 lo
+Siti: i wanna go harbour city, Thursday at 6pm can?
+Michelle: ok i'm in
+Amir: 赞成
+Amir: day 3傍晚我想去星光大道啦
+Siti: Jom
+Amir: 等下，我看回聊天记录
+Michelle: 21 Jan 6pm put tai kwun can?
+Amir: 没问题
+Siti: Ok set
+Siti: harbour city 4:30 pm better, can?
+Irfan: ok set kot
+Michelle: day 1 waktu senja kita pergi Ladies' Market la
+Amir: 可以
+Siti: ok set ah
+Michelle: eh who handling the money ah
+Amir: 昨天在小红书看到澳洲牛奶公司
+Amir: 女人街拿掉吧，来不及
+Michelle: sounds good leh
+Amir: 谁带充电宝
+Siti: How about Star Ferry second day in the evening
+Irfan: ikut cuaca la, tbc
+Siti: ok那先保留
+Irfan: Boleh pindah Tai Kwun ke 22hb tak
+Michelle: Nice, lock it in la
+Siti: nice, lock it in
+Irfan: sapa pegang duit
+
+>>> EXPECTED
+{
+ "add": [
+  {
+   "day": 1,
+   "time": "11:30",
+   "label": "Ocean Park",
+   "location": "Wong Chuk Hang",
+   "icon": "activity",
+   "saved": false
+  },
+  {
+   "day": 1,
+   "time": "12:30",
+   "label": "Mak's Noodle",
+   "location": "Central",
+   "icon": "food",
+   "saved": false
+  },
+  {
+   "day": 1,
+   "time": "16:30",
+   "label": "Harbour City",
+   "location": "Tsim Sha Tsui",
+   "icon": "shopping",
+   "saved": false
+  },
+  {
+   "day": 2,
+   "time": "10:00",
+   "label": "Hong Kong Disneyland",
+   "location": "Lantau Island",
+   "icon": "activity",
+   "saved": false
+  },
+  {
+   "day": 2,
+   "time": "18:00",
+   "label": "Tai Kwun",
+   "location": "Central",
+   "icon": "place",
+   "saved": false
+  },
+  {
+   "day": 3,
+   "time": "17:00",
+   "label": "Avenue of Stars",
+   "location": "Tsim Sha Tsui",
+   "icon": "place",
+   "saved": false
+  }
+ ],
+ "update": [
+  {
+   "label": "Tim Ho Wan (Sham Shui Po)",
+   "from_day": 1,
+   "day": 1,
+   "time": "09:00"
+  }
+ ],
+ "remove": [],
+ "unresolved": [
+  "Star Ferry"
+ ]
+}
+
+======================================================================
+
+TRIP
+destination: Kota Kinabalu, Malaysia
+days: 5
+day 1: Wed 13 Jan
+day 2: Thu 14 Jan
+day 3: Fri 15 Jan
+day 4: Sat 16 Jan
+day 5: Sun 17 Jan
+members: Mei Ling, Ryan, Yong Yun
+
+SAVED PLACES
+- Welcome Seafood Restaurant | Asia City | restaurant
+- Gaya Street Sunday Market | Gaya Street | attraction
+- Imago Shopping Mall | KK Times Square | attraction
+- Yee Fung Laksa | Gaya Street | restaurant
+- Signal Hill Observatory | Signal Hill | attraction
+- Kota Kinabalu City Mosque | Likas Bay | attraction
+- Kinabalu Park | Kundasang | attraction
+- Tanjung Aru Beach Sunset | Tanjung Aru | attraction
+- Mari Mari Cultural Village | Inanam | attraction
+
+CURRENT PLAN
+day 1: (nothing yet)
+day 2:
+- 18:00 | Kota Kinabalu City Mosque | Likas Bay | place
+- 21:00 | Filipino Market | Jalan Tun Fuad Stephens | shopping
+day 3:
+- 13:30 | Yee Fung Laksa | Gaya Street | food
+- 16:00 | Imago Shopping Mall | KK Times Square | shopping
+day 4:
+- 08:30 | Fook Yuen Cafe | Gaya Street | food
+- 21:30 | Klias River Firefly Cruise | Beaufort | activity
+day 5:
+- 18:30 | Welcome Seafood Restaurant | Asia City | food
+
+DISCUSSION
+Yong Yun: 我妈叫我买手信
+Ryan: what about mari mari? second day after lunch
+Mei Ling: ok可以
+Yong Yun: can, i'm ok ah
+Ryan: day 1 morning go gaya street ok or not
+Mei Ling: +1
+Yong Yun: 赞成
+Ryan: what about signal hill? day 4 in the evening ah
+Yong Yun: ok可以
+Ryan: eh fourth day evening we go Tanjung Aru Beach Sunset la
+Yong Yun: 可以可以
+Yong Yun: 行李限重多少
+Yong Yun: 我还没请假哈哈
+Ryan: floating mosque take out la, cannot make it ah
+Yong Yun: 没意见
+Ryan: check in at 4pm ya
+Yong Yun: 16号早上排神山公园好不好
+Mei Ling: 没意见咯
+Ryan: can we shift gaya street to Thursday instead la
+Yong Yun: 赞成
+Mei Ling: 好啊
+Yong Yun: 我建议第五天晚餐去welcome seafood
+Mei Ling: 已经排了啊 lo
+Mei Ling: 牧场要不要排星期六下午
+Yong Yun: 赞成
+Yong Yun: what time ah?
+Mei Ling: 就下午2点
+Ryan: on second thought skip yee fung
+Mei Ling: steady
+Mei Ling: kinabalu park改早上11点
+Ryan: sounds good
+Mei Ling: 想了一下Tanjung Aru Beach Sunset不去了
+Ryan: sounds good
+Mei Ling: 15号早上去跳岛怎样？
+Ryan: Maybe? see how
+Mei Ling: ok那先保留啦
+Mei Ling: Booked my leave liao
+
+>>> EXPECTED
+{
+ "add": [
+  {
+   "day": 1,
+   "time": "16:00",
+   "label": "Hotel check-in",
+   "location": "",
+   "icon": "hotel",
+   "saved": false
+  },
+  {
+   "day": 2,
+   "time": "10:00",
+   "label": "Gaya Street Sunday Market",
+   "location": "Gaya Street",
+   "icon": "shopping",
+   "saved": true
+  },
+  {
+   "day": 2,
+   "time": "14:30",
+   "label": "Mari Mari Cultural Village",
+   "location": "Inanam",
+   "icon": "activity",
+   "saved": true
+  },
+  {
+   "day": 4,
+   "time": "11:00",
+   "label": "Kinabalu Park",
+   "location": "Kundasang",
+   "icon": "place",
+   "saved": true
+  },
+  {
+   "day": 4,
+   "time": "14:00",
+   "label": "Desa Dairy Farm",
+   "location": "Kundasang",
+   "icon": "place",
+   "saved": false
+  },
+  {
+   "day": 4,
+   "time": "17:00",
+   "label": "Signal Hill Observatory",
+   "location": "Signal Hill",
+   "icon": "place",
+   "saved": true
+  }
+ ],
+ "update": [],
+ "remove": [
+  {
+   "day": 2,
+   "label": "Kota Kinabalu City Mosque"
+  },
+  {
+   "day": 3,
+   "label": "Yee Fung Laksa"
+  }
+ ],
+ "unresolved": [
+  "Tunku Abdul Rahman Marine Park Island Hopping"
+ ]
+}
+
+======================================================================
+
+TRIP
+destination: Osaka, Japan
+days: 5
+day 1: Thu 24 Jun
+day 2: Fri 25 Jun
+day 3: Sat 26 Jun
+day 4: Sun 27 Jun
+day 5: Mon 28 Jun
+members: Rachel, Xin Yi, Ryan, Yong Yun
+
+SAVED PLACES
+- Universal Studios Japan | Konohana | attraction
+- Ichiran Ramen Dotonbori | Namba | restaurant
+- Kuromon Ichiba Market | Nippombashi | restaurant
+- Kani Doraku | Namba | restaurant
+- Harukas 300 Observatory | Abeno | attraction
+- Shinsekai & Tsutenkaku Tower | Naniwa | attraction
+- Shinsaibashi-suji Shopping Street | Chuo | attraction
+
+CURRENT PLAN
+day 1:
+- 07:30 | Kuromon Ichiba Market | Nippombashi | food
+- 19:30 | Kani Doraku | Namba | food
+day 2: (nothing yet)
+day 3:
+- 13:30 | Ichiran Ramen Dotonbori | Namba | food
+- 17:00 | Harukas 300 Observatory | Abeno | place
+day 4:
+- 10:30 | Universal Studios Japan | Konohana | activity
+day 5: (nothing yet)
+
+DISCUSSION
+Yong Yun: 我建议27号下午5点半去心斋桥
+Rachel: sure
+Xin Yi: 没意见
+Rachel: what about dotonbori? day 1 at night
+Yong Yun: 可以
+Ryan: dotonbori what time?
+Rachel: let's say 9:30pm
+Yong Yun: can can lah
+Ryan: I vote umeda sky day 2 at night
+Rachel: +1 lah
+Yong Yun: +1 lo
+Xin Yi: 最后一天早上10点15分就要去机场了
+Rachel: saw osaka castle on tiktok yesterday lol
+Ryan: can we shift usj to 28 Jun instead
+Yong Yun: 可以
+Ryan: Who's bringing the powerbank wei
+Xin Yi: 好期待！！
+Yong Yun: 星期四晚餐时间去Kani Doraku Dotonbori啦
+Rachel: that one already in the plan
+Yong Yun: 护照都没过期吧
+Yong Yun: 第一天早上去临空城outlet怎样？
+Ryan: steady
+Xin Yi: 24号晚上6点我们去tsutenkaku
+Rachel: +1
+Ryan: ok no problem
+Xin Yi: 把一兰拉面换到星期四可以吗
+Rachel: Nice, lock it in
+Ryan: good idea
+Yong Yun: 梅田蓝天大厦改晚上8点半
+Ryan: eh cancel harukas la, no time
+Xin Yi: 没意见
+
+>>> EXPECTED
+{
+ "add": [
+  {
+   "day": 1,
+   "time": "10:00",
+   "label": "Rinku Premium Outlets",
+   "location": "Izumisano",
+   "icon": "shopping",
+   "saved": false
+  },
+  {
+   "day": 1,
+   "time": "18:00",
+   "label": "Shinsekai & Tsutenkaku Tower",
+   "location": "Naniwa",
+   "icon": "place",
+   "saved": true
+  },
+  {
+   "day": 1,
+   "time": "21:30",
+   "label": "Dotonbori",
+   "location": "Namba",
+   "icon": "food",
+   "saved": false
+  },
+  {
+   "day": 2,
+   "time": "20:30",
+   "label": "Umeda Sky Building",
+   "location": "Kita",
+   "icon": "place",
+   "saved": false
+  },
+  {
+   "day": 4,
+   "time": "17:30",
+   "label": "Shinsaibashi-suji Shopping Street",
+   "location": "Chuo",
+   "icon": "shopping",
+   "saved": true
+  },
+  {
+   "day": 5,
+   "time": "10:15",
+   "label": "Depart for airport",
+   "location": "Kansai International Airport (KIX)",
+   "icon": "flight",
+   "saved": false
+  }
+ ],
+ "update": [
+  {
+   "label": "Ichiran Ramen Dotonbori",
+   "from_day": 3,
+   "day": 1,
+   "time": "13:30"
+  },
+  {
+   "label": "Universal Studios Japan",
+   "from_day": 4,
+   "day": 5,
+   "time": "10:30"
+  }
+ ],
+ "remove": [
+  {
+   "day": 3,
+   "label": "Harukas 300 Observatory"
+  }
+ ],
+ "unresolved": []
+}
+
+======================================================================
+

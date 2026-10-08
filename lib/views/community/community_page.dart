@@ -6,6 +6,7 @@ import '../../models/community_models.dart';
 import '../../theme.dart';
 import '../filter/filter_page.dart';
 import '../../models/filter_models.dart' as filters;
+import 'author_profile_page.dart';
 import 'community_post_detail_page.dart';
 import 'create_post_page.dart';
 import 'itinerary_select_page.dart';
@@ -235,12 +236,17 @@ class _CommunityPageState extends State<CommunityPage> {
           ),
         ),
         if (posts.isEmpty)
-          const SliverFillRemaining(
+          SliverFillRemaining(
             hasScrollBody: false,
             child: Center(
               child: Padding(
-                padding: EdgeInsets.symmetric(vertical: 40),
-                child: Text('No posts match your search', style: TextStyle(color: AppColors.textGrey)),
+                padding: const EdgeInsets.symmetric(vertical: 40),
+                child: Text(
+                  controller.search.text.trim().isEmpty
+                      ? 'No posts yet — be the first to share a trip!'
+                      : 'No posts match your search',
+                  style: const TextStyle(color: AppColors.textGrey),
+                ),
               ),
             ),
           )
@@ -276,29 +282,40 @@ class _CommunityPageState extends State<CommunityPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          GestureDetector(
-            onTap: () => _openDetail(post),
-            child: Row(
-              children: [
-                CircleAvatar(radius: 18, backgroundColor: post.avatarColor),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+          Row(
+            children: [
+              // Tapping the author (avatar/name/handle) opens their
+              // profile instead of this post's detail now — the post
+              // itself is still reachable via the title/image area right
+              // below, which has its own separate onTap.
+              Expanded(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => _openAuthorProfile(post),
+                  child: Row(
                     children: [
-                      Text(post.author, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold, color: Colors.black)),
-                      Text('${post.handle} · ${post.timeAgo}', style: const TextStyle(fontSize: 10.5, color: AppColors.textGrey)),
+                      CircleAvatar(radius: 18, backgroundColor: post.avatarColor),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(post.author, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold, color: Colors.black)),
+                            Text('${post.handle} · ${post.timeAgo}', style: const TextStyle(fontSize: 10.5, color: AppColors.textGrey)),
+                          ],
+                        ),
+                      ),
                     ],
                   ),
                 ),
-                IconButton(
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
-                  icon: const Icon(Icons.more_vert, size: 18, color: AppColors.textGrey),
-                  onPressed: () => _openPostMenu(post),
-                ),
-              ],
-            ),
+              ),
+              IconButton(
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+                icon: const Icon(Icons.more_vert, size: 18, color: AppColors.textGrey),
+                onPressed: () => _openPostMenu(post),
+              ),
+            ],
           ),
           const SizedBox(height: 10),
           GestureDetector(
@@ -392,18 +409,6 @@ class _CommunityPageState extends State<CommunityPage> {
                   ],
                 ),
               ),
-              const SizedBox(width: 18),
-              GestureDetector(
-                onTap: () => controller.toggleSaved(post),
-                child: Row(
-                  children: [
-                    Icon(post.saved ? Icons.bookmark : Icons.bookmark_border,
-                        size: 17, color: post.saved ? AppColors.primary : AppColors.textGrey),
-                    const SizedBox(width: 5),
-                    const Text('Save', style: TextStyle(fontSize: 12, color: AppColors.textGrey)),
-                  ],
-                ),
-              ),
               const Spacer(),
               GestureDetector(
                 onTap: () => ScaffoldMessenger.of(context).showSnackBar(
@@ -428,14 +433,6 @@ class _CommunityPageState extends State<CommunityPage> {
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
-              leading: Icon(post.saved ? Icons.bookmark : Icons.bookmark_border, color: AppColors.navy),
-              title: Text(post.saved ? 'Remove from saved' : 'Save post'),
-              onTap: () {
-                controller.toggleSaved(post);
-                Navigator.of(context).pop();
-              },
-            ),
-            ListTile(
               leading: const Icon(Icons.share_outlined, color: AppColors.navy),
               title: const Text('Share'),
               onTap: () {
@@ -459,6 +456,12 @@ class _CommunityPageState extends State<CommunityPage> {
 
   void _openDetail(CommunityPost post) {
     Navigator.of(context).push(MaterialPageRoute(builder: (_) => CommunityPostDetailPage(post: post)));
+  }
+
+  void _openAuthorProfile(CommunityPost post) {
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => AuthorProfilePage(authorId: post.authorId, authorName: post.author, avatarColor: post.avatarColor),
+    ));
   }
 
   // ---------------- Compose FAB ----------------

@@ -4,12 +4,14 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Voya Console</title>
-<link rel="stylesheet" href="css/tokens.css" />
-<link rel="stylesheet" href="css/base.css" />
+<link rel="stylesheet" href="css/tokens.css?v=20261006b" />
+<link rel="stylesheet" href="css/base.css?v=20261006b" />
 <style>
   body { background: var(--navy-800); display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; }
   .chooser { background: #fff; border-radius: 22px; padding: 48px 44px; max-width: 460px; width: 100%; box-shadow: var(--shadow-pop); }
-  .chooser .brand { font-size: 28px; font-weight: 800; color: var(--navy-800); margin-bottom: 6px; }
+  .chooser .brand { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .chooser .brand img { height: 30px; width: auto; display: block; }
+  .chooser .brand span { font-size: 22px; font-weight: 800; color: var(--navy-800); }
   .chooser p.lede { color: var(--text-500); font-size: 14px; margin-bottom: 30px; }
   .choice { display: block; padding: 18px 20px; border: 1px solid var(--border-strong); border-radius: 14px; margin-bottom: 14px; transition: border-color .15s ease, background .15s ease; }
   .choice:hover { border-color: var(--teal-600); background: var(--teal-100); }
@@ -19,7 +21,7 @@
 </head>
 <body>
   <div class="chooser">
-    <div class="brand">Voya Console</div>
+    <div class="brand"><img src="img/voya-logo.png" alt="Voya" /><span>Console</span></div>
     <p class="lede">Choose which workspace you want to sign in to.</p>
     <a class="choice" href="admin/login.html">
       <div class="t">Admin Console</div>

@@ -42,6 +42,12 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
       iconColor: AppColors.primary,
       buttonLabel: 'Back to Login',
       onDone: () => Navigator.of(context).pop(),
+      // Didn't get it the first time (spam filter, typo'd into the wrong
+      // inbox folder, slow delivery)? Re-sends the same real Firebase
+      // reset email without closing the dialog or leaving this page.
+      secondaryLabel: 'Resend email',
+      onSecondary: controller.sendResetLink,
+      secondarySuccessMessage: "Sent again — check your email for the password reset link.",
     );
   }
 
@@ -50,7 +56,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
     return Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
           child: ListenableBuilder(
             listenable: controller,

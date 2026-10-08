@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../controllers/auth_controller.dart';
 import '../../theme.dart';
+import '../onboarding/onboarding_wizard_page.dart';
 import '../shared/bottom_nav.dart';
 import 'auth_widgets.dart';
 import 'forgot_password_page.dart';
@@ -37,6 +38,33 @@ class _LoginPageState extends State<LoginPage> {
       MaterialPageRoute(builder: (_) => const MainPage()),
       (route) => false,
     );
+  }
+
+  Future<void> _handleSocial(Future<SocialLoginOutcome> Function() signIn) async {
+    final outcome = await signIn();
+    if (!mounted) return;
+    switch (outcome.result) {
+      case SocialLoginResult.cancelled:
+        return;
+      case SocialLoginResult.error:
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(outcome.errorMessage!)));
+        return;
+      case SocialLoginResult.success:
+        if (outcome.isNewUser) {
+          // Same destination a brand-new email/password account reaches
+          // after verifying — avatar/phone/region/currency/add friend —
+          // which itself lands on MainPage when done (see
+          // OnboardingWizardPage._finish()). Google/Facebook accounts
+          // skip email verification entirely: the provider already
+          // vouches for the address.
+          Navigator.of(context).push(MaterialPageRoute(builder: (_) => const OnboardingWizardPage()));
+        } else {
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (_) => const MainPage()),
+            (route) => false,
+          );
+        }
+    }
   }
 
   @override
@@ -125,7 +153,13 @@ class _LoginPageState extends State<LoginPage> {
                   ),
                 ),
                 const SizedBox(height: 40),
-                socialLoginRow('Or Login with'),
+                socialLoginRow(
+                  'Or Login with',
+                  onGoogle: () => _handleSocial(controller.loginWithGoogle),
+                  onFacebook: () => _handleSocial(controller.loginWithFacebook),
+                  googleBusy: controller.googleLoading,
+                  facebookBusy: controller.facebookLoading,
+                ),
               ],
             ),
           ),

@@ -210,6 +210,7 @@ class _SavedItemsPageState extends State<SavedItemsPage> {
           pricePerNight: price,
           image: hotel.image,
           tripId: widget.tripId,
+          amenities: hotel.amenities,
         ),
       )),
       child: Row(

@@ -4,16 +4,16 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Organization Profile — Voya Insurance Partner</title>
-<link rel="stylesheet" href="../css/tokens.css" />
-<link rel="stylesheet" href="../css/base.css" />
-<link rel="stylesheet" href="../css/layout.css" />
-<link rel="stylesheet" href="../css/components.css" />
+<link rel="stylesheet" href="../css/tokens.css?v=20261006b" />
+<link rel="stylesheet" href="../css/base.css?v=20261006b" />
+<link rel="stylesheet" href="../css/layout.css?v=20261006b" />
+<link rel="stylesheet" href="../css/components.css?v=20261006b" />
 </head>
 <body>
 <div class="shell">
   <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
   <aside class="sidebar" id="sidebar">
-    <div class="sidebar-brand">Voya</div>
+    <img class="sidebar-brand" src="../img/voya-logo-white.png" alt="Voya" />
     <div class="sidebar-user">
       <div class="name" id="sbUserName">Loading…</div>
       <div class="role" id="sbUserRole">Partner workspace</div>
@@ -87,13 +87,13 @@
 </div>
 
 <script type="module">
-import { requireRole } from "../js/auth-guard.js";
-import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js";
-import { mountIcons } from "../js/icons.js";
-import { getPartnerProfile, savePartnerProfile } from "../js/data.js";
-import { storage } from "../js/firebase-config.js";
+import { requireRole } from "../js/auth-guard.js?v=20261007";
+import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261007";
+import { mountIcons } from "../js/icons.js?v=20261007";
+import { getPartnerProfile, savePartnerProfile } from "../js/data.js?v=20261007";
+import { storage } from "../js/firebase-config.js?v=20261007";
 import { ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-storage.js";
-import { toast, setBusy } from "../js/ui.js";
+import { toast, setBusy } from "../js/ui.js?v=20261007";
 
 mountSidebarNav({ role: "partner", active: "organization" });
 const session = await requireRole("partner", "login.html");

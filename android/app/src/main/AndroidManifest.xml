@@ -43,6 +43,31 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+
+        <!-- Facebook Login (lib/services/auth_service.dart's
+             signInWithFacebook, behind login_page.dart / signup_page.dart's
+             social row) — flutter_facebook_auth's own required native
+             setup, not something the plugin wires up just from being added
+             to pubspec.yaml. Reads the real App ID/Client Token from
+             res/values/strings.xml — see that file's comment for where to
+             get them (the same Facebook app already entered into the
+             Firebase console when Facebook sign-in was enabled there). -->
+        <meta-data android:name="com.facebook.sdk.ApplicationId" android:value="@string/facebook_app_id" />
+        <meta-data android:name="com.facebook.sdk.ClientToken" android:value="@string/facebook_client_token" />
+        <activity
+            android:name="com.facebook.FacebookActivity"
+            android:configChanges="keyboard|keyboardHidden|screenLayout|screenSize|orientation"
+            android:label="voya" />
+        <activity
+            android:name="com.facebook.CustomTabActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="@string/fb_login_protocol_scheme" />
+            </intent-filter>
+        </activity>
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and
@@ -54,5 +79,8 @@
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
         </intent>
+        <!-- Lets the Facebook Login SDK hand off to the real Facebook app
+             when it's installed, instead of only the in-app browser tab. -->
+        <package android:name="com.facebook.katana" />
     </queries>
 </manifest>

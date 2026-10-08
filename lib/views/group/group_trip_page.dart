@@ -13,14 +13,21 @@ import '../../services/auth_service.dart';
 import '../../services/currency_service.dart';
 import '../../services/format_utils.dart';
 import '../../theme.dart';
+import '../detail/detail_page_attraction.dart';
+import '../detail/detail_page_hotel.dart';
+import '../detail/detail_page_restaurant.dart';
 import '../expenses/add_expense_choice_page.dart';
 import '../expenses/expenses_tab.dart';
 import '../insurance/insurance_list_page.dart';
 import '../profile/history_detail_pages.dart';
+import '../shared/member_select_section.dart';
 import '../shared/nice_dialog.dart';
 import '../shared/nice_pickers.dart';
+import '../shared/translated_text.dart';
 import '../vote/create_vote_page.dart';
 import '../vote/vote_tab.dart';
+import 'ai_itinerary_sheet.dart';
+import 'day_timeline_view.dart';
 import 'group_info_page.dart';
 import 'plan_flight_detail_page.dart';
 import 'plan_hotel_detail_page.dart';
@@ -102,7 +109,7 @@ class _GroupTripPageState extends State<GroupTripPage> {
               onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => GroupInfoPage(tripId: widget.tripId))),
               child: Row(
                 children: [
-                  const CircleAvatar(radius: 18, backgroundColor: Color(0xFFD9D9D9)),
+                  AppAvatar(imageUrl: trip.coverImage, radius: 18, backgroundColor: const Color(0xFFD9D9D9), fallbackIcon: Icons.map_outlined),
                   const SizedBox(width: 10),
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -132,7 +139,14 @@ class _GroupTripPageState extends State<GroupTripPage> {
               ),
             ),
           ),
-          body: _buildBody(trip),
+          // Shows only while this trip's AI Summarise run is working or has a
+          // result waiting; tapping it re-opens the sheet (ai_itinerary_sheet.dart).
+          body: Column(
+            children: [
+              AiItineraryStatusBar(controller: controller),
+              Expanded(child: _buildBody(trip)),
+            ],
+          ),
           floatingActionButton: controller.tab == GroupTab.expenses
               ? FloatingActionButton(
                   backgroundColor: AppColors.primary,
@@ -241,7 +255,10 @@ class _GroupTripPageState extends State<GroupTripPage> {
               for (final f in trip.flights)
                 (
                   '${f.dateTime} · ${f.airline}',
-                  f.routeCode,
+                  // Who this flight is for — see TripFlight.forMemberUids —
+                  // appended so every member can see at a glance whether a
+                  // booking applies to them, not just whoever booked it.
+                  _withMembersLabel(f.routeCode, f.forMemberUids, trip.memberNames),
                   () => Navigator.of(context).push(MaterialPageRoute(
                         builder: (_) => PlanFlightDetailPage(
                           tripId: widget.tripId,
@@ -251,6 +268,7 @@ class _GroupTripPageState extends State<GroupTripPage> {
                           routeCode: f.routeCode,
                           routeCities: f.routeCities,
                           dateTime: f.dateTime,
+                          arrivalTime: f.arrivalTime,
                           terminal: f.terminal,
                           bookingRef: f.bookingRef,
                           status: f.status,
@@ -259,6 +277,8 @@ class _GroupTripPageState extends State<GroupTripPage> {
                           contactEmail: f.contactEmail,
                           contactPhone: f.contactPhone,
                           documents: f.documents,
+                          forMemberUids: f.forMemberUids,
+                          memberNames: trip.memberNames,
                         ),
                       )),
                   () => _confirmDeleteFlight(f),
@@ -276,18 +296,26 @@ class _GroupTripPageState extends State<GroupTripPage> {
               for (final h in trip.hotelStays)
                 (
                   '${h.checkIn} - ${h.checkOut}, ${h.name}',
-                  h.location,
+                  _withMembersLabel(h.location, h.forMemberUids, trip.memberNames),
                   () => Navigator.of(context).push(MaterialPageRoute(
                         builder: (_) => PlanHotelDetailPage(
+                          tripId: widget.tripId,
+                          id: h.id,
                           name: h.name,
                           location: h.location,
                           checkIn: h.checkIn,
                           checkOut: h.checkOut,
+                          bookingRef: h.bookingRef,
+                          status: h.status,
                           guestName: h.guestName,
                           guestEmail: h.guestEmail,
                           guestPhone: h.guestPhone,
                           guestIdNumber: h.guestIdNumber,
                           specialRequests: h.specialRequests,
+                          refId: h.refId,
+                          documents: h.documents,
+                          forMemberUids: h.forMemberUids,
+                          memberNames: trip.memberNames,
                         ),
                       )),
                   () => _confirmDeleteHotelStay(h),
@@ -449,6 +477,15 @@ class _GroupTripPageState extends State<GroupTripPage> {
         ),
       ),
     );
+  }
+
+  /// Appends "· For: Alice, Bob" to a flight/hotel row's subtitle when the
+  /// booking is only for some of the trip's members — see
+  /// [forMembersLabel]. Returns [base] unchanged for a solo trip, a
+  /// booking that covers everyone, or one added before this existed.
+  String _withMembersLabel(String base, List<String> forMemberUids, Map<String, String> memberNames) {
+    final label = forMembersLabel(forMemberUids, memberNames);
+    return label.isEmpty ? base : '$base · $label';
   }
 
   Widget _overviewGroup(IconData icon, List<(String, String, VoidCallback, VoidCallback?)> lines, {VoidCallback? trailingAdd}) {
@@ -1084,40 +1121,69 @@ class _GroupTripPageState extends State<GroupTripPage> {
   Widget _dayContent(Trip trip, DayPlan day) {
     final dayIndex = controller.planIndex;
     final fullDate = trip.fullDateLabelForDay(day.day);
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
-      children: [
-        Row(
-          children: [
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(fullDate.isEmpty ? 'Day ${day.day}' : 'Day ${day.day}, $fullDate',
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.navy)),
+              ),
+              _dayHeaderIcon(
+                Icons.auto_awesome,
+                onTap: () => ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('AI is optimising this day\'s schedule...')),
+                ),
+              ),
+              const SizedBox(width: 14),
+              _dayHeaderIcon(Icons.add, onTap: () => _addActivityDialog(trip, dayIndex)),
+              const SizedBox(width: 14),
+              // While editing, the pencil becomes an explicit "Save" pill
+              // instead of just toggling back — every drag already writes
+              // to Firestore the instant it's released, so there's
+              // nothing left to actually persist here; this is purely so
+              // the exit action reads as a deliberate "I'm done" rather
+              // than an unlabeled icon that looks identical to the one
+              // that started editing.
+              _dayEditMode
+                  ? _dayHeaderSaveButton(onTap: () => setState(() => _dayEditMode = false))
+                  : _dayHeaderIcon(
+                      Icons.edit_outlined,
+                      onTap: () => setState(() => _dayEditMode = true),
+                    ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          if (day.items.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 40),
+              child: Center(child: Text('No activities planned yet', style: TextStyle(color: AppColors.textGrey))),
+            )
+          // Edit mode swaps the plain chronological list for a draggable
+          // 24-hour timeline (DayTimelineView) — dragging an activity up
+          // or down changes its time, which until this existed had no way
+          // to happen short of deleting and re-adding it. Out of edit
+          // mode, the list below is unchanged from before.
+          else if (_dayEditMode)
             Expanded(
-              child: Text(fullDate.isEmpty ? 'Day ${day.day}' : 'Day ${day.day}, $fullDate',
-                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.navy)),
-            ),
-            _dayHeaderIcon(
-              Icons.auto_awesome,
-              onTap: () => ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('AI is optimising this day\'s schedule...')),
+              child: DayTimelineView(
+                items: day.items,
+                onTimeChanged: (item, newTime) => controller.updateActivityTime(dayIndex, item.id, newTime),
+                onDelete: (item) => _confirmDeleteActivity(dayIndex, item),
+              ),
+            )
+          else
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.only(bottom: 16),
+                children: day.items.map((item) => _activityCard(item, trip)).toList(),
               ),
             ),
-            const SizedBox(width: 14),
-            _dayHeaderIcon(Icons.add, onTap: () => _addActivityDialog(trip, dayIndex)),
-            const SizedBox(width: 14),
-            _dayHeaderIcon(
-              Icons.edit_outlined,
-              active: _dayEditMode,
-              onTap: () => setState(() => _dayEditMode = !_dayEditMode),
-            ),
-          ],
-        ),
-        const SizedBox(height: 14),
-        if (day.items.isEmpty)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 40),
-            child: Center(child: Text('No activities planned yet', style: TextStyle(color: AppColors.textGrey))),
-          )
-        else
-          ...day.items.map((item) => _activityCard(dayIndex, item, trip.memberNames.values.toList())),
-      ],
+        ],
+      ),
     );
   }
 
@@ -1128,6 +1194,27 @@ class _GroupTripPageState extends State<GroupTripPage> {
     return GestureDetector(
       onTap: onTap,
       child: Icon(icon, size: 20, color: active ? AppColors.primary : AppColors.navy),
+    );
+  }
+
+  /// Replaces the pencil icon while Day edit mode is on (see [_dayContent])
+  /// — a small filled pill so leaving edit mode reads as a clear, confident
+  /// action rather than an icon tap easily mistaken for re-entering it.
+  Widget _dayHeaderSaveButton({required VoidCallback onTap}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(20)),
+        child: const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.check, size: 15, color: Colors.white),
+            SizedBox(width: 4),
+            Text('Save', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.white)),
+          ],
+        ),
+      ),
     );
   }
 
@@ -1157,6 +1244,9 @@ class _GroupTripPageState extends State<GroupTripPage> {
     DateTime? pickedDate = trip.dateForDay(dayIndex + 1);
     TimeOfDay? pickedTime;
     ({String name, String location, String iconKey})? selectedSaved;
+    // Who this activity is for — defaults to everyone, same convention as
+    // the flight/hotel "Who Is This For?" picker (MemberSelectSection).
+    Set<String> selectedMemberUids = trip.memberIds.toSet();
 
     final uid = AuthService.instance.currentUser?.uid ?? '';
     final favKey = '$uid#${trip.id}';
@@ -1357,6 +1447,16 @@ class _GroupTripPageState extends State<GroupTripPage> {
                           ),
                         ),
                       ],
+                      if (trip.memberIds.length > 1) ...[
+                        const SizedBox(height: 16),
+                        const Divider(height: 1, color: Color(0xFFECECEC)),
+                        const SizedBox(height: 14),
+                        MemberSelectSection(
+                          memberNames: trip.memberNames,
+                          selected: selectedMemberUids,
+                          onChanged: (v) => setSheetState(() => selectedMemberUids = v),
+                        ),
+                      ],
                       const SizedBox(height: 16),
                       SizedBox(
                         width: double.infinity,
@@ -1395,6 +1495,10 @@ class _GroupTripPageState extends State<GroupTripPage> {
       if (offset >= 0 && offset < trip.days.length) targetDayIndex = offset;
     }
     final timeText = pickedTime == null ? '' : _formatTimeOfDay24(pickedTime!);
+    // Stored as-is even when it covers every member — forMembersLabel()
+    // treats "all members selected" the same as empty (renders nothing),
+    // so there's no need to special-case it here.
+    final forMemberUids = selectedMemberUids.toList();
     if (mode == 'saved' && selectedSaved != null) {
       await controller.addActivity(
         targetDayIndex,
@@ -1402,6 +1506,7 @@ class _GroupTripPageState extends State<GroupTripPage> {
         label: selectedSaved!.name,
         iconKey: selectedSaved!.iconKey,
         location: selectedSaved!.location,
+        forMemberUids: forMemberUids,
       );
     } else if (label.text.trim().isNotEmpty) {
       await controller.addActivity(
@@ -1410,6 +1515,7 @@ class _GroupTripPageState extends State<GroupTripPage> {
         label: label.text.trim(),
         iconKey: iconKey,
         location: location.text.trim(),
+        forMemberUids: forMemberUids,
       );
     }
   }
@@ -1444,7 +1550,23 @@ class _GroupTripPageState extends State<GroupTripPage> {
   // row pinned to the card's right edge, which is what it looked like
   // before. In edit mode (the pencil icon in the Day header) a delete
   // button still appears, as its own small tap target next to the text.
-  Widget _activityCard(int dayIndex, ActivityItem item, List<String> memberNames) {
+  // dayIndex used to be needed here for the in-list delete button, now
+  // moved onto DayTimelineView's chips (see _dayContent) — this plain
+  // card only ever renders outside edit mode now, so it has nothing left
+  // that needs the day it's on.
+  // An activity added "From Saved" in the Add Activity sheet is matched
+  // back (via GroupTripController.hotelForActivity/attractionForActivity/
+  // restaurantForActivity, same label-matching idea as the Vote tab) to the
+  // real saved listing behind it and rendered with its real image, rating,
+  // location and price instead of just its typed name. An activity typed
+  // by hand instead just shows the plain icon-circle layout it always had
+  // — still has nothing more than that to show.
+  Widget _activityCard(ActivityItem item, Trip trip) {
+    final memberNames = trip.memberNames.values.toList();
+    final forLabel = forMembersLabel(item.forMemberUids, trip.memberNames);
+    final hotel = controller.hotelForActivity(item);
+    final attraction = hotel == null ? controller.attractionForActivity(item) : null;
+    final restaurant = hotel == null && attraction == null ? controller.restaurantForActivity(item) : null;
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
       child: Row(
@@ -1462,70 +1584,249 @@ class _GroupTripPageState extends State<GroupTripPage> {
             ),
           ),
           Expanded(
-            child: Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(color: AppColors.divider, borderRadius: BorderRadius.circular(16)),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    width: 48,
-                    height: 48,
-                    decoration: const BoxDecoration(color: AppColors.chipGrey, shape: BoxShape.circle),
-                    child: Icon(item.icon, size: 20, color: AppColors.navy),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(item.label,
-                            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.navy)),
-                        if (item.location.isNotEmpty)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 3),
-                            child: Row(
-                              children: [
-                                const Icon(Icons.place_outlined, size: 12, color: AppColors.textGrey),
-                                const SizedBox(width: 3),
-                                Expanded(
-                                  child: Text(item.location,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(fontSize: 10.5, color: AppColors.textGrey)),
-                                ),
-                              ],
-                            ),
-                          ),
-                        Padding(
-                          padding: const EdgeInsets.only(top: 8),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              _avatarStack(item.total, memberNames),
-                              const SizedBox(width: 6),
-                              Text('${item.voted}/${item.total}',
-                                  style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600, color: AppColors.textGrey)),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  if (_dayEditMode)
-                    GestureDetector(
-                      onTap: () => _confirmDeleteActivity(dayIndex, item),
-                      child: const Padding(
-                        padding: EdgeInsets.only(left: 8),
-                        child: Icon(Icons.delete_outline, size: 20, color: Colors.redAccent),
-                      ),
-                    ),
-                ],
+            child: GestureDetector(
+              onTap: _activityDetailTap(hotel, attraction, restaurant),
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(color: AppColors.divider, borderRadius: BorderRadius.circular(16)),
+                child: hotel != null
+                    ? _activityHotelBody(item, hotel, forLabel, memberNames)
+                    : attraction != null
+                        ? _activityAttractionBody(item, attraction, forLabel, memberNames)
+                        : restaurant != null
+                            ? _activityRestaurantBody(item, restaurant, forLabel, memberNames)
+                            : _activityPlainBody(item, forLabel, memberNames),
               ),
             ),
           ),
         ],
       ),
+    );
+  }
+
+  /// Opens the real detail page behind a "From Saved" activity — the same
+  /// hotel/attraction/restaurant detail page Explore/Saved Items opens for
+  /// that listing, so tapping the rich card here isn't a dead end. Null
+  /// (no tap at all) for a plain, manually-typed activity — there's no
+  /// saved listing to show detail for.
+  VoidCallback? _activityDetailTap(CatalogHotel? hotel, CatalogAttraction? attraction, CatalogRestaurant? restaurant) {
+    if (hotel != null) {
+      return () => Navigator.of(context).push(MaterialPageRoute(
+            builder: (_) => DetailPageHotel(
+              hotelId: hotel.id,
+              name: hotel.name,
+              location: hotel.location,
+              ratingLabel: '${hotel.rating}(${hotel.reviews})',
+              pricePerNight: hotel.displayPrice(CurrencyService.instance.lastKnownUserCurrency),
+              image: hotel.image,
+              tripId: widget.tripId,
+              amenities: hotel.amenities,
+            ),
+          ));
+    }
+    if (attraction != null) {
+      return () => Navigator.of(context).push(MaterialPageRoute(
+            builder: (_) => DetailPageAttraction(attraction: attraction, saved: true),
+          ));
+    }
+    if (restaurant != null) {
+      return () => Navigator.of(context).push(MaterialPageRoute(
+            builder: (_) => DetailPageRestaurant(restaurant: restaurant, saved: true),
+          ));
+    }
+    return null;
+  }
+
+  Widget _activityHotelBody(ActivityItem item, CatalogHotel hotel, String forLabel, List<String> memberNames) {
+    final price = hotel.displayPrice(CurrencyService.instance.lastKnownUserCurrency);
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _activityThumb(hotel.image, Icons.hotel_outlined),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TranslatedText(hotel.name,
+                  maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.navy)),
+              if (hotel.rating.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 3), child: _activityRatingRow(hotel.rating, hotel.reviews)),
+              if (hotel.location.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 3), child: _activityLocationRow(hotel.location)),
+              if (price.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text('$price per night', style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: AppColors.primary)),
+                ),
+              _activityFooter(item, forLabel, memberNames),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _activityAttractionBody(ActivityItem item, CatalogAttraction attraction, String forLabel, List<String> memberNames) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _activityThumb(attraction.image, Icons.attractions_outlined),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TranslatedText(attraction.name,
+                  maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.navy)),
+              if (attraction.rating.isNotEmpty)
+                Padding(padding: const EdgeInsets.only(top: 3), child: _activityRatingRow(attraction.rating, attraction.reviews)),
+              Padding(
+                padding: const EdgeInsets.only(top: 3),
+                child: _activityLocationRow(attraction.location.isNotEmpty ? attraction.location : attraction.category),
+              ),
+              if (attraction.price.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(attraction.price, style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: AppColors.primary)),
+                ),
+              _activityFooter(item, forLabel, memberNames),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _activityRestaurantBody(ActivityItem item, CatalogRestaurant restaurant, String forLabel, List<String> memberNames) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _activityThumb(restaurant.image, Icons.restaurant_outlined),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TranslatedText(restaurant.name,
+                  maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.navy)),
+              if (restaurant.rating.isNotEmpty)
+                Padding(padding: const EdgeInsets.only(top: 3), child: _activityRatingRow(restaurant.rating, restaurant.reviews)),
+              if (restaurant.location.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 3), child: _activityLocationRow(restaurant.location)),
+              if (restaurant.priceRange.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(restaurant.priceRange, style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: AppColors.primary)),
+                ),
+              _activityFooter(item, forLabel, memberNames),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Fallback for an activity that doesn't match anything saved for this
+  /// trip — typically one typed by hand in Add Activity rather than picked
+  /// "From Saved". The original plain icon-circle + label + location card.
+  Widget _activityPlainBody(ActivityItem item, String forLabel, List<String> memberNames) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 48,
+          height: 48,
+          decoration: const BoxDecoration(color: AppColors.chipGrey, shape: BoxShape.circle),
+          child: Icon(item.icon, size: 20, color: AppColors.navy),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(item.label, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.navy)),
+              if (item.location.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 3), child: _activityLocationRow(item.location)),
+              _activityFooter(item, forLabel, memberNames),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// "For: X, Y" line (when the activity isn't for every member) plus the
+  /// avatar-stack + voted/total row — shared by every card body above
+  /// regardless of whether it matched a saved listing, since member-scoping
+  /// and RSVP voting apply either way.
+  Widget _activityFooter(ActivityItem item, String forLabel, List<String> memberNames) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (forLabel.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 3),
+            child: Text(forLabel,
+                maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600, color: AppColors.primary)),
+          ),
+        Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _avatarStack(item.total, memberNames),
+              const SizedBox(width: 6),
+              Text('${item.voted}/${item.total}', style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600, color: AppColors.textGrey)),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Rounded-square thumbnail for a matched saved listing's image, same
+  /// idea as Vote tab's own `_thumb` but sized to fit this card's existing
+  /// 48x48 icon-circle slot instead of Vote's roomier 56x56.
+  Widget _activityThumb(String url, IconData icon) {
+    if (url.isEmpty) {
+      return Container(
+        width: 48,
+        height: 48,
+        decoration: BoxDecoration(color: AppColors.chipGrey, borderRadius: BorderRadius.circular(10)),
+        child: Icon(icon, color: AppColors.textGrey, size: 20),
+      );
+    }
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(10),
+      child: Image.network(
+        url,
+        width: 48,
+        height: 48,
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => Container(width: 48, height: 48, color: AppColors.chipGrey, child: Icon(icon, color: AppColors.textGrey, size: 20)),
+      ),
+    );
+  }
+
+  Widget _activityRatingRow(String rating, String reviews) {
+    return Row(
+      children: [
+        const Icon(Icons.star, size: 12, color: AppColors.orange),
+        const SizedBox(width: 3),
+        Text(rating, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.black)),
+        if (reviews.isNotEmpty) ...[
+          const SizedBox(width: 4),
+          Text('($reviews)', style: const TextStyle(fontSize: 10.5, color: AppColors.textGrey)),
+        ],
+      ],
+    );
+  }
+
+  Widget _activityLocationRow(String text) {
+    if (text.isEmpty) return const SizedBox.shrink();
+    return Row(
+      children: [
+        const Icon(Icons.place_outlined, size: 12, color: AppColors.textGrey),
+        const SizedBox(width: 3),
+        Expanded(child: Text(text, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 10.5, color: AppColors.textGrey))),
+      ],
     );
   }
 
@@ -1743,7 +2044,7 @@ class _GroupTripPageState extends State<GroupTripPage> {
                 _attachmentOption(Icons.camera_alt_outlined, 'Camera'),
                 _attachmentOption(Icons.photo_outlined, 'Gallery'),
                 _attachmentOption(Icons.location_on_outlined, 'Location'),
-                _attachmentOption(Icons.auto_awesome, 'AI Summarise'),
+                _attachmentOption(Icons.auto_awesome, 'AI Summarise', onTap: () => showAiItinerarySheet(context, controller)),
               ],
             ),
           ),
@@ -1784,13 +2085,17 @@ class _GroupTripPageState extends State<GroupTripPage> {
     );
   }
 
-  Widget _attachmentOption(IconData icon, String label) {
-    return Column(
-      children: [
-        Icon(icon, color: AppColors.navy),
-        const SizedBox(height: 4),
-        Text(label, style: const TextStyle(fontSize: 10, color: AppColors.textGrey)),
-      ],
+  Widget _attachmentOption(IconData icon, String label, {VoidCallback? onTap}) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Column(
+        children: [
+          Icon(icon, color: AppColors.navy),
+          const SizedBox(height: 4),
+          Text(label, style: const TextStyle(fontSize: 10, color: AppColors.textGrey)),
+        ],
+      ),
     );
   }
 }

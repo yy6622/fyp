@@ -39,6 +39,15 @@ dependencies:
   firebase_core: ^4.14.0
   firebase_auth: ^6.6.1
   cloud_firestore: ^6.9.0
+
+  # Google/Facebook sign-in (login_page.dart / signup_page.dart's social
+  # row — previously two decorative circles with no onTap at all). Both
+  # end at FirebaseAuth.signInWithCredential in auth_service.dart, same
+  # as email/password. Needs real console setup beyond just enabling the
+  # providers in the Firebase console — see README.md in this project
+  # root for exactly what and where.
+  google_sign_in: ^6.2.2
+  flutter_facebook_auth: ^7.1.1
   image_picker: ^1.2.3
   firebase_storage: ^13.5.0
   # Calls the `createPaymentIntent` Cloud Function (see functions/index.js)
@@ -58,7 +67,10 @@ dependencies:
   # native setup too (done): MainActivity now extends
   # FlutterFragmentActivity and android/app's theme now descends from
   # Theme.AppCompat — both required by the Android Stripe SDK's own Payment
-  # Sheet UI (confirmed ^13.1.0 is current on pub.dev).
+  # Sheet UI. Pinned to ^13.0.0 (not ^13.1.0, which this was briefly set to)
+  # because 13.1.0 raised its minimum to Flutter SDK >=3.41.0 — confirmed
+  # via `flutter pub get`'s own version-solving error against this
+  # project's actual Flutter SDK (3.38.8), which 13.0.0 does not require.
   flutter_stripe: ^13.0.0
 
   # HTTP client for the real Flights/Hotels data source (Duffel API) and

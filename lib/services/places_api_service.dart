@@ -51,13 +51,30 @@ class PlacesApiService {
   // for Overpass's shared public instance.
   static const _userAgent = 'VoyaTravelApp/1.0 (student FYP project; contact: teohyongyun90@gmail.com)';
 
+  /// The reason the most recent [searchNearby] call came back empty, or
+  /// null when it genuinely found zero matching places (a real "nothing
+  /// nearby", not a failure). [searchNearby] itself still never throws —
+  /// every existing caller (Explore's background refresh) keeps working
+  /// exactly as before — but Near By's page reads this afterward to tell
+  /// "nothing here" apart from "the request to OpenStreetMap failed" and
+  /// show the real reason instead of always saying the same generic
+  /// "No places found nearby" either way. Cleared to null at the start of
+  /// every call, so a later success after an earlier failure clears it.
+  Object? lastSearchNearbyError;
+
   /// Resolves a free-text destination ("Tokyo, Japan", "Bali") to a real
-  /// lat/lng via Nominatim's search endpoint — the first/best match.
+  /// lat/lng (plus, when Nominatim's reverse-geocoded address includes
+  /// one, the destination's ISO 3166-1 alpha-2 country code — e.g. "TR"
+  /// for anywhere in Turkey) via Nominatim's search endpoint — the
+  /// first/best match. [countryCode] is upper-cased here so it compares
+  /// directly against the `country` field CatalogRepository's `places`
+  /// collection stores ("TR", not "tr"); null when Nominatim's result had
+  /// no `address.country_code` (rare, but not guaranteed for every hit).
   /// Returns null when nothing matched (typo, a place too obscure for
   /// OSM) or the request failed (offline, endpoint down); callers treat
   /// that as "couldn't look this destination up right now", not an
   /// error to surface loudly.
-  Future<({double lat, double lon})?> geocode(String query) async {
+  Future<({double lat, double lon, String? countryCode})?> geocode(String query) async {
     final trimmed = query.trim();
     if (trimmed.isEmpty) return null;
     try {
@@ -65,6 +82,7 @@ class PlacesApiService {
         'q': trimmed,
         'format': 'json',
         'limit': '1',
+        'addressdetails': '1',
       });
       final res = await http.get(uri, headers: {'User-Agent': _userAgent}).timeout(const Duration(seconds: 12));
       if (res.statusCode != 200) return null;
@@ -74,7 +92,10 @@ class PlacesApiService {
       final lat = double.tryParse('${hit['lat']}');
       final lon = double.tryParse('${hit['lon']}');
       if (lat == null || lon == null) return null;
-      return (lat: lat, lon: lon);
+      final address = hit['address'] as Map<String, dynamic>?;
+      final rawCountryCode = address?['country_code'] as String?;
+      final countryCode = (rawCountryCode != null && rawCountryCode.trim().isNotEmpty) ? rawCountryCode.trim().toUpperCase() : null;
+      return (lat: lat, lon: lon, countryCode: countryCode);
     } catch (_) {
       return null;
     }
@@ -116,6 +137,7 @@ class PlacesApiService {
     int radiusMeters = 4000,
     int limit = 25,
   }) async {
+    lastSearchNearbyError = null;
     final query = '[out:json][timeout:25];'
         '(node$filter(around:$radiusMeters,$lat,$lon);'
         'way$filter(around:$radiusMeters,$lat,$lon);'
@@ -129,7 +151,10 @@ class PlacesApiService {
             body: {'data': query},
           )
           .timeout(const Duration(seconds: 25));
-      if (res.statusCode != 200) return const [];
+      if (res.statusCode != 200) {
+        lastSearchNearbyError = 'Overpass returned HTTP ${res.statusCode}';
+        return const [];
+      }
       final data = jsonDecode(res.body) as Map<String, dynamic>;
       final elements = (data['elements'] as List?) ?? const [];
       final out = <OsmPlace>[];
@@ -149,7 +174,12 @@ class PlacesApiService {
         out.add(OsmPlace(id: '${el['type']}${el['id']}', name: name.trim(), lat: elLat, lon: elLon, tags: tags));
       }
       return out;
-    } catch (_) {
+    } catch (e) {
+      // Real reason captured here — a TimeoutException (request never
+      // got a response), a SocketException (DNS/connection failure, the
+      // usual shape of a network that blocks this host outright), or
+      // something else — rather than this just going silently empty.
+      lastSearchNearbyError = e;
       return const [];
     }
   }
@@ -199,6 +229,56 @@ class PlacesApiService {
     return null;
   }
 
+  /// A fallback photo looked up by the place's plain [name], for when
+  /// [resolveImage] found nothing on the OSM tags themselves — most OSM
+  /// nodes (the vast majority of real-world restaurants/cafes/shops, and
+  /// even plenty of attractions) were never tagged with an `image`/
+  /// `wikimedia_commons`/`wikipedia` reference at all; that's a genuine
+  /// data-coverage gap in OpenStreetMap, not a bug, and most of those
+  /// places simply have no free photo available anywhere. This recovers
+  /// the subset that DO have a Wikipedia article but whose OSM node was
+  /// never linked to it — common for well-known landmarks/museums, which
+  /// is why this is only used for Attractions (see
+  /// CatalogRepository.refreshAttractions), not Restaurants: a small
+  /// local eatery's name is far more likely to collide with an unrelated
+  /// Wikipedia article of the same/similar name than an actual named
+  /// landmark is, and showing the wrong place's photo is worse than
+  /// showing no photo. [_looksLikeSamePlace] is the guard against that.
+  /// Returns null (never throws) when nothing matches closely enough or
+  /// the request fails.
+  Future<String?> resolveImageByName(String name) async {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) return null;
+    try {
+      final uri = Uri.https('en.wikipedia.org', '/w/rest.php/v1/search/page', {'q': trimmed, 'limit': '1'});
+      final res = await http.get(uri, headers: {'User-Agent': _userAgent}).timeout(const Duration(seconds: 6));
+      if (res.statusCode != 200) return null;
+      final decoded = jsonDecode(res.body) as Map<String, dynamic>;
+      final pages = (decoded['pages'] as List?) ?? const [];
+      if (pages.isEmpty) return null;
+      final page = pages.first as Map<String, dynamic>;
+      final title = (page['title'] as String?) ?? '';
+      if (!_looksLikeSamePlace(trimmed, title)) return null;
+      final thumb = page['thumbnail'] as Map<String, dynamic>?;
+      final url = thumb?['url'] as String?;
+      if (url == null || url.isEmpty) return null;
+      return url.startsWith('http') ? url : 'https:$url';
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// A deliberately strict "same place" check for [resolveImageByName] —
+  /// one name has to fully contain the other (case-insensitive) — so a
+  /// generic query (e.g. a shop simply named "Garden") can't pull in an
+  /// unrelated Wikipedia article that merely shares a common word.
+  bool _looksLikeSamePlace(String query, String title) {
+    final q = query.toLowerCase().trim();
+    final t = title.toLowerCase().trim();
+    if (q.isEmpty || t.isEmpty) return false;
+    return q == t || q.contains(t) || t.contains(q);
+  }
+
   /// A real, place-specific "About" description for [tags] — an OSM
   /// `description` tag when present (rare, but some POIs are tagged with
   /// one directly), otherwise the opening extract of that place's own
@@ -234,6 +314,112 @@ class PlacesApiService {
       }
     }
     return null;
+  }
+
+  /// Fallback "About" text looked up by the place's plain [name], for
+  /// when [resolveDescription] found nothing on the OSM tags — same idea,
+  /// and same attractions-only reasoning, as [resolveImageByName]: most
+  /// OSM nodes were never tagged with a `wikipedia` reference at all, so
+  /// without this every attraction that lacked one fell back to the same
+  /// generic category sentence (every museum reading "One of the popular
+  /// museum spots...") regardless of how different two places actually
+  /// are. Guarded by the same [_looksLikeSamePlace] check so a generic
+  /// name can't pull in an unrelated article's description.
+  Future<String?> resolveDescriptionByName(String name) async {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) return null;
+    try {
+      final searchUri = Uri.https('en.wikipedia.org', '/w/rest.php/v1/search/page', {'q': trimmed, 'limit': '1'});
+      final searchRes = await http.get(searchUri, headers: {'User-Agent': _userAgent}).timeout(const Duration(seconds: 6));
+      if (searchRes.statusCode != 200) return null;
+      final decoded = jsonDecode(searchRes.body) as Map<String, dynamic>;
+      final pages = (decoded['pages'] as List?) ?? const [];
+      if (pages.isEmpty) return null;
+      final page = pages.first as Map<String, dynamic>;
+      final title = (page['title'] as String?) ?? '';
+      if (!_looksLikeSamePlace(trimmed, title)) return null;
+      final summaryUri = Uri.https('en.wikipedia.org', '/api/rest_v1/page/summary/${Uri.encodeComponent(title)}');
+      final summaryRes = await http.get(summaryUri, headers: {'User-Agent': _userAgent}).timeout(const Duration(seconds: 6));
+      if (summaryRes.statusCode != 200) return null;
+      final summary = jsonDecode(summaryRes.body) as Map<String, dynamic>;
+      final extract = (summary['extract'] as String?)?.trim();
+      if (extract == null || extract.isEmpty) return null;
+      return _trimToSentence(extract, 280);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// A real photo + description straight from the place's own `website`/
+  /// `contact:website` OSM tag — most real restaurant/shop/attraction
+  /// websites (even a plain Wix/Squarespace/WordPress one) set Open
+  /// Graph meta tags (`og:image`, `og:description`) for link previews,
+  /// and that preview is exactly a usable summary of the real place.
+  /// This is the one source here that's directly tied to the specific
+  /// business rather than matched by name, so it's trusted for
+  /// Restaurants too (unlike [resolveImageByName]/
+  /// [resolveDescriptionByName], which only run for Attractions because
+  /// a name match can be wrong) — a business's own URL, tagged on its
+  /// own OSM node, genuinely is that business. Returns null for both
+  /// fields (never throws) when the site has neither tag, doesn't
+  /// respond, or isn't reachable (some small-business sites are slow,
+  /// expired, or HTTP-only with a broken cert — any of that just means
+  /// no extra data from this source, not an error to surface).
+  Future<({String? image, String? description})?> resolveFromWebsite(String url) async {
+    final trimmed = url.trim();
+    if (trimmed.isEmpty) return null;
+    final uri = Uri.tryParse(trimmed.startsWith('http') ? trimmed : 'https://$trimmed');
+    if (uri == null) return null;
+    try {
+      final res = await http.get(uri, headers: {'User-Agent': _userAgent}).timeout(const Duration(seconds: 10));
+      if (res.statusCode != 200) return null;
+      final html = res.body;
+      final rawImage = _metaContent(html, 'og:image') ?? _metaContent(html, 'twitter:image');
+      final rawDescription = _metaContent(html, 'og:description') ?? _metaContent(html, 'description') ?? _metaContent(html, 'twitter:description');
+      String? image;
+      if (rawImage != null && rawImage.isNotEmpty) {
+        final resolved = Uri.tryParse(rawImage);
+        if (resolved != null) image = (resolved.hasScheme ? resolved : uri.resolveUri(resolved)).toString();
+      }
+      final description = rawDescription != null && rawDescription.isNotEmpty ? _trimToSentence(_decodeHtmlEntities(rawDescription), 280) : null;
+      if (image == null && description == null) return null;
+      return (image: image, description: description);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Pulls a `<meta ... content="...">` tag's value by its `property` or
+  /// `name` attribute ([key], e.g. `"og:image"`) — handles either
+  /// attribute order (some site builders emit `content` before
+  /// `property`), case-insensitively, with single or double quotes. A
+  /// deliberately simple regex rather than a full HTML parser: Open
+  /// Graph tags are always single, self-contained `<meta>` elements in
+  /// the page `<head>`, never nested or multi-line, so this is reliable
+  /// for exactly what it's used for without adding an HTML-parsing
+  /// dependency for one narrow job.
+  String? _metaContent(String html, String key) {
+    final keyPattern = RegExp.escape(key);
+    final afterKey = RegExp('<meta[^>]*(?:property|name)\\s*=\\s*["\']$keyPattern["\'][^>]*content\\s*=\\s*["\']([^"\']*)["\']', caseSensitive: false);
+    final afterKeyMatch = afterKey.firstMatch(html);
+    if (afterKeyMatch != null) return afterKeyMatch.group(1);
+    final beforeKey = RegExp('<meta[^>]*content\\s*=\\s*["\']([^"\']*)["\'][^>]*(?:property|name)\\s*=\\s*["\']$keyPattern["\']', caseSensitive: false);
+    return beforeKey.firstMatch(html)?.group(1);
+  }
+
+  /// Decodes the handful of HTML entities actually likely to show up in
+  /// a meta description (not a full HTML-entity table) — numeric
+  /// entities plus the common named ones.
+  String _decodeHtmlEntities(String text) {
+    return text
+        .replaceAllMapped(RegExp(r'&#(\d+);'), (m) => String.fromCharCode(int.parse(m.group(1)!)))
+        .replaceAll('&amp;', '&')
+        .replaceAll('&lt;', '<')
+        .replaceAll('&gt;', '>')
+        .replaceAll('&quot;', '"')
+        .replaceAll('&#39;', "'")
+        .replaceAll('&apos;', "'")
+        .trim();
   }
 
   /// Cuts [text] down to roughly [maxLength] characters without stopping

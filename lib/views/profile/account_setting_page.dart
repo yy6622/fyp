@@ -12,6 +12,7 @@ import '../../services/language_service.dart';
 import '../../services/location_service.dart';
 import '../../theme.dart';
 import '../shared/nice_dialog.dart';
+import '../shared/phone_input_field.dart';
 import 'sub_page_scaffold.dart';
 
 // ---------------------------------------------------------------------
@@ -179,6 +180,26 @@ class _AccountSettingPageState extends State<AccountSettingPage> {
     await UserRepository.instance.updateProfile(uid, name: field == 'name' ? value : null, phone: field == 'phone' ? value : null);
   }
 
+  Future<void> _editPhone(String current) async {
+    String value = current == 'Not set' ? '' : current;
+    final result = await showNiceFormDialog(
+      context: context,
+      title: 'Phone Number',
+      headerIcon: Icons.edit_outlined,
+      confirmLabel: 'Save',
+      fieldsBuilder: (ctx, setState) => [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: PhoneInputField(initialValue: value, onChanged: (v) => value = v),
+        ),
+      ],
+    );
+    if (result != true) return;
+    final uid = AuthService.instance.currentUser?.uid;
+    if (uid == null) return;
+    await UserRepository.instance.updateProfile(uid, phone: value.trim());
+  }
+
   @override
   Widget build(BuildContext context) {
     return SubPageScaffold(
@@ -208,11 +229,11 @@ class _AccountSettingPageState extends State<AccountSettingPage> {
                       if (_uploadingAvatar)
                         const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary))
                       else
-                        CircleAvatar(
+                        AppAvatar(
+                          imageUrl: profile?.avatarUrl,
                           radius: 18,
                           backgroundColor: const Color(0xFFD9D9D9),
-                          backgroundImage: (profile?.avatarUrl.isNotEmpty ?? false) ? NetworkImage(profile!.avatarUrl) : null,
-                          child: (profile?.avatarUrl.isNotEmpty ?? false) ? null : const Icon(Icons.person, size: 18, color: AppColors.textGrey),
+                          iconSize: 18,
                         ),
                       const SizedBox(width: 4),
                       const Icon(Icons.chevron_right, size: 18, color: AppColors.textGrey),
@@ -222,7 +243,7 @@ class _AccountSettingPageState extends State<AccountSettingPage> {
               ),
               profileNavRow('Password', '••••••••'),
               profileNavRow('Email', email),
-              profileNavRow('Phone Number', phone, onTap: () => _editField(label: 'Phone Number', current: phone, field: 'phone')),
+              profileNavRow('Phone Number', phone, onTap: () => _editPhone(phone)),
               profileNavRow('Language', LanguageService.instance.labelFor(profile?.languageCode ?? ''), onTap: _changeLanguage),
               profileNavRow('Country / Region', country, onTap: _changeCountry),
               profileNavRow('Currency', currency, onTap: _changeCurrency),

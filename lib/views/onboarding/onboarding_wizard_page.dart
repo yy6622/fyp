@@ -6,6 +6,7 @@ import '../../data/countries.dart';
 import '../../theme.dart';
 import '../auth/auth_widgets.dart';
 import '../shared/bottom_nav.dart';
+import '../shared/phone_input_field.dart';
 
 // ---------------------------------------------------------------------
 // Post-registration onboarding — Avatar / Phone / Region & Country /
@@ -174,13 +175,11 @@ class _OnboardingWizardPageState extends State<OnboardingWizardPage> {
               Center(
                 child: Stack(
                   children: [
-                    CircleAvatar(
+                    AppAvatar(
+                      imageUrl: controller.avatarUrl,
                       radius: 56,
-                      backgroundColor: AppColors.chipGrey,
-                      backgroundImage: controller.avatarUrl != null ? NetworkImage(controller.avatarUrl!) : null,
-                      child: controller.uploadingAvatar
-                          ? const CircularProgressIndicator(color: AppColors.primary)
-                          : (controller.avatarUrl == null ? const Icon(Icons.person, size: 48, color: AppColors.textGrey) : null),
+                      iconSize: 48,
+                      child: controller.uploadingAvatar ? const CircularProgressIndicator(color: AppColors.primary) : null,
                     ),
                     Positioned(
                       right: 0,
@@ -237,7 +236,10 @@ class _OnboardingWizardPageState extends State<OnboardingWizardPage> {
             title: "What's your phone number?",
             subtitle: 'Used for booking confirmations and trip updates.',
             children: [
-              AuthTextField(hint: 'Phone Number', controller: controller.phoneController),
+              PhoneInputField(
+                initialValue: controller.phoneController.text,
+                onChanged: (v) => controller.phoneController.text = v,
+              ),
             ],
           ),
         ),

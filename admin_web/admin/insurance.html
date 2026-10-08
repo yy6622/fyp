@@ -4,16 +4,17 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Insurance Management — Voya Admin</title>
-<link rel="stylesheet" href="../css/tokens.css" />
-<link rel="stylesheet" href="../css/base.css" />
-<link rel="stylesheet" href="../css/layout.css" />
-<link rel="stylesheet" href="../css/components.css" />
+<link rel="stylesheet" href="../css/tokens.css?v=20261006b" />
+<link rel="stylesheet" href="../css/base.css?v=20261006b" />
+<link rel="stylesheet" href="../css/layout.css?v=20261006b" />
+<link rel="stylesheet" href="../css/components.css?v=20261006b" />
+<style>.ref-link{background:none;border:none;padding:0;font:inherit;color:var(--teal-600);cursor:pointer;text-decoration:underline;font-weight:700;}</style>
 </head>
 <body>
 <div class="shell">
   <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
   <aside class="sidebar" id="sidebar">
-    <div class="sidebar-brand">Voya</div>
+    <img class="sidebar-brand" src="../img/voya-logo-white.png" alt="Voya" />
     <div class="sidebar-user">
       <div class="name" id="sbUserName">Loading…</div>
       <div class="role" id="sbUserRole">Administrator</div>
@@ -38,6 +39,10 @@
     </div>
 
     <div class="stat-grid" id="statGrid"><div class="skeleton" style="height:90px;grid-column:1/-1;"></div></div>
+
+    <div class="card card-pad" id="partnersCard" style="margin-bottom:20px;">
+      <div class="skeleton" style="height:90px;"></div>
+    </div>
 
     <div class="filter-bar">
       <div class="search-input-wrap"><span data-icon="search"></span><input class="input" id="searchInput" placeholder="Search…" /></div>
@@ -67,46 +72,136 @@
   </main>
 </div>
 
+<div class="modal-backdrop" id="txnModal">
+  <div class="modal" style="max-width:560px;">
+    <div class="modal-head"><h3 class="h2">Transaction detail</h3><button class="modal-close" data-close><span data-icon="x"></span></button></div>
+    <div id="txnModalBody"></div>
+  </div>
+</div>
+
 <script type="module">
-import { requireRole } from "../js/auth-guard.js";
-import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js";
-import { mountIcons } from "../js/icons.js";
-import { listTransactions, listClaims, listPartners } from "../js/data.js";
-import { seedAdminDemoData } from "../js/seed.js";
-import { money, moneyExact, number, statusBadge, escapeHtml, paginate, toast, setBusy } from "../js/ui.js";
+import { requireRole } from "../js/auth-guard.js?v=20261007f";
+import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261007f";
+import { mountIcons } from "../js/icons.js?v=20261007f";
+import { listTransactions, listClaims, listPartners, setPartnerStatus } from "../js/data.js?v=20261007f";
+import { seedAdminDemoData } from "../js/seed.js?v=20261007f";
+import {
+  money, moneyExact, number, statusBadge, escapeHtml, paginate, renderPager, toast, setBusy,
+  fullDate, confirmDialog, openModal, closeModal, wireModalDismiss,
+  statCard, plainCard, trendDelta, pointDelta, sumInMonth, countInMonth, monthBounds, rateOf,
+} from "../js/ui.js?v=20261007f";
 
 mountSidebarNav({ role: "admin", active: "insurance" });
 const session = await requireRole("admin", "login.html");
 let txns = [], filtered = [], page = 1;
+let insurancePartners = [];
 const PAGE_SIZE = 8;
 
 if (session) {
   setSidebarUser({ displayName: session.profile.name || "Admin", roleLabel: "Administrator" });
+  wireModalDismiss();
   await load();
 }
 
-function statCard(label, value, icon) {
-  return `<div class="card stat-card"><div class="stat-top"><div class="stat-icon"><span data-icon="${icon}"></span></div><div class="stat-label">${label}</div></div><div class="stat-value">${value}</div><div class="stat-delta">↑ 2.4% from last month</div></div>`;
-}
-
 async function load() {
-  const [transactions, claims] = await Promise.all([listTransactions(), listClaims()]);
+  const [transactions, claims, partnersList] = await Promise.all([listTransactions(), listClaims(), listPartners()]);
   txns = transactions;
+  insurancePartners = partnersList;
   document.getElementById("devBar").style.display = txns.length ? "none" : "flex";
 
-  const gross = txns.filter((t) => t.status === "paid").reduce((s, t) => s + (Number(t.premium) || 0), 0);
+  const paid = txns.filter((t) => t.status === "paid");
+  const gross = paid.reduce((s, t) => s + (Number(t.premium) || 0), 0);
   const pendingClaims = claims.filter((c) => c.status === "new" || c.status === "under_review").length;
   const approvedCount = claims.filter((c) => c.status === "approved").length;
   const approvalRate = claims.length ? Math.round((approvedCount / claims.length) * 1000) / 10 : 0;
 
+  // Real month-over-month deltas (js/ui.js). Pending claims is a live
+  // queue size, not a monthly flow, so it gets no honest delta and renders
+  // as a plainCard — same treatment as every other "Pending …" card
+  // across the console (see admin/reports.html's Insurance Operations tab).
+  const grossDelta = trendDelta(
+    sumInMonth(paid, "createdAt", (t) => Number(t.premium) || 0, 0),
+    sumInMonth(paid, "createdAt", (t) => Number(t.premium) || 0, 1),
+  );
+  const soldDelta = trendDelta(countInMonth(paid, "createdAt", 0), countInMonth(paid, "createdAt", 1));
+  const { start: thisMonthStart } = monthBounds(0);
+  const { start: lastMonthStart, end: lastMonthEnd } = monthBounds(1);
+  const claimDateOf = (c) => (c.createdAt?.toDate ? c.createdAt.toDate() : null);
+  const claimsThisMonth = claims.filter((c) => { const d = claimDateOf(c); return d && d >= thisMonthStart; });
+  const claimsLastMonth = claims.filter((c) => { const d = claimDateOf(c); return d && d >= lastMonthStart && d < lastMonthEnd; });
+  const approvalRateDelta = pointDelta(rateOf(claimsThisMonth, (c) => c.status === "approved"), rateOf(claimsLastMonth, (c) => c.status === "approved"));
+
   document.getElementById("statGrid").innerHTML = [
-    statCard("Gross premium", money(gross), "coin"),
-    statCard("Policies sold", number(txns.filter((t) => t.status === "paid").length), "shield-check"),
-    statCard("Pending claims", number(pendingClaims), "clock"),
-    statCard("Approval rate", `${approvalRate}%`, "percent"),
+    statCard("Gross premium", money(gross), "coin", grossDelta),
+    statCard("Policies sold", number(paid.length), "shield-check", soldDelta),
+    plainCard("Pending claims", number(pendingClaims)),
+    statCard("Approval rate", `${approvalRate}%`, "percent", approvalRateDelta),
   ].join("");
+  renderPartners();
   applyFilters();
   mountIcons(document);
+}
+
+// "Insurance partners" here is a pending-requests inbox, not the full
+// partner directory — it only shows up when something actually needs a
+// decision. The full list (every partner, every status, Approve/Suspend/
+// Reject/Re-approve) lives on its own page, admin/insurance-partners.html.
+function renderPartners() {
+  const card = document.getElementById("partnersCard");
+  if (!card) return;
+  const pending = insurancePartners.filter((p) => p.status === "pending" || !p.status);
+  if (!pending.length) {
+    card.innerHTML = `
+      <div class="section-head">
+        <h3 class="h3">Insurance partners</h3>
+        <a class="btn btn-outline btn-sm" href="insurance-partners.html"><span data-icon="building" data-icon-size="14"></span>View all</a>
+      </div>
+      <p class="subtitle" style="margin-bottom:0;">No new partner requests right now.</p>`;
+    mountIcons(card);
+    return;
+  }
+  card.innerHTML = `
+    <div class="section-head"><h3 class="h3">Insurance partners</h3></div>
+    <p class="subtitle" style="margin-bottom:16px;">New insurance partners land here as "Pending" until you approve them — approval is required before they can publish plans or handle claims.</p>
+    <div class="table-wrap scroll-x">
+      <table class="data-table">
+        <thead><tr><th>Organization</th><th>Email</th><th>Registered</th><th>Status</th><th></th></tr></thead>
+        <tbody id="partnersBody">${pending.map((p) => `
+          <tr>
+            <td class="cell-strong">${escapeHtml(p.companyName || "—")}</td>
+            <td class="muted">${escapeHtml(p.email || "—")}</td>
+            <td class="muted">${fullDate(p.createdAt)}</td>
+            <td>${statusBadge("pending")}</td>
+            <td>
+              <div class="row-actions">
+                <button class="btn btn-primary btn-sm" data-approve="${p.id}">Approve</button>
+                <button class="btn btn-danger-outline btn-sm" data-reject="${p.id}">Reject</button>
+              </div>
+            </td>
+          </tr>`).join("")}</tbody>
+      </table>
+    </div>`;
+  card.querySelectorAll("[data-approve]").forEach((b) => b.addEventListener("click", () => setPartnerStatusUi(b.dataset.approve, "approved", b)));
+  card.querySelectorAll("[data-reject]").forEach((b) => b.addEventListener("click", () => setPartnerStatusUi(b.dataset.reject, "rejected", b)));
+  mountIcons(card);
+}
+
+async function setPartnerStatusUi(uid, status, btn) {
+  if (status === "rejected") {
+    const ok = await confirmDialog({ title: "Reject this application?", body: "They won't be able to publish plans or handle claims. This can be undone later by approving them.", confirmText: "Reject", danger: true });
+    if (!ok) return;
+  }
+  setBusy(btn, true, "Working…");
+  try {
+    await setPartnerStatus(uid, status);
+    const p = insurancePartners.find((x) => x.id === uid);
+    if (p) p.status = status;
+    renderPartners();
+    toast(status === "approved" ? "Partner approved." : "Partner application rejected.", "success");
+  } catch (err) {
+    toast(err.message || "Couldn't update partner.", "error");
+    setBusy(btn, false);
+  }
 }
 
 function applyFilters() {
@@ -128,25 +223,48 @@ function renderTable() {
   else {
     empty.style.display = "none";
     body.innerHTML = pageItems.map((t) => `
-      <tr>
-        <td class="cell-strong">${escapeHtml(t.txnRef || t.id)}</td>
+      <tr style="cursor:pointer;" data-open-txn="${t.id}">
+        <td class="cell-strong"><span class="ref-link">${escapeHtml(t.txnRef || t.id)}</span></td>
         <td>${escapeHtml(t.customerName || "—")}</td>
         <td class="muted">${escapeHtml(t.providerName || "—")}</td>
         <td class="muted">${moneyExact(t.premium)}</td>
         <td>${statusBadge(t.status)}</td>
       </tr>`).join("");
+    body.querySelectorAll("[data-open-txn]").forEach((row) => row.addEventListener("click", () => openTxnDetail(row.dataset.openTxn)));
   }
   document.getElementById("resultsLabel").textContent = total
     ? `Showing ${(page - 1) * PAGE_SIZE + 1} to ${Math.min(page * PAGE_SIZE, total)} of ${total} results` : "No results";
-  const pager = document.getElementById("pagination");
-  let html = `<button class="page-btn" ${page === 1 ? "disabled" : ""} id="prevPage"><span data-icon="chevron-left" data-icon-size="14"></span></button>`;
-  for (let i = 1; i <= pages; i++) html += `<button class="page-btn${i === page ? " active" : ""}" data-page="${i}">${i}</button>`;
-  html += `<button class="page-btn" ${page === pages ? "disabled" : ""} id="nextPage"><span data-icon="chevron-right" data-icon-size="14"></span></button>`;
-  pager.innerHTML = html;
-  pager.querySelectorAll("[data-page]").forEach((b) => b.addEventListener("click", () => { page = Number(b.dataset.page); renderTable(); }));
-  document.getElementById("prevPage")?.addEventListener("click", () => { page--; renderTable(); });
-  document.getElementById("nextPage")?.addEventListener("click", () => { page++; renderTable(); });
+  renderPager("pagination", { page, pages }, (n) => { page = n; renderTable(); });
   mountIcons(document);
+}
+
+/** Shows everything we actually know about one transaction — the table
+ * only has room for Reference/Customer/Provider/Premium/Status, but a
+ * real insurance_transactions doc also carries the plan, destination,
+ * sales channel, purchase date and (for a real mobile-app purchase) the
+ * buyer's linked account — see js/data.js and
+ * lib/repositories/insurance_repository.dart. */
+function openTxnDetail(id) {
+  const t = txns.find((x) => x.id === id);
+  if (!t) return;
+  const row = (label, value) => `<div class="field" style="margin-bottom:12px;"><label>${label}</label><p class="value">${value}</p></div>`;
+  document.getElementById("txnModalBody").innerHTML = `
+    <div class="form-grid">
+      ${row("Reference", escapeHtml(t.txnRef || t.id))}
+      ${row("Status", statusBadge(t.status))}
+      ${row("Customer", escapeHtml(t.customerName || "—"))}
+      ${row("Customer email", escapeHtml(t.customerEmail || "—"))}
+      ${row("Provider", escapeHtml(t.providerName || "—"))}
+      ${row("Plan", escapeHtml(t.planName || "—"))}
+      ${row("Premium", moneyExact(t.premium))}
+      ${row("Destination", escapeHtml(t.destination || "—"))}
+      ${row("Channel", escapeHtml(t.channel || "—"))}
+      ${row("Purchased", fullDate(t.createdAt))}
+      ${row("Linked Voya account", t.buyerId ? "Yes — bought through the mobile app" : "No — logged manually (e.g. a walk-in customer)")}
+    </div>
+    ${t.isDemoSeed ? `<p class="muted small" style="margin-top:4px;">This is seeded demo data.</p>` : ""}`;
+  mountIcons(document.getElementById("txnModalBody"));
+  openModal("txnModal");
 }
 
 document.getElementById("searchInput").addEventListener("input", applyFilters);

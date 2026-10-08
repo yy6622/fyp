@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../controllers/auth_controller.dart';
 import '../../theme.dart';
+import '../onboarding/onboarding_wizard_page.dart';
+import '../shared/bottom_nav.dart';
 import 'auth_widgets.dart';
 import 'otp_verification_page.dart';
 
@@ -34,6 +36,30 @@ class _SignupPageState extends State<SignupPage> {
     Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => const OtpVerificationPage()),
     );
+  }
+
+  // "Sign up with Google/Facebook" and "Login with Google/Facebook" are
+  // the same Firebase call either way (see _runSocialLogin in
+  // auth_controller.dart) — same handling as LoginPage's.
+  Future<void> _handleSocial(Future<SocialLoginOutcome> Function() signIn) async {
+    final outcome = await signIn();
+    if (!mounted) return;
+    switch (outcome.result) {
+      case SocialLoginResult.cancelled:
+        return;
+      case SocialLoginResult.error:
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(outcome.errorMessage!)));
+        return;
+      case SocialLoginResult.success:
+        if (outcome.isNewUser) {
+          Navigator.of(context).push(MaterialPageRoute(builder: (_) => const OnboardingWizardPage()));
+        } else {
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (_) => const MainPage()),
+            (route) => false,
+          );
+        }
+    }
   }
 
   @override
@@ -139,7 +165,13 @@ class _SignupPageState extends State<SignupPage> {
                   ),
                 ),
                 const SizedBox(height: 24),
-                socialLoginRow('Or Sign up with'),
+                socialLoginRow(
+                  'Or Sign up with',
+                  onGoogle: () => _handleSocial(controller.signUpWithGoogle),
+                  onFacebook: () => _handleSocial(controller.signUpWithFacebook),
+                  googleBusy: controller.googleLoading,
+                  facebookBusy: controller.facebookLoading,
+                ),
               ],
             ),
           ),

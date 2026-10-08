@@ -4,16 +4,16 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Transactions — Voya Insurance Partner</title>
-<link rel="stylesheet" href="../css/tokens.css" />
-<link rel="stylesheet" href="../css/base.css" />
-<link rel="stylesheet" href="../css/layout.css" />
-<link rel="stylesheet" href="../css/components.css" />
+<link rel="stylesheet" href="../css/tokens.css?v=20261006b" />
+<link rel="stylesheet" href="../css/base.css?v=20261006b" />
+<link rel="stylesheet" href="../css/layout.css?v=20261006b" />
+<link rel="stylesheet" href="../css/components.css?v=20261006b" />
 </head>
 <body>
 <div class="shell">
   <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
   <aside class="sidebar" id="sidebar">
-    <div class="sidebar-brand">Voya</div>
+    <img class="sidebar-brand" src="../img/voya-logo-white.png" alt="Voya" />
     <div class="sidebar-user">
       <div class="name" id="sbUserName">Loading…</div>
       <div class="role" id="sbUserRole">Partner workspace</div>
@@ -63,11 +63,11 @@
 </div>
 
 <script type="module">
-import { requireRole } from "../js/auth-guard.js";
-import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js";
-import { mountIcons } from "../js/icons.js";
-import { listTransactions } from "../js/data.js";
-import { money, moneyExact, number, statusBadge, escapeHtml, paginate } from "../js/ui.js";
+import { requireRole } from "../js/auth-guard.js?v=20261007e";
+import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261007e";
+import { mountIcons } from "../js/icons.js?v=20261007e";
+import { listTransactions } from "../js/data.js?v=20261007e";
+import { money, moneyExact, number, statusBadge, escapeHtml, paginate, renderPager, statCard, plainCard, trendDelta, countBefore, sumBefore, monthBounds } from "../js/ui.js?v=20261007e";
 
 mountSidebarNav({ role: "partner", active: "transactions" });
 const session = await requireRole("partner", "login.html");
@@ -79,20 +79,20 @@ if (session) {
   await load();
 }
 
-function statCard(label, value, icon) {
-  return `<div class="card stat-card"><div class="stat-top"><div class="stat-icon"><span data-icon="${icon}"></span></div><div class="stat-label">${label}</div></div><div class="stat-value">${value}</div><div class="stat-delta">↑ 2.4% from last month</div></div>`;
-}
-
 async function load() {
   items = await listTransactions(session.uid);
   const paid = items.filter((t) => t.status === "paid");
   const pending = items.filter((t) => t.status === "pending");
   const gross = paid.reduce((s, t) => s + (Number(t.premium) || 0), 0);
+  const { start: thisMonthStart } = monthBounds(0);
+  const totalDelta = trendDelta(items.length, countBefore(items, "createdAt", thisMonthStart));
+  const paidDelta = trendDelta(paid.length, countBefore(paid, "createdAt", thisMonthStart));
+  const grossDelta = trendDelta(gross, sumBefore(paid, "createdAt", (t) => Number(t.premium) || 0, thisMonthStart));
   document.getElementById("statGrid").innerHTML = [
-    statCard("Total transactions", number(items.length), "swap"),
-    statCard("Paid", number(paid.length), "check-circle"),
-    statCard("Pending", number(pending.length), "clock"),
-    statCard("Gross premium", money(gross), "coin"),
+    statCard("Total transactions", number(items.length), "swap", totalDelta),
+    statCard("Paid", number(paid.length), "check-circle", paidDelta),
+    plainCard("Pending", number(pending.length)),
+    statCard("Gross premium", money(gross), "coin", grossDelta),
   ].join("");
   applyFilters();
   mountIcons(document);
@@ -124,14 +124,7 @@ function renderTable() {
   }
   document.getElementById("resultsLabel").textContent = total
     ? `Showing ${(page - 1) * PAGE_SIZE + 1} to ${Math.min(page * PAGE_SIZE, total)} of ${total} results` : "No results";
-  const pager = document.getElementById("pagination");
-  let html = `<button class="page-btn" ${page === 1 ? "disabled" : ""} id="prevPage"><span data-icon="chevron-left" data-icon-size="14"></span></button>`;
-  for (let i = 1; i <= pages; i++) html += `<button class="page-btn${i === page ? " active" : ""}" data-page="${i}">${i}</button>`;
-  html += `<button class="page-btn" ${page === pages ? "disabled" : ""} id="nextPage"><span data-icon="chevron-right" data-icon-size="14"></span></button>`;
-  pager.innerHTML = html;
-  pager.querySelectorAll("[data-page]").forEach((b) => b.addEventListener("click", () => { page = Number(b.dataset.page); renderTable(); }));
-  document.getElementById("prevPage")?.addEventListener("click", () => { page--; renderTable(); });
-  document.getElementById("nextPage")?.addEventListener("click", () => { page++; renderTable(); });
+  renderPager("pagination", { page, pages }, (n) => { page = n; renderTable(); });
   mountIcons(document);
 }
 

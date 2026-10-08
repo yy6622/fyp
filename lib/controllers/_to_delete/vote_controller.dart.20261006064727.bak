@@ -1,0 +1,215 @@
+import 'dart:async';
+
+import 'package:flutter/material.dart';
+
+import '../repositories/catalog_repository.dart';
+import '../repositories/trip_repository.dart';
+import '../services/auth_service.dart';
+import 'saved_items_controller.dart';
+
+/// Controller for [VoteTab] — streams every real vote/poll created for a
+/// trip (`trips/{tripId}/votes`), plus everything [VoteTab] needs to show
+/// an option as a real card instead of a plain text row:
+///  - the trip doc itself, for the member count/names behind each
+///    option's "X/Total voted" fraction and avatar stack;
+///  - the trip's saved flights/hotels/attractions/restaurants, so an
+///    option that was added via "From Saved" in Create Vote can be
+///    matched back to the real listing behind it (image, rating,
+///    location, price) rather than just showing its label text.
+class VoteTabController extends ChangeNotifier {
+  final String tripId;
+  VoteTabController({required this.tripId}) {
+    _sub = TripRepository.instance.watchVotes(tripId).listen((v) {
+      _votes = v;
+      _loading = false;
+      notifyListeners();
+    });
+    _tripSub = TripRepository.instance.watchTrip(tripId, _uid).listen((t) {
+      _trip = t;
+      notifyListeners();
+    });
+    _saved.addListener(notifyListeners);
+  }
+
+  String get _uid => AuthService.instance.currentUser?.uid ?? '';
+
+  List<TripVote> _votes = [];
+  List<TripVote> get votes => _votes;
+
+  bool _loading = true;
+  bool get loading => _loading;
+
+  StreamSubscription<List<TripVote>>? _sub;
+
+  Trip? _trip;
+  StreamSubscription<Trip?>? _tripSub;
+
+  /// Total trip members — the denominator shown next to each option's
+  /// vote count (e.g. "3/5"). Falls back to 1 before the trip doc has
+  /// loaded rather than 0, so nothing ever divides by zero.
+  int get totalMembers => (_trip?.memberIds.isNotEmpty ?? false) ? _trip!.memberIds.length : 1;
+
+  /// Not exposed as a loading flag of its own — [VoteTab] just renders
+  /// whatever's loaded so far (empty lists until each stream's first
+  /// snapshot arrives), same as the rest of this controller. `late` so
+  /// its initializer (which reads the `tripId` field) runs after that
+  /// field is set, not before.
+  late final SavedItemsController _saved = SavedItemsController(tripId: tripId);
+
+  bool votedByMe(VoteOption option) => option.votedBy.contains(_uid);
+
+  /// Matches an option's plain-text label back to the trip's saved
+  /// hotel/attraction/restaurant with that exact name (case/whitespace
+  /// insensitive) — best-effort only: an option typed by hand instead of
+  /// picked "From Saved" just won't match anything, which [VoteTab]
+  /// treats as a plain card rather than an error. Only one of these four
+  /// will ever match for a given option in practice (a saved item's name
+  /// is only ever that one listing's), so [VoteTab] checks them in this
+  /// same order and stops at the first hit.
+  CatalogHotel? hotelFor(VoteOption option) => _firstWhereOrNull(_saved.hotels, (h) => _sameName(h.name, option.label));
+  CatalogAttraction? attractionFor(VoteOption option) =>
+      _firstWhereOrNull(_saved.attractions, (a) => _sameName(a.name, option.label));
+  CatalogRestaurant? restaurantFor(VoteOption option) =>
+      _firstWhereOrNull(_saved.restaurants, (r) => _sameName(r.name, option.label));
+  /// Flight options are saved from the same "From → To" label the "From
+  /// Saved" picker builds (see saved_item_picker_sheet.dart), so that's
+  /// what's matched against here rather than a single flight field.
+  CatalogFlight? flightFor(VoteOption option) =>
+      _firstWhereOrNull(_saved.flights, (f) => _sameName('${f.from} → ${f.to}', option.label));
+
+  bool _sameName(String a, String b) => a.trim().toLowerCase() == b.trim().toLowerCase();
+
+  T? _firstWhereOrNull<T>(List<T> list, bool Function(T) test) {
+    for (final item in list) {
+      if (test(item)) return item;
+    }
+    return null;
+  }
+
+  Future<void> castVote(TripVote vote, String optionId) {
+    return TripRepository.instance.castVote(tripId, vote, optionId, _uid);
+  }
+
+  @override
+  void dispose() {
+    _sub?.cancel();
+    _tripSub?.cancel();
+    _saved.removeListener(notifyListeners);
+    _saved.dispose();
+    super.dispose();
+  }
+}
+
+/// Controller for [CreateVotePage] — writes a real vote/poll document.
+class CreateVoteController extends ChangeNotifier {
+  final String tripId;
+  CreateVoteController({required this.tripId});
+
+  final TextEditingController titleController = TextEditingController();
+  final List<TextEditingController> optionControllers = [
+    TextEditingController(),
+    TextEditingController(),
+  ];
+
+  bool _allowAddOptions = true;
+  bool get allowAddOptions => _allowAddOptions;
+
+  bool _allowMultipleChoice = false;
+  bool get allowMultipleChoice => _allowMultipleChoice;
+
+  DateTime? _deadline;
+  DateTime? get deadline => _deadline;
+
+  bool _saving = false;
+  bool get saving => _saving;
+
+  void setDeadline(DateTime? v) {
+    _deadline = v;
+    notifyListeners();
+  }
+
+  void addOption() {
+    optionControllers.add(TextEditingController());
+    notifyListeners();
+  }
+
+  /// Fills in picked options — used when options are picked from the
+  /// trip's saved flights/hotels/attractions/restaurants instead of typed
+  /// by hand (see [showSavedItemPicker] in saved_item_picker_sheet.dart).
+  /// Fills any still-*empty* existing rows first — Option 1 and Option 2
+  /// always exist and can never be removed (see [removeOptionAt]), so
+  /// without this a pick could only ever land in Option 3+ and those two
+  /// would be stuck manual-only, forcing them to be typed by hand (or left
+  /// blank, failing [create]'s "at least 2 options" check) even when the
+  /// whole poll is meant to be saved items. Only overflow beyond however
+  /// many rows are empty becomes new rows; a row that already has
+  /// manually typed text in it is left alone. The result is a plain
+  /// [TextEditingController] either way — still freely editable after,
+  /// not locked to the picked item.
+  void addOptions(List<String> texts) {
+    if (texts.isEmpty) return;
+    var i = 0;
+    for (final c in optionControllers) {
+      if (i >= texts.length) break;
+      if (c.text.trim().isEmpty) {
+        c.text = texts[i];
+        i++;
+      }
+    }
+    if (i < texts.length) {
+      optionControllers.addAll(texts.sublist(i).map((t) => TextEditingController(text: t)));
+    }
+    notifyListeners();
+  }
+
+  void removeOptionAt(int index) {
+    optionControllers.removeAt(index).dispose();
+    notifyListeners();
+  }
+
+  void setAllowAddOptions(bool v) {
+    _allowAddOptions = v;
+    notifyListeners();
+  }
+
+  void setAllowMultipleChoice(bool v) {
+    _allowMultipleChoice = v;
+    notifyListeners();
+  }
+
+  /// Returns true if the vote was created (false if the title/options
+  /// weren't filled in).
+  Future<bool> create() async {
+    final uid = AuthService.instance.currentUser?.uid;
+    if (uid == null) return false;
+    final title = titleController.text.trim();
+    final options = optionControllers.map((c) => c.text.trim()).where((s) => s.isNotEmpty).toList();
+    if (title.isEmpty || options.length < 2) return false;
+    _saving = true;
+    notifyListeners();
+    try {
+      await TripRepository.instance.createVote(
+        tripId,
+        title: title,
+        options: options,
+        allowAddOptions: _allowAddOptions,
+        allowMultipleChoice: _allowMultipleChoice,
+        createdBy: uid,
+        deadline: _deadline,
+      );
+      return true;
+    } finally {
+      _saving = false;
+      notifyListeners();
+    }
+  }
+
+  @override
+  void dispose() {
+    titleController.dispose();
+    for (final c in optionControllers) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+}

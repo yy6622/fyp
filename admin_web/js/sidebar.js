@@ -7,7 +7,7 @@ const ADMIN_NAV = [
   { key: "moderation", label: "Content Moderation", icon: "flag", href: "content-moderation.html" },
   { key: "attractions", label: "Attraction Management", icon: "map-pin", href: "attractions.html" },
   { key: "insurance", label: "Insurance Management", icon: "shield", href: "insurance.html" },
-  { key: "analytics", label: "Analytics & Reporting", icon: "bar-chart", href: "analytics.html" },
+  { key: "reports", label: "Reports", icon: "bar-chart", href: "reports.html" },
   { key: "settings", label: "System Settings", icon: "settings", href: "settings.html" },
 ];
 

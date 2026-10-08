@@ -7,6 +7,7 @@ import '../../models/booking_details.dart';
 import '../../repositories/trip_repository.dart';
 import '../../services/flight_document_service.dart';
 import '../../theme.dart';
+import '../shared/member_select_section.dart';
 
 // ---------------------------------------------------------------------
 // Plan_Flight_Detail — flight card inside a group's itinerary. Shown for a
@@ -25,6 +26,9 @@ class PlanFlightDetailPage extends StatefulWidget {
   final String routeCode;
   final String routeCities;
   final String dateTime;
+  // Blank for a manually-typed flight or one booked before this existed —
+  // see TripFlight.arrivalTime.
+  final String arrivalTime;
   final String terminal;
   final String bookingRef;
   final String status;
@@ -33,6 +37,11 @@ class PlanFlightDetailPage extends StatefulWidget {
   final String contactEmail;
   final String contactPhone;
   final Map<String, String> documents;
+  // Who this flight is for, and the trip's full member roster to resolve
+  // those uids into display names — see TripFlight.forMemberUids and
+  // MemberSelectSection.
+  final List<String> forMemberUids;
+  final Map<String, String> memberNames;
 
   const PlanFlightDetailPage({
     super.key,
@@ -43,6 +52,7 @@ class PlanFlightDetailPage extends StatefulWidget {
     this.routeCode = '',
     this.routeCities = '',
     this.dateTime = '',
+    this.arrivalTime = '',
     this.terminal = '',
     this.bookingRef = '',
     this.status = 'Confirmed',
@@ -51,6 +61,8 @@ class PlanFlightDetailPage extends StatefulWidget {
     this.contactEmail = '',
     this.contactPhone = '',
     this.documents = const {},
+    this.forMemberUids = const [],
+    this.memberNames = const {},
   });
 
   @override
@@ -151,9 +163,16 @@ class _PlanFlightDetailPageState extends State<PlanFlightDetailPage> {
               _field('Airline', _orNotSpecified(widget.airline)),
               _field('Flight Number', _orNotSpecified(widget.flightNumber)),
               _fieldRoute(widget.routeCode, widget.routeCities),
-              _field('Date & Time', _orNotSpecified(widget.dateTime)),
+              _field('Departure', _orNotSpecified(widget.dateTime)),
+              _field('Arrival', _orNotSpecified(widget.arrivalTime)),
               _field('Terminal', _orNotSpecified(widget.terminal)),
               _field('Booking Reference', widget.bookingRef.isEmpty ? 'Not available' : widget.bookingRef),
+              _field(
+                'For',
+                forMembersLabel(widget.forMemberUids, widget.memberNames).isEmpty
+                    ? 'Everyone'
+                    : forMembersLabel(widget.forMemberUids, widget.memberNames).replaceFirst('For: ', ''),
+              ),
               _field('Status', widget.status, last: true),
             ],
           ),

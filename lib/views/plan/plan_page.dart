@@ -296,6 +296,13 @@ class _PlanPageState extends State<PlanPage> {
               height: 150,
               width: 130,
               fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => Container(
+                height: 150,
+                width: 130,
+                color: AppColors.chipGrey,
+                alignment: Alignment.center,
+                child: const Icon(Icons.image_outlined, color: AppColors.textGrey),
+              ),
             ),
           ),
           Positioned(
@@ -397,7 +404,19 @@ class _PlanPageState extends State<PlanPage> {
           children: [
             ClipRRect(
               borderRadius: BorderRadius.circular(12),
-              child: Image.network(item.image, width: 56, height: 56, fit: BoxFit.cover),
+              child: Image.network(
+                item.image,
+                width: 56,
+                height: 56,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => Container(
+                  width: 56,
+                  height: 56,
+                  color: AppColors.chipGrey,
+                  alignment: Alignment.center,
+                  child: const Icon(Icons.image_outlined, color: AppColors.textGrey),
+                ),
+              ),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -549,11 +568,7 @@ class _PlanPageState extends State<PlanPage> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                width: 54,
-                height: 54,
-                decoration: const BoxDecoration(color: AppColors.chipGrey, shape: BoxShape.circle),
-              ),
+              AppAvatar(imageUrl: group.coverImage, radius: 27, fallbackIcon: Icons.map_outlined),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -645,11 +660,7 @@ class _PlanPageState extends State<PlanPage> {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Container(
-              width: 54,
-              height: 54,
-              decoration: const BoxDecoration(color: AppColors.chipGrey, shape: BoxShape.circle),
-            ),
+            AppAvatar(imageUrl: group.coverImage, radius: 27, fallbackIcon: Icons.map_outlined),
             const SizedBox(width: 12),
             Expanded(
               child: Column(

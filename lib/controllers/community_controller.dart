@@ -21,12 +21,19 @@ class CommunityController extends ChangeNotifier {
   bool _loading = true;
   bool get loading => _loading;
 
+  // Post ids the signed-in user has left a written review/comment on —
+  // backs the "Review" tab on Profile's Community Post page. Rating
+  // doesn't need an equivalent set: [CommunityPost.myRating] already
+  // carries it per-post (see CommunityRepository._fromDoc).
+  Set<String> _myReviewedPostIds = {};
+  Set<String> get myReviewedPostIds => _myReviewedPostIds;
+
   StreamSubscription<List<CommunityPost>>? _sub;
+  StreamSubscription<Set<String>>? _reviewedSub;
 
   CommunityController() {
     final uid = AuthService.instance.currentUser?.uid;
     if (uid != null) {
-      CommunityRepository.instance.seedIfEmpty(uid);
       _sub = CommunityRepository.instance.watchPosts(uid).listen((incoming) {
         // Preserve transient view-only state (which tab/day is expanded)
         // across snapshot rebuilds, since each Firestore update produces
@@ -41,6 +48,10 @@ class CommunityController extends ChangeNotifier {
         }
         _posts = incoming;
         _loading = false;
+        notifyListeners();
+      });
+      _reviewedSub = CommunityRepository.instance.watchMyReviewedPostIds(uid).listen((ids) {
+        _myReviewedPostIds = ids;
         notifyListeners();
       });
     } else {
@@ -77,17 +88,35 @@ class CommunityController extends ChangeNotifier {
     CommunityRepository.instance.toggleLike(post.id, uid, !post.liked);
   }
 
-  void toggleSaved(CommunityPost post) {
+  /// Fire-and-forget view record for the Community Post Analysis Report —
+  /// see [CommunityRepository.recordView]. Called once from
+  /// [CommunityPostDetailPage]'s initState.
+  void recordView(CommunityPost post) {
     final uid = AuthService.instance.currentUser?.uid;
     if (uid == null || post.id.isEmpty) return;
-    CommunityRepository.instance.toggleSaved(post.id, uid, !post.saved);
+    CommunityRepository.instance.recordView(post.id, uid);
   }
 
-  void setRating(CommunityPost post, int stars) {
+  /// Returns null on success, or an error message to show. Reports as the
+  /// signed-in traveller — see [CommunityRepository.reportPost].
+  Future<String?> reportPost(CommunityPost post, String reason) async {
     final uid = AuthService.instance.currentUser?.uid;
-    if (uid == null || post.id.isEmpty) return;
-    CommunityRepository.instance.setRating(post.id, uid, stars);
+    if (uid == null) return 'You need to be signed in to report a post.';
+    if (post.id.isEmpty) return 'This post can\'t be reported.';
+    try {
+      await CommunityRepository.instance.reportPost(post.id, reportedByUid: uid, reason: reason);
+      return null;
+    } catch (e) {
+      return 'Could not submit your report — please try again.';
+    }
   }
+
+  // There used to be a setRating(post, stars) here backing a standalone
+  // "quick rate" widget on the post detail page. That widget was dropped
+  // — rating now only happens as part of leaving a review (the star
+  // picker in showWriteReviewDialog), which CommunityRepository.addReview
+  // already writes straight to Firestore, so no controller method is
+  // needed for it.
 
   void setTab(CommunityPost post, CommunityPostTab tab) {
     post.tab = tab;
@@ -102,6 +131,7 @@ class CommunityController extends ChangeNotifier {
   @override
   void dispose() {
     _sub?.cancel();
+    _reviewedSub?.cancel();
     search.dispose();
     super.dispose();
   }

@@ -1,0 +1,498 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Add Attraction — Voya Admin</title>
+<link rel="stylesheet" href="../css/tokens.css?v=20261006b" />
+<link rel="stylesheet" href="../css/base.css?v=20261006b" />
+<link rel="stylesheet" href="../css/layout.css?v=20261006b" />
+<link rel="stylesheet" href="../css/components.css?v=20261006b" />
+</head>
+<body>
+<div class="shell">
+  <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+  <aside class="sidebar" id="sidebar">
+    <img class="sidebar-brand" src="../img/voya-logo-white.png" alt="Voya" />
+    <div class="sidebar-user">
+      <div class="name" id="sbUserName">Loading…</div>
+      <div class="role" id="sbUserRole">Administrator</div>
+    </div>
+    <nav class="nav" id="sidebarNav"></nav>
+    <button class="sidebar-logout" id="logoutBtn"><span data-icon="log-out"></span>Log out</button>
+  </aside>
+
+  <main class="content">
+    <div class="topbar">
+      <div>
+        <button class="menu-toggle" id="menuToggle"><span data-icon="menu"></span></button>
+        <a href="attractions.html" class="inline-flex" style="color:var(--text-500);font-weight:700;font-size:13.5px;margin-bottom:10px;">
+          <span data-icon="arrow-left" data-icon-size="14"></span>Back to attractions
+        </a>
+        <h1 class="h1" id="pageTitle">Add attraction</h1>
+        <p class="subtitle">Details saved here show up live in the app's Explore catalogue</p>
+      </div>
+    </div>
+
+    <div class="card card-pad">
+      <div class="form-section">
+        <div class="form-section-title"><span data-icon="map-pin"></span>Basic info</div>
+        <div class="form-grid">
+          <div class="field" style="grid-column:1/-1;">
+            <label>Name</label>
+            <div style="display:flex;gap:8px;">
+              <input class="input" id="fName" placeholder="e.g. Senso-ji Temple — or just type a place/location to search" style="flex:1;" />
+              <button type="button" class="btn btn-outline btn-icon" id="osmFindBtn" title="Find on OpenStreetMap and auto-fill the fields below">
+                <span data-icon="search" data-icon-size="16"></span>
+              </button>
+            </div>
+            <p class="hint" id="osmFindStatus">Type a name or a location, then click the search button to auto-fill the fields below from OpenStreetMap. You can still edit anything afterwards.</p>
+          </div>
+          <div class="field"><label>Primary category</label><input class="input" id="fCategory" placeholder="e.g. Cultural" /></div>
+          <div class="field">
+            <label>Status</label>
+            <select class="select" id="fStatus"><option value="active">Active</option><option value="pending">Pending</option><option value="suspended">Suspended</option></select>
+          </div>
+          <div class="field" style="grid-column:1/-1;">
+            <label>Additional category tags</label>
+            <div class="tag-input-box" id="categoriesBox"><input placeholder="Type a tag and press Enter…" /></div>
+            <p class="hint">Shown as extra chips on the attraction's detail page (e.g. "Historic Site", "Temple").</p>
+          </div>
+          <div class="field"><label>Location</label><input class="input" id="fLocation" placeholder="e.g. Asakusa, Tokyo" /></div>
+          <div class="field"><label>Recommended duration</label><input class="input" id="fDuration" placeholder="e.g. 1 - 2 hours" /></div>
+          <div class="field" style="grid-column:1/-1;"><label>Full address</label><input class="input" id="fAddress" placeholder="Full street address" /></div>
+        </div>
+      </div>
+
+      <div class="form-section">
+        <div class="form-section-title"><span data-icon="upload"></span>Photos</div>
+        <div class="image-upload-grid" id="imageGrid"></div>
+        <input type="file" id="imageFileInput" accept="image/jpeg,image/png,image/webp" multiple style="display:none;" />
+        <p class="hint">Click the star to set the cover photo shown on Explore. First photo added becomes the cover automatically.</p>
+      </div>
+
+      <div class="form-section">
+        <div class="form-section-title"><span data-icon="coin"></span>Entry fees</div>
+        <label class="checkbox-row" style="margin-bottom:14px;"><input type="checkbox" id="fFree" /> Free entry</label>
+        <div class="form-grid" id="feeFields">
+          <div class="field"><label>Adult (RM)</label><input class="input" id="fFeeAdult" type="number" min="0" step="1" placeholder="e.g. 20" /></div>
+          <div class="field"><label>Child (RM)</label><input class="input" id="fFeeChild" type="number" min="0" step="1" placeholder="e.g. 10" /></div>
+          <div class="field"><label>Senior (RM)</label><input class="input" id="fFeeSenior" type="number" min="0" step="1" placeholder="e.g. 15" /></div>
+        </div>
+      </div>
+
+      <div class="form-section">
+        <div class="form-section-title"><span data-icon="clock"></span>Opening hours</div>
+        <label class="checkbox-row" style="margin-bottom:10px;"><input type="checkbox" id="fOpen24" /> Open 24 hours</label>
+        <label class="checkbox-row" id="sameHoursRow" style="margin-bottom:14px;"><input type="checkbox" id="fSameHours" checked /> Same hours every day</label>
+        <div class="field" id="hoursSingleField"><label>Hours</label><input class="input" id="fHoursSingle" placeholder="e.g. 9:00 AM - 6:00 PM" /></div>
+        <div class="hours-grid" id="hoursGrid" style="display:none;"></div>
+      </div>
+
+      <div class="form-section">
+        <div class="form-section-title"><span data-icon="phone"></span>Contact & details</div>
+        <div class="form-grid">
+          <div class="field"><label>Phone</label><input class="input" id="fPhone" placeholder="e.g. +81 3-3842-0181" /></div>
+          <div class="field"><label>Website</label><input class="input" id="fWebsite" placeholder="https://…" /></div>
+          <div class="field"><label>Rating</label><input class="input" id="fRating" placeholder="e.g. 4.7" /></div>
+          <div class="field"><label>Reviews</label><input class="input" id="fReviews" placeholder="e.g. 3.4k" /></div>
+        </div>
+      </div>
+
+      <div class="form-section">
+        <div class="form-section-title"><span data-icon="check-circle"></span>Facilities</div>
+        <div class="tag-input-box" id="facilitiesBox"><input placeholder="e.g. Public Toilet, then press Enter…" /></div>
+      </div>
+
+      <div class="form-section">
+        <div class="form-section-title"><span data-icon="sparkle"></span>Highlights</div>
+        <div class="tag-input-box" id="highlightsBox"><input placeholder="e.g. Iconic Kaminarimon Thunder Gate, then press Enter…" /></div>
+      </div>
+
+      <div class="form-actions">
+        <a class="btn btn-outline" href="attractions.html">Cancel</a>
+        <button class="btn btn-primary" id="saveBtn">Save attraction</button>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script type="module">
+import { requireRole } from "../js/auth-guard.js?v=20261007";
+import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261007";
+import { mountIcons } from "../js/icons.js?v=20261007";
+import {
+  getAttraction, newAttractionRef, createAttraction, updateAttraction,
+  uploadAttractionImage, deleteAttractionImage,
+} from "../js/data.js?v=20261007";
+import { escapeHtml, toast, setBusy } from "../js/ui.js?v=20261007";
+import { findAndFillFromOsm, hasApiKey } from "../js/places-import.js?v=20261007";
+
+mountSidebarNav({ role: "admin", active: "attractions" });
+const session = await requireRole("admin", "login.html");
+const editingId = new URLSearchParams(location.search).get("id");
+const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+let categoriesTag, facilitiesTag, highlightsTag;
+let osmSourcePlaceId = null;
+let osmSource = null;
+
+if (session) {
+  setSidebarUser({ displayName: session.profile.name || "Admin", roleLabel: "Administrator" });
+  buildHoursGrid();
+  wireImagePicker();
+  wireOsmFind();
+
+  if (editingId) {
+    document.getElementById("pageTitle").textContent = "Edit attraction";
+    const a = await getAttraction(editingId);
+    if (!a) {
+      toast("That attraction couldn't be found.", "error");
+      location.href = "attractions.html";
+    } else {
+      populateForm(a);
+    }
+  } else {
+    populateForm(null);
+  }
+}
+
+// ==================== Tag inputs (categories / facilities / highlights) ====================
+function mountTagInput(boxId, initialTags = []) {
+  const box = document.getElementById(boxId);
+  const oldInput = box.querySelector("input");
+  const input = oldInput.cloneNode(true);
+  oldInput.replaceWith(input);
+  let tags = [...initialTags];
+
+  function render() {
+    box.querySelectorAll(".chip").forEach((c) => c.remove());
+    tags.forEach((tag, i) => {
+      const chip = document.createElement("span");
+      chip.className = "chip";
+      chip.innerHTML = `${escapeHtml(tag)}<button type="button" data-i="${i}"><span data-icon="x"></span></button>`;
+      box.insertBefore(chip, input);
+    });
+    box.querySelectorAll(".chip button").forEach((btn) =>
+      btn.addEventListener("click", () => { tags.splice(Number(btn.dataset.i), 1); render(); })
+    );
+    mountIcons(box);
+  }
+
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === ",") {
+      e.preventDefault();
+      const value = input.value.trim().replace(/,$/, "");
+      if (value && !tags.includes(value)) { tags.push(value); render(); }
+      input.value = "";
+    } else if (e.key === "Backspace" && !input.value && tags.length) {
+      tags.pop();
+      render();
+    }
+  });
+
+  render();
+  return { getTags: () => tags, setTags: (next) => { tags = [...next]; render(); } };
+}
+
+// ==================== Opening hours ====================
+function buildHoursGrid() {
+  const grid = document.getElementById("hoursGrid");
+  grid.innerHTML = DAYS.map((day) => `
+    <div class="day-label">${day}</div>
+    <input class="input" data-day="${day}" placeholder="e.g. 9:00 AM - 6:00 PM" />
+  `).join("");
+}
+
+function refreshHoursVisibility() {
+  const open24 = document.getElementById("fOpen24").checked;
+  const sameHours = document.getElementById("fSameHours").checked;
+  document.getElementById("sameHoursRow").style.display = open24 ? "none" : "flex";
+  document.getElementById("hoursSingleField").style.display = !open24 && sameHours ? "block" : "none";
+  document.getElementById("hoursGrid").style.display = !open24 && !sameHours ? "grid" : "none";
+}
+document.getElementById("fOpen24").addEventListener("change", refreshHoursVisibility);
+document.getElementById("fSameHours").addEventListener("change", refreshHoursVisibility);
+
+function setHoursFields(a) {
+  const byDay = a?.openingHoursByDay || {};
+  const values = DAYS.map((d) => (byDay[d] || "").trim());
+  const allSame = values.every((v) => v === values[0]);
+  const isOpen24 = (a?.openingHours || "").toLowerCase().includes("24");
+  document.getElementById("fOpen24").checked = isOpen24;
+  document.getElementById("fSameHours").checked = allSame || !values.some(Boolean);
+  document.getElementById("fHoursSingle").value = isOpen24 ? "" : (values[0] || (a?.openingHours || "").replace(/^Daily,\s*/, ""));
+  document.querySelectorAll("#hoursGrid input[data-day]").forEach((inp) => {
+    inp.value = byDay[inp.dataset.day] || "";
+  });
+  refreshHoursVisibility();
+}
+
+function readHours() {
+  const open24 = document.getElementById("fOpen24").checked;
+  if (open24) {
+    const byDay = {};
+    DAYS.forEach((d) => (byDay[d] = "Open 24 hours"));
+    return { openingHours: "Open 24 hours", openingHoursByDay: byDay };
+  }
+  const sameHours = document.getElementById("fSameHours").checked;
+  if (sameHours) {
+    const hours = document.getElementById("fHoursSingle").value.trim() || "9:00 AM - 6:00 PM";
+    const byDay = {};
+    DAYS.forEach((d) => (byDay[d] = hours));
+    return { openingHours: `Daily, ${hours}`, openingHoursByDay: byDay };
+  }
+  const byDay = {};
+  document.querySelectorAll("#hoursGrid input[data-day]").forEach((inp) => {
+    byDay[inp.dataset.day] = inp.value.trim();
+  });
+  const firstSet = DAYS.map((d) => byDay[d]).find((v) => v);
+  return { openingHours: firstSet ? `Hours vary by day (e.g. ${firstSet})` : "", openingHoursByDay: byDay };
+}
+
+// ==================== Images (existing URLs + newly-picked files) ====================
+let imageItems = []; // { id, kind: 'existing'|'new', url?, file?, previewUrl? }
+let coverId = null;
+let nextImageId = 1;
+let removedExistingUrls = [];
+
+function wireImagePicker() {
+  document.getElementById("imageFileInput").addEventListener("change", (e) => {
+    const files = Array.from(e.target.files || []);
+    files.forEach((file) => {
+      const id = nextImageId++;
+      const previewUrl = URL.createObjectURL(file);
+      imageItems.push({ id, kind: "new", file, previewUrl });
+      if (!coverId) coverId = id;
+    });
+    e.target.value = "";
+    renderImages();
+  });
+}
+
+function resetImages(a) {
+  imageItems.forEach((it) => { if (it.previewUrl) URL.revokeObjectURL(it.previewUrl); });
+  const urls = a?.images?.length ? a.images : (a?.image ? [a.image] : []);
+  imageItems = urls.map((url) => ({ id: nextImageId++, kind: "existing", url }));
+  coverId = imageItems.length
+    ? (imageItems.find((it) => it.url === a?.image)?.id || imageItems[0].id)
+    : null;
+  removedExistingUrls = [];
+  renderImages();
+}
+
+function renderImages() {
+  const grid = document.getElementById("imageGrid");
+  const tiles = imageItems.map((it) => {
+    const src = it.kind === "existing" ? it.url : it.previewUrl;
+    const isCover = it.id === coverId;
+    return `
+      <div class="image-tile${isCover ? " cover" : ""}" data-id="${it.id}">
+        ${isCover ? `<span class="cover-tag">Cover</span>` : ""}
+        <img src="${src}" alt="" />
+        <div class="tile-actions">
+          <button type="button" class="tile-btn${isCover ? " active" : ""}" data-cover="${it.id}" title="Set as cover"><span data-icon="star"></span></button>
+          <button type="button" class="tile-btn" data-remove="${it.id}" title="Remove"><span data-icon="trash"></span></button>
+        </div>
+      </div>`;
+  }).join("");
+  grid.innerHTML = tiles + `<div class="image-upload-add" id="addImageTile"><span data-icon="upload"></span>Add photo</div>`;
+  document.getElementById("addImageTile").addEventListener("click", () => document.getElementById("imageFileInput").click());
+  grid.querySelectorAll("[data-cover]").forEach((btn) => btn.addEventListener("click", () => { coverId = Number(btn.dataset.cover); renderImages(); }));
+  grid.querySelectorAll("[data-remove]").forEach((btn) => btn.addEventListener("click", () => {
+    const id = Number(btn.dataset.remove);
+    const removed = imageItems.find((it) => it.id === id);
+    if (removed?.kind === "existing") removedExistingUrls.push(removed.url);
+    if (removed?.previewUrl) URL.revokeObjectURL(removed.previewUrl);
+    imageItems = imageItems.filter((it) => it.id !== id);
+    if (coverId === id) coverId = imageItems[0]?.id || null;
+    renderImages();
+  }));
+  mountIcons(grid);
+}
+
+async function resolveImages(attractionId) {
+  const urls = [];
+  let coverUrl = "";
+  let index = 0;
+  for (const it of imageItems) {
+    const url = it.kind === "existing" ? it.url : await uploadAttractionImage(attractionId, it.file, index++);
+    urls.push(url);
+    if (it.id === coverId) coverUrl = url;
+  }
+  if (!coverUrl && urls.length) coverUrl = urls[0];
+  await Promise.all(removedExistingUrls.map((url) => deleteAttractionImage(url)));
+  return { images: urls, image: coverUrl };
+}
+
+// ==================== Fees ====================
+function refreshFeeVisibility() {
+  document.getElementById("feeFields").style.display = document.getElementById("fFree").checked ? "none" : "grid";
+}
+document.getElementById("fFree").addEventListener("change", refreshFeeVisibility);
+
+function setFeeFields(a) {
+  const isFree = !a || a.price === "Free entry" || (!a.fees?.adult && !a.fees?.child && !a.fees?.senior && !a.price);
+  document.getElementById("fFree").checked = !!isFree;
+  document.getElementById("fFeeAdult").value = (a?.fees?.adult || "").replace(/^RM\s*/i, "");
+  document.getElementById("fFeeChild").value = (a?.fees?.child || "").replace(/^RM\s*/i, "");
+  document.getElementById("fFeeSenior").value = (a?.fees?.senior || "").replace(/^RM\s*/i, "");
+  refreshFeeVisibility();
+}
+
+function readFees() {
+  if (document.getElementById("fFree").checked) {
+    return { price: "Free entry", fees: {} };
+  }
+  const adult = document.getElementById("fFeeAdult").value.trim();
+  const child = document.getElementById("fFeeChild").value.trim();
+  const senior = document.getElementById("fFeeSenior").value.trim();
+  const fees = {};
+  if (adult) fees.adult = `RM ${adult}`;
+  if (child) fees.child = `RM ${child}`;
+  if (senior) fees.senior = `RM ${senior}`;
+  const price = fees.adult || fees.child || fees.senior || "";
+  return { price, fees };
+}
+
+// ==================== Find on OpenStreetMap (auto-fill) ====================
+// One free-text lookup (a name like "Senso-ji Temple" or just a location
+// like "Asakusa, Tokyo") against Geoapify's Geocoding API — built on
+// OpenStreetMap data — then a Place Details call for the matched place to
+// pull in website/phone/opening hours/an image where OSM has them. Nothing
+// is swept or bulk-imported here; this fills THIS form only, and the admin
+// reviews/edits everything before clicking Save, same as any other field.
+function wireOsmFind() {
+  document.getElementById("osmFindBtn").addEventListener("click", async () => {
+    const btn = document.getElementById("osmFindBtn");
+    const statusEl = document.getElementById("osmFindStatus");
+    const q = document.getElementById("fName").value.trim();
+    if (!q) { toast("Type a name or location first.", "error"); return; }
+    if (!hasApiKey()) {
+      statusEl.textContent = "No Geoapify API key set yet — add one in js/places-config.js, then reload this page.";
+      return;
+    }
+    setBusy(btn, true, "");
+    statusEl.textContent = "Searching OpenStreetMap…";
+    try {
+      const result = await findAndFillFromOsm(q);
+      applyOsmResult(result);
+      statusEl.textContent = `Filled in from OpenStreetMap${result.address ? ` — ${result.address}` : ""}. Review and adjust anything before saving.`;
+      toast("Auto-filled from OpenStreetMap.", "success");
+    } catch (err) {
+      statusEl.textContent = err.message || "Couldn't find that on OpenStreetMap.";
+    } finally {
+      setBusy(btn, false);
+    }
+  });
+}
+
+function applyOsmResult(result) {
+  if (result.name) document.getElementById("fName").value = result.name;
+  if (result.category) {
+    document.getElementById("fCategory").value = result.category;
+    const extra = (result.categories || []).filter((c) => c !== result.category);
+    categoriesTag.setTags([...new Set([...categoriesTag.getTags(), ...extra])]);
+  }
+  if (result.location) document.getElementById("fLocation").value = result.location;
+  if (result.address) document.getElementById("fAddress").value = result.address;
+  if (result.phone) document.getElementById("fPhone").value = result.phone;
+  if (result.website) document.getElementById("fWebsite").value = result.website;
+  if (result.openingHours) {
+    document.getElementById("fOpen24").checked = false;
+    document.getElementById("fSameHours").checked = true;
+    document.getElementById("fHoursSingle").value = result.openingHours;
+    refreshHoursVisibility();
+  }
+  if (result.highlights?.length) {
+    highlightsTag.setTags([...new Set([...highlightsTag.getTags(), ...result.highlights])]);
+  }
+  if (result.image) {
+    const id = nextImageId++;
+    imageItems.push({ id, kind: "existing", url: result.image });
+    if (!coverId) coverId = id;
+    renderImages();
+  }
+  if (result.sourcePlaceId) {
+    osmSourcePlaceId = result.sourcePlaceId;
+    osmSource = result.source || "Geoapify";
+  }
+}
+
+// ==================== Populate / save ====================
+function populateForm(a) {
+  document.getElementById("fName").value = a?.name || "";
+  document.getElementById("fCategory").value = a?.category || "";
+  document.getElementById("fLocation").value = a?.location || "";
+  document.getElementById("fDuration").value = a?.recommendedDuration || "";
+  document.getElementById("fAddress").value = a?.address || "";
+  document.getElementById("fPhone").value = a?.phone || "";
+  document.getElementById("fWebsite").value = a?.website || "";
+  document.getElementById("fRating").value = a?.rating || "";
+  document.getElementById("fReviews").value = a?.reviews || "";
+  document.getElementById("fStatus").value = a?.status || "active";
+  osmSourcePlaceId = a?.sourcePlaceId || null;
+  osmSource = a?.source || null;
+
+  const extraCategories = (a?.categories || []).filter((c) => c !== (a?.category || ""));
+  categoriesTag = mountTagInput("categoriesBox", extraCategories);
+  facilitiesTag = mountTagInput("facilitiesBox", a?.facilities || []);
+  highlightsTag = mountTagInput("highlightsBox", a?.highlights || []);
+
+  setFeeFields(a);
+  setHoursFields(a);
+  resetImages(a);
+}
+
+document.getElementById("saveBtn").addEventListener("click", async () => {
+  const name = document.getElementById("fName").value.trim();
+  const category = document.getElementById("fCategory").value.trim();
+  if (!name) { toast("Name is required.", "error"); return; }
+  if (!category) { toast("Primary category is required.", "error"); return; }
+
+  const btn = document.getElementById("saveBtn");
+  setBusy(btn, true, "Saving…");
+  try {
+    const ref = editingId ? { id: editingId } : newAttractionRef();
+    const attractionId = editingId || ref.id;
+
+    const { images, image } = await resolveImages(attractionId);
+    const { price, fees } = readFees();
+    const { openingHours, openingHoursByDay } = readHours();
+    const extraCategories = categoriesTag.getTags();
+
+    const data = {
+      name,
+      category,
+      categories: [category, ...extraCategories.filter((c) => c !== category)],
+      location: document.getElementById("fLocation").value.trim(),
+      address: document.getElementById("fAddress").value.trim(),
+      recommendedDuration: document.getElementById("fDuration").value.trim(),
+      phone: document.getElementById("fPhone").value.trim(),
+      website: document.getElementById("fWebsite").value.trim(),
+      rating: document.getElementById("fRating").value.trim() || "0",
+      reviews: document.getElementById("fReviews").value.trim() || "0",
+      status: document.getElementById("fStatus").value,
+      price, fees,
+      openingHours, openingHoursByDay,
+      images, image,
+      facilities: facilitiesTag.getTags(),
+      highlights: highlightsTag.getTags(),
+    };
+    if (osmSourcePlaceId) {
+      data.sourcePlaceId = osmSourcePlaceId;
+      data.source = osmSource || "Geoapify";
+    }
+
+    if (editingId) await updateAttraction(editingId, data);
+    else await createAttraction(ref, data);
+
+    toast("Attraction saved — this is live in the app's Explore catalogue.", "success");
+    location.href = "attractions.html";
+  } catch (err) {
+    toast(err.message || "Couldn't save.", "error");
+    setBusy(btn, false);
+  }
+});
+</script>
+</body>
+</html>

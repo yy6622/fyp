@@ -2,9 +2,13 @@ import 'package:flutter/material.dart';
 
 import '../../controllers/booking_details_controller.dart';
 import '../../controllers/insurance_controller.dart' show nationalityOptions;
+import '../../repositories/trip_repository.dart';
+import '../../services/auth_service.dart';
 import '../../theme.dart';
+import '../shared/member_select_section.dart';
 import '../shared/nice_dialog.dart';
 import '../shared/nice_pickers.dart';
+import '../shared/phone_input_field.dart';
 import 'booking_payment_page.dart';
 
 const List<String> _monthNames = [
@@ -63,6 +67,29 @@ class _FlightPassengerDetailsPageState extends State<FlightPassengerDetailsPage>
   final TextEditingController _emailCtrl = TextEditingController();
   final TextEditingController _phoneCtrl = TextEditingController();
 
+  // Who this booking is for, within the trip — see MemberSelectSection.
+  // Only relevant (and only shown) for a group trip, i.e. once _trip loads
+  // and actually has more than one member; stays null/empty otherwise.
+  Trip? _trip;
+  Set<String> _forMemberUids = {};
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.tripId.isNotEmpty) {
+      final uid = AuthService.instance.currentUser?.uid ?? '';
+      TripRepository.instance.watchTrip(widget.tripId, uid).first.then((trip) {
+        if (!mounted || trip == null) return;
+        setState(() {
+          _trip = trip;
+          // Defaults to the whole trip — deselecting is how you say "just
+          // some of us", not the other way around.
+          _forMemberUids = trip.memberIds.toSet();
+        });
+      });
+    }
+  }
+
   @override
   void dispose() {
     controller.dispose();
@@ -117,6 +144,7 @@ class _FlightPassengerDetailsPageState extends State<FlightPassengerDetailsPage>
         passengerDetails: controller.passengers,
         contactEmail: controller.contactEmail.trim(),
         contactPhone: controller.contactPhone.trim(),
+        forMemberUids: _forMemberUids.toList(),
         onPaid: widget.onPaid,
       ),
     ));
@@ -180,7 +208,22 @@ class _FlightPassengerDetailsPageState extends State<FlightPassengerDetailsPage>
                         const SizedBox(height: 10),
                         niceDialogField(_emailCtrl, 'Email', icon: Icons.email_outlined, keyboardType: TextInputType.emailAddress,
                             onTap: null),
-                        niceDialogField(_phoneCtrl, 'Phone Number', icon: Icons.phone_outlined, keyboardType: TextInputType.phone),
+                        const SizedBox(height: 12),
+                        PhoneInputField(
+                          initialValue: _phoneCtrl.text,
+                          onChanged: (v) => _phoneCtrl.text = v,
+                        ),
+                        const SizedBox(height: 12),
+                        if (_trip != null && _trip!.memberIds.length > 1) ...[
+                          const SizedBox(height: 8),
+                          const Divider(color: Color(0xFFDDDDDD)),
+                          const SizedBox(height: 12),
+                          MemberSelectSection(
+                            memberNames: _trip!.memberNames,
+                            selected: _forMemberUids,
+                            onChanged: (v) => setState(() => _forMemberUids = v),
+                          ),
+                        ],
                       ],
                     ),
                   ),

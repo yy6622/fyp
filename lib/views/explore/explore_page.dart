@@ -37,6 +37,14 @@ class _ExplorePageState extends State<ExplorePage> {
   // is reopened.
   final FilterController filterController = FilterController();
 
+  // Marks the "Best Flight Deals" section header so the banner's
+  // "Explore Now" button can scroll straight to it (see
+  // _scrollToBestFlights) — everything on the "All" tab lives inside one
+  // outer SingleChildScrollView (the inner per-category ListViews are
+  // shrink-wrapped, non-scrolling), so Scrollable.ensureVisible finds
+  // that single ancestor scroll view on its own.
+  final GlobalKey _bestFlightsKey = GlobalKey();
+
   @override
   void dispose() {
     _searchController.dispose();
@@ -45,7 +53,23 @@ class _ExplorePageState extends State<ExplorePage> {
     super.dispose();
   }
 
+  void _scrollToBestFlights() {
+    final ctx = _bestFlightsKey.currentContext;
+    if (ctx == null) return;
+    Scrollable.ensureVisible(ctx, duration: const Duration(milliseconds: 450), curve: Curves.easeInOut, alignment: 0.05);
+  }
+
   void _runTopBarSearch() => controller.searchFromTopBar(_searchController.text);
+
+  // The actual fix for "after I search I can't get back to the page I
+  // started on" — a manual search overwrites the same flights/hotels/
+  // attractions/restaurants state the default trip/popular view uses,
+  // in place, with nothing that used to undo it. This clears the typed
+  // text and asks the controller to restore that default view.
+  void _clearManualSearch() {
+    _searchController.clear();
+    controller.clearManualSearch();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -74,6 +98,10 @@ class _ExplorePageState extends State<ExplorePage> {
                     _buildTripCard(),
                     const SizedBox(height: 16),
                     _buildSearchBar(),
+                    if (controller.isManualSearch) ...[
+                      const SizedBox(height: 10),
+                      _buildManualSearchBar(),
+                    ],
                     const SizedBox(height: 14),
                     _buildCategoryChips(),
                     const SizedBox(height: 10),
@@ -492,7 +520,57 @@ class _ExplorePageState extends State<ExplorePage> {
                 ),
               ),
             ),
-            const Icon(Icons.mic_none, color: AppColors.textGrey, size: 20),
+            // Once a manual search is active, this becomes the quickest
+            // way back to the default view (see _clearManualSearch) —
+            // the decorative mic (never wired to anything) only makes
+            // sense to show the rest of the time.
+            controller.isManualSearch
+                ? GestureDetector(
+                    onTap: _clearManualSearch,
+                    child: const Icon(Icons.close, color: AppColors.textGrey, size: 20),
+                  )
+                : const Icon(Icons.mic_none, color: AppColors.textGrey, size: 20),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Shown only while controller.isManualSearch is true — says plainly
+  // what's on screen now (a search result, not the trip/popular default)
+  // and gives an explicit, labeled way back to it. This is the actual
+  // answer to "after I search I can never get back to the before-search
+  // page": before this existed nothing on screen said a search had even
+  // happened, let alone offered to undo it.
+  Widget _buildManualSearchBar() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(12)),
+        child: Row(
+          children: [
+            const Icon(Icons.search, size: 15, color: AppColors.primary),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Showing results for "${controller.lastSearchQuery}"',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.navy),
+              ),
+            ),
+            GestureDetector(
+              onTap: _clearManualSearch,
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.close, size: 14, color: AppColors.primary),
+                  SizedBox(width: 3),
+                  Text('Clear', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.primary)),
+                ],
+              ),
+            ),
           ],
         ),
       ),
@@ -561,7 +639,20 @@ class _ExplorePageState extends State<ExplorePage> {
   }
 
   // ================= ALL (mixed / discovery view) =================
+  // A section with nothing to show (a failed search, or a real search
+  // that just came back empty) used to render an error box or a "No X
+  // found" line right in the middle of this discovery feed — noisy for a
+  // page whose whole point is "browse what's good", not "see what broke".
+  // Each section below is now only shown at all while loading (so the
+  // spinner still appears) or once it actually has something to show;
+  // the equivalent "nothing found" message only appears on that
+  // category's own dedicated tab (_buildFlightListBody and friends),
+  // where the person went looking on purpose.
   Widget _buildAllView() {
+    final showFlights = controller.loadingFlights || (controller.flightError == null && _visibleFlights.isNotEmpty);
+    final showHotels = controller.loadingHotels || (controller.hotelError == null && _visibleHotels.isNotEmpty);
+    final showAttractions = controller.loadingPlaces || _visibleAttractions.isNotEmpty;
+    final showRestaurants = controller.loadingPlaces || _visibleRestaurants.isNotEmpty;
     return ListView(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
@@ -569,22 +660,30 @@ class _ExplorePageState extends State<ExplorePage> {
       children: [
         _buildExploreBanner(),
         const SizedBox(height: 22),
-        _buildSectionHeader(Icons.flight_takeoff, 'Best Flight Deals', ExploreCategory.flights),
-        const SizedBox(height: 12),
-        _buildFlightHorizontalList(),
-        const SizedBox(height: 22),
-        _buildSectionHeader(Icons.hotel_outlined, 'Recommended Hotels', ExploreCategory.accommodation),
-        const SizedBox(height: 12),
-        _buildHotelHorizontalList(),
-        const SizedBox(height: 22),
-        _buildSectionHeader(Icons.attractions_outlined, 'Top Attractions', ExploreCategory.attractions),
-        const SizedBox(height: 12),
-        _buildAttractionHorizontalList(),
-        const SizedBox(height: 22),
-        _buildSectionHeader(Icons.restaurant_outlined, 'Top Restaurants', ExploreCategory.restaurants),
-        const SizedBox(height: 12),
-        _buildRestaurantHorizontalList(),
-        const SizedBox(height: 22),
+        if (showFlights) ...[
+          KeyedSubtree(key: _bestFlightsKey, child: _buildSectionHeader(Icons.flight_takeoff, 'Best Flight Deals', ExploreCategory.flights)),
+          const SizedBox(height: 12),
+          _buildFlightHorizontalList(),
+          const SizedBox(height: 22),
+        ],
+        if (showHotels) ...[
+          _buildSectionHeader(Icons.hotel_outlined, 'Recommended Hotels', ExploreCategory.accommodation),
+          const SizedBox(height: 12),
+          _buildHotelHorizontalList(),
+          const SizedBox(height: 22),
+        ],
+        if (showAttractions) ...[
+          _buildSectionHeader(Icons.attractions_outlined, 'Top Attractions', ExploreCategory.attractions),
+          const SizedBox(height: 12),
+          _buildAttractionHorizontalList(),
+          const SizedBox(height: 22),
+        ],
+        if (showRestaurants) ...[
+          _buildSectionHeader(Icons.restaurant_outlined, 'Top Restaurants', ExploreCategory.restaurants),
+          const SizedBox(height: 12),
+          _buildRestaurantHorizontalList(),
+          const SizedBox(height: 22),
+        ],
         _buildNearbyPreview(),
       ],
     );
@@ -612,72 +711,91 @@ class _ExplorePageState extends State<ExplorePage> {
     );
   }
 
+  // Real destination, real photo — "Explore {destination}" now follows
+  // whichever destination is actually driving the rest of the page
+  // (the selected trip's, or the same popular-destination fallback
+  // flights/hotels default to), and the photo behind it is a live
+  // Wikipedia lookup for that same destination (see
+  // ExploreController._loadBannerImage), not a fixed Japan photo that
+  // used to show regardless of what was actually selected. Falls back
+  // to a neutral scenic travel photo while that lookup is in flight or
+  // if it found nothing — same degrade pattern _placeCardImage already
+  // uses for attraction/restaurant photos.
+  static const _bannerFallbackImage = 'https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=800';
+
   Widget _buildExploreBanner() {
+    final destination = controller.bannerDestination;
+    final hasTrip = controller.selectedTrip != null;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(20),
-        child: Container(
+        child: SizedBox(
           height: 180,
-          decoration: const BoxDecoration(
-            image: DecorationImage(
-              image: NetworkImage(
-                'https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=800',
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              Image.network(
+                controller.bannerImageUrl ?? _bannerFallbackImage,
+                fit: BoxFit.cover,
+                errorBuilder: (c, e, s) => Image.network(_bannerFallbackImage, fit: BoxFit.cover),
               ),
-              fit: BoxFit.cover,
-            ),
-          ),
-          child: Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Colors.black.withOpacity(0.05),
-                  Colors.black.withOpacity(0.7),
-                ],
-              ),
-            ),
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                const Text(
-                  'Explore Japan',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
+              Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.black.withOpacity(0.05),
+                      Colors.black.withOpacity(0.7),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 4),
-                const Text(
-                  'Sakura session is here',
-                  style: TextStyle(color: Colors.white, fontSize: 12),
-                ),
-                const Text(
-                  'Up to 30 % off on flight and hotel',
-                  style: TextStyle(color: Colors.white70, fontSize: 11),
-                ),
-                const SizedBox(height: 12),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Text(
-                    'Explore Now',
-                    style: TextStyle(
-                      color: AppColors.navy,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 12.5,
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    Text(
+                      'Explore $destination',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
-                  ),
+                    const SizedBox(height: 4),
+                    Text(
+                      hasTrip ? 'Your trip is coming up' : 'One of our popular picks',
+                      style: const TextStyle(color: Colors.white, fontSize: 12),
+                    ),
+                    const Text(
+                      'Find the best flights and hotel deals below',
+                      style: TextStyle(color: Colors.white70, fontSize: 11),
+                    ),
+                    const SizedBox(height: 12),
+                    GestureDetector(
+                      onTap: _scrollToBestFlights,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Text(
+                          'Explore Now',
+                          style: TextStyle(
+                            color: AppColors.navy,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 12.5,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
@@ -730,8 +848,9 @@ class _ExplorePageState extends State<ExplorePage> {
   // Saved Items page like any other saved catalogue item.
   Widget _buildFlightHorizontalList() {
     if (controller.loadingFlights) return const SizedBox(height: 148, child: Center(child: CircularProgressIndicator(color: AppColors.primary)));
-    if (controller.flightError != null) return _searchErrorBox(controller.flightError!);
-    if (_visibleFlights.isEmpty) return _searchEmptyBox('No flights found.');
+    // _buildAllView only calls this once there's actually something to
+    // show (see showFlights there), so these are just a safety fallback.
+    if (controller.flightError != null || _visibleFlights.isEmpty) return const SizedBox.shrink();
     return SizedBox(
       height: 148,
       child: ListView.separated(
@@ -856,8 +975,9 @@ class _ExplorePageState extends State<ExplorePage> {
     if (controller.loadingFlights) {
       return const SizedBox(height: 200, child: Center(child: CircularProgressIndicator(color: AppColors.primary)));
     }
-    if (controller.flightError != null) return _searchErrorBox(controller.flightError!, padded: true);
-    if (_visibleFlights.isEmpty) return _searchEmptyBox('No flights found — try a different search.', padded: true);
+    if (controller.flightError != null || _visibleFlights.isEmpty) {
+      return _searchEmptyBox('No flights found — try a different search.', padded: true);
+    }
     return ListView.separated(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
@@ -937,8 +1057,9 @@ class _ExplorePageState extends State<ExplorePage> {
   // ================= ACCOMMODATION (real Duffel Stays results) ================
   Widget _buildHotelHorizontalList() {
     if (controller.loadingHotels) return const SizedBox(height: 190, child: Center(child: CircularProgressIndicator(color: AppColors.primary)));
-    if (controller.hotelError != null) return _searchErrorBox(controller.hotelError!);
-    if (_visibleHotels.isEmpty) return _searchEmptyBox('No hotels found.');
+    // _buildAllView only calls this once there's actually something to
+    // show (see showHotels there), so this is just a safety fallback.
+    if (controller.hotelError != null || _visibleHotels.isEmpty) return const SizedBox.shrink();
     return SizedBox(
       height: 190,
       child: ListView.separated(
@@ -967,6 +1088,7 @@ class _ExplorePageState extends State<ExplorePage> {
         tripId: controller.selectedTrip?.id ?? '',
         checkIn: controller.lastHotelCheckIn != null ? formatLongDate(controller.lastHotelCheckIn!) : '',
         checkOut: controller.lastHotelCheckOut != null ? formatLongDate(controller.lastHotelCheckOut!) : '',
+        amenities: hotel.amenities,
       );
 
   Widget _buildHotelCompactCard(DuffelStayResult hotel) {
@@ -987,9 +1109,12 @@ class _ExplorePageState extends State<ExplorePage> {
               children: [
                 ClipRRect(
                   borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-                  child: hotel.photoUrl == null
-                      ? Container(height: 95, width: double.infinity, color: AppColors.chipGrey, child: const Icon(Icons.hotel_outlined, color: AppColors.textGrey))
-                      : Image.network(hotel.photoUrl!, height: 95, width: double.infinity, fit: BoxFit.cover),
+                  // _placeCardImage already covers both "no photo at all"
+                  // and "the photo URL is there but fails to load" —
+                  // these two used to only handle the first case, falling
+                  // through to Flutter's default broken-image icon on a
+                  // real load failure.
+                  child: _placeCardImage(hotel.photoUrl ?? '', height: 95, width: double.infinity, icon: Icons.hotel_outlined),
                 ),
                 Positioned(
                   top: 8,
@@ -1045,8 +1170,9 @@ class _ExplorePageState extends State<ExplorePage> {
     if (controller.loadingHotels) {
       return const SizedBox(height: 200, child: Center(child: CircularProgressIndicator(color: AppColors.primary)));
     }
-    if (controller.hotelError != null) return _searchErrorBox(controller.hotelError!, padded: true);
-    if (_visibleHotels.isEmpty) return _searchEmptyBox('No hotels found — try a different search.', padded: true);
+    if (controller.hotelError != null || _visibleHotels.isEmpty) {
+      return _searchEmptyBox('No hotels found — try a different search.', padded: true);
+    }
     return ListView.separated(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
@@ -1073,9 +1199,7 @@ class _ExplorePageState extends State<ExplorePage> {
           children: [
             ClipRRect(
               borderRadius: BorderRadius.circular(12),
-              child: hotel.photoUrl == null
-                  ? Container(width: 80, height: 80, color: AppColors.chipGrey, child: const Icon(Icons.hotel_outlined, color: AppColors.textGrey))
-                  : Image.network(hotel.photoUrl!, width: 80, height: 80, fit: BoxFit.cover),
+              child: _placeCardImage(hotel.photoUrl ?? '', width: 80, height: 80, icon: Icons.hotel_outlined),
             ),
             const SizedBox(width: 14),
             Expanded(
@@ -1117,20 +1241,6 @@ class _ExplorePageState extends State<ExplorePage> {
     );
   }
 
-  Widget _searchErrorBox(String message, {bool padded = false}) {
-    final child = Container(
-      padding: const EdgeInsets.all(16),
-      margin: padded ? const EdgeInsets.symmetric(horizontal: 20) : EdgeInsets.zero,
-      decoration: BoxDecoration(color: const Color(0xFFFFF1F0), borderRadius: BorderRadius.circular(12)),
-      child: Row(children: [
-        const Icon(Icons.error_outline, size: 18, color: Colors.redAccent),
-        const SizedBox(width: 10),
-        Expanded(child: Text(message, style: const TextStyle(fontSize: 11.5, color: AppColors.navy))),
-      ]),
-    );
-    return padded ? Padding(padding: const EdgeInsets.only(top: 8), child: child) : Padding(padding: const EdgeInsets.symmetric(horizontal: 20), child: child);
-  }
-
   Widget _searchEmptyBox(String message, {bool padded = false}) {
     final child = Text(message, style: const TextStyle(fontSize: 12, color: AppColors.textGrey));
     return Padding(
@@ -1162,6 +1272,12 @@ class _ExplorePageState extends State<ExplorePage> {
 
   // ================= ATTRACTIONS =================
   Widget _buildAttractionHorizontalList() {
+    if (controller.loadingPlaces && _visibleAttractions.isEmpty) {
+      return const SizedBox(height: 190, child: Center(child: CircularProgressIndicator(color: AppColors.primary)));
+    }
+    // _buildAllView only calls this once there's actually something to
+    // show, so this is just a safety fallback.
+    if (_visibleAttractions.isEmpty) return const SizedBox.shrink();
     return SizedBox(
       height: 190,
       child: ListView.separated(
@@ -1250,6 +1366,10 @@ class _ExplorePageState extends State<ExplorePage> {
   }
 
   Widget _buildAttractionListView() {
+    if (controller.loadingPlaces && _visibleAttractions.isEmpty) {
+      return const SizedBox(height: 200, child: Center(child: CircularProgressIndicator(color: AppColors.primary)));
+    }
+    if (_visibleAttractions.isEmpty) return _searchEmptyBox('No attractions found — try a different search.', padded: true);
     return ListView.separated(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
@@ -1321,6 +1441,12 @@ class _ExplorePageState extends State<ExplorePage> {
 
   // ================= RESTAURANTS =================
   Widget _buildRestaurantHorizontalList() {
+    if (controller.loadingPlaces && _visibleRestaurants.isEmpty) {
+      return const SizedBox(height: 190, child: Center(child: CircularProgressIndicator(color: AppColors.primary)));
+    }
+    // _buildAllView only calls this once there's actually something to
+    // show, so this is just a safety fallback.
+    if (_visibleRestaurants.isEmpty) return const SizedBox.shrink();
     return SizedBox(
       height: 190,
       child: ListView.separated(
@@ -1409,6 +1535,10 @@ class _ExplorePageState extends State<ExplorePage> {
   }
 
   Widget _buildRestaurantListView() {
+    if (controller.loadingPlaces && _visibleRestaurants.isEmpty) {
+      return const SizedBox(height: 200, child: Center(child: CircularProgressIndicator(color: AppColors.primary)));
+    }
+    if (_visibleRestaurants.isEmpty) return _searchEmptyBox('No restaurants found — try a different search.', padded: true);
     return ListView.separated(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),

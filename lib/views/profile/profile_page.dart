@@ -2,13 +2,13 @@ import 'package:flutter/material.dart';
 
 import '../../controllers/profile_controller.dart';
 import '../../models/profile_models.dart';
+import '../../repositories/catalog_repository.dart';
 import '../../services/auth_service.dart';
 import '../../theme.dart';
 import '../auth/login_page.dart';
 import '../shared/nice_dialog.dart';
 import '../community/my_community_posts_page.dart';
 import 'account_setting_page.dart';
-import 'chat_setting_page.dart';
 import 'friends_page.dart';
 import 'help_support_page.dart';
 import 'history_page.dart';
@@ -28,7 +28,6 @@ class _ProfilePageState extends State<ProfilePage> {
   late final List<ProfileMenuItem> _menuItems = [
     ProfileMenuItem(Icons.person_outline, 'Account Setting', () => _push(const AccountSettingPage())),
     ProfileMenuItem(Icons.history, 'History', () => _push(const HistoryPage())),
-    ProfileMenuItem(Icons.chat_bubble_outline, 'Chat Setting', () => _push(const ChatSettingPage())),
     ProfileMenuItem(Icons.dynamic_feed_outlined, 'Community Post', () => _push(const MyCommunityPostsPage())),
     ProfileMenuItem(Icons.people_outline, 'Friends', () => _push(const FriendsPage())),
     ProfileMenuItem(Icons.privacy_tip_outlined, 'Privacy and Security', () => _push(const PrivacySecurityPage())),
@@ -72,28 +71,19 @@ class _ProfilePageState extends State<ProfilePage> {
 
   // ---------------- Header ----------------
   Widget _buildHeader() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    return const Padding(
+      padding: EdgeInsets.symmetric(horizontal: 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Profile',
-                style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: AppColors.navy),
-              ),
-              SizedBox(height: 4),
-              Text(
-                'Manage your account and preferences',
-                style: TextStyle(fontSize: 12.5, color: AppColors.textGrey),
-              ),
-            ],
+          Text(
+            'Profile',
+            style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: AppColors.navy),
           ),
-          HeaderIconButton(
-            icon: controller.favorited ? Icons.favorite : Icons.favorite_border,
-            onTap: controller.toggleFavorited,
+          SizedBox(height: 4),
+          Text(
+            'Manage your account and preferences',
+            style: TextStyle(fontSize: 12.5, color: AppColors.textGrey),
           ),
         ],
       ),
@@ -117,11 +107,10 @@ class _ProfilePageState extends State<ProfilePage> {
         ),
         child: Row(
           children: [
-            CircleAvatar(
+            AppAvatar(
+              imageUrl: profile?.avatarUrl,
               radius: 32,
-              backgroundColor: AppColors.chipGrey,
-              backgroundImage: (profile?.avatarUrl.isNotEmpty ?? false) ? NetworkImage(profile!.avatarUrl) : null,
-              child: (profile?.avatarUrl.isNotEmpty ?? false) ? null : const Icon(Icons.person, color: AppColors.textGrey, size: 30),
+              iconSize: 30,
             ),
             const SizedBox(width: 16),
             Expanded(
@@ -237,6 +226,11 @@ class _ProfilePageState extends State<ProfilePage> {
       destructive: true,
     );
     if (!confirmed) return;
+    // Belt-and-suspenders: drop this account's in-memory flight/hotel
+    // search cache right as it signs out (see CatalogRepository.
+    // clearSearchCache's doc comment) before handing off to whoever
+    // signs in next on this device.
+    CatalogRepository.instance.clearSearchCache();
     await AuthService.instance.signOut();
     if (!context.mounted) return;
     Navigator.of(context).pushAndRemoveUntil(

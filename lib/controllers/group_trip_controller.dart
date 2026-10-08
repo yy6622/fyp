@@ -3,9 +3,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../models/day_plan_models.dart';
+import '../repositories/catalog_repository.dart';
 import '../repositories/trip_repository.dart';
 import '../repositories/user_repository.dart';
 import '../services/auth_service.dart';
+import 'saved_items_controller.dart';
 
 /// Tabs of [GroupTripPage].
 enum GroupTab { plan, chat, expenses, vote }
@@ -17,6 +19,37 @@ class GroupTripController extends ChangeNotifier {
   GroupTab _tab;
   GroupTripController({required this.tripId, GroupTab initialTab = GroupTab.plan}) : _tab = initialTab {
     _load();
+    _saved.addListener(notifyListeners);
+  }
+
+  /// The trip's saved flights/hotels/attractions/restaurants — used to
+  /// match an activity's plain-text label back to the real saved listing
+  /// behind it (image, rating, location, price) when it was added "From
+  /// Saved" in the Add Activity sheet, same idea as VoteTabController's
+  /// own hotelFor/attractionFor/restaurantFor. `late` so its initializer
+  /// (which reads `tripId`) runs after that field is set.
+  late final SavedItemsController _saved = SavedItemsController(tripId: tripId);
+
+  /// Matches an activity's label back to the trip's saved hotel with that
+  /// exact name (case/whitespace insensitive) — best-effort: an activity
+  /// typed by hand instead of picked "From Saved" just won't match
+  /// anything, which the Day view treats as a plain card rather than an
+  /// error. Checked in this order (hotel, then attraction, then
+  /// restaurant) and stops at the first hit, since a saved item's name is
+  /// only ever that one listing's.
+  CatalogHotel? hotelForActivity(ActivityItem item) => _firstWhereOrNull(_saved.hotels, (h) => _sameName(h.name, item.label));
+  CatalogAttraction? attractionForActivity(ActivityItem item) =>
+      _firstWhereOrNull(_saved.attractions, (a) => _sameName(a.name, item.label));
+  CatalogRestaurant? restaurantForActivity(ActivityItem item) =>
+      _firstWhereOrNull(_saved.restaurants, (r) => _sameName(r.name, item.label));
+
+  bool _sameName(String a, String b) => a.trim().toLowerCase() == b.trim().toLowerCase();
+
+  T? _firstWhereOrNull<T>(List<T> list, bool Function(T) test) {
+    for (final item in list) {
+      if (test(item)) return item;
+    }
+    return null;
   }
 
   String get _uid => AuthService.instance.currentUser?.uid ?? '';
@@ -87,9 +120,10 @@ class GroupTripController extends ChangeNotifier {
     required String label,
     required String iconKey,
     String location = '',
+    List<String> forMemberUids = const [],
   }) {
-    return TripRepository.instance
-        .addActivity(tripId, dayIndex, time: time, label: label, iconKey: iconKey, location: location);
+    return TripRepository.instance.addActivity(tripId, dayIndex,
+        time: time, label: label, iconKey: iconKey, location: location, forMemberUids: forMemberUids, actorUid: _uid);
   }
 
   Future<void> toggleActivityVote(int dayIndex, ActivityItem item) {
@@ -97,19 +131,24 @@ class GroupTripController extends ChangeNotifier {
   }
 
   Future<void> removeActivity(int dayIndex, String itemId) {
-    return TripRepository.instance.removeActivity(tripId, dayIndex, itemId);
+    return TripRepository.instance.removeActivity(tripId, dayIndex, itemId, actorUid: _uid);
   }
 
-  Future<void> addFlight(TripFlight flight) => TripRepository.instance.addFlight(tripId, flight);
+  Future<void> updateActivityTime(int dayIndex, String itemId, String time) {
+    return TripRepository.instance.updateActivityTime(tripId, dayIndex, itemId, time);
+  }
+
+  Future<void> addFlight(TripFlight flight) => TripRepository.instance.addFlight(tripId, flight, actorUid: _uid);
   Future<void> removeFlight(String flightId) => TripRepository.instance.removeFlight(tripId, flightId);
-  Future<void> addHotelStay(TripHotelStay stay) => TripRepository.instance.addHotelStay(tripId, stay);
+  Future<void> addHotelStay(TripHotelStay stay) => TripRepository.instance.addHotelStay(tripId, stay, actorUid: _uid);
   Future<void> removeHotelStay(String stayId) => TripRepository.instance.removeHotelStay(tripId, stayId);
 
-  Future<void> setDestination(String destination) => TripRepository.instance.updateSettings(tripId, destination: destination);
+  Future<void> setDestination(String destination) =>
+      TripRepository.instance.updateSettings(tripId, destination: destination, actorUid: _uid);
   Future<void> setDates(DateTime start, DateTime end) =>
-      TripRepository.instance.updateSettings(tripId, startDate: start, endDate: end);
+      TripRepository.instance.updateSettings(tripId, startDate: start, endDate: end, actorUid: _uid);
   Future<void> setBudget(double budgetPerPerson) =>
-      TripRepository.instance.updateSettings(tripId, budgetPerPerson: budgetPerPerson);
+      TripRepository.instance.updateSettings(tripId, budgetPerPerson: budgetPerPerson, actorUid: _uid);
 
   Future<void> sendMessage() async {
     final text = messageController.text.trim();
@@ -123,6 +162,8 @@ class GroupTripController extends ChangeNotifier {
     _tripSub?.cancel();
     _messagesSub?.cancel();
     messageController.dispose();
+    _saved.removeListener(notifyListeners);
+    _saved.dispose();
     super.dispose();
   }
 }
@@ -135,6 +176,21 @@ class PlanFlightDetailController extends ChangeNotifier {
   PlanFlightTab _tab = PlanFlightTab.detail;
   PlanFlightTab get tab => _tab;
   void setTab(PlanFlightTab value) {
+    _tab = value;
+    notifyListeners();
+  }
+}
+
+/// Tabs of [PlanHotelDetailPage] — mirrors [PlanFlightTab], with a
+/// "Guests" tab in place of "Passenger" and an optional trailing "Review"
+/// tab (only shown when the stay has a real catalog hotelId).
+enum PlanHotelTab { detail, guests, documents, review }
+
+/// Controller for [PlanHotelDetailPage].
+class PlanHotelDetailController extends ChangeNotifier {
+  PlanHotelTab _tab = PlanHotelTab.detail;
+  PlanHotelTab get tab => _tab;
+  void setTab(PlanHotelTab value) {
     _tab = value;
     notifyListeners();
   }

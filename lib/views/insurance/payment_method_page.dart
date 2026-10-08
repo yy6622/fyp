@@ -6,6 +6,7 @@ import '../../repositories/booking_repository.dart';
 import '../../repositories/insurance_repository.dart';
 import '../../repositories/trip_repository.dart';
 import '../../services/auth_service.dart';
+import '../../services/stripe_service.dart';
 import '../../theme.dart';
 import '../shared/nice_dialog.dart';
 import 'insurance_widgets.dart';
@@ -30,6 +31,7 @@ class PaymentMethodPage extends StatefulWidget {
 class _PaymentMethodPageState extends State<PaymentMethodPage> {
   late final PaymentMethodController controller =
       PaymentMethodController(plan: widget.plan, travellerCount: widget.travellerCount);
+  bool _paying = false;
 
   @override
   void dispose() {
@@ -79,8 +81,25 @@ class _PaymentMethodPageState extends State<PaymentMethodPage> {
                   ),
                   const SizedBox(height: 24),
                   const Text('Payment Method', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.black)),
+                  const SizedBox(height: 4),
+                  const Text('Paid securely by card via Stripe — tap "Pay" below to enter your card details.',
+                      style: TextStyle(fontSize: 11.5, color: AppColors.textGrey)),
                   const SizedBox(height: 12),
-                  ...PaymentMethodController.methods.map((m) => _methodTile(m)),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFFECECEC)),
+                    ),
+                    child: const Row(
+                      children: [
+                        Icon(Icons.credit_card, color: AppColors.primary, size: 20),
+                        SizedBox(width: 12),
+                        Expanded(child: Text('Credit / Debit Card', style: TextStyle(fontSize: 13.5, color: Colors.black))),
+                        Icon(Icons.lock_outline, size: 16, color: AppColors.textGrey),
+                      ],
+                    ),
+                  ),
                   const SizedBox(height: 12),
                   const Divider(color: Color(0xFFECECEC)),
                   const SizedBox(height: 4),
@@ -103,9 +122,11 @@ class _PaymentMethodPageState extends State<PaymentMethodPage> {
                     padding: const EdgeInsets.symmetric(vertical: 15),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                   ),
-                  onPressed: _confirmPayment,
-                  child: Text('Pay RM ${controller.subtotal.toStringAsFixed(2)}',
-                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 15)),
+                  onPressed: _paying ? null : _confirmPayment,
+                  child: _paying
+                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : Text('Pay RM ${controller.subtotal.toStringAsFixed(2)}',
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 15)),
                 ),
               ),
             ),
@@ -119,15 +140,56 @@ class _PaymentMethodPageState extends State<PaymentMethodPage> {
     final user = AuthService.instance.currentUser;
     final uid = user?.uid;
     if (uid == null) return;
+
+    setState(() => _paying = true);
+
+    // Real Stripe sandbox charge — same payWithSheet() used by flight/hotel
+    // checkout (see BookingPaymentPage._confirmPayment). Previously this
+    // page did no charge at all: it just wrote a Firestore record with a
+    // policy number fabricated from a timestamp. Now the policy number is
+    // derived from the real PaymentIntent id, so it's a genuine,
+    // transaction-linked reference.
+    final String paymentRef;
     try {
-      final policyNumber = 'INS-${DateTime.now().millisecondsSinceEpoch}';
+      paymentRef = await StripeService.instance.payWithSheet(
+        amount: controller.subtotal,
+        currencyCode: 'myr',
+        merchantDisplayName: 'Voya',
+        customerEmail: user?.email,
+      );
+    } on StripePaymentException catch (e) {
+      if (!mounted) return;
+      setState(() => _paying = false);
+      if (e.message != 'Payment cancelled.') {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      }
+      return;
+    }
+
+    try {
+      final policyNumber = 'INS-$paymentRef';
       await BookingRepository.instance.addBooking(
         uid: uid,
         type: 'insurance',
         title: widget.plan.name,
         subtitle: 'Policy #$policyNumber',
         trailing: 'RM ${controller.subtotal.toStringAsFixed(2)}',
+        bookingRef: paymentRef,
+        status: 'Confirmed',
       );
+      // A purchase made from inside a trip (widget.tripId set) carries that
+      // trip's real destination into the transaction record, so reports
+      // like the admin/partner console's "Top Destinations" reflect where
+      // the policy was actually for instead of showing "Unspecified" on a
+      // transaction that clearly has real money against it. Bought
+      // standalone (no trip), there genuinely is no destination to record,
+      // so this stays empty — that case is a legitimate "Unspecified", not
+      // a bug.
+      String purchaseDestination = '';
+      if (widget.tripId != null && widget.tripId!.isNotEmpty) {
+        final trip = await TripRepository.instance.getTrip(widget.tripId!, uid);
+        purchaseDestination = trip?.destination ?? '';
+      }
       // Also lands in the partner console's Transactions list (see
       // InsuranceRepository.recordPurchase) so a purchase made here is
       // visible on the business side too, not just the rider's own
@@ -138,6 +200,7 @@ class _PaymentMethodPageState extends State<PaymentMethodPage> {
         customerName: user?.displayName?.trim().isNotEmpty == true ? user!.displayName!.trim() : (user?.email ?? 'Voya user'),
         customerEmail: user?.email ?? '',
         premium: controller.subtotal,
+        destination: purchaseDestination,
       );
       if (widget.tripId != null && widget.tripId!.isNotEmpty) {
         await TripRepository.instance.setInsurance(
@@ -148,12 +211,14 @@ class _PaymentMethodPageState extends State<PaymentMethodPage> {
             price: 'RM ${controller.subtotal.toStringAsFixed(2)}',
             policyNumber: policyNumber,
           ),
+          actorUid: uid,
         );
       }
     } catch (e) {
       if (!mounted) return;
+      setState(() => _paying = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Payment could not be completed: $e')),
+        SnackBar(content: Text('Payment succeeded, but saving the policy failed: $e')),
       );
       return;
     }
@@ -164,32 +229,6 @@ class _PaymentMethodPageState extends State<PaymentMethodPage> {
       message: 'Your ${widget.plan.name} plan for ${widget.travellerCount} traveller(s) is confirmed. '
           'A copy of your policy has been sent to your email.',
       onDone: () => Navigator.of(context).popUntil((route) => route.isFirst),
-    );
-  }
-
-  Widget _methodTile(String method) {
-    final selected = controller.method == method;
-    return GestureDetector(
-      onTap: () => controller.setMethod(method),
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 10),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: selected ? AppColors.primary : const Color(0xFFECECEC), width: selected ? 1.5 : 1),
-        ),
-        child: Row(
-          children: [
-            Icon(
-              selected ? Icons.radio_button_checked : Icons.radio_button_off,
-              color: selected ? AppColors.primary : AppColors.textGrey,
-              size: 20,
-            ),
-            const SizedBox(width: 12),
-            Expanded(child: Text(method, style: const TextStyle(fontSize: 13.5, color: Colors.black))),
-          ],
-        ),
-      ),
     );
   }
 

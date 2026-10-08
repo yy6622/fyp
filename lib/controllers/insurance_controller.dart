@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../models/insurance_models.dart';
 import '../repositories/insurance_repository.dart';
+import 'booking_details_controller.dart' show isValidEmailFormat, isValidPhoneFormat;
 
 /// Controller for [InsuranceListPage]. Streams real plans from
 /// [InsuranceRepository] instead of a hardcoded list.
@@ -130,6 +131,29 @@ class TravellerDetailsController extends ChangeNotifier {
 
   void setPhone(int index, String value) {
     travellers[index].phone = value;
+  }
+
+  /// The first validation problem found, or null once every required
+  /// field for every traveller, plus the lead traveller's (index 0)
+  /// contact email/phone, is filled in — mirrors
+  /// FlightPassengerDetailsController.validate()'s pattern. Previously
+  /// there was no validation at all, so "Continue" navigated to Payment
+  /// regardless of what (if anything) had been filled in.
+  String? validate() {
+    for (var i = 0; i < travellers.length; i++) {
+      final t = travellers[i];
+      final who = travellers.length > 1 ? 'Traveller ${i + 1}' : 'The traveller';
+      if (t.name.trim().isEmpty) return "$who's full name is required.";
+      if (t.dob == null) return "$who's date of birth is required.";
+      if (t.nationality == null || t.nationality!.isEmpty) return "$who's nationality is required.";
+      if (t.passport.trim().isEmpty) return "$who's passport number is required.";
+    }
+    final lead = travellers.first;
+    if (lead.email.trim().isEmpty) return 'A contact email is required.';
+    if (!isValidEmailFormat(lead.email)) return 'Please enter a valid contact email address.';
+    if (lead.phone.trim().isEmpty) return 'A contact phone number is required.';
+    if (!isValidPhoneFormat(lead.phone)) return 'Please enter a valid contact phone number.';
+    return null;
   }
 }
 

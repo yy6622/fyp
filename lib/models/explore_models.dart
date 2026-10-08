@@ -80,6 +80,14 @@ class FlightData {
 
 class HotelData {
   final String name, location, rating, reviews, price, image;
+  // Real per-hotel amenity names (e.g. "WiFi", "Pool", "Parking") — from
+  // Duffel's `accommodation.amenities` (Flights' stays product) or
+  // RollingGo's `hotelAmenities` (Hotels' real data source — see
+  // DuffelStayResult.fromRollingGo/fromJson). '' when the source result
+  // just doesn't have any for that particular hotel; the detail page
+  // hides the Amenities row entirely rather than showing a fixed list
+  // that isn't actually about this hotel.
+  final List<String> amenities;
   const HotelData({
     required this.name,
     required this.location,
@@ -87,6 +95,7 @@ class HotelData {
     required this.reviews,
     required this.price,
     required this.image,
+    this.amenities = const [],
   });
 }
 

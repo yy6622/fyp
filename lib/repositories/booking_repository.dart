@@ -19,6 +19,23 @@ class BookingEntry {
   // BookingDocumentService). Empty until someone actually uploads one
   // from History's Documents tab.
   final Map<String, String> documents;
+  // The real payment/booking reference (Stripe PaymentIntent id for now)
+  // and status — previously only ever written for Insurance; Flight and
+  // Hotel's payment flows now pass their real values here too instead of
+  // leaving every past booking's detail page to show a hardcoded fallback.
+  final String bookingRef;
+  final String status;
+  // Guest/traveller + stay details, captured at the moment of payment so
+  // History's detail pages can show what was actually booked instead of
+  // nothing at all (these used to be collected on the guest-details page
+  // and then thrown away — never written to `users/{uid}/bookings`).
+  final String guestName;
+  final String guestEmail;
+  final String guestPhone;
+  final String guestIdNumber;
+  final String specialRequests;
+  final String checkIn;
+  final String checkOut;
   const BookingEntry({
     required this.id,
     required this.type,
@@ -27,6 +44,15 @@ class BookingEntry {
     required this.trailing,
     this.refId = '',
     this.documents = const {},
+    this.bookingRef = '',
+    this.status = '',
+    this.guestName = '',
+    this.guestEmail = '',
+    this.guestPhone = '',
+    this.guestIdNumber = '',
+    this.specialRequests = '',
+    this.checkIn = '',
+    this.checkOut = '',
   });
 }
 
@@ -50,6 +76,15 @@ class BookingRepository {
               trailing: (d.data()['trailing'] as String?) ?? '',
               refId: (d.data()['refId'] as String?) ?? '',
               documents: Map<String, String>.from(d.data()['documents'] as Map? ?? const {}),
+              bookingRef: (d.data()['bookingRef'] as String?) ?? '',
+              status: (d.data()['status'] as String?) ?? '',
+              guestName: (d.data()['guestName'] as String?) ?? '',
+              guestEmail: (d.data()['guestEmail'] as String?) ?? '',
+              guestPhone: (d.data()['guestPhone'] as String?) ?? '',
+              guestIdNumber: (d.data()['guestIdNumber'] as String?) ?? '',
+              specialRequests: (d.data()['specialRequests'] as String?) ?? '',
+              checkIn: (d.data()['checkIn'] as String?) ?? '',
+              checkOut: (d.data()['checkOut'] as String?) ?? '',
             ))
         .where((b) => type == null || b.type == type)
         .toList());
@@ -69,6 +104,15 @@ class BookingRepository {
     required String subtitle,
     required String trailing,
     String refId = '',
+    String bookingRef = '',
+    String status = '',
+    String guestName = '',
+    String guestEmail = '',
+    String guestPhone = '',
+    String guestIdNumber = '',
+    String specialRequests = '',
+    String checkIn = '',
+    String checkOut = '',
   }) {
     return _bookingsOf(uid).add({
       'type': type,
@@ -76,6 +120,15 @@ class BookingRepository {
       'subtitle': subtitle,
       'trailing': trailing,
       'refId': refId,
+      if (bookingRef.isNotEmpty) 'bookingRef': bookingRef,
+      if (status.isNotEmpty) 'status': status,
+      if (guestName.isNotEmpty) 'guestName': guestName,
+      if (guestEmail.isNotEmpty) 'guestEmail': guestEmail,
+      if (guestPhone.isNotEmpty) 'guestPhone': guestPhone,
+      if (guestIdNumber.isNotEmpty) 'guestIdNumber': guestIdNumber,
+      if (specialRequests.isNotEmpty) 'specialRequests': specialRequests,
+      if (checkIn.isNotEmpty) 'checkIn': checkIn,
+      if (checkOut.isNotEmpty) 'checkOut': checkOut,
       'createdAt': FieldValue.serverTimestamp(),
     });
   }

@@ -67,6 +67,11 @@ class PlanGroup {
   final double lastExpenseAmount;
   /// The real Firestore trip id this card represents.
   final String tripId;
+  /// The trip's own cover photo (Trip.coverImage) — shown in the round
+  /// thumbnail on this card instead of a plain grey circle. Empty for a
+  /// trip with no cover set yet; the card falls back to a placeholder
+  /// icon rather than a broken image either way.
+  final String coverImage;
   const PlanGroup({
     required this.title,
     required this.members,
@@ -79,5 +84,6 @@ class PlanGroup {
     this.lastExpenseLabel = '',
     this.lastExpenseAmount = 0,
     this.tripId = '',
+    this.coverImage = '',
   });
 }

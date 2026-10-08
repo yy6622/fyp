@@ -4,16 +4,16 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Refunds & Claims — Voya Insurance Partner</title>
-<link rel="stylesheet" href="../css/tokens.css" />
-<link rel="stylesheet" href="../css/base.css" />
-<link rel="stylesheet" href="../css/layout.css" />
-<link rel="stylesheet" href="../css/components.css" />
+<link rel="stylesheet" href="../css/tokens.css?v=20261006b" />
+<link rel="stylesheet" href="../css/base.css?v=20261006b" />
+<link rel="stylesheet" href="../css/layout.css?v=20261006b" />
+<link rel="stylesheet" href="../css/components.css?v=20261006b" />
 </head>
 <body>
 <div class="shell">
   <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
   <aside class="sidebar" id="sidebar">
-    <div class="sidebar-brand">Voya</div>
+    <img class="sidebar-brand" src="../img/voya-logo-white.png" alt="Voya" />
     <div class="sidebar-user">
       <div class="name" id="sbUserName">Loading…</div>
       <div class="role" id="sbUserRole">Partner workspace</div>
@@ -27,12 +27,17 @@
       <div>
         <button class="menu-toggle" id="menuToggle"><span data-icon="menu"></span></button>
         <h1 class="h1">Refunds & Claims</h1>
-        <p class="subtitle">Manage and review claim submissions</p>
+        <p class="subtitle">Manage and review claim and refund submissions</p>
       </div>
       <div class="inline-flex">
-        <button class="btn btn-outline" id="newClaimBtn"><span data-icon="plus"></span>New claim</button>
+        <button class="btn btn-outline" id="newBtn"><span data-icon="plus"></span>New claim</button>
         <button class="btn btn-primary" id="exportBtn"><span data-icon="download"></span>Export</button>
       </div>
+    </div>
+
+    <div class="tabs">
+      <button class="tab-btn active" data-type="claim">Claims</button>
+      <button class="tab-btn" data-type="refund">Refunds</button>
     </div>
 
     <div class="stat-grid" id="statGrid"><div class="skeleton" style="height:90px;grid-column:1/-1;"></div></div>
@@ -50,13 +55,13 @@
 
     <div class="table-wrap scroll-x">
       <table class="data-table">
-        <thead><tr><th>Claim ID</th><th>Policyholder</th><th>Plan</th><th>Amount</th><th>Status</th></tr></thead>
+        <thead><tr><th id="refColHead">Claim ID</th><th>Policyholder</th><th>Plan</th><th>Amount</th><th>Status</th></tr></thead>
         <tbody id="tableBody"><tr><td colspan="5"><div class="skeleton" style="height:40px;"></div></td></tr></tbody>
       </table>
       <div class="empty-state" id="emptyState" style="display:none;">
         <span data-icon="doc-text" class="icon-lg"></span>
-        <div class="h3">No claims yet</div>
-        <p class="small">Claims submitted for your plans will show up here.</p>
+        <div class="h3" id="emptyTitle">No claims yet</div>
+        <p class="small" id="emptyBody">Claims submitted for your plans will show up here.</p>
       </div>
     </div>
     <div class="table-foot">
@@ -68,16 +73,16 @@
 
 <div class="modal-backdrop" id="newModal">
   <div class="modal">
-    <div class="modal-head"><h3 class="h2">New claim</h3><button class="modal-close" data-close><span data-icon="x"></span></button></div>
-    <p class="muted small" style="margin-bottom:18px;">The mobile app doesn't have a claim-submission flow yet, so file one here on a policyholder's behalf (e.g. when they call or email support).</p>
+    <div class="modal-head"><h3 class="h2" id="newModalTitle">New claim</h3><button class="modal-close" data-close><span data-icon="x"></span></button></div>
+    <p class="muted small" id="newModalHint" style="margin-bottom:18px;">The mobile app doesn't have a claim-submission flow yet, so file one here on a policyholder's behalf (e.g. when they call or email support).</p>
     <div class="form-grid">
       <div class="field"><label>Policyholder name</label><input class="input" id="nName" /></div>
       <div class="field"><label>Policyholder email</label><input class="input" id="nEmail" type="email" /></div>
       <div class="field"><label>Plan</label><input class="input" id="nPlan" placeholder="e.g. Health Shield Gold" /></div>
-      <div class="field"><label>Category</label>
-        <select class="select" id="nCategory"><option>Medical</option><option>Trip Cancellation</option><option>Baggage Loss</option><option>Flight Delay</option></select>
+      <div class="field"><label id="nCategoryLabel">Category</label>
+        <select class="select" id="nCategory"></select>
       </div>
-      <div class="field" style="grid-column:1/-1;"><label>Amount claimed (RM)</label><input class="input" id="nAmount" type="number" /></div>
+      <div class="field" style="grid-column:1/-1;"><label id="nAmountLabel">Amount claimed (RM)</label><input class="input" id="nAmount" type="number" /></div>
     </div>
     <div class="form-actions">
       <button class="btn btn-outline" data-close>Cancel</button>
@@ -87,34 +92,65 @@
 </div>
 
 <script type="module">
-import { requireRole } from "../js/auth-guard.js";
-import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js";
-import { mountIcons } from "../js/icons.js";
-import { listClaims, createClaim } from "../js/data.js";
-import { number, moneyExact, statusBadge, escapeHtml, paginate, toast, setBusy, openModal, closeModal, wireModalDismiss } from "../js/ui.js";
+import { requireRole } from "../js/auth-guard.js?v=20261007e";
+import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261007e";
+import { mountIcons } from "../js/icons.js?v=20261007e";
+import { listClaims, createClaim, listRefunds, createRefund } from "../js/data.js?v=20261007e";
+import { number, moneyExact, statusBadge, escapeHtml, paginate, renderPager, toast, setBusy, openModal, closeModal, wireModalDismiss, statCard, trendDelta, countByStatusInMonth } from "../js/ui.js?v=20261007e";
+
+const CLAIM_CATEGORIES = ["Medical", "Trip Cancellation", "Baggage Loss", "Flight Delay"];
+const REFUND_CATEGORIES = ["Policy Cancellation", "Duplicate Payment", "Overpayment", "Premium Refund", "Service Not Rendered"];
 
 mountSidebarNav({ role: "partner", active: "claims" });
 const session = await requireRole("partner", "login.html");
 let items = [], filtered = [], page = 1;
+let type = new URLSearchParams(location.search).get("type") === "refund" ? "refund" : "claim";
 const PAGE_SIZE = 8;
 
 if (session) {
   setSidebarUser({ displayName: session.profile.companyName || "Partner", roleLabel: `${session.profile.companyName || "Insurance"} · Insurance Partner` });
   wireModalDismiss();
+  setTab(type);
   await load();
 }
 
-function statCard(label, value, icon) {
-  return `<div class="card stat-card"><div class="stat-top"><div class="stat-icon"><span data-icon="${icon}"></span></div><div class="stat-label">${label}</div></div><div class="stat-value">${value}</div><div class="stat-delta">↑ 2.4% from last month</div></div>`;
+function setTab(nextType) {
+  type = nextType;
+  document.querySelectorAll(".tab-btn").forEach((b) => b.classList.toggle("active", b.dataset.type === type));
+  const isClaim = type === "claim";
+  document.getElementById("refColHead").textContent = isClaim ? "Claim ID" : "Refund ID";
+  document.getElementById("newBtn").innerHTML = `<span data-icon="plus"></span>New ${isClaim ? "claim" : "refund"}`;
+  document.getElementById("emptyTitle").textContent = isClaim ? "No claims yet" : "No refunds yet";
+  document.getElementById("emptyBody").textContent = isClaim
+    ? "Claims submitted for your plans will show up here."
+    : "Refunds issued against your plans will show up here.";
+  mountIcons(document);
 }
 
+document.querySelectorAll(".tab-btn").forEach((b) => b.addEventListener("click", async () => {
+  if (b.dataset.type === type) return;
+  setTab(b.dataset.type);
+  history.replaceState(null, "", `claims.html?type=${type}`);
+  page = 1;
+  await load();
+}));
+
 async function load() {
-  items = await listClaims(session.uid);
+  items = type === "claim" ? await listClaims(session.uid) : await listRefunds(session.uid);
+  const prefix = type === "claim" ? "New claims" : "New refunds";
+  // Real deltas (js/ui.js): bucketed by WHEN each item reached its
+  // current status (its timeline), not when it was filed — so "Approved"
+  // compares how many were approved this month vs last month, not how
+  // many happen to have been created in each of those months.
+  const newDelta = trendDelta(countByStatusInMonth(items, "new", 0), countByStatusInMonth(items, "new", 1));
+  const reviewDelta = trendDelta(countByStatusInMonth(items, "under_review", 0), countByStatusInMonth(items, "under_review", 1));
+  const approvedDelta = trendDelta(countByStatusInMonth(items, "approved", 0), countByStatusInMonth(items, "approved", 1));
+  const rejectedDelta = trendDelta(countByStatusInMonth(items, "rejected", 0), countByStatusInMonth(items, "rejected", 1));
   document.getElementById("statGrid").innerHTML = [
-    statCard("New claims", number(items.filter((c) => c.status === "new").length), "flag"),
-    statCard("Under review", number(items.filter((c) => c.status === "under_review").length), "clock"),
-    statCard("Approved", number(items.filter((c) => c.status === "approved").length), "check-circle"),
-    statCard("Rejected", number(items.filter((c) => c.status === "rejected").length), "x-circle"),
+    statCard(prefix, number(items.filter((c) => c.status === "new").length), "flag", newDelta),
+    statCard("Under review", number(items.filter((c) => c.status === "under_review").length), "clock", reviewDelta),
+    statCard("Approved", number(items.filter((c) => c.status === "approved").length), "check-circle", approvedDelta),
+    statCard("Rejected", number(items.filter((c) => c.status === "rejected").length), "x-circle", rejectedDelta),
   ].join("");
   applyFilters();
   mountIcons(document);
@@ -123,7 +159,8 @@ async function load() {
 function applyFilters() {
   const q = document.getElementById("searchInput").value.trim().toLowerCase();
   const status = document.getElementById("statusFilter").value;
-  filtered = items.filter((c) => (!q || (c.policyholderName || "").toLowerCase().includes(q) || (c.claimRef || "").toLowerCase().includes(q)) && (!status || c.status === status));
+  const refField = type === "claim" ? "claimRef" : "refundRef";
+  filtered = items.filter((c) => (!q || (c.policyholderName || "").toLowerCase().includes(q) || (c[refField] || "").toLowerCase().includes(q)) && (!status || c.status === status));
   page = 1;
   renderTable();
 }
@@ -132,43 +169,56 @@ function renderTable() {
   const { pageItems, pages, total } = paginate(filtered, page, PAGE_SIZE);
   const body = document.getElementById("tableBody");
   const empty = document.getElementById("emptyState");
+  const refField = type === "claim" ? "claimRef" : "refundRef";
+  const detailPage = type === "claim" ? "claim-detail.html" : "refund-detail.html";
   if (!pageItems.length) { body.innerHTML = ""; empty.style.display = "block"; }
   else {
     empty.style.display = "none";
     body.innerHTML = pageItems.map((c) => `
       <tr style="cursor:pointer;" data-open="${c.id}">
-        <td class="cell-strong">${escapeHtml(c.claimRef)}</td>
+        <td class="cell-strong">${escapeHtml(c[refField])}</td>
         <td>${escapeHtml(c.policyholderName || "—")}</td>
         <td class="muted">${escapeHtml(c.planName || "—")}</td>
         <td class="muted">${moneyExact(c.amount)}</td>
         <td>${statusBadge(c.status)}</td>
       </tr>`).join("");
-    body.querySelectorAll("[data-open]").forEach((row) => row.addEventListener("click", () => { location.href = `claim-detail.html?id=${row.dataset.open}`; }));
+    body.querySelectorAll("[data-open]").forEach((row) => row.addEventListener("click", () => { location.href = `${detailPage}?id=${row.dataset.open}`; }));
   }
   document.getElementById("resultsLabel").textContent = total
     ? `Showing ${(page - 1) * PAGE_SIZE + 1} to ${Math.min(page * PAGE_SIZE, total)} of ${total} results` : "No results";
-  const pager = document.getElementById("pagination");
-  let html = `<button class="page-btn" ${page === 1 ? "disabled" : ""} id="prevPage"><span data-icon="chevron-left" data-icon-size="14"></span></button>`;
-  for (let i = 1; i <= pages; i++) html += `<button class="page-btn${i === page ? " active" : ""}" data-page="${i}">${i}</button>`;
-  html += `<button class="page-btn" ${page === pages ? "disabled" : ""} id="nextPage"><span data-icon="chevron-right" data-icon-size="14"></span></button>`;
-  pager.innerHTML = html;
-  pager.querySelectorAll("[data-page]").forEach((b) => b.addEventListener("click", (e) => { e.stopPropagation(); page = Number(b.dataset.page); renderTable(); }));
-  document.getElementById("prevPage")?.addEventListener("click", () => { page--; renderTable(); });
-  document.getElementById("nextPage")?.addEventListener("click", () => { page++; renderTable(); });
+  renderPager("pagination", { page, pages }, (n) => { page = n; renderTable(); });
   mountIcons(document);
 }
 
 document.getElementById("searchInput").addEventListener("input", applyFilters);
 document.getElementById("statusFilter").addEventListener("change", applyFilters);
-document.getElementById("newClaimBtn").addEventListener("click", () => openModal("newModal"));
+
+document.getElementById("newBtn").addEventListener("click", () => {
+  const isClaim = type === "claim";
+  document.getElementById("newModalTitle").textContent = isClaim ? "New claim" : "New refund";
+  document.getElementById("newModalHint").textContent = isClaim
+    ? "The mobile app doesn't have a claim-submission flow yet, so file one here on a policyholder's behalf (e.g. when they call or email support)."
+    : "File a refund here on a policyholder's behalf (e.g. a cancelled policy or a duplicate payment).";
+  document.getElementById("nCategoryLabel").textContent = isClaim ? "Category" : "Reason";
+  document.getElementById("nAmountLabel").textContent = isClaim ? "Amount claimed (RM)" : "Amount to refund (RM)";
+  const options = isClaim ? CLAIM_CATEGORIES : REFUND_CATEGORIES;
+  document.getElementById("nCategory").innerHTML = options.map((c) => `<option>${escapeHtml(c)}</option>`).join("");
+  document.getElementById("saveNewBtn").textContent = isClaim ? "Submit claim" : "Submit refund";
+  document.getElementById("nName").value = "";
+  document.getElementById("nEmail").value = "";
+  document.getElementById("nPlan").value = "";
+  document.getElementById("nAmount").value = "";
+  openModal("newModal");
+});
 
 document.getElementById("saveNewBtn").addEventListener("click", async () => {
   const policyholderName = document.getElementById("nName").value.trim();
   if (!policyholderName) { toast("Policyholder name is required.", "error"); return; }
+  const isClaim = type === "claim";
   const btn = document.getElementById("saveNewBtn");
-  setBusy(btn, true, "Submitting…");
+  setBusy(btn, true, isClaim ? "Submitting…" : "Saving…");
   try {
-    await createClaim({
+    const payload = {
       partnerId: session.uid,
       providerName: session.profile.companyName || "Partner",
       policyholderName,
@@ -177,14 +227,15 @@ document.getElementById("saveNewBtn").addEventListener("click", async () => {
       category: document.getElementById("nCategory").value,
       amount: Number(document.getElementById("nAmount").value) || 0,
       documents: [],
-      assignee: { name: session.profile.contact?.fullName || "Unassigned", role: "Claims Officer" },
+      assignee: { name: session.profile.contact?.fullName || "Unassigned", role: isClaim ? "Claims Officer" : "Refunds Officer" },
       status: "new",
-    });
+    };
+    if (isClaim) await createClaim(payload); else await createRefund(payload);
     closeModal("newModal");
-    toast("Claim submitted.", "success");
+    toast(isClaim ? "Claim submitted." : "Refund submitted.", "success");
     await load();
   } catch (err) {
-    toast(err.message || "Couldn't submit claim.", "error");
+    toast(err.message || "Couldn't save.", "error");
   } finally {
     setBusy(btn, false);
   }
@@ -192,14 +243,16 @@ document.getElementById("saveNewBtn").addEventListener("click", async () => {
 
 document.getElementById("exportBtn").addEventListener("click", () => {
   if (!filtered.length) return;
-  const rows = [["Claim ID", "Policyholder", "Plan", "Amount (RM)", "Status"]];
-  filtered.forEach((c) => rows.push([c.claimRef, c.policyholderName || "", c.planName || "", (Number(c.amount) || 0).toFixed(2), c.status || ""]));
+  const refField = type === "claim" ? "claimRef" : "refundRef";
+  const label = type === "claim" ? "Claim ID" : "Refund ID";
+  const rows = [[label, "Policyholder", "Plan", "Amount (RM)", "Status"]];
+  filtered.forEach((c) => rows.push([c[refField], c.policyholderName || "", c.planName || "", (Number(c.amount) || 0).toFixed(2), c.status || ""]));
   const csv = rows.map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `voya-claims-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.download = `voya-${type}s-${new Date().toISOString().slice(0, 10)}.csv`;
   a.click();
   URL.revokeObjectURL(url);
 });

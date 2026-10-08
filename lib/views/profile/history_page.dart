@@ -112,26 +112,21 @@ class _HistoryPageState extends State<HistoryPage> {
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
       itemCount: bookings.length,
-      itemBuilder: (context, i) {
-        final b = bookings[i];
-        return _historyRow(context, icon: icon, id: b.id, title: b.title, subtitle: b.subtitle, trailing: b.trailing, refId: b.refId, documents: b.documents);
-      },
+      itemBuilder: (context, i) => _historyRow(context, icon: icon, booking: bookings[i]),
     );
   }
 
   Widget _historyRow(
     BuildContext context, {
     required IconData icon,
-    required String id,
-    required String title,
-    required String subtitle,
-    required String trailing,
-    required String refId,
-    required Map<String, String> documents,
+    required BookingEntry booking,
   }) {
+    final title = booking.title;
+    final subtitle = booking.subtitle;
+    final trailing = booking.trailing;
     return InkWell(
       borderRadius: BorderRadius.circular(14),
-      onTap: () => _openHistoryDetail(context, id: id, title: title, subtitle: subtitle, trailing: trailing, refId: refId, documents: documents),
+      onTap: () => _openHistoryDetail(context, booking),
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.all(12),
@@ -173,15 +168,7 @@ class _HistoryPageState extends State<HistoryPage> {
   // looked completely different from the Flight tab. The row's own
   // title/subtitle/trailing are threaded through so each page reflects the
   // booking that was actually tapped.
-  void _openHistoryDetail(
-    BuildContext context, {
-    required String id,
-    required String title,
-    required String subtitle,
-    required String trailing,
-    required String refId,
-    required Map<String, String> documents,
-  }) {
+  void _openHistoryDetail(BuildContext context, BookingEntry b) {
     switch (controller.tab) {
       case HistoryTab.flight:
         // id is the real `users/{uid}/bookings` doc id — passed through as
@@ -192,11 +179,13 @@ class _HistoryPageState extends State<HistoryPage> {
         // flight entry.
         Navigator.of(context).push(MaterialPageRoute(
           builder: (_) => HistoryFlightDetailPage(
-            routeCode: title,
-            dateTime: subtitle,
-            price: trailing,
-            bookingId: id,
-            documents: documents,
+            routeCode: b.title,
+            dateTime: b.subtitle,
+            price: b.trailing,
+            bookingRef: b.bookingRef,
+            status: b.status.isEmpty ? 'Confirmed' : b.status,
+            bookingId: b.id,
+            documents: b.documents,
           ),
         ));
         break;
@@ -204,15 +193,27 @@ class _HistoryPageState extends State<HistoryPage> {
         // trailing reads like "RM 320 (per night)" (see BookingBar) — strip
         // the suffix back off, HistoryHotelDetailPage labels it itself.
         // refId (when set) is the original catalog_hotels doc id, which
-        // unlocks a real Review tab on the detail page below.
+        // unlocks a real Review tab on the detail page below. checkIn/
+        // checkOut/bookingRef/guestName now come from the real booking
+        // (written by BookingPaymentPage._confirmPayment) instead of the
+        // hardcoded fallback dates this page used to default to.
         Navigator.of(context).push(MaterialPageRoute(
           builder: (_) => HistoryHotelDetailPage(
-            name: title,
-            location: subtitle,
-            pricePerNight: trailing.split(' (').first,
-            hotelId: refId,
-            bookingId: id,
-            documents: documents,
+            name: b.title,
+            location: b.subtitle,
+            pricePerNight: b.trailing.split(' (').first,
+            checkIn: b.checkIn,
+            checkOut: b.checkOut,
+            bookingRef: b.bookingRef,
+            status: b.status.isEmpty ? 'Confirmed' : b.status,
+            guestName: b.guestName,
+            guestEmail: b.guestEmail,
+            guestPhone: b.guestPhone,
+            guestIdNumber: b.guestIdNumber,
+            specialRequests: b.specialRequests,
+            hotelId: b.refId,
+            bookingId: b.id,
+            documents: b.documents,
           ),
         ));
         break;
@@ -222,11 +223,13 @@ class _HistoryPageState extends State<HistoryPage> {
         // itself.
         Navigator.of(context).push(MaterialPageRoute(
           builder: (_) => HistoryInsuranceDetailPage(
-            planName: title,
-            policyNumber: subtitle.replaceFirst('Policy #', ''),
-            amountPaid: trailing,
-            bookingId: id,
-            documents: documents,
+            planName: b.title,
+            policyNumber: b.subtitle.replaceFirst('Policy #', ''),
+            amountPaid: b.trailing,
+            status: b.status.isEmpty ? 'Confirmed' : b.status,
+            travellerName: b.guestName,
+            bookingId: b.id,
+            documents: b.documents,
           ),
         ));
         break;
