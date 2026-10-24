@@ -3,11 +3,9 @@ import 'package:image_picker/image_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../repositories/booking_repository.dart';
-import '../../repositories/catalog_repository.dart';
 import '../../services/auth_service.dart';
 import '../../services/booking_document_service.dart';
 import '../../theme.dart';
-import '../detail/detail_widgets.dart';
 
 // ---------------------------------------------------------------------
 // Past-booking detail pages opened from History's Hotel / Insurance tabs.
@@ -32,8 +30,9 @@ import '../detail/detail_widgets.dart';
 /// Shared shell: VoyaAppBar with the popup menu, a [PillTabBar] (matching
 /// Plan's Plan/Chat/Expenses/Vote look), and the tab body switch. [tabs]
 /// and [builders] must be the same length and in the same order — each
-/// page below supplies its own set (Hotel adds a 4th "Review" tab only
-/// when it has a real catalog id to show reviews for).
+/// page below supplies its own set. (Hotel used to add a 4th "Review" tab
+/// here — removed along with every other hotel/attraction/restaurant
+/// review surface.)
 class _HistoryDetailShell extends StatefulWidget {
   final String title;
   final List<PillTab> tabs;
@@ -384,10 +383,9 @@ class HistoryHotelDetailPage extends StatefulWidget {
   final String guestIdNumber;
   final String specialRequests;
   // The `catalog_hotels` doc id this booking refers to — blank for a stay
-  // with no catalog link (a manually-typed hotel). Only when this is set
-  // do we know which real place to show reviews for, so the Review tab
-  // only appears then, instead of showing reviews for the wrong hotel or
-  // crashing on an empty id.
+  // with no catalog link (a manually-typed hotel). No longer read by this
+  // page itself (the Review tab that used it is gone), kept since callers
+  // still pass it through.
   final String hotelId;
   // The `users/{uid}/bookings` doc id this booking actually is — what
   // document uploads attach to (see BookingRepository.setBookingDocument).
@@ -442,14 +440,12 @@ class _HistoryHotelDetailPageState extends State<HistoryHotelDetailPage> with _B
 
   @override
   Widget build(BuildContext context) {
-    final hasReviews = widget.hotelId.isNotEmpty;
     return _HistoryDetailShell(
       title: 'Hotel',
-      tabs: [
-        const PillTab('Detail', Icons.info_outline),
-        const PillTab('Guests', Icons.people_outline),
-        const PillTab('Documents', Icons.description_outlined),
-        if (hasReviews) const PillTab('Review', Icons.rate_review_outlined),
+      tabs: const [
+        PillTab('Detail', Icons.info_outline),
+        PillTab('Guests', Icons.people_outline),
+        PillTab('Documents', Icons.description_outlined),
       ],
       builders: [
         (_) => _infoCard('HOTEL INFORMATION', [
@@ -474,25 +470,6 @@ class _HistoryHotelDetailPageState extends State<HistoryHotelDetailPage> with _B
               uploading: uploading,
               onUpload: uploadDocument,
             ),
-        if (hasReviews)
-          (_) => ListView(
-                padding: const EdgeInsets.all(20),
-                children: [
-                  ReviewsSection(
-                    title: widget.name,
-                    ratingSummary: 'Guest Reviews',
-                    reviewsStream: CatalogRepository.instance.watchHotelReviews(widget.hotelId).map((list) => list.map(reviewDataFromPlace).toList()),
-                    onSubmitReview: ({required authorId, required authorName, required rating, required comment}) =>
-                        CatalogRepository.instance.addHotelReview(
-                      widget.hotelId,
-                      authorId: authorId,
-                      authorName: authorName,
-                      rating: rating,
-                      comment: comment,
-                    ),
-                  ),
-                ],
-              ),
       ],
     );
   }

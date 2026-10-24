@@ -32,6 +32,15 @@
 .nav-item.active { background: var(--teal-600); color: #fff; }
 .nav-item.active .icon { stroke: #fff; }
 
+/* Small red notification dot on a sidebar nav item's icon — see
+   sidebar.js's setNavBadge(). Hidden by default via inline style. */
+.nav-icon-wrap { position: relative; display: inline-flex; flex: none; }
+.nav-dot {
+  position: absolute; top: -2px; right: -2px;
+  width: 9px; height: 9px; border-radius: 50%;
+  background: #ff4d4f; border: 1.5px solid var(--navy-800);
+}
+
 .sidebar-logout {
   display: flex; align-items: center; gap: 10px;
   color: #ff8585; font-weight: 700; font-size: 14.5px;

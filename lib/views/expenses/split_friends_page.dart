@@ -38,7 +38,7 @@ class _SplitFriendsPageState extends State<SplitFriendsPage> {
                   value: checked,
                   activeColor: AppColors.primary,
                   controlAffinity: ListTileControlAffinity.trailing,
-                  secondary: const CircleAvatar(radius: 18, backgroundColor: Color(0xFFD9D9D9)),
+                  secondary: UserAvatar(uid: uid, radius: 18),
                   title: Text(members[i].value, style: const TextStyle(fontSize: 14, color: Colors.black)),
                   onChanged: (v) => setState(() => v! ? selected.add(uid) : selected.remove(uid)),
                 );

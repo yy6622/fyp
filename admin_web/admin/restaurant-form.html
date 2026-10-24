@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Add Restaurant — Voya Admin</title>
+<link rel="stylesheet" href="../css/tokens.css?v=20261022" />
+<link rel="stylesheet" href="../css/base.css?v=20261022" />
+<link rel="stylesheet" href="../css/layout.css?v=20261022" />
+<link rel="stylesheet" href="../css/components.css?v=20261022" />
+</head>
+<body>
+<div class="shell">
+  <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+  <aside class="sidebar" id="sidebar">
+    <img class="sidebar-brand" src="../img/voya-logo-white.png" alt="Voya" />
+    <div class="sidebar-user">
+      <div class="name" id="sbUserName">Loading…</div>
+      <div class="role" id="sbUserRole">Administrator</div>
+    </div>
+    <nav class="nav" id="sidebarNav"></nav>
+    <button class="sidebar-logout" id="logoutBtn"><span data-icon="log-out"></span>Log out</button>
+  </aside>
+
+  <main class="content">
+    <div class="topbar">
+      <div>
+        <button class="menu-toggle" id="menuToggle"><span data-icon="menu"></span></button>
+        <a href="attractions.html?tab=restaurants" class="inline-flex" style="color:var(--text-500);font-weight:700;font-size:13.5px;margin-bottom:10px;">
+          <span data-icon="arrow-left" data-icon-size="14"></span>Back to places
+        </a>
+        <h1 class="h1" id="pageTitle">Add restaurant</h1>
+        <p class="subtitle">Details saved here show up live in the app's Explore catalogue</p>
+      </div>
+    </div>
+
+    <div class="card card-pad">
+      <div class="form-section">
+        <div class="form-section-title"><span data-icon="coin"></span>Basic info</div>
+        <div class="form-grid">
+          <div class="field" style="grid-column:1/-1;"><label>Name</label><input class="input" id="fName" placeholder="e.g. Gasthof Krone" /></div>
+          <div class="field" style="grid-column:1/-1;">
+            <label>Cuisine tags</label>
+            <div class="tag-input-box" id="cuisineBox"><input placeholder="Type a cuisine and press Enter… e.g. Japanese" /></div>
+            <p class="hint">Shown as the restaurant's cuisine chips (e.g. "Japanese", "Ramen").</p>
+          </div>
+          <div class="field"><label>Location</label><input class="input" id="fLocation" placeholder="e.g. Asakusa, Tokyo" /></div>
+          <div class="field"><label>Price range</label><input class="input" id="fPriceRange" placeholder="e.g. RM 20 - RM 40" /></div>
+          <div class="field" style="grid-column:1/-1;"><label>Full address</label><input class="input" id="fAddress" placeholder="Full street address" /></div>
+        </div>
+      </div>
+
+      <div class="form-section">
+        <div class="form-section-title"><span data-icon="upload"></span>Photo</div>
+        <div class="form-grid">
+          <div class="field" style="grid-column:1/-1;">
+            <label>Photo URL</label>
+            <input class="input" id="fImage" placeholder="https://… — e.g. a Wikimedia Commons or the restaurant's own photo" />
+            <p class="hint">Pasted as a direct link, not uploaded — same "image" field the app's live OpenStreetMap refresh writes.</p>
+          </div>
+        </div>
+        <div id="imagePreviewWrap" style="margin-top:10px;display:none;">
+          <img id="imagePreview" style="width:100%;max-height:220px;object-fit:cover;border-radius:12px;" />
+        </div>
+      </div>
+
+      <div class="form-section">
+        <div class="form-section-title"><span data-icon="clock"></span>Opening hours</div>
+        <div class="field"><input class="input" id="fHours" placeholder="e.g. Daily, 11:00 AM - 10:00 PM" /></div>
+        <p class="hint">Leave blank if not known — shown blank rather than a guessed time, same as attractions.</p>
+      </div>
+
+      <div class="form-section">
+        <div class="form-section-title"><span data-icon="phone"></span>Contact & details</div>
+        <div class="form-grid">
+          <div class="field"><label>Phone</label><input class="input" id="fPhone" placeholder="e.g. +81 3-3842-0181" /></div>
+          <div class="field"><label>Website</label><input class="input" id="fWebsite" placeholder="https://…" /></div>
+          <div class="field"><label>Rating</label><input class="input" id="fRating" placeholder="e.g. 4.5, or leave blank" /></div>
+          <div class="field"><label>Reviews</label><input class="input" id="fReviews" placeholder="e.g. 128, or leave blank" /></div>
+        </div>
+      </div>
+
+      <div class="form-section">
+        <div class="form-section-title"><span data-icon="doc-text"></span>About</div>
+        <div class="field"><textarea class="input" id="fDescription" rows="3" placeholder="A short description shown as the restaurant's About text"></textarea></div>
+      </div>
+
+      <div class="form-actions">
+        <a class="btn btn-outline" href="attractions.html?tab=restaurants">Cancel</a>
+        <button class="btn btn-primary" id="saveBtn">Save restaurant</button>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script type="module">
+import { requireRole } from "../js/auth-guard.js?v=20261022";
+import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261022";
+import { mountIcons } from "../js/icons.js?v=20261022";
+import { getRestaurant, newRestaurantRef, createRestaurant, updateRestaurant } from "../js/data.js?v=20261022";
+import { escapeHtml, toast, setBusy } from "../js/ui.js?v=20261022";
+
+mountSidebarNav({ role: "admin", active: "attractions" });
+const session = await requireRole("admin", "login.html");
+const editingId = new URLSearchParams(location.search).get("id");
+let cuisineTag;
+
+if (session) {
+  setSidebarUser({ displayName: session.profile.name || "Admin", roleLabel: "Administrator" });
+  wireImagePreview();
+
+  if (editingId) {
+    document.getElementById("pageTitle").textContent = "Edit restaurant";
+    const r = await getRestaurant(editingId);
+    if (!r) {
+      toast("That restaurant couldn't be found.", "error");
+      location.href = "attractions.html";
+    } else {
+      populateForm(r);
+    }
+  } else {
+    populateForm(null);
+  }
+}
+
+// ==================== Cuisine tag input (same pattern as attraction-form.html) ====================
+function mountTagInput(boxId, initialTags = []) {
+  const box = document.getElementById(boxId);
+  const oldInput = box.querySelector("input");
+  const input = oldInput.cloneNode(true);
+  oldInput.replaceWith(input);
+  let tags = [...initialTags];
+
+  function render() {
+    box.querySelectorAll(".chip").forEach((c) => c.remove());
+    tags.forEach((tag, i) => {
+      const chip = document.createElement("span");
+      chip.className = "chip";
+      chip.innerHTML = `${escapeHtml(tag)}<button type="button" data-i="${i}"><span data-icon="x"></span></button>`;
+      box.insertBefore(chip, input);
+    });
+    box.querySelectorAll(".chip button").forEach((btn) =>
+      btn.addEventListener("click", () => { tags.splice(Number(btn.dataset.i), 1); render(); })
+    );
+    mountIcons(box);
+  }
+
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === ",") {
+      e.preventDefault();
+      const value = input.value.trim().replace(/,$/, "");
+      if (value && !tags.includes(value)) { tags.push(value); render(); }
+      input.value = "";
+    } else if (e.key === "Backspace" && !input.value && tags.length) {
+      tags.pop();
+      render();
+    }
+  });
+
+  render();
+  return { getTags: () => tags, setTags: (next) => { tags = [...next]; render(); } };
+}
+
+// ==================== Photo URL preview ====================
+function wireImagePreview() {
+  document.getElementById("fImage").addEventListener("input", refreshImagePreview);
+}
+function refreshImagePreview() {
+  const url = document.getElementById("fImage").value.trim();
+  const wrap = document.getElementById("imagePreviewWrap");
+  if (url) {
+    document.getElementById("imagePreview").src = url;
+    wrap.style.display = "block";
+  } else {
+    wrap.style.display = "none";
+  }
+}
+
+// Reads both field conventions catalog_restaurants' two writers use (see
+// lib/repositories/catalog_repository.dart) so editing a legacy
+// snake_case/bulk-import doc here starts from its real existing values,
+// not blanks. Always SAVES in the modern camelCase convention regardless
+// of which one the doc started with (see save handler below).
+function populateForm(r) {
+  document.getElementById("fName").value = r?.name || "";
+  document.getElementById("fLocation").value = (typeof r?.location === "string" ? r.location : "") || (r?.city && r?.country ? `${r.city}, ${r.country}` : "") || r?.city || r?.country || "";
+  document.getElementById("fPriceRange").value = r?.priceRange || r?.price_range || "";
+  document.getElementById("fAddress").value = r?.address || "";
+  document.getElementById("fImage").value = r?.image || r?.image_url || "";
+  document.getElementById("fHours").value = r?.openingHours || r?.opening_hours || "";
+  document.getElementById("fPhone").value = r?.phone || "";
+  document.getElementById("fWebsite").value = r?.website || "";
+  document.getElementById("fRating").value = r?.rating || "";
+  document.getElementById("fReviews").value = r?.reviews || "";
+  document.getElementById("fDescription").value = r?.description || r?.about || "";
+
+  const cuisineTags = Array.isArray(r?.cuisineTags) && r.cuisineTags.length
+    ? r.cuisineTags
+    : (Array.isArray(r?.cuisine) ? r.cuisine : (typeof r?.cuisine === "string" && r.cuisine ? [r.cuisine] : []));
+  cuisineTag = mountTagInput("cuisineBox", cuisineTags);
+  refreshImagePreview();
+}
+
+document.getElementById("saveBtn").addEventListener("click", async () => {
+  const name = document.getElementById("fName").value.trim();
+  if (!name) { toast("Name is required.", "error"); return; }
+
+  const btn = document.getElementById("saveBtn");
+  setBusy(btn, true, "Saving…");
+  try {
+    const data = {
+      name,
+      cuisineTags: cuisineTag.getTags(),
+      location: document.getElementById("fLocation").value.trim(),
+      priceRange: document.getElementById("fPriceRange").value.trim(),
+      address: document.getElementById("fAddress").value.trim(),
+      image: document.getElementById("fImage").value.trim(),
+      openingHours: document.getElementById("fHours").value.trim(),
+      phone: document.getElementById("fPhone").value.trim(),
+      website: document.getElementById("fWebsite").value.trim(),
+      rating: document.getElementById("fRating").value.trim(),
+      reviews: document.getElementById("fReviews").value.trim(),
+      description: document.getElementById("fDescription").value.trim(),
+    };
+
+    if (editingId) await updateRestaurant(editingId, data);
+    else await createRestaurant(newRestaurantRef(), data);
+
+    toast("Restaurant saved — this is live in the app's Explore catalogue.", "success");
+    location.href = "attractions.html?tab=restaurants";
+  } catch (err) {
+    toast(err.message || "Couldn't save.", "error");
+    setBusy(btn, false);
+  }
+});
+</script>
+</body>
+</html>

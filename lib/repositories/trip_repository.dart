@@ -50,6 +50,19 @@ class TripFlight {
   // lands, instead of guessing. Blank for a manually-typed flight, or
   // one booked before this existed.
   final String arrivalTime;
+  // Real exact timestamps (DateTime.toIso8601String(), no forced UTC
+  // conversion so this stays the destination's plain wall-clock time, same
+  // "no timezone concept" convention as every other time in this app) —
+  // only ever set when this flight was booked straight from a live Duffel
+  // search result (see explore_page.dart's _flightDetailFor, which has the
+  // real DateTime on hand; a flight added from Saved or typed in by hand
+  // has no such DateTime, so these stay blank). [dateTime]/[arrivalTime]
+  // above are display strings shown to a person (or pasted into the AI
+  // prompt as text); these are what functions/logistics.js uses to do
+  // actual time arithmetic (is this before/after that), which a free-text
+  // display string can't be trusted to parse back out correctly.
+  final String departureAtIso;
+  final String arrivalAtIso;
   // Passenger full names collected at checkout (BookingPaymentPage) — empty
   // for a manually-typed flight, which never went through a checkout step.
   // Kept alongside [passengerDetails] below (rather than derived from it)
@@ -94,6 +107,8 @@ class TripFlight {
     this.documents = const {},
     this.forMemberUids = const [],
     this.arrivalTime = '',
+    this.departureAtIso = '',
+    this.arrivalAtIso = '',
   });
 
   Map<String, dynamic> toMap() => {
@@ -104,6 +119,8 @@ class TripFlight {
         'routeCities': routeCities,
         'dateTime': dateTime,
         'arrivalTime': arrivalTime,
+        'departureAtIso': departureAtIso,
+        'arrivalAtIso': arrivalAtIso,
         'terminal': terminal,
         'bookingRef': bookingRef,
         'status': status,
@@ -122,6 +139,8 @@ class TripFlight {
         routeCode: (m['routeCode'] as String?) ?? '',
         routeCities: (m['routeCities'] as String?) ?? '',
         dateTime: (m['dateTime'] as String?) ?? '',
+        departureAtIso: (m['departureAtIso'] as String?) ?? '',
+        arrivalAtIso: (m['arrivalAtIso'] as String?) ?? '',
         arrivalTime: (m['arrivalTime'] as String?) ?? '',
         terminal: (m['terminal'] as String?) ?? '',
         bookingRef: (m['bookingRef'] as String?) ?? '',
@@ -289,6 +308,27 @@ class Trip {
   /// instead of null. Used by the Plan tab to decide when a group has gone
   /// quiet long enough to fold into "Past Plans".
   final DateTime? lastActivityAt;
+  /// When the itinerary (day/activity) content last changed — a NARROWER
+  /// timestamp than [lastActivityAt] (which also counts votes/expenses/
+  /// chat), bumped only by [TripRepository.addActivity]/[removeActivity]/
+  /// [updateActivityTime]. Paired with [planSeenAt] to decide whether the
+  /// Plan tab's "Plan Updated" tag should show for the signed-in user —
+  /// see [planUnseenFor].
+  final DateTime? planUpdatedAt;
+  /// Per-member "I've opened the Plan tab since [planUpdatedAt]" marker —
+  /// `{uid: lastOpenedAt}`, written by [TripRepository.markPlanSeen]
+  /// (called whenever [GroupTripController] switches to [GroupTab.plan]).
+  /// Whoever makes a plan edit has that same write also mark themselves
+  /// as having seen it (see [TripRepository.addActivity] etc.), so the
+  /// tag only ever appears for members who didn't make the change AND
+  /// haven't opened the tab since.
+  final Map<String, DateTime> planSeenAt;
+  /// Same idea as [planUpdatedAt], but for the expenses subcollection —
+  /// bumped by [TripRepository.addExpense]/[updateExpense]/
+  /// [setParticipantPaid].
+  final DateTime? expensesUpdatedAt;
+  /// Same idea as [planSeenAt], but for the Expenses tab.
+  final Map<String, DateTime> expensesSeenAt;
   final List<DayPlan> days;
   final List<TripFlight> flights;
   final List<TripHotelStay> hotelStays;
@@ -316,6 +356,10 @@ class Trip {
     this.notificationOption = 'All Messages',
     required this.createdAt,
     this.lastActivityAt,
+    this.planUpdatedAt,
+    this.planSeenAt = const {},
+    this.expensesUpdatedAt,
+    this.expensesSeenAt = const {},
     required this.days,
     required this.flights,
     required this.hotelStays,
@@ -350,6 +394,28 @@ class Trip {
     return DateTime.now().difference(last) > const Duration(days: 30);
   }
 
+  /// True when [uid] should see the Plan tab's "Plan Updated" tag for
+  /// this trip — there's been a real itinerary edit AND [uid] either
+  /// hasn't opened the Plan tab since, or never has. Whoever made the
+  /// edit has their own [planSeenAt] entry bumped to the same write (see
+  /// [TripRepository.addActivity] etc.), so this is naturally false for
+  /// the person who just made the change themselves.
+  bool planUnseenFor(String uid) {
+    final updated = planUpdatedAt;
+    if (updated == null) return false;
+    final seen = planSeenAt[uid];
+    return seen == null || updated.isAfter(seen);
+  }
+
+  /// Same idea as [planUnseenFor], for the Expenses tab / "Expenses
+  /// Updated" tag.
+  bool expensesUnseenFor(String uid) {
+    final updated = expensesUpdatedAt;
+    if (updated == null) return false;
+    final seen = expensesSeenAt[uid];
+    return seen == null || updated.isAfter(seen);
+  }
+
   String get dateRangeLabel {
     if (startDate == null || endDate == null) return '';
     return '$dateOnlyLabel  ·  $nightsLabel';
@@ -370,6 +436,15 @@ class Trip {
     if (startDate == null || endDate == null) return '';
     final nights = endDate!.difference(startDate!).inDays;
     return '${nights + 1} days $nights night${nights == 1 ? '' : 's'}';
+  }
+
+  /// A short "Oct 2026"-style label — for tight spaces (the Plan tab's
+  /// small voting-card corner badge) where the full [dateRangeLabel]
+  /// ("23 Sep 2026 - 27 Sep 2026  ·  5 days 4 nights") is too long and
+  /// spills out past the badge/card.
+  String get shortDateLabel {
+    if (startDate == null) return '';
+    return '${_month(startDate!.month)} ${startDate!.year}';
   }
 
   static String _month(int m) => const [
@@ -421,11 +496,26 @@ class Trip {
     final memberIds = List<String>.from(data['memberIds'] as List? ?? const []);
     final memberNames = Map<String, String>.from(
         (data['memberNames'] as Map?)?.map((k, v) => MapEntry(k.toString(), v.toString())) ?? const {});
+    // {uid: Timestamp} map fields (planSeenAt/expensesSeenAt) -> {uid: DateTime} —
+    // a value could theoretically still be mid-write as a server-timestamp
+    // sentinel on a snapshot from the local cache, hence the `is Timestamp` guard.
+    Map<String, DateTime> timestampMap(dynamic raw) {
+      final map = raw is Map ? raw : const {};
+      final out = <String, DateTime>{};
+      for (final entry in map.entries) {
+        final v = entry.value;
+        if (v is Timestamp) out[entry.key.toString()] = v.toDate();
+      }
+      return out;
+    }
     final daysRaw = Map<String, dynamic>.from(data['days'] as Map? ?? const {});
     final dayKeys = daysRaw.keys.toList()..sort((a, b) => (int.tryParse(a) ?? 0).compareTo(int.tryParse(b) ?? 0));
     final days = dayKeys.map((key) {
       final d = Map<String, dynamic>.from(daysRaw[key] as Map);
       final itemsRaw = Map<String, dynamic>.from(d['items'] as Map? ?? const {});
+      // Sorted by itemId first just to make the *input* to the time-sort
+      // below deterministic (so two items sharing an identical time always
+      // land in the same order), not because itemId order means anything.
       final itemIds = itemsRaw.keys.toList()..sort();
       final items = itemIds.map((itemId) {
         final it = Map<String, dynamic>.from(itemsRaw[itemId] as Map);
@@ -441,7 +531,20 @@ class Trip {
           votedByMe: votedBy.contains(myUid),
           forMemberUids: List<String>.from(it['forMemberUids'] as List? ?? const []),
         );
-      }).toList();
+      }).toList()
+        // Always chronological (morning -> night) regardless of how these
+        // items got here - a manual add, an applied AI Summarise change, or
+        // an applied Optimise re-time all just write a new `time` onto an
+        // item without reordering the Firestore map, so without this sort
+        // the list stayed in whatever order the items happened to be
+        // added/keyed in. "HH:mm" (zero-padded 24h, enforced wherever a
+        // time is written) sorts correctly as a plain string compare. Ties
+        // (rare - the model or a manual add can repeat a time) fall back to
+        // itemId so the order is fully deterministic either way.
+        ..sort((a, b) {
+          final byTime = a.time.compareTo(b.time);
+          return byTime != 0 ? byTime : a.id.compareTo(b.id);
+        });
       return DayPlan(
         day: (d['day'] as num?)?.toInt() ?? (int.tryParse(key) ?? 0) + 1,
         weekday: (d['weekday'] as String?) ?? '',
@@ -473,6 +576,10 @@ class Trip {
       notificationOption: (data['notificationOption'] as String?) ?? 'All Messages',
       createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
       lastActivityAt: (data['lastActivityAt'] as Timestamp?)?.toDate() ?? (data['createdAt'] as Timestamp?)?.toDate(),
+      planUpdatedAt: (data['planUpdatedAt'] as Timestamp?)?.toDate(),
+      planSeenAt: timestampMap(data['planSeenAt']),
+      expensesUpdatedAt: (data['expensesUpdatedAt'] as Timestamp?)?.toDate(),
+      expensesSeenAt: timestampMap(data['expensesSeenAt']),
       days: days,
       flights: (data['flights'] as List? ?? const [])
           .map((f) => TripFlight.fromMap(Map<String, dynamic>.from(f as Map)))
@@ -522,6 +629,11 @@ class TripVote {
 
   int get totalVoters => options.expand((o) => o.votedBy).toSet().length;
 
+  /// Every member who has voted on at least one option, deduplicated —
+  /// e.g. for a Plan Home voting-card's avatar stack (who's voted so far),
+  /// as opposed to [leading]'s option-specific list.
+  List<String> get voterUids => options.expand((o) => o.votedBy).toSet().toList();
+
   VoteOption? get leading =>
       options.isEmpty ? null : (options.toList()..sort((a, b) => b.votedBy.length.compareTo(a.votedBy.length))).first;
 
@@ -555,6 +667,14 @@ class ExpenseParticipant {
   final double share;
   final bool paid;
   const ExpenseParticipant({required this.uid, required this.name, required this.share, required this.paid});
+}
+
+/// What an expense is called in lists and headings. There is no separate title field in the
+/// Add Expenses form any more: the note describes it (older expenses still have a title).
+String expenseLabel(TripExpense e) {
+  if (e.title.trim().isNotEmpty) return e.title.trim();
+  if (e.note.trim().isNotEmpty) return e.note.trim();
+  return e.category;
 }
 
 /// One shared expense — `trips/{tripId}/expenses/{expenseId}`.
@@ -634,13 +754,31 @@ class TripMessage {
   final String senderName;
   final String text;
   final DateTime? createdAt;
+
+  /// 'text' (default — every message before this field existed, and
+  /// every plain typed message since), 'image' (a Camera/Gallery
+  /// attachment — [text] is empty, [imageUrl] holds the uploaded photo),
+  /// or 'location' (a shared-location attachment — [text] is empty,
+  /// [lat]/[lng] hold the coordinates).
+  final String type;
+  final String imageUrl;
+  final double? lat;
+  final double? lng;
+
   const TripMessage({
     required this.id,
     required this.senderId,
     required this.senderName,
     required this.text,
     required this.createdAt,
+    this.type = 'text',
+    this.imageUrl = '',
+    this.lat,
+    this.lng,
   });
+
+  bool get isImage => type == 'image' && imageUrl.isNotEmpty;
+  bool get isLocation => type == 'location' && lat != null && lng != null;
 
   static TripMessage fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
     final data = doc.data() ?? const {};
@@ -650,6 +788,10 @@ class TripMessage {
       senderName: (data['senderName'] as String?) ?? '',
       text: (data['text'] as String?) ?? '',
       createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
+      type: (data['type'] as String?) ?? 'text',
+      imageUrl: (data['imageUrl'] as String?) ?? '',
+      lat: (data['lat'] as num?)?.toDouble(),
+      lng: (data['lng'] as num?)?.toDouble(),
     );
   }
 }
@@ -997,6 +1139,7 @@ class TripRepository {
         'forMemberUids': forMemberUids,
       },
       'lastActivityAt': FieldValue.serverTimestamp(),
+      ..._planUpdateFields(actorUid: actorUid),
     });
     if (actorUid != null) {
       await _notifyMembers(
@@ -1013,6 +1156,7 @@ class TripRepository {
     await _trips.doc(tripId).update({
       'days.$dayIndex.items.$itemId': FieldValue.delete(),
       'lastActivityAt': FieldValue.serverTimestamp(),
+      ..._planUpdateFields(actorUid: actorUid),
     });
     if (actorUid != null) {
       await _notifyMembers(
@@ -1031,10 +1175,11 @@ class TripRepository {
   /// mode (see `day_timeline_view.dart`) is the only caller today; before
   /// it existed there was no way to change an activity's time short of
   /// deleting and re-adding it.
-  Future<void> updateActivityTime(String tripId, int dayIndex, String itemId, String time) {
+  Future<void> updateActivityTime(String tripId, int dayIndex, String itemId, String time, {String? actorUid}) {
     return _trips.doc(tripId).update({
       'days.$dayIndex.items.$itemId.time': time,
       'lastActivityAt': FieldValue.serverTimestamp(),
+      ..._planUpdateFields(actorUid: actorUid),
     });
   }
 
@@ -1148,16 +1293,56 @@ class TripRepository {
     }
   }
 
+  /// Fields to merge into a trip-doc update when itinerary content
+  /// changes — bumps [Trip.planUpdatedAt] and, when [actorUid] is known,
+  /// marks that same write as already "seen" by whoever made the edit
+  /// (see [Trip.planUnseenFor]), so the Plan tab's "Plan Updated" tag
+  /// never shows for the person who just made the change.
+  Map<String, dynamic> _planUpdateFields({String? actorUid}) => {
+        'planUpdatedAt': FieldValue.serverTimestamp(),
+        if (actorUid != null && actorUid.isNotEmpty) 'planSeenAt.$actorUid': FieldValue.serverTimestamp(),
+      };
+
   /// Bumps the trip's `lastActivityAt` — used by write methods that don't
   /// already touch the trip document directly (votes/expenses/messages
   /// live in subcollections). Fire-and-forget: this is UI-only metadata
   /// (drives "Past Plans" folding on the Plan tab), not worth failing or
   /// delaying the write that triggered it.
-  void _touchActivity(String tripId) {
+  ///
+  /// [category] additionally bumps that category's own "updated at" +
+  /// (when [actorUid] is known) marks it seen for the actor — see
+  /// [Trip.expensesUnseenFor]/[planUnseenFor]. Only `'expenses'` is used
+  /// today (votes/chat don't have their own "unseen" tag — see
+  /// [PlanPageController.planGroups]'s "Poll Ongoing" tag, which checks
+  /// each poll's own open/voted state directly instead of a seen marker).
+  void _touchActivity(String tripId, {String? category, String? actorUid}) {
+    final update = <String, dynamic>{'lastActivityAt': FieldValue.serverTimestamp()};
+    if (category == 'expenses') {
+      update['expensesUpdatedAt'] = FieldValue.serverTimestamp();
+      if (actorUid != null && actorUid.isNotEmpty) {
+        update['expensesSeenAt.$actorUid'] = FieldValue.serverTimestamp();
+      }
+    }
     // Genuinely fire-and-forget: swallow any failure (offline, permission
     // denied, doc deleted mid-flight) so it can never surface as an
     // unrelated error on top of the real write that triggered this.
-    _trips.doc(tripId).update({'lastActivityAt': FieldValue.serverTimestamp()}).catchError((_) {});
+    _trips.doc(tripId).update(update).catchError((_) {});
+  }
+
+  /// Records that [uid] has opened the Plan tab just now — called by
+  /// [GroupTripController] whenever it switches to (or opens directly
+  /// into) [GroupTab.plan]. Fire-and-forget, same reasoning as
+  /// [_touchActivity]: this is UI-only "have they seen it" metadata, not
+  /// worth surfacing an error over.
+  void markPlanSeen(String tripId, String uid) {
+    if (uid.isEmpty) return;
+    _trips.doc(tripId).update({'planSeenAt.$uid': FieldValue.serverTimestamp()}).catchError((_) {});
+  }
+
+  /// Same idea as [markPlanSeen], for [GroupTab.expenses].
+  void markExpensesSeen(String tripId, String uid) {
+    if (uid.isEmpty) return;
+    _trips.doc(tripId).update({'expensesSeenAt.$uid': FieldValue.serverTimestamp()}).catchError((_) {});
   }
 
   /// Notifies every *other* member of [tripId] (everyone but [actorUid])
@@ -1260,6 +1445,22 @@ class TripRepository {
     await _votes(tripId).doc(vote.id).update(update);
   }
 
+  /// Adds one more option to an already-created poll — what
+  /// [TripVote.allowAddOptions] actually turning it on enables (the
+  /// toggle existed on the create screen before but had nothing in the
+  /// app that read it back, so it did nothing for anyone but the
+  /// creator). [VoteTab] only shows the control that calls this when
+  /// that flag is true and the poll isn't closed; this just performs the
+  /// write, with dot-notation so it can never clobber another member's
+  /// concurrent vote or add on the same poll.
+  Future<void> addVoteOption(String tripId, String voteId, String label) async {
+    final optionId = 'opt_${DateTime.now().microsecondsSinceEpoch}';
+    _touchActivity(tripId);
+    await _votes(tripId).doc(voteId).update({
+      'options.$optionId': {'label': label, 'votedBy': <String>[]},
+    });
+  }
+
   // ---------------- Expenses ----------------
   Stream<List<TripExpense>> watchExpenses(String tripId) {
     return _expenses(tripId).orderBy('createdAt', descending: true).snapshots().map(
@@ -1303,7 +1504,7 @@ class TripRepository {
     final participantsMap = <String, dynamic>{
       for (final p in participants) p.uid: {'name': p.name, 'share': p.share, 'paid': p.paid}
     };
-    _touchActivity(tripId);
+    _touchActivity(tripId, category: 'expenses', actorUid: paidBy);
     await _expenses(tripId).add({
       'tripId': tripId,
       'tripName': tripName,
@@ -1323,13 +1524,52 @@ class TripRepository {
     await _notifyMembers(
       tripId,
       paidBy,
-      (_, __) => '$paidByName added an expense: "$title" (RM${amount.toStringAsFixed(2)})',
+      (_, __) => '$paidByName added an expense: "${title.isNotEmpty ? title : category}" (RM${amount.toStringAsFixed(2)})',
       type: 'trip_expense_added',
     );
   }
 
+  /// The payer edits their own expense (Transaction detail -> Edit). When the amount changes the
+  /// split follows: an equal split stays equal, an uneven (itemized) split keeps its proportions.
+  /// Who has already paid is kept. Firestore rules only let [TripExpense.paidBy] do this.
+  Future<void> updateExpense(
+    TripExpense expense, {
+    required String title,
+    required double amount,
+    required String category,
+    required String note,
+    String? receiptImageUrl,
+  }) {
+    final ps = expense.participants;
+    // Someone besides the payer already paid their share: the amount is locked (the edit sheet
+    // explains this; this stops it from being bypassed).
+    if ((amount - expense.amount).abs() > 0.001 && ps.any((p) => p.paid && p.uid != expense.paidBy)) {
+      throw StateError('The amount can\'t change after someone has paid their share.');
+    }
+    final equal = ps.isNotEmpty && ps.every((p) => (p.share - ps.first.share).abs() < 0.011);
+    double newShare(ExpenseParticipant p) {
+      if (ps.isEmpty) return 0;
+      if (equal || expense.amount <= 0) return double.parse((amount / ps.length).toStringAsFixed(2));
+      return double.parse((p.share * amount / expense.amount).toStringAsFixed(2));
+    }
+
+    _touchActivity(expense.tripId, category: 'expenses', actorUid: expense.paidBy);
+    return _expenses(expense.tripId).doc(expense.id).update({
+      'title': title,
+      'amount': amount,
+      'category': category,
+      'note': note,
+      if (receiptImageUrl != null) 'receiptImageUrl': receiptImageUrl,
+      if ((amount - expense.amount).abs() > 0.001)
+        'participants': {
+          for (final p in ps) p.uid: {'name': p.name, 'share': newShare(p), 'paid': p.paid},
+        },
+      'editedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
   Future<void> setParticipantPaid(String tripId, String expenseId, String uid, bool paid) {
-    _touchActivity(tripId);
+    _touchActivity(tripId, category: 'expenses', actorUid: uid);
     return _expenses(tripId).doc(expenseId).update({'participants.$uid.paid': paid});
   }
 
@@ -1338,12 +1578,28 @@ class TripRepository {
     return _messages(tripId).orderBy('createdAt').snapshots().map((snap) => snap.docs.map(TripMessage.fromDoc).toList());
   }
 
-  Future<void> sendMessage(String tripId, {required String senderId, required String senderName, required String text}) {
+  /// [type] is 'text' (default — pass just [text]), 'image' (pass
+  /// [imageUrl], leave [text] empty), or 'location' (pass [lat]/[lng],
+  /// leave [text] empty) — see [TripMessage]'s doc comment.
+  Future<void> sendMessage(
+    String tripId, {
+    required String senderId,
+    required String senderName,
+    String text = '',
+    String type = 'text',
+    String imageUrl = '',
+    double? lat,
+    double? lng,
+  }) {
     _touchActivity(tripId);
     return _messages(tripId).add({
       'senderId': senderId,
       'senderName': senderName,
       'text': text,
+      'type': type,
+      if (imageUrl.isNotEmpty) 'imageUrl': imageUrl,
+      if (lat != null) 'lat': lat,
+      if (lng != null) 'lng': lng,
       'createdAt': FieldValue.serverTimestamp(),
     });
   }

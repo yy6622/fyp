@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../controllers/expenses_controller.dart';
 import '../../theme.dart';
@@ -32,6 +33,65 @@ class _ExpenseDetailsFormPageState extends State<ExpenseDetailsFormPage> {
     }
   }
 
+  static const double _maxAmount = 1000000;
+
+  /// null = valid, otherwise what is wrong with it.
+  String? _amountError(String text) {
+    final t = text.trim();
+    if (t.isEmpty) return 'Enter an amount';
+    final v = double.tryParse(t);
+    if (v == null || !RegExp(r'^\d+(\.\d{1,2})?$').hasMatch(t)) return 'Numbers only, up to 2 decimal places';
+    if (v <= 0) return 'Amount must be more than RM 0';
+    if (v > _maxAmount) return 'Amount can\'t be more than RM 1,000,000';
+    return null;
+  }
+
+  /// Amount gets its own dialog: digits and one "." with at most 2 decimals can be typed at all,
+  /// the problem is shown under the field as you type, and Save only works for a valid amount.
+  Future<void> _editAmount() async {
+    final ctrl = TextEditingController(text: widget.controller.amountController.text);
+    String? error;
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          final valid = _amountError(ctrl.text) == null;
+          return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+            title: const Text('Amount', style: TextStyle(fontSize: 16.5, fontWeight: FontWeight.bold, color: AppColors.navy)),
+            content: TextField(
+              controller: ctrl,
+              autofocus: true,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d{0,7}(\.\d{0,2})?'))],
+              onChanged: (v) => setDialogState(() => error = v.trim().isEmpty ? null : _amountError(v)),
+              decoration: InputDecoration(
+                prefixText: 'RM ',
+                hintText: '0.00',
+                errorText: error,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(false),
+                child: const Text('Cancel', style: TextStyle(color: AppColors.textGrey)),
+              ),
+              TextButton(
+                onPressed: valid ? () => Navigator.of(ctx).pop(true) : () => setDialogState(() => error = _amountError(ctrl.text)),
+                child: Text('Save', style: TextStyle(color: valid ? AppColors.primary : AppColors.textGrey, fontWeight: FontWeight.w600)),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    if (saved == true) {
+      // store it tidy: "12.5" -> "12.50"
+      widget.controller.setAmountText(double.parse(ctrl.text.trim()).toStringAsFixed(2));
+    }
+  }
+
   Future<void> _submit() async {
     bool ok;
     String? error;
@@ -46,7 +106,7 @@ class _ExpenseDetailsFormPageState extends State<ExpenseDetailsFormPage> {
       Navigator.of(context).popUntil((r) => r.settings.name == GroupTripPage.routeName);
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error ?? 'Add a title, an amount, and who to split with')),
+        SnackBar(content: Text(error ?? _whatIsMissing())),
       );
     }
   }
@@ -75,17 +135,13 @@ class _ExpenseDetailsFormPageState extends State<ExpenseDetailsFormPage> {
                   ],
                   const Text('Details', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.navy)),
                   const SizedBox(height: 8),
-                  _editableRow('Title', widget.controller.titleController.text.isEmpty ? 'Tap to add a title' : widget.controller.titleController.text,
-                      onTap: () => _editField('Title', widget.controller.titleController.text, widget.controller.setTitle)),
                   if (widget.controller.splitEqually)
                     _editableRow('Amount', widget.controller.amountController.text.isEmpty ? 'Tap to add an amount' : 'RM ${widget.controller.amountController.text}',
-                        onTap: () => _editField('Amount (RM)', widget.controller.amountController.text, widget.controller.setAmountText,
-                            keyboardType: const TextInputType.numberWithOptions(decimal: true)))
+                        onTap: _editAmount)
                   else
                     _row('Amount', 'RM ${widget.controller.amount.toStringAsFixed(2)} (from ${widget.controller.items.length} item${widget.controller.items.length == 1 ? '' : 's'})'),
-                  _editableRow('Location', widget.controller.location, onTap: () => _editField('Location', widget.controller.location, widget.controller.setLocation)),
                   _editableRow('Category', widget.controller.category, onTap: () => _editField('Category', widget.controller.category, widget.controller.setCategory)),
-                  _editableRow('Note', widget.controller.noteController.text.isEmpty ? 'Tap to add a note' : widget.controller.noteController.text,
+                  _editableRow('Note', widget.controller.noteController.text.isEmpty ? 'Tap to add a note (e.g. dinner at Mei Seafood)' : widget.controller.noteController.text,
                       onTap: () => _editField('Note', widget.controller.noteController.text, widget.controller.setNote)),
                   _editableRow(
                     'Split Method',
@@ -128,6 +184,20 @@ class _ExpenseDetailsFormPageState extends State<ExpenseDetailsFormPage> {
         ),
       ),
     );
+  }
+
+  /// The first thing that stops this expense from being saved, in plain words.
+  String _whatIsMissing() {
+    final c = widget.controller;
+    if (c.splitEqually) {
+      final e = _amountError(c.amountController.text);
+      if (e != null) return e;
+      if (c.selectedUids.isEmpty) return 'Choose who to split with';
+    } else {
+      if (c.items.isEmpty) return 'Add at least one item';
+      if (c.items.any((i) => i.assigneeUids.isEmpty)) return 'Every item needs someone to pay for it';
+    }
+    return 'Add an amount and who to split with';
   }
 
   /// Lets the split method be changed from right inside Details, instead of
@@ -174,10 +244,13 @@ class _ExpenseDetailsFormPageState extends State<ExpenseDetailsFormPage> {
       padding: const EdgeInsets.symmetric(vertical: 14),
       decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: Color(0xFFE4E4E4)))),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(label, style: const TextStyle(fontSize: 13, color: AppColors.textGrey)),
-          Text(value, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.black)),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Text(value,
+                textAlign: TextAlign.right, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.black)),
+          ),
         ],
       ),
     );
@@ -189,16 +262,23 @@ class _ExpenseDetailsFormPageState extends State<ExpenseDetailsFormPage> {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 14),
         decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: Color(0xFFE4E4E4)))),
+        // The value side must be Expanded: a Flexible inside a Row that itself sits unconstrained in
+        // another Row cannot be laid out, and every row of this form rendered blank.
         child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(label, style: const TextStyle(fontSize: 13, color: AppColors.textGrey)),
-            Row(
-              children: [
-                Flexible(child: Text(value, textAlign: TextAlign.right, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.black))),
-                const Icon(Icons.chevron_right, size: 18, color: AppColors.textGrey),
-              ],
+            const SizedBox(width: 16),
+            Expanded(
+              child: Text(value,
+                  textAlign: TextAlign.right,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: value.startsWith('Tap to') ? AppColors.textGrey : Colors.black)),
             ),
+            const Icon(Icons.chevron_right, size: 18, color: AppColors.textGrey),
           ],
         ),
       ),

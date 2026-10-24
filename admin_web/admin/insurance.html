@@ -6,8 +6,8 @@
 <title>Insurance Management — Voya Admin</title>
 <link rel="stylesheet" href="../css/tokens.css?v=20261006b" />
 <link rel="stylesheet" href="../css/base.css?v=20261006b" />
-<link rel="stylesheet" href="../css/layout.css?v=20261006b" />
-<link rel="stylesheet" href="../css/components.css?v=20261006b" />
+<link rel="stylesheet" href="../css/layout.css?v=20261021" />
+<link rel="stylesheet" href="../css/components.css?v=20261021c" />
 <style>.ref-link{background:none;border:none;padding:0;font:inherit;color:var(--teal-600);cursor:pointer;text-decoration:underline;font-weight:700;}</style>
 </head>
 <body>
@@ -31,11 +31,6 @@
         <p class="subtitle">Monitor all insurance transactions</p>
       </div>
       <button class="btn btn-primary" id="exportBtn"><span data-icon="download"></span>Export</button>
-    </div>
-
-    <div class="dev-tool-bar" id="devBar" style="display:none;">
-      <span>No insurance data yet — seed some demo transactions, plans and claims to explore this page.</span>
-      <button class="btn btn-outline btn-sm" id="seedBtn"><span data-icon="refresh" data-icon-size="14"></span>Seed demo data</button>
     </div>
 
     <div class="stat-grid" id="statGrid"><div class="skeleton" style="height:90px;grid-column:1/-1;"></div></div>
@@ -80,16 +75,15 @@
 </div>
 
 <script type="module">
-import { requireRole } from "../js/auth-guard.js?v=20261007f";
-import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261007f";
-import { mountIcons } from "../js/icons.js?v=20261007f";
-import { listTransactions, listClaims, listPartners, setPartnerStatus } from "../js/data.js?v=20261007f";
-import { seedAdminDemoData } from "../js/seed.js?v=20261007f";
+import { requireRole } from "../js/auth-guard.js?v=20261021";
+import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261021";
+import { mountIcons } from "../js/icons.js?v=20261021";
+import { listTransactions, listClaims, listPartners, setPartnerStatus } from "../js/data.js?v=20261021";
 import {
   money, moneyExact, number, statusBadge, escapeHtml, paginate, renderPager, toast, setBusy,
-  fullDate, confirmDialog, openModal, closeModal, wireModalDismiss,
+  fullDate, confirmDialog, promptDialog, detailDialog, openModal, closeModal, wireModalDismiss,
   statCard, plainCard, trendDelta, pointDelta, sumInMonth, countInMonth, monthBounds, rateOf,
-} from "../js/ui.js?v=20261007f";
+} from "../js/ui.js?v=20261021";
 
 mountSidebarNav({ role: "admin", active: "insurance" });
 const session = await requireRole("admin", "login.html");
@@ -107,7 +101,6 @@ async function load() {
   const [transactions, claims, partnersList] = await Promise.all([listTransactions(), listClaims(), listPartners()]);
   txns = transactions;
   insurancePartners = partnersList;
-  document.getElementById("devBar").style.display = txns.length ? "none" : "flex";
 
   const paid = txns.filter((t) => t.status === "paid");
   const gross = paid.reduce((s, t) => s + (Number(t.premium) || 0), 0);
@@ -167,7 +160,7 @@ function renderPartners() {
       <table class="data-table">
         <thead><tr><th>Organization</th><th>Email</th><th>Registered</th><th>Status</th><th></th></tr></thead>
         <tbody id="partnersBody">${pending.map((p) => `
-          <tr>
+          <tr style="cursor:pointer;" data-open-partner="${p.id}">
             <td class="cell-strong">${escapeHtml(p.companyName || "—")}</td>
             <td class="muted">${escapeHtml(p.email || "—")}</td>
             <td class="muted">${fullDate(p.createdAt)}</td>
@@ -181,21 +174,64 @@ function renderPartners() {
           </tr>`).join("")}</tbody>
       </table>
     </div>`;
-  card.querySelectorAll("[data-approve]").forEach((b) => b.addEventListener("click", () => setPartnerStatusUi(b.dataset.approve, "approved", b)));
-  card.querySelectorAll("[data-reject]").forEach((b) => b.addEventListener("click", () => setPartnerStatusUi(b.dataset.reject, "rejected", b)));
+  card.querySelectorAll("[data-open-partner]").forEach((row) => row.addEventListener("click", (e) => {
+    if (e.target.closest(".row-actions")) return;
+    openPartnerDetail(row.dataset.openPartner);
+  }));
+  card.querySelectorAll("[data-approve]").forEach((b) => b.addEventListener("click", (e) => { e.stopPropagation(); setPartnerStatusUi(b.dataset.approve, "approved", b); }));
+  card.querySelectorAll("[data-reject]").forEach((b) => b.addEventListener("click", (e) => { e.stopPropagation(); setPartnerStatusUi(b.dataset.reject, "rejected", b); }));
   mountIcons(card);
 }
 
+// Read-only popup with the partner's full registration info — so an admin
+// can actually review who they're approving/rejecting instead of judging
+// off just org name + email + date in the table row.
+function openPartnerDetail(uid) {
+  const p = insurancePartners.find((x) => x.id === uid);
+  if (!p) return;
+  detailDialog({
+    title: p.companyName || "—",
+    subtitle: "Pending insurance partner application",
+    rows: [
+      { label: "Registration no.", value: escapeHtml(p.registrationNumber) },
+      { label: "Email", value: escapeHtml(p.email) },
+      { label: "Phone", value: escapeHtml(p.phone) },
+      { label: "Contact person", value: escapeHtml(p.contact?.fullName) },
+      { label: "Contact designation", value: escapeHtml(p.contact?.designation) },
+      { label: "Contact email", value: escapeHtml(p.contact?.email) },
+      { label: "Contact phone", value: escapeHtml(p.contact?.phone) },
+      {
+        label: "Address",
+        value: [p.address?.line1, p.address?.city, p.address?.state, p.address?.postalCode].filter(Boolean).map(escapeHtml).join(", "),
+      },
+      { label: "Registered", value: fullDate(p.createdAt) },
+      { label: "Status", value: statusBadge(p.status || "pending") },
+    ],
+    actions: [
+      { text: "Reject", className: "btn-danger-outline", onClick: () => setPartnerStatusUi(uid, "rejected") },
+      { text: "Approve", className: "btn-primary", onClick: () => setPartnerStatusUi(uid, "approved") },
+    ],
+  });
+}
+
 async function setPartnerStatusUi(uid, status, btn) {
+  let rejectionReason = "";
   if (status === "rejected") {
-    const ok = await confirmDialog({ title: "Reject this application?", body: "They won't be able to publish plans or handle claims. This can be undone later by approving them.", confirmText: "Reject", danger: true });
-    if (!ok) return;
+    const result = await promptDialog({
+      title: "Reject this application?",
+      body: "They won't be able to publish plans or handle claims. We'll let them know why, and their account will be automatically blocked if this isn't resolved within 30 days. This can be undone later by approving them.",
+      label: "Reason (shown to the partner)",
+      placeholder: "e.g. Registration number couldn't be verified — please re-submit with supporting documents.",
+      confirmText: "Reject", danger: true,
+    });
+    if (!result.confirmed) return;
+    rejectionReason = result.value;
   }
   setBusy(btn, true, "Working…");
   try {
-    await setPartnerStatus(uid, status);
+    await setPartnerStatus(uid, status, status === "rejected" ? { rejectionReason } : {});
     const p = insurancePartners.find((x) => x.id === uid);
-    if (p) p.status = status;
+    if (p) { p.status = status; if (status === "rejected") p.rejectionReason = rejectionReason; }
     renderPartners();
     toast(status === "approved" ? "Partner approved." : "Partner application rejected.", "success");
   } catch (err) {
@@ -241,9 +277,11 @@ function renderTable() {
 /** Shows everything we actually know about one transaction — the table
  * only has room for Reference/Customer/Provider/Premium/Status, but a
  * real insurance_transactions doc also carries the plan, destination,
- * sales channel, purchase date and (for a real mobile-app purchase) the
- * buyer's linked account — see js/data.js and
- * lib/repositories/insurance_repository.dart. */
+ * sales channel and purchase date — see js/data.js and
+ * lib/repositories/insurance_repository.dart. Channel already says how the
+ * sale happened ("Mobile App" vs a manually-logged channel), so we don't
+ * also show a separate buyerId-derived row — that was just repeating the
+ * same yes/no in more confusing words. */
 function openTxnDetail(id) {
   const t = txns.find((x) => x.id === id);
   if (!t) return;
@@ -260,7 +298,6 @@ function openTxnDetail(id) {
       ${row("Destination", escapeHtml(t.destination || "—"))}
       ${row("Channel", escapeHtml(t.channel || "—"))}
       ${row("Purchased", fullDate(t.createdAt))}
-      ${row("Linked Voya account", t.buyerId ? "Yes — bought through the mobile app" : "No — logged manually (e.g. a walk-in customer)")}
     </div>
     ${t.isDemoSeed ? `<p class="muted small" style="margin-top:4px;">This is seeded demo data.</p>` : ""}`;
   mountIcons(document.getElementById("txnModalBody"));
@@ -269,20 +306,6 @@ function openTxnDetail(id) {
 
 document.getElementById("searchInput").addEventListener("input", applyFilters);
 document.getElementById("statusFilter").addEventListener("change", applyFilters);
-
-document.getElementById("seedBtn")?.addEventListener("click", async (e) => {
-  setBusy(e.currentTarget, true, "Seeding…");
-  try {
-    const partners = await listPartners();
-    const notes = await seedAdminDemoData(partners.filter((p) => p.status === "approved"));
-    toast(notes.join(" · "), "success");
-    await load();
-  } catch (err) {
-    toast(err.message || "Couldn't seed data.", "error");
-  } finally {
-    setBusy(e.currentTarget, false);
-  }
-});
 
 document.getElementById("exportBtn").addEventListener("click", () => {
   if (!filtered.length) { toast("Nothing to export."); return; }

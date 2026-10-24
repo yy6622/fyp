@@ -1,46 +1,63 @@
 import 'package:flutter/material.dart';
 
-import '../../data/emergency_info.dart';
+import '../../repositories/country_emergency_repository.dart';
 import '../../theme.dart';
 import '../shared/contact_launcher.dart';
 
 // ---------------------------------------------------------------------
 // Police / Ambulance / Firefighters for [destination] — real published
-// local emergency numbers (see emergency_info.dart), not one fixed set
-// shown regardless of where the trip actually goes.
+// local emergency numbers, read live from the admin-curated
+// country_emergency_info Firestore collection (falling back to the
+// static emergency_info.dart maps — see CountryEmergencyRepository), not
+// one fixed set shown regardless of where the trip actually goes.
 // ---------------------------------------------------------------------
-class EmergencyContactPage extends StatelessWidget {
+class EmergencyContactPage extends StatefulWidget {
   final String destination;
   const EmergencyContactPage({super.key, required this.destination});
 
   @override
+  State<EmergencyContactPage> createState() => _EmergencyContactPageState();
+}
+
+class _EmergencyContactPageState extends State<EmergencyContactPage> {
+  late final Future<CountryEmergencyInfo> _future =
+      CountryEmergencyRepository.instance.forDestination(widget.destination);
+
+  @override
   Widget build(BuildContext context) {
-    final numbers = kEmergencyNumbersByCountry[destination.trim().toLowerCase()] ?? kFallbackEmergencyNumbers;
-    final isFallback = !kEmergencyNumbersByCountry.containsKey(destination.trim().toLowerCase());
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: const VoyaAppBar(
         title: Text('Emergency', style: TextStyle(color: AppColors.navy, fontWeight: FontWeight.bold, fontSize: 19)),
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          if (isFallback)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: Text(
-                destination.isEmpty
-                    ? "This trip has no destination set yet, so 112 — the universal GSM emergency number — is shown below."
-                    : "We don't have $destination's specific local numbers yet, so 112 — the universal GSM emergency number, which works in most countries — is shown below.",
-                style: const TextStyle(fontSize: 11.5, color: AppColors.textGrey, height: 1.4),
-              ),
-            ),
-          _contactRow(context, Icons.local_police_outlined, 'Police', numbers.police),
-          const Divider(height: 1, color: Color(0xFFF0F0F0)),
-          _contactRow(context, Icons.local_hospital_outlined, 'Ambulance', numbers.ambulance),
-          const Divider(height: 1, color: Color(0xFFF0F0F0)),
-          _contactRow(context, Icons.local_fire_department_outlined, 'Firefighters', numbers.fire),
-        ],
+      body: FutureBuilder<CountryEmergencyInfo>(
+        future: _future,
+        builder: (context, snapshot) {
+          if (!snapshot.hasData) {
+            return const Center(child: CircularProgressIndicator(color: AppColors.primary));
+          }
+          final numbers = snapshot.data!;
+          return ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              if (numbers.isGenericFallback)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Text(
+                    widget.destination.isEmpty
+                        ? "This trip has no destination set yet, so 112 — the universal GSM emergency number — is shown below."
+                        : "We don't have ${widget.destination}'s specific local numbers yet, so 112 — the universal GSM emergency number, which works in most countries — is shown below.",
+                    style: const TextStyle(fontSize: 11.5, color: AppColors.textGrey, height: 1.4),
+                  ),
+                ),
+              _contactRow(context, Icons.local_police_outlined, 'Police', numbers.police),
+              const Divider(height: 1, color: Color(0xFFF0F0F0)),
+              _contactRow(context, Icons.local_hospital_outlined, 'Ambulance', numbers.ambulance),
+              const Divider(height: 1, color: Color(0xFFF0F0F0)),
+              _contactRow(context, Icons.local_fire_department_outlined, 'Firefighters', numbers.fire),
+            ],
+          );
+        },
       ),
     );
   }

@@ -6,7 +6,7 @@
 <title>Voya Insurance Partner — Log in</title>
 <link rel="stylesheet" href="../css/tokens.css?v=20261006b" />
 <link rel="stylesheet" href="../css/base.css?v=20261006b" />
-<link rel="stylesheet" href="../css/components.css?v=20261006b" />
+<link rel="stylesheet" href="../css/components.css?v=20261021c" />
 <link rel="stylesheet" href="../css/auth.css?v=20261006b" />
 </head>
 <body>
@@ -47,13 +47,13 @@
 </div>
 
 <script type="module">
-import { mountIcons } from "../js/icons.js?v=20261007";
+import { mountIcons } from "../js/icons.js?v=20261021";
 import { auth } from "../js/firebase-config.js?v=20261007";
 import { onAuthStateChanged, setPersistence, browserLocalPersistence, browserSessionPersistence } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
 import { doc, getDoc } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
 import { db } from "../js/firebase-config.js?v=20261007";
-import { loginWithEmail, authErrorMessage } from "../js/auth-guard.js?v=20261007";
-import { setBusy } from "../js/ui.js?v=20261007";
+import { loginWithEmail, authErrorMessage } from "../js/auth-guard.js?v=20261021";
+import { setBusy } from "../js/ui.js?v=20261021";
 
 mountIcons(document);
 

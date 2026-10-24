@@ -43,6 +43,11 @@ class VotingItem {
   /// data so tapping it can jump straight to that trip's Vote tab.
   final String tripId;
   final String voteId;
+  /// Uids of everyone who has voted on at least one option (TripVote.voterUids)
+  /// — drives the avatar-stack next to [votes], same real-photo convention
+  /// as the Vote tab's own option footers, instead of unlabelled placeholder
+  /// circles.
+  final List<String> voterUids;
   const VotingItem({
     required this.title,
     required this.subtitle,
@@ -53,6 +58,7 @@ class VotingItem {
     this.leadingOption = '',
     this.tripId = '',
     this.voteId = '',
+    this.voterUids = const [],
   });
 }
 

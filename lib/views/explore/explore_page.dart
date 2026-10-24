@@ -17,7 +17,7 @@ import '../detail/detail_page_restaurant.dart';
 import '../detail/detail_widgets.dart' show tagChip;
 import '../filter/filter_page.dart';
 import '../near_by/near_by_page.dart';
-import '../shared/translated_text.dart';
+import 'attraction_chat_page.dart';
 import 'saved_items_page.dart';
 
 class ExplorePage extends StatefulWidget {
@@ -45,18 +45,33 @@ class _ExplorePageState extends State<ExplorePage> {
   // that single ancestor scroll view on its own.
   final GlobalKey _bestFlightsKey = GlobalKey();
 
+  // Right under the banner - always on the page, unlike "Best Flight Deals", which is only built when
+  // there are flights to show (with no flights the button used to do nothing at all).
+  final GlobalKey _belowBannerKey = GlobalKey();
+
+  // The page's one scroll view: fallback for "Explore Now" if neither marker is on screen yet.
+  final ScrollController _pageScroll = ScrollController();
+
   @override
   void dispose() {
     _searchController.dispose();
+    _pageScroll.dispose();
     controller.dispose();
     filterController.dispose();
     super.dispose();
   }
 
+  /// "Explore Now": scroll down to the deals / places under the banner.
   void _scrollToBestFlights() {
-    final ctx = _bestFlightsKey.currentContext;
-    if (ctx == null) return;
-    Scrollable.ensureVisible(ctx, duration: const Duration(milliseconds: 450), curve: Curves.easeInOut, alignment: 0.05);
+    final ctx = _bestFlightsKey.currentContext ?? _belowBannerKey.currentContext;
+    if (ctx != null) {
+      Scrollable.ensureVisible(ctx, duration: const Duration(milliseconds: 450), curve: Curves.easeInOut, alignment: 0.0);
+      return;
+    }
+    if (!_pageScroll.hasClients) return;
+    final p = _pageScroll.position;
+    _pageScroll.animateTo((p.pixels + p.viewportDimension * 0.6).clamp(0.0, p.maxScrollExtent),
+        duration: const Duration(milliseconds: 450), curve: Curves.easeInOut);
   }
 
   void _runTopBarSearch() => controller.searchFromTopBar(_searchController.text);
@@ -80,6 +95,7 @@ class _ExplorePageState extends State<ExplorePage> {
       listenable: Listenable.merge([controller, filterController]),
       builder: (context, _) => Scaffold(
         backgroundColor: AppColors.scaffoldBackground,
+        floatingActionButton: _buildAiFab(),
         body: SafeArea(
           child: Stack(
             children: [
@@ -91,6 +107,7 @@ class _ExplorePageState extends State<ExplorePage> {
               // (_buildBody()) laid out inline (shrinkWrap, no scrolling
               // of its own) instead of independently scrollable.
               SingleChildScrollView(
+                controller: _pageScroll,
                 child: Column(
                   children: [
                     _buildHeader(),
@@ -180,22 +197,38 @@ class _ExplorePageState extends State<ExplorePage> {
   }
 
   void _openFilterSheet() {
+    // Real airlines present in the current search results — never a
+    // fixed list, so the Airlines filter only ever offers carriers that
+    // could actually appear for whatever route was searched.
+    final availableAirlines = controller.flightResults.map((f) => f.airlineName).where((n) => n.isNotEmpty).toSet().toList()
+      ..sort();
+    // Drop any previously-selected airline that isn't offered by this
+    // search's results (e.g. picked while searching a different route) —
+    // otherwise it would keep silently excluding every result here
+    // without ever showing as checked, since it no longer has a row to
+    // render in the checklist.
+    filterController.airlines.removeWhere((a) => !availableAirlines.contains(a));
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => FilterPage(type: controller.selectedCategory.filterType, controller: filterController),
+      builder: (_) => FilterPage(
+        type: controller.selectedCategory.filterType,
+        controller: filterController,
+        availableAirlines: availableAirlines,
+      ),
     );
   }
 
   // ---------------- Filtering ----------------
   // Applies filterController's current selections (set from the Filter
   // sheet opened above) to whichever list the active category is showing.
-  // Values with no real backing field on the result (hotel amenities and
-  // property type — Duffel/RollingGo's parsed stay result doesn't carry
-  // either) are left out of the match rather than compared against
-  // fabricated data; every other field here is a real one already on the
-  // result/catalogue object.
+  // Every field compared here is a real one already on the result/
+  // catalogue object — the Hotel filter sheet no longer offers Property
+  // Type or Amenities precisely because neither Duffel nor RollingGo
+  // returns a property-type field, and the Amenities checklist (while a
+  // real field) was never actually matched against here either; see
+  // filter_page.dart's _hotelFilters() doc comment.
 
   List<int> _numbersIn(String text) => RegExp(r'\d+').allMatches(text).map((m) => int.parse(m.group(0)!)).toList();
 
@@ -273,8 +306,6 @@ class _ExplorePageState extends State<ExplorePage> {
         final threshold = double.tryParse(f.guestRating.replaceAll('+', '')) ?? 0;
         if (score == null || score < threshold) return false;
       }
-      // Property Type / Amenities: no matching field on DuffelStayResult
-      // yet — not filtered on, see note above.
       return true;
     }).toList();
   }
@@ -287,13 +318,6 @@ class _ExplorePageState extends State<ExplorePage> {
         if (!f.attractionCategories.any(tags.contains)) return false;
       }
       if (f.attractionPrice != 'Any' && !_priceTextMatchesBucket(item.price, f.attractionPrice)) return false;
-      if (f.ratingStars > 0) {
-        final rating = double.tryParse(item.rating) ?? 0;
-        if (rating.round() < f.ratingStars) return false;
-      }
-      // Duration: recommendedDuration isn't consistently structured
-      // across every attraction yet, so that chip stays display-only
-      // rather than guessing at a match.
       return true;
     }).toList();
   }
@@ -303,10 +327,6 @@ class _ExplorePageState extends State<ExplorePage> {
     return controller.restaurants.where((item) {
       if (f.restaurantCuisines.isNotEmpty && !f.restaurantCuisines.any(item.cuisineTags.contains)) return false;
       if (f.restaurantPrice != 'Any' && !_priceTextMatchesBucket(item.priceRange, f.restaurantPrice)) return false;
-      if (f.ratingStars > 0) {
-        final rating = double.tryParse(item.rating) ?? 0;
-        if (rating.round() < f.ratingStars) return false;
-      }
       return true;
     }).toList();
   }
@@ -387,6 +407,19 @@ class _ExplorePageState extends State<ExplorePage> {
   // rest get a light grey outline. Same real trip data throughout, only
   // the card styling changed.
   Widget _buildTripSwitcherOverlay() {
+    // mainAxisSize.min with no cap used to size this purely off however
+    // many trips there are — fine normally, but with the keyboard up
+    // (e.g. right after tapping the search field) the space actually
+    // left below this popup's top offset shrinks by the keyboard's own
+    // height, and a list of several trips no longer fit, which showed
+    // as a bottom RenderFlex overflow instead of ever scrolling.
+    // Capping the card to whatever room is genuinely left and letting
+    // its content scroll instead fixes that regardless of trip count
+    // or whether the keyboard is showing.
+    final media = MediaQuery.of(context);
+    const topOffset = 96.0;
+    const bottomBreathingRoom = 40.0;
+    final maxHeight = media.size.height - media.viewInsets.bottom - topOffset - bottomBreathingRoom;
     return Positioned.fill(
       child: GestureDetector(
         onTap: () => controller.closeTripSwitcher(),
@@ -395,22 +428,25 @@ class _ExplorePageState extends State<ExplorePage> {
           child: Align(
             alignment: Alignment.topCenter,
             child: Padding(
-              padding: const EdgeInsets.only(top: 96),
+              padding: const EdgeInsets.only(top: topOffset),
               child: GestureDetector(
                 onTap: () {},
-                child: Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 20),
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(20),
-                    boxShadow: [
-                      BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 24, offset: const Offset(0, 10)),
-                    ],
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: List.generate(controller.trips.length, (i) {
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(maxHeight: maxHeight < 120 ? 120 : maxHeight),
+                  child: Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 20),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 24, offset: const Offset(0, 10)),
+                      ],
+                    ),
+                    child: SingleChildScrollView(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: List.generate(controller.trips.length, (i) {
                       final trip = controller.trips[i];
                       final selected = i == controller.selectedTripIndex;
                       return Padding(
@@ -450,6 +486,8 @@ class _ExplorePageState extends State<ExplorePage> {
                         ),
                       );
                     }),
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -457,6 +495,32 @@ class _ExplorePageState extends State<ExplorePage> {
           ),
         ),
       ),
+    );
+  }
+
+  // "Ask AI for attraction ideas" — a floating button, bottom-right,
+  // always on screen regardless of which category chip is selected
+  // (unlike the earlier inline banner this replaces, which only showed
+  // up on specific tabs and was easy to miss). Opens a chatbot (OpenAI,
+  // see AttractionChatService) scoped to the destination Explore is
+  // currently showing and grounded to the real attractions already
+  // loaded for it ([controller.attractions]), so it can only ever
+  // recommend from real Voya listings, never invent a place.
+  Widget _buildAiFab() {
+    return FloatingActionButton(
+      heroTag: 'explore_ai_fab',
+      mini: true,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      backgroundColor: AppColors.primary,
+      onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+        builder: (_) => AttractionChatPage(
+          destination: controller.bannerDestination,
+          candidates: controller.attractions,
+          uid: AuthService.instance.currentUser?.uid ?? '',
+          tripId: controller.selectedTrip?.id,
+        ),
+      )),
+      child: const Icon(Icons.smart_toy_outlined, color: Colors.white),
     );
   }
 
@@ -659,7 +723,7 @@ class _ExplorePageState extends State<ExplorePage> {
       padding: const EdgeInsets.only(bottom: 24),
       children: [
         _buildExploreBanner(),
-        const SizedBox(height: 22),
+        SizedBox(key: _belowBannerKey, height: 22),
         if (showFlights) ...[
           KeyedSubtree(key: _bestFlightsKey, child: _buildSectionHeader(Icons.flight_takeoff, 'Best Flight Deals', ExploreCategory.flights)),
           const SizedBox(height: 12),
@@ -916,7 +980,9 @@ class _ExplorePageState extends State<ExplorePage> {
   DetailPageFlight _flightDetailFor(DuffelFlightOffer flight) => DetailPageFlight(
         airline: flight.airlineName,
         fromCode: flight.originCode,
+        fromCity: flight.originCityName,
         toCode: flight.destinationCode,
+        toCity: flight.destinationCityName,
         flightNo: flight.flightNumber,
         date: formatLongDate(flight.departureAt),
         depTime: _hhmm(flight.departureAt),
@@ -927,6 +993,25 @@ class _ExplorePageState extends State<ExplorePage> {
         priceSuffix: 'Economy',
         airlineLogoUrl: flight.airlineLogoUrl,
         tripId: controller.selectedTrip?.id ?? '',
+        // The real DateTime this search result came with — see
+        // DetailPageFlight's doc comment for why this matters (lets
+        // functions/logistics.js enforce exact flight-time constraints on
+        // the AI itinerary/optimise features, instead of guessing from a
+        // free-text display string).
+        departureAt: flight.departureAt,
+        arrivalAt: flight.arrivalAt,
+        aircraftName: flight.aircraftName,
+        cabinClass: flight.cabinClass,
+        originTerminal: flight.originTerminal,
+        destinationTerminal: flight.destinationTerminal,
+        checkedBagQuantity: flight.checkedBagQuantity,
+        carryOnBagQuantity: flight.carryOnBagQuantity,
+        changeAllowed: flight.changeAllowed,
+        changePenaltyAmount: flight.changePenaltyAmount,
+        changePenaltyCurrency: flight.changePenaltyCurrency,
+        refundAllowed: flight.refundAllowed,
+        refundPenaltyAmount: flight.refundPenaltyAmount,
+        refundPenaltyCurrency: flight.refundPenaltyCurrency,
       );
 
   String _hhmm(DateTime dt) => '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
@@ -1086,9 +1171,11 @@ class _ExplorePageState extends State<ExplorePage> {
         pricePerNight: controller.formatPrice(hotel.cheapestTotalAmount, hotel.cheapestCurrency),
         image: hotel.photoUrl ?? '',
         tripId: controller.selectedTrip?.id ?? '',
-        checkIn: controller.lastHotelCheckIn != null ? formatLongDate(controller.lastHotelCheckIn!) : '',
-        checkOut: controller.lastHotelCheckOut != null ? formatLongDate(controller.lastHotelCheckOut!) : '',
+        checkIn: controller.lastHotelCheckIn,
+        checkOut: controller.lastHotelCheckOut,
         amenities: hotel.amenities,
+        checkInPolicyTime: hotel.checkInPolicyTime,
+        checkOutPolicyTime: hotel.checkOutPolicyTime,
       );
 
   Widget _buildHotelCompactCard(DuffelStayResult hotel) {
@@ -1206,7 +1293,7 @@ class _ExplorePageState extends State<ExplorePage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  TranslatedText(hotel.name, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.navy)),
+                  Text(hotel.name, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.navy)),
                   const SizedBox(height: 6),
                   if (hotel.reviewScore != null || hotel.rating != null)
                     Row(children: [
@@ -1329,7 +1416,7 @@ class _ExplorePageState extends State<ExplorePage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                TranslatedText(
+                Text(
                   item.name,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -1403,7 +1490,7 @@ class _ExplorePageState extends State<ExplorePage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                TranslatedText(
+                Text(
                   item.name,
                   style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.navy),
                 ),
@@ -1509,7 +1596,7 @@ class _ExplorePageState extends State<ExplorePage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                TranslatedText(
+                Text(
                   item.name,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -1572,7 +1659,7 @@ class _ExplorePageState extends State<ExplorePage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                TranslatedText(
+                Text(
                   item.name,
                   style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.navy),
                 ),

@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../controllers/group_trip_controller.dart';
 import '../../data/airlines.dart';
@@ -23,12 +25,12 @@ import '../profile/history_detail_pages.dart';
 import '../shared/member_select_section.dart';
 import '../shared/nice_dialog.dart';
 import '../shared/nice_pickers.dart';
-import '../shared/translated_text.dart';
 import '../vote/create_vote_page.dart';
 import '../vote/vote_tab.dart';
 import 'ai_itinerary_sheet.dart';
 import 'day_timeline_view.dart';
 import 'group_info_page.dart';
+import 'optimise_sheet.dart';
 import 'plan_flight_detail_page.dart';
 import 'plan_hotel_detail_page.dart';
 
@@ -77,6 +79,171 @@ class _GroupTripPageState extends State<GroupTripPage> {
   // removed (there was previously no way to undo "Add Activity" at all).
   bool _dayEditMode = false;
 
+  // Edit mode works on a draft: dragging an activity to a new time or removing it is only
+  // remembered here, and nothing is written to the trip until "Save" is tapped. Leaving edit
+  // mode any other way (back, another day / tab, the other header buttons, Cancel) asks first.
+  int? _editDayIndex;
+  final Map<String, String> _draftTimes = {}; // activity id -> new "HH:mm"
+  final Set<String> _draftRemoved = {}; // activity ids to remove
+  bool _savingDraft = false;
+
+  bool get _hasDraftChanges => _draftTimes.isNotEmpty || _draftRemoved.isNotEmpty;
+
+  void _startDayEdit() {
+    setState(() {
+      _dayEditMode = true;
+      _editDayIndex = controller.planIndex;
+      _draftTimes.clear();
+      _draftRemoved.clear();
+    });
+  }
+
+  void _endDayEdit() {
+    setState(() {
+      _dayEditMode = false;
+      _editDayIndex = null;
+      _draftTimes.clear();
+      _draftRemoved.clear();
+    });
+  }
+
+  /// The day as it will look once the draft is saved.
+  List<ActivityItem> _draftItems(List<ActivityItem> items) => [
+        for (final it in items)
+          if (!_draftRemoved.contains(it.id))
+            _draftTimes.containsKey(it.id)
+                ? ActivityItem(
+                    id: it.id,
+                    time: _draftTimes[it.id]!,
+                    icon: it.icon,
+                    label: it.label,
+                    location: it.location,
+                    voted: it.voted,
+                    total: it.total,
+                    votedByMe: it.votedByMe,
+                    forMemberUids: it.forMemberUids,
+                  )
+                : it,
+      ];
+
+  /// Writes the draft to the trip. Returns false (and stays in edit mode) if something failed.
+  Future<bool> _saveDayEdit() async {
+    final dayIndex = _editDayIndex;
+    if (dayIndex == null || !_hasDraftChanges) {
+      _endDayEdit();
+      return true;
+    }
+    final changes = _draftTimes.length + _draftRemoved.length;
+    setState(() => _savingDraft = true);
+    try {
+      for (final id in _draftRemoved) {
+        await controller.removeActivity(dayIndex, id);
+      }
+      for (final e in _draftTimes.entries) {
+        if (_draftRemoved.contains(e.key)) continue;
+        await controller.updateActivityTime(dayIndex, e.key, e.value);
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _savingDraft = false);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not save your changes: $e')));
+      }
+      return false;
+    }
+    if (!mounted) return true;
+    setState(() => _savingDraft = false);
+    _endDayEdit();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Plan saved — $changes ${changes == 1 ? 'change' : 'changes'}')),
+    );
+    return true;
+  }
+
+  /// Call before anything that leaves edit mode. True = go ahead (saved, discarded or nothing
+  /// to save); false = stay in edit mode.
+  Future<bool> _confirmLeaveDayEdit() async {
+    if (!_dayEditMode) return true;
+    if (!_hasDraftChanges) {
+      _endDayEdit();
+      return true;
+    }
+    final n = _draftTimes.length + _draftRemoved.length;
+    final choice = await showDialog<String>(
+      context: context,
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 26, 24, 14),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 56,
+                height: 56,
+                decoration: BoxDecoration(color: AppColors.orange.withValues(alpha: 0.12), shape: BoxShape.circle),
+                alignment: Alignment.center,
+                child: const Icon(Icons.edit_note, color: AppColors.orange, size: 28),
+              ),
+              const SizedBox(height: 14),
+              const Text('Save your changes?',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 16.5, fontWeight: FontWeight.bold, color: AppColors.navy)),
+              const SizedBox(height: 8),
+              Text(
+                'You made $n ${n == 1 ? 'change' : 'changes'} to this day. They are only kept if you save.',
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 12.5, color: AppColors.textGrey, height: 1.4),
+              ),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(vertical: 13),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  ),
+                  onPressed: () => Navigator.of(ctx).pop('save'),
+                  child: const Text('Save', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+                ),
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton(
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: AppColors.border),
+                    padding: const EdgeInsets.symmetric(vertical: 13),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  ),
+                  onPressed: () => Navigator.of(ctx).pop('discard'),
+                  child: const Text('Discard changes', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.w600)),
+                ),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop('stay'),
+                child: const Text('Keep editing', style: TextStyle(color: AppColors.textGrey)),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (choice == 'save') return _saveDayEdit();
+    if (choice == 'discard') {
+      _endDayEdit();
+      return true;
+    }
+    return false;
+  }
+
+  /// Runs [action] only after the edit-mode question above is settled.
+  Future<void> _afterLeavingEdit(VoidCallback action) async {
+    if (await _confirmLeaveDayEdit()) action();
+  }
+
   @override
   void dispose() {
     controller.dispose();
@@ -98,7 +265,14 @@ class _GroupTripPageState extends State<GroupTripPage> {
             body: const Center(child: Text('This trip no longer exists', style: TextStyle(color: AppColors.textGrey))),
           );
         }
-        return Scaffold(
+        return PopScope(
+          canPop: !(_dayEditMode && _hasDraftChanges),
+          onPopInvokedWithResult: (didPop, _) async {
+            if (didPop) return;
+            final navigator = Navigator.of(context);
+            if (await _confirmLeaveDayEdit()) navigator.pop();
+          },
+          child: Scaffold(
           backgroundColor: Colors.white,
           appBar: AppBar(
             backgroundColor: Colors.white,
@@ -139,11 +313,13 @@ class _GroupTripPageState extends State<GroupTripPage> {
               ),
             ),
           ),
-          // Shows only while this trip's AI Summarise run is working or has a
-          // result waiting; tapping it re-opens the sheet (ai_itinerary_sheet.dart).
+          // Shows only while this trip's AI Summarise and/or Optimise run is
+          // working or has a result waiting; tapping either re-opens its sheet
+          // (ai_itinerary_sheet.dart / optimise_sheet.dart).
           body: Column(
             children: [
               AiItineraryStatusBar(controller: controller),
+              OptimiseStatusBar(controller: controller),
               Expanded(child: _buildBody(trip)),
             ],
           ),
@@ -164,6 +340,7 @@ class _GroupTripPageState extends State<GroupTripPage> {
                       child: const Icon(Icons.add, color: Colors.white),
                     )
                   : null,
+        ),
         );
       },
     );
@@ -182,7 +359,7 @@ class _GroupTripPageState extends State<GroupTripPage> {
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 3),
         child: GestureDetector(
-          onTap: () => controller.setTab(tab),
+          onTap: () => _afterLeavingEdit(() => controller.setTab(tab)),
           child: Container(
             height: 50,
             alignment: Alignment.center,
@@ -1033,7 +1210,7 @@ class _GroupTripPageState extends State<GroupTripPage> {
       builder: (sheetContext) => StatefulBuilder(
         builder: (context, setSheetState) {
           final query = searchController.text.trim().toLowerCase();
-          final results = query.isEmpty ? kCountries : kCountries.where((c) => c.name.toLowerCase().contains(query)).toList();
+          final results = query.isEmpty ? kDestinationCountries : kDestinationCountries.where((c) => c.name.toLowerCase().contains(query)).toList();
           return SafeArea(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
@@ -1132,27 +1309,32 @@ class _GroupTripPageState extends State<GroupTripPage> {
                 child: Text(fullDate.isEmpty ? 'Day ${day.day}' : 'Day ${day.day}, $fullDate',
                     style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.navy)),
               ),
-              _dayHeaderIcon(
-                Icons.auto_awesome,
-                onTap: () => ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('AI is optimising this day\'s schedule...')),
+              if (!_dayEditMode) ...[
+                _dayHeaderIcon(
+                  Icons.auto_awesome,
+                  onTap: () => showOptimiseModeSheet(context, controller, dayIndex: dayIndex, dayNumber: day.day),
                 ),
-              ),
-              const SizedBox(width: 14),
-              _dayHeaderIcon(Icons.add, onTap: () => _addActivityDialog(trip, dayIndex)),
-              const SizedBox(width: 14),
-              // While editing, the pencil becomes an explicit "Save" pill
-              // instead of just toggling back — every drag already writes
-              // to Firestore the instant it's released, so there's
-              // nothing left to actually persist here; this is purely so
-              // the exit action reads as a deliberate "I'm done" rather
-              // than an unlabeled icon that looks identical to the one
-              // that started editing.
+                const SizedBox(width: 14),
+                _dayHeaderIcon(Icons.add, onTap: () => _addActivityDialog(trip, dayIndex)),
+                const SizedBox(width: 14),
+              ] else ...[
+                // Cancel = leave without saving (asks first if something was changed)
+                GestureDetector(
+                  onTap: _savingDraft ? null : () => _confirmLeaveDayEdit(),
+                  child: const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+                    child: Text('Cancel', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textGrey)),
+                  ),
+                ),
+                const SizedBox(width: 10),
+              ],
+              // While editing, the pencil becomes "Save": drags and removals are only a
+              // draft until it is tapped (see _saveDayEdit / _confirmLeaveDayEdit).
               _dayEditMode
-                  ? _dayHeaderSaveButton(onTap: () => setState(() => _dayEditMode = false))
+                  ? _dayHeaderSaveButton(onTap: _savingDraft ? () {} : () => _saveDayEdit())
                   : _dayHeaderIcon(
                       Icons.edit_outlined,
-                      onTap: () => setState(() => _dayEditMode = true),
+                      onTap: _startDayEdit,
                     ),
             ],
           ),
@@ -1167,19 +1349,36 @@ class _GroupTripPageState extends State<GroupTripPage> {
           // or down changes its time, which until this existed had no way
           // to happen short of deleting and re-adding it. Out of edit
           // mode, the list below is unchanged from before.
-          else if (_dayEditMode)
+          else if (_dayEditMode) ...[
+            if (_hasDraftChanges)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Text(
+                  'Unsaved: ${_draftTimes.length} moved, ${_draftRemoved.length} removed — tap Save to keep them.',
+                  style: const TextStyle(fontSize: 11.5, color: AppColors.orange),
+                ),
+              ),
             Expanded(
               child: DayTimelineView(
-                items: day.items,
-                onTimeChanged: (item, newTime) => controller.updateActivityTime(dayIndex, item.id, newTime),
-                onDelete: (item) => _confirmDeleteActivity(dayIndex, item),
+                items: _draftItems(day.items),
+                // only a draft until "Save"
+                onTimeChanged: (item, newTime) => setState(() {
+                  final original = day.items.where((it) => it.id == item.id).map((it) => it.time).firstOrNull;
+                  if (original == newTime) {
+                    _draftTimes.remove(item.id);
+                  } else {
+                    _draftTimes[item.id] = newTime;
+                  }
+                }),
+                onDelete: (item) => setState(() => _draftRemoved.add(item.id)),
               ),
-            )
+            ),
+          ]
           else
             Expanded(
               child: ListView(
                 padding: const EdgeInsets.only(bottom: 16),
-                children: day.items.map((item) => _activityCard(item, trip)).toList(),
+                children: _dayItemsWithTransport(day.items, trip),
               ),
             ),
         ],
@@ -1187,9 +1386,11 @@ class _GroupTripPageState extends State<GroupTripPage> {
     );
   }
 
-  /// One of the 3 small icon buttons next to the Day header (AI optimise /
+  /// One of the 3 small icon buttons next to the Day header (AI Optimise /
   /// add activity / toggle edit mode) — plain glyphs, no circle background,
-  /// matching the reference design.
+  /// matching the reference design. The first opens [showOptimiseModeSheet]
+  /// (optimise_sheet.dart), which lets the person choose Day vs Whole trip
+  /// before anything runs.
   Widget _dayHeaderIcon(IconData icon, {required VoidCallback onTap, bool active = false}) {
     return GestureDetector(
       onTap: onTap,
@@ -1197,9 +1398,9 @@ class _GroupTripPageState extends State<GroupTripPage> {
     );
   }
 
-  /// Replaces the pencil icon while Day edit mode is on (see [_dayContent])
-  /// — a small filled pill so leaving edit mode reads as a clear, confident
-  /// action rather than an icon tap easily mistaken for re-entering it.
+  /// Replaces the pencil icon while Day edit mode is on (see [_dayContent]).
+  /// Edit mode keeps every change as a draft; this is the only thing that
+  /// writes them to the trip (see [_saveDayEdit]).
   Widget _dayHeaderSaveButton({required VoidCallback onTap}) {
     return GestureDetector(
       onTap: onTap,
@@ -1604,6 +1805,101 @@ class _GroupTripPageState extends State<GroupTripPage> {
     );
   }
 
+  /// Interleaves a small "Get directions" row between consecutive activity
+  /// cards on a day, one per gap between two different locations — tapping
+  /// it opens Google Maps with directions from the earlier stop to the
+  /// next one. No row is added when either side has no usable location
+  /// (a manually-typed activity with no address) or both stops are the
+  /// same place.
+  List<Widget> _dayItemsWithTransport(List<ActivityItem> items, Trip trip) {
+    final widgets = <Widget>[];
+    for (var i = 0; i < items.length; i++) {
+      widgets.add(_activityCard(items[i], trip));
+      if (i == items.length - 1) continue;
+      final from = _effectiveLocationFor(items[i]);
+      final to = _effectiveLocationFor(items[i + 1]);
+      if (from.isNotEmpty && to.isNotEmpty && from.toLowerCase() != to.toLowerCase()) {
+        widgets.add(_transportRow(from, to));
+      }
+    }
+    return widgets;
+  }
+
+  /// Same "which saved listing is this?" resolution [_activityCard] already
+  /// does for its body, but returning just the location text — so the
+  /// transport row between two cards points Maps at the same address the
+  /// card itself shows (an attraction with no address falls back to its
+  /// category, same as [_activityAttractionBody]; a plain/manual activity
+  /// uses whatever location text was typed in, which may be empty).
+  String _effectiveLocationFor(ActivityItem item) {
+    final hotel = controller.hotelForActivity(item);
+    if (hotel != null) return hotel.location;
+    final attraction = controller.attractionForActivity(item);
+    if (attraction != null) return attraction.location.isNotEmpty ? attraction.location : attraction.category;
+    final restaurant = controller.restaurantForActivity(item);
+    if (restaurant != null) return restaurant.location;
+    return item.location;
+  }
+
+  /// The row shown in the gap between two activity cards — tapping it opens
+  /// Google Maps' Directions with [from] and [to] as plain-text addresses
+  /// (Maps geocodes them itself, same as typing them into the app), so no
+  /// coordinates are needed on either side.
+  Widget _transportRow(String from, String to) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          const SizedBox(width: 66),
+          Expanded(
+            child: GestureDetector(
+              onTap: () => _openDirectionsInMaps(from, to),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withOpacity(0.06),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppColors.primary.withOpacity(0.25)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.directions_outlined, size: 16, color: AppColors.primary),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Get directions to $to',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.primary),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    const Icon(Icons.open_in_new, size: 13, color: AppColors.primary),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Opens Google Maps' turn-by-turn Directions from [from] to [to] (both
+  /// plain-text addresses/place names) in the Maps app if installed,
+  /// otherwise the browser — same external-app launch already used by
+  /// [_openLocationInMaps] for a shared chat location.
+  Future<void> _openDirectionsInMaps(String from, String to) async {
+    final uri = Uri.parse(
+      'https://www.google.com/maps/dir/?api=1'
+      '&origin=${Uri.encodeComponent(from)}'
+      '&destination=${Uri.encodeComponent(to)}'
+      '&travelmode=driving',
+    );
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
   /// Opens the real detail page behind a "From Saved" activity — the same
   /// hotel/attraction/restaurant detail page Explore/Saved Items opens for
   /// that listing, so tapping the rich card here isn't a dead end. Null
@@ -1648,7 +1944,7 @@ class _GroupTripPageState extends State<GroupTripPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              TranslatedText(hotel.name,
+              Text(hotel.name,
                   maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.navy)),
               if (hotel.rating.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 3), child: _activityRatingRow(hotel.rating, hotel.reviews)),
               if (hotel.location.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 3), child: _activityLocationRow(hotel.location)),
@@ -1675,7 +1971,7 @@ class _GroupTripPageState extends State<GroupTripPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              TranslatedText(attraction.name,
+              Text(attraction.name,
                   maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.navy)),
               if (attraction.rating.isNotEmpty)
                 Padding(padding: const EdgeInsets.only(top: 3), child: _activityRatingRow(attraction.rating, attraction.reviews)),
@@ -1706,7 +2002,7 @@ class _GroupTripPageState extends State<GroupTripPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              TranslatedText(restaurant.name,
+              Text(restaurant.name,
                   maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.navy)),
               if (restaurant.rating.isNotEmpty)
                 Padding(padding: const EdgeInsets.only(top: 3), child: _activityRatingRow(restaurant.rating, restaurant.reviews)),
@@ -1766,17 +2062,12 @@ class _GroupTripPageState extends State<GroupTripPage> {
             child: Text(forLabel,
                 maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600, color: AppColors.primary)),
           ),
-        Padding(
-          padding: const EdgeInsets.only(top: 8),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _avatarStack(item.total, memberNames),
-              const SizedBox(width: 6),
-              Text('${item.voted}/${item.total}', style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600, color: AppColors.textGrey)),
-            ],
+        // who this activity is for: their real profile photos (everyone when nobody was picked)
+        if (_activityMemberUids(item).isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: _avatarStack(_activityMemberUids(item)),
           ),
-        ),
       ],
     );
   }
@@ -1830,20 +2121,6 @@ class _GroupTripPageState extends State<GroupTripPage> {
     );
   }
 
-  Future<void> _confirmDeleteActivity(int dayIndex, ActivityItem item) async {
-    final confirmed = await showNiceConfirmDialog(
-      context: context,
-      title: 'Remove activity?',
-      message: 'This removes "${item.label}" from the day for everyone.',
-      confirmLabel: 'Remove',
-      icon: Icons.delete_outline,
-      destructive: true,
-    );
-    if (confirmed) {
-      await controller.removeActivity(dayIndex, item.id);
-    }
-  }
-
   Future<void> _confirmDeleteFlight(TripFlight flight) async {
     final confirmed = await showNiceConfirmDialog(
       context: context,
@@ -1879,33 +2156,28 @@ class _GroupTripPageState extends State<GroupTripPage> {
   /// instead of a generic, unlabelled 3-color placeholder — no profile
   /// photos in this data model, but this at least reflects the trip's
   /// actual members rather than decoration with no meaning.
-  Widget _avatarStack(int total, List<String> memberNames) {
-    final shown = total.clamp(0, 3);
-    final extra = total - shown;
+  List<String> _activityMemberUids(ActivityItem item) =>
+      effectiveActivityMembers(item, controller.trip?.memberIds ?? const <String>[]);
+
+  /// Overlapping profile photos (up to 4, then "+N") of the members an activity is for.
+  Widget _avatarStack(List<String> uids) {
+    final shown = uids.take(4).toList();
+    final extra = uids.length - shown.length;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         SizedBox(
-          width: shown == 0 ? 0 : 20.0 + (shown - 1) * 12.0,
-          height: 20,
+          width: shown.isEmpty ? 0 : 22.0 + (shown.length - 1) * 14.0,
+          height: 22,
           child: Stack(
             children: [
-              for (int i = 0; i < shown; i++)
+              for (int i = 0; i < shown.length; i++)
                 Positioned(
-                  left: i * 12.0,
+                  left: i * 14.0,
                   child: Container(
-                    width: 20,
-                    height: 20,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: Colors.primaries[i % Colors.primaries.length],
-                      border: Border.all(color: Colors.white, width: 1.5),
-                    ),
-                    alignment: Alignment.center,
-                    child: Text(
-                      i < memberNames.length && memberNames[i].isNotEmpty ? memberNames[i][0].toUpperCase() : '?',
-                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 8),
-                    ),
+                    padding: const EdgeInsets.all(1.5),
+                    decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                    child: UserAvatar(uid: shown[i], radius: 9.5),
                   ),
                 ),
             ],
@@ -1914,7 +2186,7 @@ class _GroupTripPageState extends State<GroupTripPage> {
         if (extra > 0)
           Padding(
             padding: const EdgeInsets.only(left: 4),
-            child: Text('+$extra', style: const TextStyle(fontSize: 9, color: AppColors.textGrey)),
+            child: Text('+$extra', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: AppColors.textGrey)),
           ),
       ],
     );
@@ -1947,7 +2219,7 @@ class _GroupTripPageState extends State<GroupTripPage> {
         children: [
           IconButton(
             icon: const Icon(Icons.chevron_left, color: AppColors.navy, size: 26),
-            onPressed: controller.planIndex > -1 ? () => controller.setPlanIndex(controller.planIndex - 1) : null,
+            onPressed: controller.planIndex > -1 ? () => _afterLeavingEdit(() => controller.setPlanIndex(controller.planIndex - 1)) : null,
           ),
           Expanded(
             child: SingleChildScrollView(
@@ -1962,7 +2234,9 @@ class _GroupTripPageState extends State<GroupTripPage> {
           ),
           IconButton(
             icon: const Icon(Icons.chevron_right, color: AppColors.navy, size: 26),
-            onPressed: controller.planIndex < controller.days.length - 1 ? () => controller.setPlanIndex(controller.planIndex + 1) : null,
+            onPressed: controller.planIndex < controller.days.length - 1
+                ? () => _afterLeavingEdit(() => controller.setPlanIndex(controller.planIndex + 1))
+                : null,
           ),
         ],
       ),
@@ -1975,7 +2249,7 @@ class _GroupTripPageState extends State<GroupTripPage> {
   Widget _pagerLabel(String label, int idx) {
     final selected = idx == controller.planIndex;
     return GestureDetector(
-      onTap: () => controller.setPlanIndex(idx),
+      onTap: () => idx == controller.planIndex ? null : _afterLeavingEdit(() => controller.setPlanIndex(idx)),
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 4),
         padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 18),
@@ -2018,15 +2292,66 @@ class _GroupTripPageState extends State<GroupTripPage> {
                                 padding: const EdgeInsets.only(left: 6, bottom: 2),
                                 child: Text(m.senderName, style: const TextStyle(fontSize: 10, color: AppColors.textGrey)),
                               ),
-                            Container(
-                              constraints: const BoxConstraints(maxWidth: 260),
-                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                              decoration: BoxDecoration(
-                                color: mine ? AppColors.primary : const Color(0xFFDCEFFF),
-                                borderRadius: BorderRadius.circular(14),
+                            if (m.isImage)
+                              GestureDetector(
+                                onTap: () => _openFullScreenImage(context, m.imageUrl),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(14),
+                                  child: Image.network(
+                                    m.imageUrl,
+                                    width: 200,
+                                    height: 200,
+                                    fit: BoxFit.cover,
+                                    loadingBuilder: (context, child, progress) => progress == null
+                                        ? child
+                                        : Container(
+                                            width: 200,
+                                            height: 200,
+                                            color: const Color(0xFFF0F0F0),
+                                            alignment: Alignment.center,
+                                            child: const CircularProgressIndicator(strokeWidth: 2),
+                                          ),
+                                    errorBuilder: (context, error, stack) => Container(
+                                      width: 200,
+                                      height: 200,
+                                      color: const Color(0xFFF0F0F0),
+                                      alignment: Alignment.center,
+                                      child: const Icon(Icons.broken_image_outlined, color: AppColors.textGrey),
+                                    ),
+                                  ),
+                                ),
+                              )
+                            else if (m.isLocation)
+                              GestureDetector(
+                                onTap: () => _openLocationInMaps(m.lat!, m.lng!),
+                                child: Container(
+                                  constraints: const BoxConstraints(maxWidth: 260),
+                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                  decoration: BoxDecoration(
+                                    color: mine ? AppColors.primary : const Color(0xFFDCEFFF),
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.location_on, size: 18, color: mine ? Colors.white : AppColors.primary),
+                                      const SizedBox(width: 6),
+                                      Text('Location shared — tap to view',
+                                          style: TextStyle(fontSize: 12.5, color: mine ? Colors.white : Colors.black)),
+                                    ],
+                                  ),
+                                ),
+                              )
+                            else
+                              Container(
+                                constraints: const BoxConstraints(maxWidth: 260),
+                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                decoration: BoxDecoration(
+                                  color: mine ? AppColors.primary : const Color(0xFFDCEFFF),
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                                child: Text(m.text, style: TextStyle(fontSize: 13, color: mine ? Colors.white : Colors.black)),
                               ),
-                              child: Text(m.text, style: TextStyle(fontSize: 13, color: mine ? Colors.white : Colors.black)),
-                            ),
                           ],
                         ),
                       ),
@@ -2034,6 +2359,11 @@ class _GroupTripPageState extends State<GroupTripPage> {
                   },
                 ),
         ),
+        if (controller.sendingAttachment)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 6),
+            child: LinearProgressIndicator(minHeight: 2, color: AppColors.primary, backgroundColor: Color(0xFFF0F0F0)),
+          ),
         if (controller.showAttachments)
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -2041,9 +2371,9 @@ class _GroupTripPageState extends State<GroupTripPage> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                _attachmentOption(Icons.camera_alt_outlined, 'Camera'),
-                _attachmentOption(Icons.photo_outlined, 'Gallery'),
-                _attachmentOption(Icons.location_on_outlined, 'Location'),
+                _attachmentOption(Icons.camera_alt_outlined, 'Camera', onTap: () => _sendImageAttachment(context, ImageSource.camera)),
+                _attachmentOption(Icons.photo_outlined, 'Gallery', onTap: () => _sendImageAttachment(context, ImageSource.gallery)),
+                _attachmentOption(Icons.location_on_outlined, 'Location', onTap: () => _sendLocationAttachment(context)),
                 _attachmentOption(Icons.auto_awesome, 'AI Summarise', onTap: () => showAiItinerarySheet(context, controller)),
               ],
             ),
@@ -2083,6 +2413,33 @@ class _GroupTripPageState extends State<GroupTripPage> {
         ),
       ],
     );
+  }
+
+  Future<void> _sendImageAttachment(BuildContext context, ImageSource source) async {
+    final error = await controller.sendImageMessage(source);
+    if (!context.mounted || error == null) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
+  }
+
+  Future<void> _sendLocationAttachment(BuildContext context) async {
+    final error = await controller.sendLocationMessage();
+    if (!context.mounted || error == null) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
+  }
+
+  Future<void> _openLocationInMaps(double lat, double lng) async {
+    final uri = Uri.parse('https://www.google.com/maps/search/?api=1&query=$lat,$lng');
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
+  void _openFullScreenImage(BuildContext context, String imageUrl) {
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => Scaffold(
+        backgroundColor: Colors.black,
+        appBar: AppBar(backgroundColor: Colors.black, iconTheme: const IconThemeData(color: Colors.white)),
+        body: Center(child: InteractiveViewer(child: Image.network(imageUrl))),
+      ),
+    ));
   }
 
   Widget _attachmentOption(IconData icon, String label, {VoidCallback? onTap}) {

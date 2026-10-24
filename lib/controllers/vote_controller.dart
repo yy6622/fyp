@@ -155,6 +155,18 @@ class VoteTabController extends ChangeNotifier {
     return TripRepository.instance.castVote(tripId, vote, optionId, _uid);
   }
 
+  /// Returns true if [label] was added as a new option on [vote] — false
+  /// for a blank label or one that (trimmed, case-insensitive) already
+  /// matches an existing option, same duplicate rule Create Vote uses.
+  Future<bool> addOption(TripVote vote, String label) async {
+    final trimmed = label.trim();
+    if (trimmed.isEmpty) return false;
+    final exists = vote.options.any((o) => o.label.trim().toLowerCase() == trimmed.toLowerCase());
+    if (exists) return false;
+    await TripRepository.instance.addVoteOption(tripId, vote.id, trimmed);
+    return true;
+  }
+
   @override
   void dispose() {
     _sub?.cancel();
@@ -172,12 +184,11 @@ class CreateVoteController extends ChangeNotifier {
 
   final TextEditingController titleController = TextEditingController();
 
-  /// Option 1 and Option 2 always exist and can never be removed (see
-  /// [removeOptionAt]'s guard in create_vote_page.dart).
-  final List<VoteOptionDraft> optionDrafts = [
-    VoteOptionDraft.manual(),
-    VoteOptionDraft.manual(),
-  ];
+  /// Starts empty — the page offers "Type Option" and "From Saved" as
+  /// the two ways to add the first one, rather than opening on two blank
+  /// pre-filled fields nobody asked for. [create] still requires at
+  /// least 2 filled options before a vote can actually be submitted.
+  final List<VoteOptionDraft> optionDrafts = [];
 
   bool _allowAddOptions = true;
   bool get allowAddOptions => _allowAddOptions;
@@ -263,6 +274,10 @@ class CreateVoteController extends ChangeNotifier {
         lastError = 'Duplicate option: "${d.label}" — each option must be different';
         return false;
       }
+    }
+    if (_deadline != null && _deadline!.isBefore(DateTime.now())) {
+      lastError = 'Deadline must be in the future';
+      return false;
     }
     lastError = null;
     _saving = true;

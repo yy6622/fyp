@@ -79,11 +79,11 @@
 </div>
 
 <script type="module">
-import { requireRole } from "../js/auth-guard.js?v=20261007e";
-import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261007e";
-import { mountIcons } from "../js/icons.js?v=20261007e";
-import { listTransactions, listClaims, listRefunds, listPlans } from "../js/data.js?v=20261007e";
-import { money, moneyExact, number, escapeHtml, renderComparisonBars, trendDelta, pointDelta, sumInMonth, countInMonth, countBefore, monthBounds, rateOf } from "../js/ui.js?v=20261007e";
+import { requireRole } from "../js/auth-guard.js?v=20261021";
+import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261021";
+import { mountIcons } from "../js/icons.js?v=20261021";
+import { listTransactions, listClaims, listRefunds, listPlans } from "../js/data.js?v=20261021";
+import { money, moneyExact, number, escapeHtml, renderComparisonBars, trendDelta, pointDelta, sumInMonth, countInMonth, countBefore, monthBounds, rateOf } from "../js/ui.js?v=20261021";
 import { exportReportPdf, exportReportExcel } from "../js/report-export.js?v=20261007e";
 
 mountSidebarNav({ role: "partner", active: "reports" });
@@ -108,9 +108,8 @@ function plainCard(label, value) {
 
 /** Matches a transaction/claim/refund to a plan: by planId when the record
  * has one (real mobile-app purchases always do), falling back to a
- * case-insensitive plan-name match otherwise (console-seeded demo data has
- * no planId — see lib/repositories/insurance_repository.dart vs
- * admin_web/js/seed.js). */
+ * case-insensitive plan-name match otherwise (older records saved before
+ * planId existed have none). */
 function belongsToPlan(item, plan) {
   if (item.planId) return item.planId === plan.id;
   return (item.planName || "").trim().toLowerCase() === (plan.name || "").trim().toLowerCase();

@@ -8,6 +8,7 @@ import '../../theme.dart';
 import '../detail/detail_widgets.dart';
 import '../shared/nice_dialog.dart';
 import 'author_profile_page.dart';
+import 'community_page.dart';
 
 // ---------------------------------------------------------------------
 // Community post detail — hero photo carousel, rating, and an
@@ -118,6 +119,28 @@ class _CommunityPostDetailPageState extends State<CommunityPostDetailPage> {
           return ListView(
             padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
             children: [
+              // Only ever true for the post's own author — watchPosts
+              // already keeps anyone else's view from ever landing here
+              // with an autoFlagged post. See CommunityRepository.createPost.
+              if (post.autoFlagged)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  margin: const EdgeInsets.only(bottom: 14),
+                  decoration: BoxDecoration(color: AppColors.orange.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(10)),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.hourglass_top, size: 15, color: AppColors.orange),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Pending review — our content filter flagged this post, so it\'s only visible to you until an admin checks it.',
+                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.orange),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -180,6 +203,14 @@ class _CommunityPostDetailPageState extends State<CommunityPostDetailPage> {
               ),
               const SizedBox(height: 6),
               Text(post.description, style: const TextStyle(fontSize: 12.5, color: Colors.black87, height: 1.4)),
+              if (post.tags.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: post.tags.map((t) => _tagChip(t)).toList(),
+                ),
+              ],
               const SizedBox(height: 14),
               _photoCarousel(post),
               if (post.images.length > 1) ...[
@@ -193,6 +224,21 @@ class _CommunityPostDetailPageState extends State<CommunityPostDetailPage> {
             ],
           );
         },
+      ),
+    );
+  }
+
+  /// Tapping a tag here opens the Community feed pre-filtered to it (see
+  /// CommunityPage.initialTagFilter) — this page's own [controller] is a
+  /// separate instance from the feed's, so there's no local filter state
+  /// to toggle in place the way the feed card's own chips do.
+  Widget _tagChip(String tag) {
+    return GestureDetector(
+      onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => CommunityPage(initialTagFilter: tag))),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(color: AppColors.chipGrey, borderRadius: BorderRadius.circular(12)),
+        child: Text('#$tag', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.navy)),
       ),
     );
   }
@@ -369,7 +415,7 @@ class _CommunityPostDetailPageState extends State<CommunityPostDetailPage> {
     return ReviewsSection(
       title: post.title,
       ratingSummary: '${post.avgRating.toStringAsFixed(1)} (${_compactCount(post.ratingCount)})',
-      reviewsStream: CommunityRepository.instance.watchReviews(post.id).map((list) => list.map(reviewDataFromPlace).toList()),
+      reviewsStream: CommunityRepository.instance.watchReviews(post.id, myUid: _myUid).map((list) => list.map(reviewDataFromPlace).toList()),
       onSubmitReview: ({required authorId, required authorName, required rating, required comment}) => CommunityRepository.instance.addReview(
         post.id,
         authorId: authorId,

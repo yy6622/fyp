@@ -1,71 +1,10 @@
-// Pure helpers for generateItinerary (see itinerary.js) - no Firebase imports,
-// so they can be unit-tested with plain `node`.
-//
-// buildItineraryPrompt MUST produce exactly what
-// ml/itinerary_model/prompt_format.py build_user_prompt() produces: the
-// tuned model was trained on that format. ml/itinerary_model/test_prompt_parity.py
-// checks the two stay identical.
-//
-// Format v2: the model also sees the group's saved places and the current
-// plan, and answers with changes (add / update / remove).
+// Pure helpers for generateItinerary (see itinerary.js) - no Firebase imports, so they can be
+// tested with plain `node`: parseItineraryAnswer checks the planner's answer, and
+// resolveItineraryAnswer pins it to the real saved places and plan items.
 
 const ICONS = ["flight", "hotel", "shopping", "food", "place", "activity"];
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 
-/**
- * trip: { destination,
- *         days:    [{day, weekday, date}],
- *         members: [name],
- *         saved:   [{name, location, type}],          type: attraction | restaurant
- *         plan:    {day: [{time, label, location, icon}]},
- *         flightArrival: string,                      real booked flight's arrival date+time, '' if none
- *         hotelCheckIn: string,                        real booked hotel's check-in date+time, '' if none
- *         hotelCheckOut: string }                      real booked hotel's check-out date+time, '' if none
- * messages: [{ sender, text }] oldest first
- */
-function buildItineraryPrompt(trip, messages) {
-  const lines = ["TRIP", `destination: ${trip.destination}`, `days: ${trip.days.length}`];
-  for (const d of trip.days) lines.push(`day ${d.day}: ${d.weekday} ${d.date}`);
-  lines.push("members: " + trip.members.join(", "));
-
-  // The real booked flight/hotel times (see TripFlight.arrivalTime,
-  // TripHotelStay.checkIn/checkOut) — so the model can avoid scheduling
-  // day-1 activities before the flight actually lands or before check-in,
-  // and last-day activities after check-out, instead of only guessing
-  // from the generic "day 1 / last day" rule it already has.
-  lines.push("", "LOGISTICS");
-  const logistics = [];
-  if (trip.flightArrival) logistics.push(`flight arrival: ${trip.flightArrival}`);
-  if (trip.hotelCheckIn) logistics.push(`hotel check-in: ${trip.hotelCheckIn}`);
-  if (trip.hotelCheckOut) logistics.push(`hotel check-out: ${trip.hotelCheckOut}`);
-  if (logistics.length) lines.push(...logistics);
-  else lines.push("(none booked yet)");
-
-  lines.push("", "SAVED PLACES");
-  if (trip.saved && trip.saved.length) {
-    for (const s of trip.saved) lines.push(`- ${s.name} | ${s.location} | ${s.type}`);
-  } else {
-    lines.push("(none)");
-  }
-
-  lines.push("", "CURRENT PLAN");
-  for (const d of trip.days) {
-    const items = (trip.plan && trip.plan[d.day]) || [];
-    if (!items.length) {
-      lines.push(`day ${d.day}: (nothing yet)`);
-      continue;
-    }
-    lines.push(`day ${d.day}:`);
-    for (const it of items) lines.push(`- ${it.time} | ${it.label} | ${it.location} | ${it.icon}`);
-  }
-
-  lines.push("", "DISCUSSION");
-  for (const m of messages) {
-    const text = String(m.text).split(/\s+/).filter(Boolean).join(" ");
-    lines.push(`${m.sender}: ${text}`);
-  }
-  return lines.join("\n");
-}
 
 /** The first balanced {...} in the text (string-aware), or null. */
 function firstJsonObject(text) {
@@ -121,6 +60,11 @@ function parseItineraryAnswer(text, dayCount) {
       location: cleanText(it.location, 120),
       icon: ICONS.includes(it.icon) ? it.icon : "activity",
       saved: it.saved === true,
+      // "known": the place is in Voya's place database / the app's catalog (planner/places.js),
+      // so it is a real place even when nobody saved it - no "not in your saved list" warning
+      known: it.known === true,
+      source: ["saved", "voya", "catalog", "pattern"].includes(it.source) ? it.source : "",
+      reason: cleanText(it.reason, 140),
     });
   }
   add.sort((a, b) => a.day - b.day || a.time.localeCompare(b.time) || a.label.localeCompare(b.label));
@@ -228,7 +172,10 @@ function resolveItineraryAnswer(answer, saved, plan) {
       icon: match && match.type === "restaurant" ? "food" : a.icon,
       inSavedList: Boolean(match),
       // hotel check-in / airport runs are never "saved places", so no warning for them
-      warnNotSaved: !match && !logistics,
+      warnNotSaved: !match && !logistics && !a.known,
+      // where the place came from and why it is suggested ("Emily suggested · Alex, Mia agreed")
+      source: match ? "saved" : a.source || "",
+      reason: a.reason || "",
       alreadyInPlan: dayItems(a.day).some((it) => samePlace(it.label, label)),
     });
   }
@@ -236,4 +183,14 @@ function resolveItineraryAnswer(answer, saved, plan) {
   return { add, update, remove, unresolved: answer.unresolved };
 }
 
-module.exports = { buildItineraryPrompt, parseItineraryAnswer, resolveItineraryAnswer, samePlace, ICONS };
+// findOne/firstJsonObject are also exported for optimise_prompt.js (see
+// optimise.js) to reuse — same name-matching/JSON-extraction behaviour,
+// no change to either function itself.
+module.exports = {
+  parseItineraryAnswer,
+  resolveItineraryAnswer,
+  samePlace,
+  findOne,
+  firstJsonObject,
+  ICONS,
+};

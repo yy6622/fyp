@@ -21,6 +21,14 @@ service firebase.storage {
       allow write: if request.auth != null;
     }
 
+    // Chat tab photo attachments (Camera/Gallery, see
+    // chat_attachment_service.dart) — one per upload, grouped by trip.
+    // Same pragmatic "any signed-in user" level as receipts/avatars above.
+    match /chat_images/{tripId}/{fileName} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null;
+    }
+
     // Flight travel documents (e-ticket, boarding pass, passport scan, ...)
     // uploaded from PlanFlightDetailPage's Documents tab — one per upload
     // (see flight_document_service.dart), grouped by trip then flight.
@@ -37,6 +45,23 @@ service firebase.storage {
     // members, so only the owning uid can read/write its own folder.
     match /booking_documents/{uid}/{bookingId}/{fileName} {
       allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // Embassy photos for the admin-curated Country Emergency Info tool
+    // (admin/country-emergency.html, see uploadEmbassyPhoto in js/data.js)
+    // — one photo per country, overwritten in place. Admin-only write
+    // since this is admin-entered reference data shown to every trip
+    // member, not a pragmatic "any signed-in user" upload like the
+    // blocks above; read stays open to any signed-in user so the
+    // Embassy page can show it to every trip member.
+    // Embassy photos — one per (destination, home country) pair now that
+    // a destination can have more than one nationality's embassy (see
+    // country_emergency_info/{countryKey}/embassies/{homeCountryKey} in
+    // firestore.rules). Admin-only write; read open to any signed-in user.
+    match /country_emergency_photos/{countryKey}/{fileName} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null &&
+        firestore.exists(/databases/(default)/documents/admins/$(request.auth.uid));
     }
   }
 }

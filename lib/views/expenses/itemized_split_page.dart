@@ -132,10 +132,24 @@ class _ItemizedSplitPageState extends State<ItemizedSplitPage> {
         niceDialogField(price, 'Price (RM)', icon: Icons.payments_outlined, keyboardType: const TextInputType.numberWithOptions(decimal: true)),
       ],
     );
-    final priceValue = double.tryParse(price.text.trim());
-    if (result == true && label.text.trim().isNotEmpty && priceValue != null && priceValue > 0) {
-      widget.controller.addItem(label.text.trim(), priceValue);
+    if (result != true) return;
+    final p = price.text.trim();
+    final priceValue = double.tryParse(p);
+    // say what is wrong instead of silently dropping the item
+    final problem = label.text.trim().isEmpty
+        ? 'Give the item a name'
+        : priceValue == null || !RegExp(r'^\d+(\.\d{1,2})?$').hasMatch(p)
+            ? 'Price: numbers only, up to 2 decimal places'
+            : priceValue <= 0
+                ? 'Price must be more than RM 0'
+                : priceValue > 1000000
+                    ? 'Price can\'t be more than RM 1,000,000'
+                    : null;
+    if (problem != null) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(problem)));
+      return;
     }
+    widget.controller.addItem(label.text.trim(), priceValue!);
   }
 
   void _openFriendPicker(int index, ReceiptItem item) {

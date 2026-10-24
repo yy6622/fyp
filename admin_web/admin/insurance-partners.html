@@ -6,8 +6,8 @@
 <title>Insurance Partners — Voya Admin</title>
 <link rel="stylesheet" href="../css/tokens.css?v=20261006b" />
 <link rel="stylesheet" href="../css/base.css?v=20261006b" />
-<link rel="stylesheet" href="../css/layout.css?v=20261006b" />
-<link rel="stylesheet" href="../css/components.css?v=20261006b" />
+<link rel="stylesheet" href="../css/layout.css?v=20261021" />
+<link rel="stylesheet" href="../css/components.css?v=20261021c" />
 </head>
 <body>
 <div class="shell">
@@ -42,13 +42,14 @@
         <option value="approved">Approved</option>
         <option value="suspended">Suspended</option>
         <option value="rejected">Rejected</option>
+        <option value="blocked">Blocked</option>
       </select>
     </div>
 
     <div class="table-wrap scroll-x">
       <table class="data-table">
-        <thead><tr><th>Organization</th><th>Email</th><th>Registered</th><th>Status</th><th></th></tr></thead>
-        <tbody id="tableBody"><tr><td colspan="5"><div class="skeleton" style="height:40px;"></div></td></tr></tbody>
+        <thead><tr><th></th><th>Organization</th><th>Email</th><th>Registered</th><th>Status</th><th></th></tr></thead>
+        <tbody id="tableBody"><tr><td colspan="6"><div class="skeleton" style="height:40px;"></div></td></tr></tbody>
       </table>
       <div class="empty-state" id="emptyState" style="display:none;">
         <span data-icon="building" class="icon-lg"></span>
@@ -64,11 +65,11 @@
 </div>
 
 <script type="module">
-import { requireRole } from "../js/auth-guard.js?v=20261007f";
-import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261007f";
-import { mountIcons } from "../js/icons.js?v=20261007f";
-import { listPartners, setPartnerStatus } from "../js/data.js?v=20261007f";
-import { fullDate, statusBadge, escapeHtml, paginate, renderPager, toast, setBusy, confirmDialog } from "../js/ui.js?v=20261007f";
+import { requireRole } from "../js/auth-guard.js?v=20261021";
+import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261021";
+import { mountIcons } from "../js/icons.js?v=20261021";
+import { listPartners, setPartnerStatus } from "../js/data.js?v=20261021";
+import { fullDate, timeAgo, statusBadge, escapeHtml, paginate, renderPager, toast, setBusy, confirmDialog, promptDialog, detailDialog } from "../js/ui.js?v=20261021";
 
 mountSidebarNav({ role: "admin", active: "insurance" });
 const session = await requireRole("admin", "login.html");
@@ -97,6 +98,17 @@ function applyFilters() {
   renderTable();
 }
 
+/** Small round avatar for the org's uploaded logo (admin_web/partner/
+ * organization.html), falling back to an initial badge when they haven't
+ * uploaded one yet. */
+function partnerAvatar(p) {
+  const initial = escapeHtml((p.companyName || "?").trim().charAt(0).toUpperCase() || "?");
+  const style = "width:30px;height:30px;border-radius:50%;flex:none;";
+  return p.logoUrl
+    ? `<img src="${escapeHtml(p.logoUrl)}" alt="" style="${style}object-fit:cover;border:1px solid var(--border);" onerror="this.outerHTML='<div style=&quot;${style}background:var(--teal-100);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;color:var(--teal-600);&quot;>${initial}</div>';" />`
+    : `<div style="${style}background:var(--teal-100);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;color:var(--teal-600);">${initial}</div>`;
+}
+
 function renderTable() {
   const { pageItems, pages, total } = paginate(filtered, page, PAGE_SIZE);
   const body = document.getElementById("tableBody");
@@ -105,7 +117,8 @@ function renderTable() {
   else {
     empty.style.display = "none";
     body.innerHTML = pageItems.map((p) => `
-      <tr>
+      <tr style="cursor:pointer;" data-open-partner="${p.id}">
+        <td>${partnerAvatar(p)}</td>
         <td class="cell-strong">${escapeHtml(p.companyName || "—")}</td>
         <td class="muted">${escapeHtml(p.email || "—")}</td>
         <td class="muted">${fullDate(p.createdAt)}</td>
@@ -116,15 +129,19 @@ function renderTable() {
               ? `<button class="btn btn-primary btn-sm" data-approve="${p.id}">Approve</button><button class="btn btn-danger-outline btn-sm" data-reject="${p.id}">Reject</button>`
               : p.status === "approved"
                 ? `<button class="btn btn-danger-outline btn-sm" data-suspend="${p.id}">Suspend</button>`
-                : p.status === "suspended"
+                : p.status === "suspended" || p.status === "rejected" || p.status === "blocked"
                   ? `<button class="btn btn-primary btn-sm" data-approve="${p.id}">Re-approve</button>`
                   : ""}
           </div>
         </td>
       </tr>`).join("");
-    body.querySelectorAll("[data-approve]").forEach((b) => b.addEventListener("click", () => setStatus(b.dataset.approve, "approved", b)));
-    body.querySelectorAll("[data-suspend]").forEach((b) => b.addEventListener("click", () => setStatus(b.dataset.suspend, "suspended", b)));
-    body.querySelectorAll("[data-reject]").forEach((b) => b.addEventListener("click", () => setStatus(b.dataset.reject, "rejected", b)));
+    body.querySelectorAll("[data-open-partner]").forEach((row) => row.addEventListener("click", (e) => {
+      if (e.target.closest(".row-actions")) return;
+      openPartnerDetail(row.dataset.openPartner);
+    }));
+    body.querySelectorAll("[data-approve]").forEach((b) => b.addEventListener("click", (e) => { e.stopPropagation(); setStatus(b.dataset.approve, "approved", b); }));
+    body.querySelectorAll("[data-suspend]").forEach((b) => b.addEventListener("click", (e) => { e.stopPropagation(); setStatus(b.dataset.suspend, "suspended", b); }));
+    body.querySelectorAll("[data-reject]").forEach((b) => b.addEventListener("click", (e) => { e.stopPropagation(); setStatus(b.dataset.reject, "rejected", b); }));
   }
   document.getElementById("resultsLabel").textContent = total
     ? `Showing ${(page - 1) * PAGE_SIZE + 1} to ${Math.min(page * PAGE_SIZE, total)} of ${total} results` : "No results";
@@ -132,20 +149,74 @@ function renderTable() {
   mountIcons(document);
 }
 
+// Read-only popup with the partner's full registration info, plus the
+// right action button(s) for whatever their current status is — so
+// reviewing and acting can happen from one place instead of hunting back
+// down to the row. Mirrors admin/insurance.html's pending-card version,
+// but covers every status this full directory can show (approved,
+// suspended, rejected, blocked), not just pending.
+function openPartnerDetail(uid) {
+  const p = partners.find((x) => x.id === uid);
+  if (!p) return;
+  const status = p.status || "pending";
+  const rows = [
+    { label: "Registration no.", value: escapeHtml(p.registrationNumber) },
+    { label: "Email", value: escapeHtml(p.email) },
+    { label: "Phone", value: escapeHtml(p.phone) },
+    { label: "Contact person", value: escapeHtml(p.contact?.fullName) },
+    { label: "Contact designation", value: escapeHtml(p.contact?.designation) },
+    { label: "Contact email", value: escapeHtml(p.contact?.email) },
+    { label: "Contact phone", value: escapeHtml(p.contact?.phone) },
+    {
+      label: "Address",
+      value: [p.address?.line1, p.address?.city, p.address?.state, p.address?.postalCode].filter(Boolean).map(escapeHtml).join(", "),
+    },
+    { label: "Registered", value: fullDate(p.createdAt) },
+    { label: "Status", value: statusBadge(status === "approved" ? "active" : status) },
+  ];
+  if (status === "rejected" || status === "blocked") {
+    rows.push({ label: "Rejection reason", value: p.rejectionReason ? escapeHtml(p.rejectionReason) : "<span class=\"muted\">No reason given</span>" });
+    rows.push({ label: "Rejected", value: p.rejectedAt ? `${fullDate(p.rejectedAt)} (${timeAgo(p.rejectedAt)})` : "—" });
+  }
+  if (status === "blocked") {
+    rows.push({ label: "Blocked", value: p.blockedAt ? fullDate(p.blockedAt) : "—" });
+  }
+
+  const actions = [];
+  if (status === "pending") {
+    actions.push({ text: "Reject", className: "btn-danger-outline", onClick: () => setStatus(uid, "rejected") });
+    actions.push({ text: "Approve", className: "btn-primary", onClick: () => setStatus(uid, "approved") });
+  } else if (status === "approved") {
+    actions.push({ text: "Suspend", className: "btn-danger-outline", onClick: () => setStatus(uid, "suspended") });
+  } else if (status === "suspended" || status === "rejected" || status === "blocked") {
+    actions.push({ text: "Re-approve", className: "btn-primary", onClick: () => setStatus(uid, "approved") });
+  }
+
+  detailDialog({ title: p.companyName || "—", subtitle: `Insurance partner — ${status}`, rows, actions });
+}
+
 async function setStatus(uid, status, btn) {
+  let rejectionReason = "";
   if (status === "suspended") {
     const ok = await confirmDialog({ title: "Suspend this partner?", body: "They'll lose access to publish plans or handle claims until re-approved.", confirmText: "Suspend", danger: true });
     if (!ok) return;
   }
   if (status === "rejected") {
-    const ok = await confirmDialog({ title: "Reject this application?", body: "They won't be able to publish plans or handle claims. This can be undone later by approving them.", confirmText: "Reject", danger: true });
-    if (!ok) return;
+    const result = await promptDialog({
+      title: "Reject this application?",
+      body: "They won't be able to publish plans or handle claims. We'll let them know why, and their account will be automatically blocked if this isn't resolved within 30 days. This can be undone later by approving them.",
+      label: "Reason (shown to the partner)",
+      placeholder: "e.g. Registration number couldn't be verified — please re-submit with supporting documents.",
+      confirmText: "Reject", danger: true,
+    });
+    if (!result.confirmed) return;
+    rejectionReason = result.value;
   }
   setBusy(btn, true, "Working…");
   try {
-    await setPartnerStatus(uid, status);
+    await setPartnerStatus(uid, status, status === "rejected" ? { rejectionReason } : {});
     const p = partners.find((x) => x.id === uid);
-    if (p) p.status = status;
+    if (p) { p.status = status; if (status === "rejected") p.rejectionReason = rejectionReason; }
     applyFilters();
     toast(status === "approved" ? "Partner approved." : status === "rejected" ? "Partner application rejected." : "Partner suspended.", "success");
   } catch (err) {

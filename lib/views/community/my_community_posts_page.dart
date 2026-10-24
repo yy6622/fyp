@@ -162,11 +162,12 @@ class _MyCommunityPostsPageState extends State<MyCommunityPostsPage> {
                       Text(post.avgRating.toStringAsFixed(1), style: const TextStyle(fontSize: 11, color: AppColors.textGrey)),
                     ],
                   ),
-                  if (post.myRating > 0 || reviewed) ...[
+                  if (post.myRating > 0 || reviewed || post.autoFlagged) ...[
                     const SizedBox(height: 6),
                     Wrap(
                       spacing: 6,
                       children: [
+                        if (post.autoFlagged) _youBadge(Icons.hourglass_top, 'Pending review', color: AppColors.orange),
                         if (post.myRating > 0) _youBadge(Icons.star, 'You rated ${post.myRating}★'),
                         if (reviewed) _youBadge(Icons.chat_bubble_outline, 'You reviewed'),
                       ],
@@ -181,16 +182,16 @@ class _MyCommunityPostsPageState extends State<MyCommunityPostsPage> {
     );
   }
 
-  Widget _youBadge(IconData icon, String label) {
+  Widget _youBadge(IconData icon, String label, {Color color = AppColors.primary}) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(8)),
+      decoration: BoxDecoration(color: color.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(8)),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 11, color: AppColors.primary),
+          Icon(icon, size: 11, color: color),
           const SizedBox(width: 3),
-          Text(label, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: AppColors.primary)),
+          Text(label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: color)),
         ],
       ),
     );

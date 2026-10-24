@@ -1,36 +1,18 @@
-const fs = require("fs");
-const path = require("path");
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
-const { defineSecret } = require("firebase-functions/params");
 const { initializeApp, getApps } = require("firebase-admin/app");
-const { buildItineraryPrompt, parseItineraryAnswer, resolveItineraryAnswer } = require("./itinerary_prompt");
+const { parseItineraryAnswer, resolveItineraryAnswer } = require("./itinerary_prompt");
+const { computeLogisticsWindow, withinWindow } = require("./logistics");
 
 if (getApps().length === 0) initializeApp();
 
-// Free-tier Gemini Developer API key (ai.google.dev / Google AI Studio) —
-// NOT Vertex AI, a different product with no billing account attached at
-// all. Set once with: firebase functions:secrets:set GEMINI_API_KEY
-// (same key value as lib/config/secrets.dart's geminiApiKey — see that
-// file's comment for where to get one free).
-//
-// This replaces the old Vertex AI call, which used a custom fine-tuned
-// model (see ml/itinerary_model/). Vertex AI requires a billing account,
-// and this project's billing account hit a "dunning" (payment-failed)
-// hold that blocked it outright — moving here trades that away entirely.
-// The real cost: a fine-tuned model can't be deployed on the free
-// Developer API (tuning/serving a tuned model is Vertex-only and paid),
-// so this now always calls the untuned base model below. Per
-// ml/itinerary_model/'s own eval, the tuned model scored noticeably
-// higher (decision_f1 ~95% tuned vs ~83-87% untuned) — the base model is
-// still useful, just less precise about which chat messages represent a
-// real decision vs. idle chatter.
-const geminiApiKey = defineSecret("GEMINI_API_KEY");
-const BASE_MODEL = "gemini-3.5-flash";
+// No Gemini / external model: Voya's own trained model (functions/discussion_summary/) reads
+// who agreed / objected, and the planner (functions/planner/) only plans REAL places named in
+// the chat (saved list, the app's catalog for this city, Voya's place database, name patterns),
+// then organises them into days (itinerary_engine.js). No chat message is ever copied into the
+// plan as an activity.
 const MAX_MESSAGES = 300;
 const MAX_SAVED = 60;
 
-// Same text the model was tuned with - a copy of ml/itinerary_model/system_prompt.txt.
-const SYSTEM_PROMPT = fs.readFileSync(path.join(__dirname, "itinerary_system_prompt.txt"), "utf8").trim();
 
 // One line of the prompt per field, "|" is the field separator.
 const oneLine = (v) => String(v || "").replace(/[|\s]+/g, " ").trim();
@@ -47,7 +29,14 @@ async function loadSavedPlaces(db, tripId, memberIds) {
     for (let i = 0; i < keys.length; i += 30) { // array-contains-any takes at most 30 values
       queries.push(
         db.collection(collection).where("favoritedBy", "array-contains-any", keys.slice(i, i + 30)).get()
-          .then((snap) => snap.docs.map((d) => ({ name: oneLine(d.get("name")), location: oneLine(d.get("location")), type }))),
+          .then((snap) => snap.docs.map((d) => ({
+            name: oneLine(d.get("name")), location: oneLine(d.get("location")), type,
+            // what kind of place it is - lets "a museum" / "本帮菜" in the chat find it (planner/needs.js)
+            category: oneLine(d.get("category")),
+            categories: (d.get("categories") || []).map(oneLine),
+            cuisineTags: (d.get("cuisineTags") || []).map(oneLine),
+            recommendedDuration: oneLine(d.get("recommendedDuration")),
+          }))),
       );
     }
   }
@@ -62,38 +51,42 @@ async function loadSavedPlaces(db, tripId, memberIds) {
   return saved.sort((a, b) => a.name.localeCompare(b.name)).slice(0, MAX_SAVED);
 }
 
-/**
- * The free Gemini Developer API returns 503 ("model is overloaded, please
- * try again later") noticeably more often than the paid Vertex AI path did
- * — the free tier gets lower priority under load. That's normally gone a
- * few seconds later, so retrying a couple of times here (short, increasing
- * delays) turns a transient blip into a slightly-slower success instead of
- * a failed request the person has to notice and retry by hand. A
- * non-overload error (bad key, bad request, safety block, ...) isn't
- * transient, so it's thrown immediately instead of wasting the retries.
- */
-async function callGeminiWithRetry(ai, prompt, attempts = 3) {
-  for (let i = 0; i < attempts; i++) {
-    try {
-      const response = await ai.models.generateContent({
-        model: BASE_MODEL,
-        contents: prompt,
-        config: {
-          systemInstruction: SYSTEM_PROMPT,
-          temperature: 0,
-          responseMimeType: "application/json",
-          maxOutputTokens: 8192,
-        },
-      });
-      return response.text;
-    } catch (err) {
-      const message = String((err && err.message) || "");
-      const overloaded = err && (err.status === 503 || /\b503\b|overloaded|UNAVAILABLE/i.test(message));
-      if (!overloaded || i === attempts - 1) throw err;
-      console.warn(`generateItinerary model overloaded, retrying (${i + 1}/${attempts})`, message);
-      await new Promise((resolve) => setTimeout(resolve, 1500 * (i + 1)));
-    }
+/** Hotels any member saved for this trip (Explore): used when the chat agreed on an area but nothing is booked. */
+async function loadSavedHotels(db, tripId, memberIds) {
+  const keys = memberIds.map((uid) => `${uid}#${tripId}`);
+  const queries = [];
+  for (let i = 0; i < keys.length; i += 30) {
+    queries.push(db.collection("catalog_hotels").where("favoritedBy", "array-contains-any", keys.slice(i, i + 30)).get()
+      .then((snap) => snap.docs.map((d) => ({ name: oneLine(d.get("name")), location: oneLine(d.get("location") || d.get("address")) }))));
   }
+  const seen = new Set();
+  return (await Promise.all(queries)).flat().filter((h) => h.name && !seen.has(h.name.toLowerCase()) && seen.add(h.name.toLowerCase()));
+}
+
+/** The app's catalog places for the trip's city (not only the saved ones): more names the planner can recognise. */
+async function loadCatalogPlaces(db, destination) {
+  const key = String(destination || "").trim().toLowerCase();
+  if (!key) return [];
+  const sources = [["catalog_attractions", "attraction"], ["catalog_restaurants", "restaurant"]];
+  const lists = await Promise.all(sources.map(async ([collection, type]) => {
+    try {
+      const snap = await db.collection(collection).where("destinationQuery", "==", key).limit(150).get();
+      // the bulk restaurant import stores 'location' as a GeoPoint, not text
+      const text = (v) => (typeof v === "string" ? oneLine(v) : "");
+      const geo = (d) => { const l = d.get("location"); return l && typeof l === "object" && "latitude" in l ? l : null; };
+      return snap.docs.map((d) => ({ name: oneLine(d.get("name")), location: text(d.get("address")) || text(d.get("location")), type,
+        // what kind of place it is: lets "夜市" / "a café" find it when nobody saved one (planner/needs.js)
+        category: oneLine(d.get("category")),
+        categories: (d.get("categories") || []).map(oneLine),
+        cuisineTags: (d.get("cuisineTags") || []).map(oneLine),
+        // the area it is in, for keeping one area on one day (planner/schedule.js)
+        district: oneLine(d.get("district")),
+        lat: d.get("lat") ?? (geo(d) && geo(d).latitude), lng: d.get("lng") ?? (geo(d) && geo(d).longitude) }));
+    } catch (err) {
+      return [];      // the catalog only adds names; never fail AI Summarise over it
+    }
+  }));
+  return lists.flat().filter((p) => p.name);
 }
 
 /**
@@ -112,7 +105,10 @@ async function callGeminiWithRetry(ai, prompt, attempts = 3) {
  *   savedCount: number,
  * }
  */
-exports.generateItinerary = onCall({ timeoutSeconds: 120, memory: "512MiB", secrets: [geminiApiKey] }, async (request) => {
+exports.loadSavedPlaces = loadSavedPlaces;
+exports.loadCatalogPlaces = loadCatalogPlaces;
+
+exports.generateItinerary = onCall({ timeoutSeconds: 120, memory: "512MiB" }, async (request) => {
   if (!request.auth) throw new HttpsError("unauthenticated", "Sign in first.");
   const tripId = request.data && request.data.tripId;
   if (typeof tripId !== "string" || !tripId) throw new HttpsError("invalid-argument", "tripId is required.");
@@ -133,19 +129,21 @@ exports.generateItinerary = onCall({ timeoutSeconds: 120, memory: "512MiB", secr
   const dayKeys = Object.keys(daysRaw).sort((a, b) => Number(a) - Number(b));
   if (dayKeys.length === 0) throw new HttpsError("failed-precondition", "This trip has no days yet.");
 
-  const [msgSnap, saved] = await Promise.all([
+  const [msgSnap, saved, catalog, savedHotels] = await Promise.all([
     tripRef.collection("messages").orderBy("createdAt", "desc").limit(MAX_MESSAGES).get(),
     // A saved-list failure must not block the whole feature: carry on without it.
     loadSavedPlaces(db, tripId, trip.memberIds).catch((err) => {
       console.error("generateItinerary could not read saved places", err);
       return [];
     }),
+    loadCatalogPlaces(db, trip.destination),
+    loadSavedHotels(db, tripId, trip.memberIds).catch(() => []),
   ]);
   const messages = msgSnap.docs
-    .map((d) => d.data())
+    .map((d) => ({ id: d.id, ...d.data() }))
     .reverse()
     .filter((m) => typeof m.text === "string" && m.text.trim())
-    .map((m) => ({ sender: (m.senderName || "Member").trim() || "Member", text: m.text }));
+    .map((m) => ({ id: m.id, speaker: String(m.senderName || "Member").trim() || "Member", text: m.text }));
   if (messages.length === 0) {
     throw new HttpsError("failed-precondition", "There is no discussion in this group yet.");
   }
@@ -166,71 +164,64 @@ exports.generateItinerary = onCall({ timeoutSeconds: 120, memory: "512MiB", secr
       .sort((a, b) => a.time.localeCompare(b.time) || a.label.localeCompare(b.label));
   });
 
-  // The real booked flight/hotel for this trip, if any — same Firestore
-  // doc already fetched above (trip.flights / trip.hotelStays, written by
-  // TripRepository.addFlight/addHotelStay), just not read until now. When
-  // there's more than one, the first booked is used as the reference —
-  // good enough for "when do we land / when can we check in", which is
-  // the only thing this is for (see buildItineraryPrompt's LOGISTICS
-  // section); it isn't trying to model a full multi-leg itinerary.
-  const firstFlight = Array.isArray(trip.flights) && trip.flights.length ? trip.flights[0] : null;
-  const firstHotel = Array.isArray(trip.hotelStays) && trip.hotelStays.length ? trip.hotelStays[0] : null;
-
-  const prompt = buildItineraryPrompt(
-    {
-      destination: trip.destination || "",
-      days: dayKeys.map((k, i) => ({ day: i + 1, weekday: daysRaw[k].weekday || "", date: daysRaw[k].date || "" })),
-      members: Object.values(trip.memberNames || {}).map(String),
-      saved,
-      plan,
-      flightArrival: firstFlight ? oneLine(firstFlight.arrivalTime || firstFlight.dateTime) : "",
-      hotelCheckIn: firstHotel ? oneLine(firstHotel.checkIn) : "",
-      hotelCheckOut: firstHotel ? oneLine(firstHotel.checkOut) : "",
-    },
-    messages,
-  );
-
-  let text;
+  const days = dayKeys.map((k, i) => ({ day: i + 1, weekday: daysRaw[k].weekday || "", date: daysRaw[k].date || "" }));
+  const window = computeLogisticsWindow(trip, dayKeys.length);
+  let built;
   try {
-    const { GoogleGenAI } = require("@google/genai");
-    // Plain API-key auth against the free Gemini Developer API — no
-    // `vertexai: true`, no project/location, nothing billed. See the
-    // geminiApiKey comment above for why this is no longer Vertex AI.
-    const ai = new GoogleGenAI({ apiKey: geminiApiKey.value() });
-    text = await callGeminiWithRetry(ai, prompt);
+    const { buildItinerary } = require("./itinerary_engine");
+    const { loadModel } = require("./discussion_summary/load_model");
+    built = await buildItinerary({
+      messages, members: trip.memberIds, days, plan, saved, catalog, model: loadModel().model,
+      destination: trip.destination || "", window,
+      hasHotel: Array.isArray(trip.hotelStays) && trip.hotelStays.length > 0,
+      // booked flights and hotel stays: the plan is built around them (planner/logistics_plan.js)
+      flights: Array.isArray(trip.flights) ? trip.flights : [],
+      hotelStays: Array.isArray(trip.hotelStays) ? trip.hotelStays : [],
+      savedHotels,
+      // a wish nobody named a place for ("夜市"): catalog_places, then OpenStreetMap (planner/osm_places.js)
+      lookupNeed: require("./planner/osm_places").makeNeedLookup({ db, destination: trip.destination || "" }),
+      decisions: trip.discussionDecisions || null,
+    });
   } catch (err) {
-    // The raw SDK/HTTP error (status codes, JSON error bodies, stack
-    // traces) is exactly what a programmer debugging this would want, and
-    // exactly what a trip member tapping "AI Summarise" should never see.
-    // It goes to the server log ONLY (`firebase functions:log`, or Cloud
-    // Logging) — the HttpsError thrown below carries just a short, plain
-    // sentence, which is all that reaches the app (see
-    // ItineraryAiService._generate on the Flutter side).
-    console.error("generateItinerary model call failed", err);
-    const message = String((err && err.message) || "");
-    const overloaded = err && (err.status === 503 || /\b503\b|overloaded|UNAVAILABLE/i.test(message));
-    throw new HttpsError(
-      "unavailable",
-      overloaded
-        ? "AI Summarise is getting a lot of requests right now. Please wait a moment and try again."
-        : "AI Summarise could not finish right now. Please try again.",
-    );
+    console.error("generateItinerary failed", err);
+    throw new HttpsError("internal", "AI Summarise could not finish right now. Please try again.");
   }
-
-  const answer = parseItineraryAnswer(text, dayKeys.length);
-  if (!answer) {
-    console.error("generateItinerary unparseable answer", text);
-    throw new HttpsError("internal", "The itinerary model returned something unreadable. Try again.");
-  }
+  // Same validation as before: only well-formed entries on days that exist.
+  const answer = parseItineraryAnswer(JSON.stringify(built.answer), dayKeys.length);
+  if (!answer) throw new HttpsError("internal", "AI Summarise could not finish right now. Please try again.");
 
   const resolved = resolveItineraryAnswer(answer, saved, plan);
+
+  // Belt-and-braces: the prompt *asks* the model to respect real flight/
+  // hotel times (rule 9), but nothing stopped it from getting that wrong —
+  // this is what actually enforces it, regardless of what the model said.
+  // Only applies where a real flight timestamp exists at all (see
+  // logistics.js's doc comment); otherwise it's a no-op, same behaviour as
+  // before this existed.
+  // the window now also has the typed-in flights and the chat's arrival time (planner/logistics_plan.js);
+  // flight / hotel rows themselves are exempt (a check-out can be before the flight-home cut-off)
+  const win = built.window || window;
+  resolved.add = resolved.add.filter((a) => a.icon === "hotel" || withinWindow(win, a.day, a.time));
+  resolved.update = resolved.update.filter((u) => withinWindow(win, u.day, u.time));
+
   const dayIndex = (day) => Number(dayKeys[day - 1]);
   return {
     add: resolved.add.map((a) => ({ ...a, dayIndex: dayIndex(a.day) })),
     update: resolved.update.map((u) => ({ ...u, fromDayIndex: dayIndex(u.fromDay), toDayIndex: dayIndex(u.toDay) })),
     remove: resolved.remove.map((r) => ({ ...r, dayIndex: dayIndex(r.day) })),
     unresolved: resolved.unresolved,
+    // wishes without a place yet ("Dessert", "Shopping mall (if it rains)") - see planner/needs.js
+    ideas: (built.ideas || []).slice(0, 8),
+    // the booked flights / hotel stays the plan was built around, as {day, dayIndex, time, label, kind}
+    logistics: {
+      fixed: ((built.logistics && built.logistics.fixed) || []).map((f) => ({ ...f, dayIndex: dayIndex(f.day) })),
+      flightsBooked: Boolean(built.logistics && built.logistics.flightsBooked),
+      hotelsBooked: Boolean(built.logistics && built.logistics.stays.length),
+    },
     messageCount: messages.length,
     savedCount: saved.length,
+    engine: "voya-planner",
+    openai: built.stats.openai,
+    relaxed: built.stats.relaxed,
   };
 });

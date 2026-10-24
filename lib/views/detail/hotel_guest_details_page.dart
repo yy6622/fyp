@@ -30,6 +30,12 @@ class HotelGuestDetailsPage extends StatefulWidget {
   final String bookingSubtitle;
   final String refId;
   final String tripId;
+  // Dates already chosen earlier in the flow (edited on the hotel's own
+  // detail page, before "Select Hotel" was even tapped) — seeds the Stay
+  // Dates fields and [controller] instead of starting blank every time,
+  // so a date picked there isn't silently thrown away on this page.
+  final DateTime? initialCheckIn;
+  final DateTime? initialCheckOut;
   final Future<void> Function(BookingConfirmation confirmation)? onPaid;
 
   const HotelGuestDetailsPage({
@@ -43,6 +49,8 @@ class HotelGuestDetailsPage extends StatefulWidget {
     required this.bookingSubtitle,
     this.refId = '',
     this.tripId = '',
+    this.initialCheckIn,
+    this.initialCheckOut,
     this.onPaid,
   });
 
@@ -51,7 +59,10 @@ class HotelGuestDetailsPage extends StatefulWidget {
 }
 
 class _HotelGuestDetailsPageState extends State<HotelGuestDetailsPage> {
-  late final HotelGuestDetailsController controller = HotelGuestDetailsController();
+  late final HotelGuestDetailsController controller = HotelGuestDetailsController(
+    checkIn: widget.initialCheckIn,
+    checkOut: widget.initialCheckOut,
+  );
 
   final TextEditingController _nameCtrl = TextEditingController();
   final TextEditingController _emailCtrl = TextEditingController();
@@ -69,6 +80,8 @@ class _HotelGuestDetailsPageState extends State<HotelGuestDetailsPage> {
   @override
   void initState() {
     super.initState();
+    if (controller.checkIn != null) _checkInCtrl.text = formatLongDate(controller.checkIn!);
+    if (controller.checkOut != null) _checkOutCtrl.text = formatLongDate(controller.checkOut!);
     if (widget.tripId.isNotEmpty) {
       final uid = AuthService.instance.currentUser?.uid ?? '';
       TripRepository.instance.watchTrip(widget.tripId, uid).first.then((trip) {

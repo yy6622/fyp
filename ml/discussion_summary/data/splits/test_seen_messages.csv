@@ -1,0 +1,1700 @@
+﻿message_id,conv_id,source,speaker,message,label
+m001,tpl-0024,template,Priya,真的假的,OTHER
+m002,tpl-0024,template,Ethan,Let's go Seoul this year!,DESTINATION
+m003,tpl-0024,template,Priya,那边比较方便,DESTINATION
+m004,tpl-0024,template,Ethan,呵呵,OTHER
+m005,tpl-0024,template,Zara,Aku nak masa shopping lebih,PREFERENCE
+m006,tpl-0024,template,Aiman,mantap,OTHER
+m007,tpl-0024,template,Zara,Seoul boleh,DECISION
+m008,tpl-0024,template,Aiman,morninggg,OTHER
+m009,tpl-0024,template,Priya,就首尔吧,DECISION
+m010,tpl-0024,template,Ethan,let's do myeongdong in the afternoon,ATTRACTION
+m011,tpl-0024,template,Priya,明洞我同意,DECISION
+m012,tpl-0024,template,Zara,myeongdong nanti la fikir,DECISION
+m013,tpl-0024,template,Aiman,ok Seoul sounds good ah,DECISION
+m014,tpl-0024,template,Ethan,I'm thinking ihwa mural village for day 4 ya,ATTRACTION
+m015,tpl-0024,template,Aiman,可以啊,DECISION
+m016,tpl-0024,template,Priya,i'm in for ihwa mural village ah,DECISION
+m017,tpl-0024,template,Aiman,yo guys 😅,OTHER
+m018,tpl-0024,template,Priya,那就这样定了，ihwa mural village,DECISION
+m019,tpl-0024,template,Zara,Aku free 7 hingga 10 November,DATE
+m020,tpl-0024,template,Priya,那就这样定了，11月7号到10号,DECISION
+m021,tpl-0024,template,Ethan,收到收到,OTHER
+m022,tpl-0024,template,Zara,ihwa mural village boleh 🤔,DECISION
+m023,tpl-0024,template,Zara,alamak,OTHER
+m024,tpl-0024,template,Aiman,"lotte world best tau, nak pergi tak?",ATTRACTION
+m025,tpl-0024,template,Ethan,是哦,OTHER
+m026,tpl-0024,template,Aiman,"can we not walk too much, my knee pain",PREFERENCE
+m027,tpl-0024,template,Zara,boleh je,DECISION
+m028,tpl-0024,template,Aiman,"settle, lotte world",DECISION
+m029,tpl-0024,template,Ethan,"I can only afford RM2,000 each max",BUDGET
+m030,tpl-0024,template,Zara,+1 for RM2000 la 😊,DECISION
+m031,tpl-0024,template,Aiman,"settled, rm2000 it is",DECISION
+m032,tpl-0024,template,Priya,要不要去南山塔？,ATTRACTION
+m033,tpl-0024,template,Priya,😂~,OTHER
+m034,tpl-0024,template,Aiman,👍,DECISION
+m035,tpl-0024,template,Zara,南山塔我同意,DECISION
+m036,tpl-0024,template,Ethan,南山塔就这样决定,DECISION
+m037,tpl-0024,template,Ethan,南怡岛听说很值得去,ATTRACTION
+m038,tpl-0024,template,Aiman,定了！南怡岛,DECISION
+m039,tpl-0024,template,Zara,"Hotel Jen Mapo murah gila, RM250 semalam",ACCOMMODATION
+m040,tpl-0024,template,Aiman,我看了dongdaemun附近的airbnb，评价不错,ACCOMMODATION
+m041,tpl-0024,template,Ethan,termasuk sarapan,ACCOMMODATION
+m042,tpl-0024,template,Priya,行程不要太赶,PREFERENCE
+m043,tpl-0024,template,Zara,boleh,DECISION
+m044,tpl-0024,template,Ethan,agree,DECISION
+m045,tpl-0024,template,Priya,我ok,DECISION
+m046,tpl-0024,template,Aiman,we can take the metro lah,TRANSPORT
+m047,tpl-0024,template,Ethan,坐地铁太贵了,DECISION
+m048,tpl-0024,template,Priya,我们去仁寺洞吧,ATTRACTION
+m049,tpl-0024,template,Priya,Aku book insadong sekarang,DECISION
+m001,tpl-0069,template,Lisa,Apa kata kita pergi Pulau Pinang?,DESTINATION
+m002,tpl-0069,template,Lisa,我在上班,OTHER
+m003,tpl-0069,template,Uma,"Pulau Pinang dah pergi, Seoul pulak?",DESTINATION
+m004,tpl-0069,template,Ivy,Tengok dulu,DECISION
+m005,tpl-0069,template,Lisa,第4天去南怡岛怎么样,ATTRACTION
+m006,tpl-0069,template,Ivy,boleh je,DECISION
+m007,tpl-0069,template,Zara,agree with nami island,DECISION
+m008,tpl-0069,template,Zara,Seoul on,DECISION
+m009,tpl-0069,template,Ivy,aku free 9 hingga 14 disember,DATE
+m010,tpl-0069,template,Uma,"9 hingga 14 Disember aku tak boleh, 3 hingga 6 September?",DATE
+m011,tpl-0069,template,Zara,so 3 to 6 sep confirm ya,DECISION
+m012,tpl-0069,template,Uma,let's keep it under RM 2000 per head,BUDGET
+m013,tpl-0069,template,Ivy,tak nak,DECISION
+m014,tpl-0069,template,Uma,"ok la takpe, cancel",DECISION
+m015,tpl-0069,template,Lisa,人呢,OTHER
+m016,tpl-0069,template,Ivy,"RM2000 per orang mahal sangat, RM1500 seorang boleh?",BUDGET
+m017,tpl-0069,template,Lisa,笑死人,OTHER
+m018,tpl-0069,template,Lisa,那就这样定了，每人一千五,DECISION
+m019,tpl-0069,template,Lisa,第2天去清溪川怎么样,ATTRACTION
+m020,tpl-0069,template,Lisa,清溪川早上比较少人,ATTRACTION
+m021,tpl-0069,template,Lisa,好累啊今天,OTHER
+m022,tpl-0069,template,Uma,no la,DECISION
+m023,tpl-0069,template,Zara,cheonggyecheon? no thanks,DECISION
+m024,tpl-0069,template,Lisa,加Ihwa Mural Village进去好不好,ATTRACTION
+m025,tpl-0069,template,Lisa,ihwa mural village早上比较少人,ATTRACTION
+m026,tpl-0069,template,Uma,ok ihwa mural village sounds good !!,DECISION
+m027,tpl-0069,template,Zara,ihwa mural village can,DECISION
+m028,tpl-0069,template,Ivy,Jom pergi insadong,ATTRACTION
+m029,tpl-0069,template,Ivy,insadong tutup hari Isnin,ATTRACTION
+m030,tpl-0069,template,Uma,insadong nanti la fikir,DECISION
+m031,tpl-0069,template,Ivy,"can we not wake up too early, no 6am start pls ya",PREFERENCE
+m032,tpl-0069,template,Ivy,otw balik,OTHER
+m033,tpl-0069,template,Uma,let's book Hotel Jen Dongdaemun?,ACCOMMODATION
+m034,tpl-0069,template,Ivy,check in pukul 3,ACCOMMODATION
+m035,tpl-0069,template,Lisa,Dongdaemun的Hotel Jen可以,DECISION
+m036,tpl-0069,template,Zara,hmm insadong ah... not sure,DECISION
+m037,tpl-0069,template,Ivy,"hotel jen dongdaemun jauh la, hilton chuncheon lagi ok",ACCOMMODATION
+m038,tpl-0069,template,Zara,yesss,DECISION
+m039,tpl-0069,template,Uma,ok I'll book Hilton Chuncheon tonight,DECISION
+m040,tpl-0069,template,Uma,helo semua,OTHER
+m041,tpl-0069,template,Uma,I think we should take the high-speed train,TRANSPORT
+m042,tpl-0069,template,Zara,"same, ok",DECISION
+m043,tpl-0069,template,Uma,嗨嗨,OTHER
+m044,tpl-0069,template,Ivy,train on,DECISION
+m045,tpl-0069,template,Uma,"Done, booking train now",DECISION
+m046,tpl-0069,template,Lisa,就chuncheon希尔顿吧,DECISION
+m047,tpl-0069,template,Zara,i'm at work now,OTHER
+m001,tpl-0192,template,Li Wei,What about HCMC for this trip?,DESTINATION
+m002,tpl-0192,template,Li Wei,so cute,OTHER
+m003,tpl-0192,template,Li Wei,"ok confirmed then, hcmc",DECISION
+m004,tpl-0192,template,Bryan,23-26 dec ok for everyone?,DATE
+m005,tpl-0192,template,Chloe,I need to apply leave early,DATE
+m006,tpl-0192,template,Hafiz,I don't think 23-26 Dec is a good idea,DECISION
+m007,tpl-0192,template,Grace,HCMC on,DECISION
+m008,tpl-0192,template,Grace,我觉得坐地铁比较方便,TRANSPORT
+m009,tpl-0192,template,Chloe,who's online,OTHER
+m010,tpl-0192,template,Hafiz,hahaha true,OTHER
+m011,tpl-0192,template,Hafiz,+1,DECISION
+m012,tpl-0192,template,Chloe,so metro confirm ya,DECISION
+m013,tpl-0192,template,Li Wei,ok 23-26 Dec sounds good,DECISION
+m014,tpl-0192,template,Chloe,"ibis my tho is cheaper, rm420/night !!",ACCOMMODATION
+m015,tpl-0192,template,Hafiz,check-in is 3pm lah,ACCOMMODATION
+m016,tpl-0192,template,Li Wei,ibis my tho not worth it la,DECISION
+m017,tpl-0192,template,Bryan,i don't think ibis my tho is a good idea la~,DECISION
+m018,tpl-0192,template,Bryan,"ibis My Tho looks old leh, a capsule hotel in Cu Chi better?",ACCOMMODATION
+m019,tpl-0192,template,Hafiz,"ok confirmed then, the capsule hotel Cu Chi",DECISION
+m020,tpl-0192,template,Grace,Makan The Cafe Apartments jom,ATTRACTION
+m021,tpl-0192,template,Chloe,cafe apartment is quite far from the city leh,ATTRACTION
+m022,tpl-0192,template,Bryan,monday blues,OTHER
+m023,tpl-0192,template,Li Wei,let's decide later 😅,DECISION
+m024,tpl-0192,template,Hafiz,+1 for the capsule hotel Cu Chi,DECISION
+m025,tpl-0192,template,Bryan,I'm thinking Saigon Central Post Office for day 1,ATTRACTION
+m026,tpl-0192,template,Li Wei,"I prefer cheaper options, saving money",PREFERENCE
+m027,tpl-0192,template,Li Wei,post office is quite far from the city leh ah 😅,ATTRACTION
+m028,tpl-0192,template,Hafiz,skip post office lah ah,DECISION
+m029,tpl-0192,template,Bryan,hmm cafe apartment ah... not sure,DECISION
+m030,tpl-0192,template,Grace,"Jangan jalan banyak sangat, lutut aku sakit",PREFERENCE
+m001,tpl-0249,template,Li Wei,terima kasih semua,OTHER
+m002,tpl-0249,template,Xin Yi,17 hingga 20 September boleh tak?,DATE
+m003,tpl-0249,template,Lisa,我ok,DECISION
+m004,tpl-0249,template,Li Wei,17 to 20 sep on,DECISION
+m005,tpl-0249,template,Xin Yi,我预算大概每人三千 😊,BUDGET
+m006,tpl-0249,template,Lisa,我不太能吃辣,PREFERENCE
+m007,tpl-0249,template,Xin Yi,mantap,OTHER
+m008,tpl-0249,template,Li Wei,wehh haha,OTHER
+m009,tpl-0249,template,Lisa,赞成,DECISION
+m010,tpl-0249,template,Xin Yi,jumpa nanti 😅,OTHER
+m011,tpl-0249,template,Lisa,定了！每人三千,DECISION
+m012,tpl-0249,template,Grace,17 to 20 Sep ok for me,DECISION
+m013,tpl-0249,template,Li Wei,kita kena pergi namsan tower,ATTRACTION
+m014,tpl-0249,template,Lisa,定了！南山塔,DECISION
+m015,tpl-0249,template,Xin Yi,Masukkan hangang park dalam plan,ATTRACTION
+m016,tpl-0249,template,Lisa,要不要包车？,TRANSPORT
+m017,tpl-0249,template,Xin Yi,好啊,DECISION
+m018,tpl-0249,template,Li Wei,包车好啊,DECISION
+m019,tpl-0249,template,Grace,not keen on hangang park,DECISION
+m020,tpl-0249,template,Li Wei,🙈,OTHER
+m021,tpl-0249,template,Li Wei,jom pergi bukchon hanok village,ATTRACTION
+m022,tpl-0249,template,Li Wei,Ok confirm bukchon~,DECISION
+m023,tpl-0249,template,Xin Yi,发错了,OTHER
+m024,tpl-0249,template,Grace,Let's go Nami Island,ATTRACTION
+m025,tpl-0249,template,Li Wei,hahaha,OTHER
+m026,tpl-0249,template,Xin Yi,boleh,DECISION
+m027,tpl-0249,template,Li Wei,hai korang,OTHER
+m028,tpl-0249,template,Li Wei,nami island nanti la fikir,DECISION
+m029,tpl-0249,template,Xin Yi,Kita kena pergi the palace 😅,ATTRACTION
+m030,tpl-0249,template,Li Wei,gyeongbokgung on,DECISION
+m031,tpl-0249,template,Grace,"Done, booking gyeongbokgung now",DECISION
+m032,tpl-0249,template,Lisa,我们去弘大吧,ATTRACTION
+m033,tpl-0249,template,Li Wei,skip hongdae je la 😊,DECISION
+m001,tpl-0016,template,Qistina,what about penang for this trip?,DESTINATION
+m002,tpl-0016,template,Zara,depends on the price,DECISION
+m003,tpl-0016,template,Zara,good morning everyone,OTHER
+m004,tpl-0016,template,Zara,We must try Toh Soon Cafe ya 😅,ATTRACTION
+m005,tpl-0016,template,Ryan,多春茶座我同意,DECISION
+m006,tpl-0016,template,Lisa,还不确定 !!,DECISION
+m007,tpl-0016,template,Ryan,can we discuss Penang later?,DECISION
+m008,tpl-0016,template,Zara,We can take taxis,TRANSPORT
+m009,tpl-0016,template,Qistina,加油,OTHER
+m010,tpl-0016,template,Zara,parking is expensive there,TRANSPORT
+m011,tpl-0016,template,Qistina,yes!! let's do it,DECISION
+m012,tpl-0016,template,Ryan,Can we add Siam Road Char Koay Teow?,ATTRACTION
+m013,tpl-0016,template,Lisa,暹罗路炒粿条门票好像要100多,ATTRACTION
+m014,tpl-0016,template,Qistina,final: siam road ckt ya,DECISION
+m015,tpl-0016,template,Ryan,i'm in for taxi,DECISION
+m016,tpl-0016,template,Lisa,笑死人,OTHER
+m017,tpl-0016,template,Lisa,不要太早起床啦,PREFERENCE
+m018,tpl-0016,template,Lisa,坐的士我同意 😅,DECISION
+m019,tpl-0016,template,Qistina,can see my msg?,OTHER
+m020,tpl-0016,template,Qistina,"I found Holiday Inn Express Air Itam, reviews are good ya",ACCOMMODATION
+m021,tpl-0016,template,Ryan,我觉得Air Itam假日酒店不太好,DECISION
+m022,tpl-0016,template,Zara,wrong group lol ya,OTHER
+m023,tpl-0016,template,Lisa,对啊,OTHER
+m024,tpl-0016,template,Lisa,我觉得Air Itam假日酒店不太好,DECISION
+m025,tpl-0016,template,Qistina,lol this video,OTHER
+m026,tpl-0016,template,Qistina,"ok fine, never mind then (Holiday Inn Express Air Itam)",DECISION
+m027,tpl-0016,template,Qistina,"I want a chill trip, not too packed",PREFERENCE
+m028,tpl-0016,template,Lisa,"holiday inn express air itam jauh la, a capsule hotel in batu ferringhi lagi ok",ACCOMMODATION
+m029,tpl-0016,template,Ryan,depends on the price 🤔,DECISION
+m030,tpl-0016,template,Zara,afternoon guys haha,OTHER
+m031,tpl-0016,template,Qistina,RM 2000 per head should be enough right?,BUDGET
+m032,tpl-0016,template,Qistina,"ok confirmed then, RM2000 la",DECISION
+m033,tpl-0016,template,Zara,"heard gurney drive is super good, go?",ATTRACTION
+m034,tpl-0016,template,Ryan,没问题,DECISION
+m035,tpl-0016,template,Lisa,行,DECISION
+m036,tpl-0016,template,Qistina,agree with gurney hawker,DECISION
+m037,tpl-0016,template,Lisa,新关仔角就这样决定,DECISION
+m038,tpl-0016,template,Lisa,我只能4月底请假,DATE
+m039,tpl-0016,template,Zara,I love nature stuff more than malls leh~,PREFERENCE
+m040,tpl-0016,template,Ryan,之后再决定,DECISION
+m041,tpl-0016,template,Ryan,Jom pergi armenian street murals,ATTRACTION
+m042,tpl-0016,template,Qistina,👍,DECISION
+m043,tpl-0016,template,Ryan,I'm vegetarian btw,PREFERENCE
+m044,tpl-0016,template,Zara,agree ya,DECISION
+m045,tpl-0016,template,Lisa,就壁画街吧,DECISION
+m046,tpl-0016,template,Zara,"ok confirmed then, street art",DECISION
+m001,tpl-0245,template,Qistina,"Marina Bay Sands SkyPark looks nice, want to go?",ATTRACTION
+m002,tpl-0245,template,Elaine,not sure yet,DECISION
+m003,tpl-0245,template,Zara,mbs nanti la fikir,DECISION
+m004,tpl-0245,template,Qistina,Aku nak yang murah je,PREFERENCE
+m005,tpl-0245,template,Yusuf,jangan lebih 4k sorang la,BUDGET
+m006,tpl-0245,template,Qistina,deal,DECISION
+m007,tpl-0245,template,Qistina,final: RM4000,DECISION
+m008,tpl-0245,template,Yusuf,let's book the hostel at Singapore River?,ACCOMMODATION
+m009,tpl-0245,template,Zara,i'm ok with that,DECISION
+m010,tpl-0245,template,Qistina,boleh je,DECISION
+m011,tpl-0245,template,Zara,多谢,OTHER
+m012,tpl-0245,template,Yusuf,i really want to see maxwell food centre,ATTRACTION
+m013,tpl-0245,template,Qistina,alamak ya,OTHER
+m014,tpl-0245,template,Qistina,麦士威门票好像要100多,ATTRACTION
+m015,tpl-0245,template,Zara,保重,OTHER
+m016,tpl-0245,template,Elaine,好饿,OTHER
+m017,tpl-0245,template,Elaine,看到了,OTHER
+m018,tpl-0245,template,Zara,我再想想,DECISION
+m019,tpl-0245,template,Elaine,我容易晕车,PREFERENCE
+m020,tpl-0245,template,Yusuf,"I prefer staying in one hotel, don't want to keep moving la",PREFERENCE
+m021,tpl-0245,template,Qistina,还不确定,DECISION
+m022,tpl-0245,template,Yusuf,We can get a day pass for public transport,TRANSPORT
+m023,tpl-0245,template,Zara,+1 for day pass~,DECISION
+m024,tpl-0245,template,Qistina,can we discuss day pass later?,DECISION
+m025,tpl-0245,template,Elaine,11月中去怎样？,DATE
+m026,tpl-0245,template,Zara,Ok confirm mid Nov,DECISION
+m027,tpl-0245,template,Zara,i'm vegetarian btw,PREFERENCE
+m001,tpl-0114,template,Priya,今年去新加坡吧,DESTINATION
+m002,tpl-0114,template,Farah,新加坡去过了，首尔吧,DESTINATION
+m003,tpl-0114,template,Aiman,salam semua,OTHER
+m004,tpl-0114,template,Farah,那边比较方便,DESTINATION
+m005,tpl-0114,template,Priya,看到了,OTHER
+m006,tpl-0114,template,Priya,好啊,DECISION
+m007,tpl-0114,template,Priya,那就这样定了，首尔,DECISION
+m008,tpl-0114,template,Farah,保重 😊,OTHER
+m009,tpl-0114,template,Aiman,RM3000 seorang cukup kot?,BUDGET
+m010,tpl-0114,template,Priya,rm3000一个人再看看,DECISION
+m011,tpl-0114,template,Aiman,Jom pergi gyeongbokgung,ATTRACTION
+m012,tpl-0114,template,Priya,我觉得坐巴士比较方便,TRANSPORT
+m013,tpl-0114,template,Farah,坐巴士算了吧,DECISION
+m014,tpl-0114,template,Priya,I don't think gyeongbokgung is a good idea,DECISION
+m015,tpl-0114,template,Farah,我觉得景福宫不太好,DECISION
+m016,tpl-0114,template,Aiman,takpe la skip gyeongbokgung (gyeongbokgung),DECISION
+m017,tpl-0114,template,Priya,广藏市场一定要吃,ATTRACTION
+m018,tpl-0114,template,Aiman,gwangjang market boleh,DECISION
+m019,tpl-0114,template,Priya,我们去弘大吧,ATTRACTION
+m020,tpl-0114,template,Aiman,看情况吧,DECISION
+m021,tpl-0114,template,Farah,要不要去南山塔？,ATTRACTION
+m022,tpl-0114,template,Aiman,namsan tower mahal sangat,DECISION
+m023,tpl-0114,template,Farah,那南山塔就不去了,DECISION
+m024,tpl-0114,template,Farah,南怡岛好像不错欸，去吗,ATTRACTION
+m025,tpl-0114,template,Farah,抱歉,OTHER
+m026,tpl-0114,template,Aiman,Aku nak try street food,PREFERENCE
+m027,tpl-0114,template,Priya,生日快乐！,OTHER
+m028,tpl-0114,template,Priya,南怡岛要提前订票,ATTRACTION
+m029,tpl-0114,template,Priya,南怡岛再看看,DECISION
+m030,tpl-0114,template,Farah,happy bday!!,OTHER
+m031,tpl-0114,template,Aiman,nami island nanti la fikir,DECISION
+m032,tpl-0114,template,Priya,收到收到,OTHER
+m033,tpl-0114,template,Aiman,tq semua,OTHER
+m034,tpl-0114,template,Farah,看到了,OTHER
+m035,tpl-0114,template,Priya,南山塔不要啦,DECISION
+m036,tpl-0114,template,Priya,要不要租车自驾？,TRANSPORT
+m037,tpl-0114,template,Priya,天啊,OTHER
+m038,tpl-0114,template,Aiman,skip rent car je la haha,DECISION
+m039,tpl-0114,template,Priya,那租车自驾就不去了,DECISION
+m040,tpl-0114,template,Aiman,Masukkan cheonggyecheon dalam plan,ATTRACTION
+m041,tpl-0114,template,Priya,我想便宜一点的,PREFERENCE
+m042,tpl-0114,template,Priya,清溪川要提前订票,ATTRACTION
+m043,tpl-0114,template,Farah,行程不要太赶,PREFERENCE
+m044,tpl-0114,template,Farah,不想去清溪川,DECISION
+m001,tpl-0046,template,Priya,去槟城好不好,DESTINATION
+m002,tpl-0046,template,Priya,那边比较方便,DESTINATION
+m003,tpl-0046,template,Hafiz,I'm in for Penang,DECISION
+m004,tpl-0046,template,Hafiz,"Citadines Leith Street is cheaper, RM150/night",ACCOMMODATION
+m005,tpl-0046,template,Darren,槟城好啊,DECISION
+m006,tpl-0046,template,Priya,我看了Lebuh Kimberley假日酒店，评价不错 🤔,ACCOMMODATION
+m007,tpl-0046,template,Priya,预算rm4500一个人可以吗？,BUDGET
+m008,tpl-0046,template,Darren,那就这样定了，RM4500一个人,DECISION
+m009,tpl-0046,template,Hafiz,best gila video ni,OTHER
+m010,tpl-0046,template,Hafiz,+1 for holiday inn express lebuh kimberley,DECISION
+m011,tpl-0046,template,Darren,我想去蝴蝶公园,ATTRACTION
+m012,tpl-0046,template,Hafiz,🤣🤣 lah,OTHER
+m013,tpl-0046,template,Hafiz,+1 for entopia,DECISION
+m014,tpl-0046,template,Priya,4月6号到8号去怎样？ 🤔,DATE
+m015,tpl-0046,template,Darren,我想吃当地小吃,PREFERENCE
+m016,tpl-0046,template,Hafiz,6 to 8 Apr can,DECISION
+m017,tpl-0046,template,Hafiz,so 6 to 8 Apr confirm ya,DECISION
+m018,tpl-0046,template,Priya,蓝屋好像不错欸，去吗,ATTRACTION
+m019,tpl-0046,template,Hafiz,ok I'll book blue mansion tonight ah,DECISION
+m020,tpl-0046,template,Priya,第2天去合您广场怎么样,ATTRACTION
+m021,tpl-0046,template,Hafiz,"same, ok",DECISION
+m022,tpl-0046,template,Priya,等下回你们,OTHER
+m023,tpl-0046,template,Darren,我ok,DECISION
+m024,tpl-0046,template,Priya,定了！合您广场 🤔,DECISION
+m025,tpl-0046,template,Priya,嘻嘻,OTHER
+m001,tpl-0032,template,Darren,Apa kata kita pergi Pulau Pinang?,DESTINATION
+m002,tpl-0032,template,Oscar,"Pulau Pinang dah pergi, KL pulak?",DESTINATION
+m003,tpl-0032,template,Oscar,"Settle, KL",DECISION
+m004,tpl-0032,template,Darren,How about 10 to 12 Oct?,DATE
+m005,tpl-0032,template,Oscar,"10 hingga 12 Oktober aku tak boleh, 6 hingga 8 Oktober?",DATE
+m006,tpl-0032,template,Aiman,hahaha,OTHER
+m007,tpl-0032,template,Aiman,hmm 6-8 Oct ah... not sure ah,DECISION
+m008,tpl-0032,template,Aiman,Jangan bangun awal sangat,PREFERENCE
+m009,tpl-0032,template,Darren,not sure yet,DECISION
+m010,tpl-0032,template,Aiman,塞车了,OTHER
+m011,tpl-0032,template,Aiman,I think 4k per pax is reasonable,BUDGET
+m012,tpl-0032,template,Darren,ok,DECISION
+m013,tpl-0032,template,Aiman,We can get a day pass for public transport,TRANSPORT
+m014,tpl-0032,template,Darren,"settled, day pass it is",DECISION
+m015,tpl-0032,template,Oscar,setuju rm4000 😊,DECISION
+m016,tpl-0032,template,Aiman,How about Hotel Jen Gombak? RM200 per night,ACCOMMODATION
+m017,tpl-0032,template,Oscar,setuju day pass,DECISION
+m018,tpl-0032,template,Darren,let's book the hostel at chinatown?,ACCOMMODATION
+m019,tpl-0032,template,Aiman,the hostel at Chinatown ok for me,DECISION
+m020,tpl-0032,template,Darren,我不太能吃辣,PREFERENCE
+m021,tpl-0032,template,Aiman,wahh ya,OTHER
+m022,tpl-0032,template,Aiman,aduh~,OTHER
+m023,tpl-0032,template,Oscar,boleh,DECISION
+m024,tpl-0032,template,Aiman,ok I'll book the hostel at Chinatown tonight,DECISION
+m025,tpl-0032,template,Aiman,must go Kwai Chai Hong leh la,ATTRACTION
+m026,tpl-0032,template,Darren,i'm in for kwai chai hong,DECISION
+m027,tpl-0032,template,Oscar,sorry baru nampak msg,OTHER
+m028,tpl-0032,template,Darren,internet down,OTHER
+m029,tpl-0032,template,Darren,吉隆坡塔一定要去,ATTRACTION
+m030,tpl-0032,template,Oscar,boleh,DECISION
+m031,tpl-0032,template,Darren,定了！吉隆坡塔,DECISION
+m032,tpl-0032,template,Aiman,waalaikumsalam,OTHER
+m033,tpl-0032,template,Oscar,kwai chai hong on,DECISION
+m034,tpl-0032,template,Aiman,😅,OTHER
+m001,tpl-0218,template,Hui Min,多谢,OTHER
+m002,tpl-0218,template,Ben,去东京好不好,DESTINATION
+m003,tpl-0218,template,Hui Min,setuju Tokyo,DECISION
+m004,tpl-0218,template,Ben,i'm starving,OTHER
+m005,tpl-0218,template,Wei Jie,就东京吧,DECISION
+m006,tpl-0218,template,Ben,"settled, Tokyo it is",DECISION
+m007,tpl-0218,template,Hui Min,Masukkan Meiji Shrine dalam plan,ATTRACTION
+m008,tpl-0218,template,Mei Ling,明治神宫再看看,DECISION
+m009,tpl-0218,template,Mei Ling,Tokyo on,DECISION
+m010,tpl-0218,template,Hui Min,晚餐去筑地市场吃怎样,ATTRACTION
+m011,tpl-0218,template,Hui Min,Aku book tsukiji sekarang,DECISION
+m012,tpl-0218,template,Wei Jie,坐高铁吧，比较便宜,TRANSPORT
+m013,tpl-0218,template,Mei Ling,train on,DECISION
+m014,tpl-0218,template,Mei Ling,jom pergi ueno park,ATTRACTION
+m015,tpl-0218,template,Wei Jie,jap aku drive,OTHER
+m016,tpl-0218,template,Hui Min,ueno mahal sangat,DECISION
+m017,tpl-0218,template,Ben,ueno tak best,DECISION
+m018,tpl-0218,template,Hui Min,坐高铁我同意,DECISION
+m019,tpl-0218,template,Ben,Kita pergi 11 hingga 13 September la,DATE
+m020,tpl-0218,template,Ben,so Sep 11 to 13 confirm ya,DECISION
+m021,tpl-0218,template,Wei Jie,"let's just Grab everywhere, cheaper",TRANSPORT
+m022,tpl-0218,template,Ben,kad MRT dalam RM20,TRANSPORT
+m023,tpl-0218,template,Hui Min,selamat hari jadi!,OTHER
+m024,tpl-0218,template,Ben,lol,OTHER
+m025,tpl-0218,template,Hui Min,ok,DECISION
+m026,tpl-0218,template,Mei Ling,must go omoide yokocho leh,ATTRACTION
+m027,tpl-0218,template,Ben,setuju omoide yokocho,DECISION
+m028,tpl-0218,template,Wei Jie,"can we not wake up too early, no 6am start pls",PREFERENCE
+m029,tpl-0218,template,Ben,rofl,OTHER
+m030,tpl-0218,template,Wei Jie,ok setuju,DECISION
+m031,tpl-0218,template,Hui Min,stuck in traffic,OTHER
+m032,tpl-0218,template,Mei Ling,grab nanti la fikir,DECISION
+m001,tpl-0020,template,Aiman,let's go singapore this year!,DESTINATION
+m002,tpl-0020,template,Wen,I'm in for Singapore,DECISION
+m003,tpl-0020,template,Chloe,deal,DECISION
+m004,tpl-0020,template,Aiman,8-11 jun ok for everyone?,DATE
+m005,tpl-0020,template,Wen,ok setuju,DECISION
+m006,tpl-0020,template,Chloe,hahah,OTHER
+m007,tpl-0020,template,Aiman,"ok confirmed then, 8-11 Jun",DECISION
+m008,tpl-0020,template,Aiman,Put night safari in the plan pls,ATTRACTION
+m009,tpl-0020,template,Wen,depends on the price,DECISION
+m010,tpl-0020,template,Chloe,maybe? need to check my leave first,DECISION
+m011,tpl-0020,template,Chloe,setuju 8-11 Jun,DECISION
+m012,tpl-0020,template,Chloe,must go Singapore Botanic Gardens leh,ATTRACTION
+m013,tpl-0020,template,Wen,pass on botanic gardens,DECISION
+m014,tpl-0020,template,Wen,I prefer less crowded places haha,PREFERENCE
+m015,tpl-0020,template,Aiman,pass on botanic gardens,DECISION
+m016,tpl-0020,template,Aiman,你们吃饭了吗,OTHER
+m017,tpl-0020,template,Chloe,好吧那算了,DECISION
+m018,tpl-0020,template,Aiman,Makan satay street jom,ATTRACTION
+m019,tpl-0020,template,Wen,talk later,OTHER
+m020,tpl-0020,template,Wen,lau pa sat is quite far from the city leh,ATTRACTION
+m021,tpl-0020,template,Wen,skip lau pa sat lah,DECISION
+m022,tpl-0020,template,Chloe,Tak nak lah lau pa sat,DECISION
+m023,tpl-0020,template,Wen,let's keep it under 5k per pax~,BUDGET
+m024,tpl-0020,template,Aiman,get well soon ya haha,OTHER
+m025,tpl-0020,template,Aiman,hotel will take like rm1200 each,BUDGET
+m026,tpl-0020,template,Aiman,ok skip it (lau pa sat) la,DECISION
+m027,tpl-0020,template,Chloe,How about budget RM3k per person?,BUDGET
+m028,tpl-0020,template,Wen,really?,OTHER
+m029,tpl-0020,template,Aiman,oh i see lah,OTHER
+m030,tpl-0020,template,Chloe,"settled, RM3000 it is",DECISION
+m031,tpl-0020,template,Wen,i'm starving,OTHER
+m032,tpl-0020,template,Chloe,I'm thinking clarke quay for day 2,ATTRACTION
+m033,tpl-0020,template,Wen,"sure, I'm in",DECISION
+m034,tpl-0020,template,Wen,ok I'll book clarke quay tonight,DECISION
+m035,tpl-0020,template,Aiman,你们好,OTHER
+m036,tpl-0020,template,Wen,RM3000 can,DECISION
+m037,tpl-0020,template,Chloe,Put kampong glam in the plan pls ya haha,ATTRACTION
+m038,tpl-0020,template,Aiman,mengantuk,OTHER
+m039,tpl-0020,template,Aiman,I'm in for kampong glam,DECISION
+m040,tpl-0020,template,Wen,sounds good,DECISION
+m001,tpl-0242,template,Kumar,I vote KL 😊,DESTINATION
+m002,tpl-0242,template,Ben,kl boleh,DECISION
+m003,tpl-0242,template,Uma,同意,DECISION
+m004,tpl-0242,template,Uma,wahh,OTHER
+m005,tpl-0242,template,Kumar,sleep first,OTHER
+m006,tpl-0242,template,Uma,ping,OTHER
+m007,tpl-0242,template,Ethan,I'm ok with that,DECISION
+m008,tpl-0242,template,Ben,Kita kena pergi dataran merdeka,ATTRACTION
+m009,tpl-0242,template,Ben,Aku senang mabuk kereta,PREFERENCE
+m010,tpl-0242,template,Ethan,aku nak masa shopping lebih,PREFERENCE
+m011,tpl-0242,template,Ethan,tahniah!,OTHER
+m012,tpl-0242,template,Ethan,aduh,OTHER
+m013,tpl-0242,template,Ethan,boleh,DECISION
+m014,tpl-0242,template,Ben,kita pergi 7 hingga 11 februari la,DATE
+m015,tpl-0242,template,Uma,I want to try local street food,PREFERENCE
+m016,tpl-0242,template,Ben,takpe la skip Feb 7 to 11 (Feb 7 to 11),DECISION
+m017,tpl-0242,template,Kumar,I'm in for dataran merdeka la,DECISION
+m018,tpl-0242,template,Uma,"i'm busy feb 7 to 11, how about jun 10 to 13",DATE
+m019,tpl-0242,template,Kumar,hmm ok,OTHER
+m020,tpl-0242,template,Ben,bateri nak habis,OTHER
+m021,tpl-0242,template,Ethan,i'm ok with that ya,DECISION
+m022,tpl-0242,template,Ben,可以,DECISION
+m023,tpl-0242,template,Kumar,就6月10号到13号吧,DECISION
+m024,tpl-0242,template,Kumar,"settled, Jun 10 to 13 it is~",DECISION
+m025,tpl-0242,template,Kumar,feb 7 to 11 not worth it la leh,DECISION
+m026,tpl-0242,template,Kumar,let's do batu caves in the evening leh,ATTRACTION
+m027,tpl-0242,template,Ben,Tiket batu caves kena beli online,ATTRACTION
+m028,tpl-0242,template,Kumar,hehehe ah,OTHER
+m029,tpl-0242,template,Ben,set,DECISION
+m030,tpl-0242,template,Uma,agree with batu caves,DECISION
+m031,tpl-0242,template,Ethan,Masukkan Islamic Arts Museum Malaysia dalam plan 🤔,ATTRACTION
+m032,tpl-0242,template,Uma,setuju islamic arts museum,DECISION
+m033,tpl-0242,template,Kumar,islamic arts museum can,DECISION
+m034,tpl-0242,template,Kumar,"ok confirmed then, islamic arts museum",DECISION
+m035,tpl-0242,template,Ethan,Put Jalan Alor Food Street in the plan pls,ATTRACTION
+m036,tpl-0242,template,Uma,Tak nak lah jalan alor haha,DECISION
+m037,tpl-0242,template,Kumar,lol,OTHER
+m038,tpl-0242,template,Kumar,waalaikumsalam,OTHER
+m039,tpl-0242,template,Ethan,takpe la skip jalan alor,DECISION
+m040,tpl-0242,template,Ben,Hari 3 pergi Aquaria KLCC ok tak? !!,ATTRACTION
+m041,tpl-0242,template,Uma,aquaria nanti la fikir,DECISION
+m042,tpl-0242,template,Ethan,nanti kita decide,DECISION
+m043,tpl-0242,template,Ethan,住lorong panggung的citadines怎样？,ACCOMMODATION
+m044,tpl-0242,template,Kumar,I need halal food ya lah,PREFERENCE
+m045,tpl-0242,template,Ben,Citadines Lorong Panggung boleh,DECISION
+m046,tpl-0242,template,Ben,hahaha,OTHER
+m047,tpl-0242,template,Uma,going home,OTHER
+m048,tpl-0242,template,Ethan,"Citadines Lorong Panggung jauh la, the hostel at Robson Heights lagi ok",ACCOMMODATION
+m049,tpl-0242,template,Uma,check in pukul 3,ACCOMMODATION
+m050,tpl-0242,template,Ben,the hostel at Robson Heights boleh,DECISION
+m051,tpl-0242,template,Kumar,hmm ok,OTHER
+m052,tpl-0242,template,Uma,final: the hostel at Robson Heights,DECISION
+m053,tpl-0242,template,Kumar,tgif ya,OTHER
+m001,tpl-0008,template,Ryan,今年去东京吧,DESTINATION
+m002,tpl-0008,template,Siti,agree with Tokyo leh,DECISION
+m003,tpl-0008,template,Farah,ok setuju,DECISION
+m004,tpl-0008,template,Farah,I'm thinking teamlab for day 2,ATTRACTION
+m005,tpl-0008,template,Siti,Aku nak tempat cantik untuk gambar,PREFERENCE
+m006,tpl-0008,template,Siti,睡了,OTHER
+m007,tpl-0008,template,Ryan,之后再决定,DECISION
+m008,tpl-0008,template,Siti,我想去银座,ATTRACTION
+m009,tpl-0008,template,Ryan,看情况吧,DECISION
+m010,tpl-0008,template,Farah,我想要多一点购物时间,PREFERENCE
+m011,tpl-0008,template,Ryan,panas gila,OTHER
+m012,tpl-0008,template,Siti,teamlab再看看,DECISION
+m013,tpl-0008,template,Farah,wtf leh,OTHER
+m014,tpl-0008,template,Ryan,我比较喜欢大自然,PREFERENCE
+m015,tpl-0008,template,Farah,my budget is around rm3.5k per person,BUDGET
+m016,tpl-0008,template,Ryan,机票大概RM500,BUDGET
+m017,tpl-0008,template,Siti,塞车了,OTHER
+m018,tpl-0008,template,Ryan,还不确定,DECISION
+m019,tpl-0008,template,Ryan,我觉得租车自驾比较方便,TRANSPORT
+m020,tpl-0008,template,Farah,可以,DECISION
+m021,tpl-0008,template,Siti,不好,DECISION
+m022,tpl-0008,template,Siti,RM3500一个人再看看,DECISION
+m001,tpl-0040,template,Darren,亚庇怎么样？,DESTINATION
+m002,tpl-0040,template,Aiman,好,DECISION
+m003,tpl-0040,template,Darren,不要走太多路，我膝盖痛,PREFERENCE
+m004,tpl-0040,template,Yusuf,"KK went before already, Taipei?",DESTINATION
+m005,tpl-0040,template,Yusuf,i like taking photos so want nice spots,PREFERENCE
+m006,tpl-0040,template,Darren,这张照片好看,OTHER
+m007,tpl-0040,template,Aiman,台北好啊,DECISION
+m008,tpl-0040,template,Aiman,so taipei confirm ya,DECISION
+m009,tpl-0040,template,Aiman,中正纪念堂听说很值得去,ATTRACTION
+m010,tpl-0040,template,Yusuf,alamak,OTHER
+m011,tpl-0040,template,Aiman,cks memorial opens at 9am btw,ATTRACTION
+m012,tpl-0040,template,Yusuf,let's decide later,DECISION
+m013,tpl-0040,template,Darren,台北我同意,DECISION
+m014,tpl-0040,template,Darren,这张照片好看,OTHER
+m015,tpl-0040,template,Aiman,我想去野柳,ATTRACTION
+m016,tpl-0040,template,Aiman,I can't eat spicy food ah,PREFERENCE
+m017,tpl-0040,template,Yusuf,yehliu not worth it la,DECISION
+m018,tpl-0040,template,Darren,我们买交通一日券就好,TRANSPORT
+m019,tpl-0040,template,Yusuf,setuju day pass,DECISION
+m020,tpl-0040,template,Aiman,我ok,DECISION
+m021,tpl-0040,template,Yusuf,"done, booking day pass now",DECISION
+m022,tpl-0040,template,Aiman,look at this meme lah,OTHER
+m023,tpl-0040,template,Aiman,Budget aku dalam 3.5k sorang,BUDGET
+m024,tpl-0040,template,Yusuf,hotel will take like rm500 each ah,BUDGET
+m025,tpl-0040,template,Yusuf,tak sabar dah,OTHER
+m026,tpl-0040,template,Darren,没问题,DECISION
+m001,tpl-0195,template,Hui Min,can we add shanghai tower observation deck?,ATTRACTION
+m002,tpl-0195,template,Jia Hao,ok shanghai tower sounds good,DECISION
+m003,tpl-0195,template,Xin Yi,aku nak sangat pergi the bund,ATTRACTION
+m004,tpl-0195,template,Xin Yi,need to book the bund tickets online !!,ATTRACTION
+m005,tpl-0195,template,Hafiz,就外滩吧,DECISION
+m006,tpl-0195,template,Jia Hao,final: the bund,DECISION
+m007,tpl-0195,template,Hafiz,不想去上海中心,DECISION
+m008,tpl-0195,template,Xin Yi,"let's keep it under RM3,000 each",BUDGET
+m009,tpl-0195,template,Xin Yi,预算多少？,BUDGET
+m010,tpl-0195,template,Hui Min,ok lor,DECISION
+m011,tpl-0195,template,Jia Hao,+1,DECISION
+m012,tpl-0195,template,Jia Hao,Let's go Oriental Pearl Tower lah,ATTRACTION
+m013,tpl-0195,template,Hui Min,Jangan bangun awal sangat 😊,PREFERENCE
+m014,tpl-0195,template,Hafiz,可以,DECISION
+m015,tpl-0195,template,Hui Min,tak nak,DECISION
+m016,tpl-0195,template,Hui Min,this group so quiet,OTHER
+m017,tpl-0195,template,Hafiz,later guys leh,OTHER
+m018,tpl-0195,template,Hafiz,新天地好像不错欸，去吗,ATTRACTION
+m019,tpl-0195,template,Xin Yi,selamat hari jadi!,OTHER
+m020,tpl-0195,template,Hui Min,yes!! let's do it,DECISION
+m021,tpl-0195,template,Hafiz,我在上班,OTHER
+m022,tpl-0195,template,Xin Yi,night night,OTHER
+m023,tpl-0195,template,Xin Yi,Tengok dulu,DECISION
+m024,tpl-0195,template,Hafiz,Huangpu的民宿比较便宜，一晚RM280,ACCOMMODATION
+m025,tpl-0195,template,Hafiz,huangpu的民宿评价不好，换putuo的青旅吧,ACCOMMODATION
+m026,tpl-0195,template,Xin Yi,+1 lah,DECISION
+m027,tpl-0195,template,Hafiz,我比较喜欢大自然,PREFERENCE
+m028,tpl-0195,template,Jia Hao,fine by me~,DECISION
+m029,tpl-0195,template,Hafiz,那就这样定了，Putuo的青旅,DECISION
+m030,tpl-0195,template,Xin Yi,Aku tak tahan pedas,PREFERENCE
+m031,tpl-0195,template,Hui Min,I'm thinking Wukang Road for day 3,ATTRACTION
+m032,tpl-0195,template,Jia Hao,hmm french concession ah... not sure,DECISION
+m001,tpl-0050,template,Jason,same lol,OTHER
+m002,tpl-0050,template,Jason,去新加坡好不好,DESTINATION
+m003,tpl-0050,template,Jason,"heard Ya Kun Kaya Toast is super good, go?",ATTRACTION
+m004,tpl-0050,template,Hafiz,agree with ya kun,DECISION
+m005,tpl-0050,template,Ben,Singapore nanti la fikir haha,DECISION
+m006,tpl-0050,template,Jason,笑死,OTHER
+m007,tpl-0050,template,Ben,Let's go satay street,ATTRACTION
+m008,tpl-0050,template,Hafiz,walao,OTHER
+m009,tpl-0050,template,Ben,"I prefer staying in one hotel, don't want to keep moving",PREFERENCE
+m010,tpl-0050,template,Hafiz,hi all,OTHER
+m011,tpl-0050,template,Jason,ok no problem,DECISION
+m012,tpl-0050,template,Ben,Aku book lau pa sat sekarang,DECISION
+m013,tpl-0050,template,Ben,ya kun boleh,DECISION
+m014,tpl-0050,template,Jason,Apa kata stay kat Novotel Sentosa?,ACCOMMODATION
+m015,tpl-0050,template,Jason,check-in is 3pm,ACCOMMODATION
+m016,tpl-0050,template,Ben,yes!! let's do it,DECISION
+m017,tpl-0050,template,Hafiz,+1 for Novotel Sentosa,DECISION
+m018,tpl-0050,template,Hafiz,"We can walk around, it's all near",TRANSPORT
+m019,tpl-0050,template,Hafiz,"i prefer cheaper options, saving money",PREFERENCE
+m020,tpl-0050,template,Jason,kad mrt dalam rm20,TRANSPORT
+m021,tpl-0050,template,Hafiz,stuck in traffic,OTHER
+m022,tpl-0050,template,Ben,yes!! let's do it,DECISION
+m023,tpl-0050,template,Jason,appreciate it,OTHER
+m024,tpl-0050,template,Jason,tak nak,DECISION
+m025,tpl-0050,template,Ben,aduh,OTHER
+m026,tpl-0050,template,Hafiz,my budget is around rm 2500 per head,BUDGET
+m027,tpl-0050,template,Jason,就每人两千五吧,DECISION
+m028,tpl-0050,template,Jason,Can we add Universal Studios Singapore?,ATTRACTION
+m029,tpl-0050,template,Jason,Aku nak tempat cantik untuk gambar,PREFERENCE
+m030,tpl-0050,template,Ben,"sure, i'm in",DECISION
+m031,tpl-0050,template,Ben,eh?,OTHER
+m032,tpl-0050,template,Hafiz,"same, ok",DECISION
+m033,tpl-0050,template,Ben,滨海湾花园一定要去,ATTRACTION
+m034,tpl-0050,template,Jason,就滨海湾花园吧,DECISION
+m035,tpl-0050,template,Hafiz,yesss,DECISION
+m036,tpl-0050,template,Jason,那就这样定了，滨海湾花园,DECISION
+m037,tpl-0050,template,Hafiz,"Merlion Park looks nice, want to go?",ATTRACTION
+m038,tpl-0050,template,Hafiz,merlion entrance is free,ATTRACTION
+m039,tpl-0050,template,Jason,鱼尾狮不要啦,DECISION
+m040,tpl-0050,template,Ben,动物园听说很值得去,ATTRACTION
+m041,tpl-0050,template,Jason,the zoo tutup hari Isnin,ATTRACTION
+m042,tpl-0050,template,Jason,sounds good,DECISION
+m043,tpl-0050,template,Hafiz,ok the zoo sounds good la,DECISION
+m044,tpl-0050,template,Ben,"settled, the zoo it is",DECISION
+m045,tpl-0050,template,Jason,watching netflix la,OTHER
+m001,tpl-0057,template,Oscar,Apa kata kita pergi Tokyo?,DESTINATION
+m002,tpl-0057,template,Wen,tak nak,DECISION
+m003,tpl-0057,template,Oscar,"Tokyo dah pergi, Ho Chi Minh pulak?",DESTINATION
+m004,tpl-0057,template,Oscar,kawasan  lagi senang,DESTINATION
+m005,tpl-0057,template,Nurul,not keen on Tokyo 🤔,DECISION
+m006,tpl-0057,template,Oscar,Apa kata kita naik AirAsia?,TRANSPORT
+m007,tpl-0057,template,Ryan,aduh,OTHER
+m008,tpl-0057,template,Ryan,Aku book AirAsia sekarang,DECISION
+m009,tpl-0057,template,Nurul,can we discuss HCMC later?,DECISION
+m010,tpl-0057,template,Ryan,不客气,OTHER
+m011,tpl-0057,template,Ryan,Let's go bui vien,ATTRACTION
+m012,tpl-0057,template,Wen,bui vien mahal sangat,DECISION
+m013,tpl-0057,template,Oscar,tengah drive,OTHER
+m014,tpl-0057,template,Oscar,skip bui vien je la,DECISION
+m015,tpl-0057,template,Ryan,"ok fine, never mind then~",DECISION
+m016,tpl-0057,template,Wen,setuju AirAsia,DECISION
+m017,tpl-0057,template,Ryan,"I prefer staying in one hotel, don't want to keep moving",PREFERENCE
+m018,tpl-0057,template,Wen,"Aku jumpa Citadines District 3, review ok",ACCOMMODATION
+m019,tpl-0057,template,Oscar,on!,DECISION
+m020,tpl-0057,template,Wen,Ok confirm Citadines District 3,DECISION
+m021,tpl-0057,template,Ryan,"mekong tour looks nice, want to go?",ATTRACTION
+m022,tpl-0057,template,Nurul,yes!! let's do it la,DECISION
+m023,tpl-0057,template,Wen,Hari 1 pergi Saigon Square ok tak?,ATTRACTION
+m024,tpl-0057,template,Ryan,saigon square要提前订票,ATTRACTION
+m025,tpl-0057,template,Ryan,setuju saigon square,DECISION
+m026,tpl-0057,template,Oscar,tak nak lah saigon square,DECISION
+m027,tpl-0057,template,Wen,mekong delta boleh,DECISION
+m028,tpl-0057,template,Oscar,panas gila,OTHER
+m029,tpl-0057,template,Ryan,awal Februari boleh tak?,DATE
+m030,tpl-0057,template,Nurul,so true,OTHER
+m031,tpl-0057,template,Oscar,setuju,DECISION
+m032,tpl-0057,template,Nurul,agree,DECISION
+m033,tpl-0057,template,Wen,setuju early Feb,DECISION
+m001,tpl-0105,template,Lisa,去马六甲好不好,DESTINATION
+m002,tpl-0105,template,Kumar,好饿,OTHER
+m003,tpl-0105,template,Lisa,How about Shanghai?,DESTINATION
+m004,tpl-0105,template,Farah,pagi semua,OTHER
+m005,tpl-0105,template,Lisa,I love nature stuff more than malls 😅,PREFERENCE
+m006,tpl-0105,template,Farah,没问题,DECISION
+m007,tpl-0105,template,Kumar,tak payah,DECISION
+m008,tpl-0105,template,Kumar,"an Airbnb near Former French Concession murah gila, RM180 semalam",ACCOMMODATION
+m009,tpl-0105,template,Kumar,sape nak makan lunch skrg,OTHER
+m010,tpl-0105,template,Lisa,wehh,OTHER
+m011,tpl-0105,template,Lisa,👍,DECISION
+m012,tpl-0105,template,Lisa,Masukkan jade buddha temple dalam plan,ATTRACTION
+m013,tpl-0105,template,Farah,玉佛寺早上比较少人,ATTRACTION
+m014,tpl-0105,template,Farah,还不确定,DECISION
+m015,tpl-0105,template,Lisa,We can hire a private driver leh,TRANSPORT
+m016,tpl-0105,template,Farah,agree with private driver,DECISION
+m017,tpl-0105,template,Farah,网络很慢,OTHER
+m018,tpl-0105,template,Kumar,on!,DECISION
+m019,tpl-0105,template,Kumar,aku book private driver sekarang,DECISION
+m020,tpl-0105,template,Farah,第3天去南京路怎么样,ATTRACTION
+m021,tpl-0105,template,Lisa,周末快乐,OTHER
+m022,tpl-0105,template,Farah,定了！南京路,DECISION
+m023,tpl-0105,template,Kumar,pagi semua,OTHER
+m024,tpl-0105,template,Farah,我们租车自驾就好,TRANSPORT
+m025,tpl-0105,template,Kumar,test test,OTHER
+m026,tpl-0105,template,Farah,在吗？,OTHER
+m027,tpl-0105,template,Lisa,the metro card is around RM20,TRANSPORT
+m028,tpl-0105,template,Kumar,I don't think rent car is a good idea lah,DECISION
+m029,tpl-0105,template,Lisa,测试一下,OTHER
+m030,tpl-0105,template,Lisa,skip rent car lah,DECISION
+m031,tpl-0105,template,Farah,那租车自驾就不去了,DECISION
+m032,tpl-0105,template,Kumar,jom pergi wukang road,ATTRACTION
+m033,tpl-0105,template,Lisa,setuju wukang road,DECISION
+m034,tpl-0105,template,Farah,不要超过每人五千,BUDGET
+m035,tpl-0105,template,Lisa,rm5000 can ah,DECISION
+m036,tpl-0105,template,Farah,武康路可以,DECISION
+m037,tpl-0105,template,Farah,每人五千有点贵，每人rm3000吧,BUDGET
+m038,tpl-0105,template,Kumar,anybody here,OTHER
+m039,tpl-0105,template,Lisa,tak pasti lagi,DECISION
+m040,tpl-0105,template,Kumar,salam semua,OTHER
+m041,tpl-0105,template,Farah,6月20号到24号去怎样？,DATE
+m042,tpl-0105,template,Farah,我要早点请假,DATE
+m043,tpl-0105,template,Lisa,20 to 24 jun can,DECISION
+m044,tpl-0105,template,Farah,上海中心好像不错欸，去吗,ATTRACTION
+m045,tpl-0105,template,Lisa,no la leh !!,DECISION
+m046,tpl-0105,template,Kumar,20 to 24 jun on,DECISION
+m001,tpl-0112,template,Ben,KL trip anyone?,DESTINATION
+m002,tpl-0112,template,Hafiz,jaga diri,OTHER
+m003,tpl-0112,template,Hafiz,tak payah,DECISION
+m004,tpl-0112,template,Jason,pass on KL,DECISION
+m005,tpl-0112,template,Jason,"KL dah pergi, Bali pulak?",DESTINATION
+m006,tpl-0112,template,Mei Ling,kawasan  lagi senang,DESTINATION
+m007,tpl-0112,template,Mei Ling,bali boleh,DECISION
+m008,tpl-0112,template,Hafiz,"Jangan jalan banyak sangat, lutut aku sakit",PREFERENCE
+m009,tpl-0112,template,Ben,Ok confirm Bali,DECISION
+m010,tpl-0112,template,Mei Ling,Aku vegetarian,PREFERENCE
+m011,tpl-0112,template,Mei Ling,Hari 1 pergi tegalalang ok tak?~,ATTRACTION
+m012,tpl-0112,template,Jason,Tiket tegalalang kena beli online,ATTRACTION
+m013,tpl-0112,template,Ben,agree with tegalalang,DECISION
+m014,tpl-0112,template,Jason,tak payah,DECISION
+m015,tpl-0112,template,Ben,agree with Bali~,DECISION
+m016,tpl-0112,template,Hafiz,"heard Bebek Tepi Sawah is super good, go?",ATTRACTION
+m017,tpl-0112,template,Mei Ling,setuju bebek tepi sawah !!,DECISION
+m018,tpl-0112,template,Ben,ok lor 😅,DECISION
+m019,tpl-0112,template,Mei Ling,terima kasih semua,OTHER
+m020,tpl-0112,template,Ben,oops,OTHER
+m021,tpl-0112,template,Jason,setuju bebek tepi sawah,DECISION
+m022,tpl-0112,template,Jason,Hari 1 pergi Lempuyang Temple (Gates of Heaven) ok tak?,ATTRACTION
+m023,tpl-0112,template,Mei Ling,jaga diri,OTHER
+m024,tpl-0112,template,Hafiz,Tiket lempuyang kena beli online,ATTRACTION
+m025,tpl-0112,template,Mei Ling,tak payah,DECISION
+m026,tpl-0112,template,Mei Ling,"Aku jumpa a capsule hotel in Nusa Penida, review ok",ACCOMMODATION
+m027,tpl-0112,template,Mei Ling,termasuk sarapan,ACCOMMODATION
+m028,tpl-0112,template,Jason,aku tak tahan pedas,PREFERENCE
+m029,tpl-0112,template,Hafiz,Aku book the capsule hotel Nusa Penida sekarang,DECISION
+m030,tpl-0112,template,Ben,ok lempuyang sounds good,DECISION
+m031,tpl-0112,template,Ben,"I want a chill trip, not too packed",PREFERENCE
+m032,tpl-0112,template,Jason,RM1500 per orang cukup kot?,BUDGET
+m033,tpl-0112,template,Hafiz,tiket flight dalam RM1200,BUDGET
+m034,tpl-0112,template,Hafiz,lapar gila,OTHER
+m035,tpl-0112,template,Ben,yesss,DECISION
+m036,tpl-0112,template,Mei Ling,nanti kita decide,DECISION
+m001,tpl-0078,template,Elaine,手机快没电,OTHER
+m002,tpl-0078,template,Marcus,我想去马六甲,DESTINATION
+m003,tpl-0078,template,Nurul,我ok,DECISION
+m004,tpl-0078,template,Elaine,Melaka on,DECISION
+m005,tpl-0078,template,Elaine,4k per pax should be enough right?,BUDGET
+m006,tpl-0078,template,Marcus,一个人四千块好啊 !!,DECISION
+m007,tpl-0078,template,Nurul,定了！一个人四千块,DECISION
+m008,tpl-0078,template,Marcus,中华茶室听说很值得去,ATTRACTION
+m009,tpl-0078,template,Nurul,中华茶室我同意 🤔,DECISION
+m010,tpl-0078,template,Elaine,chung wah? no thanks,DECISION
+m011,tpl-0078,template,Marcus,听说椰子雪很好吃,ATTRACTION
+m012,tpl-0078,template,Nurul,椰子雪要提前订票,ATTRACTION
+m013,tpl-0078,template,Nurul,可以,DECISION
+m014,tpl-0078,template,Elaine,加马六甲河游船进去好不好,ATTRACTION
+m015,tpl-0078,template,Marcus,jom makan kat jonker 88,ATTRACTION
+m016,tpl-0078,template,Nurul,之后再决定,DECISION
+m017,tpl-0078,template,Elaine,just checking haha,OTHER
+m018,tpl-0078,template,Marcus,马六甲河游船再看看,DECISION
+m019,tpl-0078,template,Nurul,我只能11月底请假,DATE
+m020,tpl-0078,template,Elaine,happy friday guys,OTHER
+m021,tpl-0078,template,Marcus,看情况吧,DECISION
+m022,tpl-0078,template,Nurul,住Jonker Walk的胶囊旅馆怎样？,ACCOMMODATION
+m023,tpl-0078,template,Elaine,+1 for the capsule hotel jonker walk,DECISION
+m024,tpl-0078,template,Nurul,定了！Jonker Walk的胶囊旅馆,DECISION
+m025,tpl-0078,template,Marcus,"Jangan jalan banyak sangat, lutut aku sakit",PREFERENCE
+m001,tpl-0019,template,Wei Jie,Jom pergi Ho Chi Minh haha,DESTINATION
+m002,tpl-0019,template,Hui Min,aiyo,OTHER
+m003,tpl-0019,template,Jason,胡志明市不要啦,DECISION
+m004,tpl-0019,template,Wei Jie,"ok la takpe, cancel",DECISION
+m005,tpl-0019,template,Farah,selamat hari jadi!,OTHER
+m006,tpl-0019,template,Wei Jie,"I prefer staying in one hotel, don't want to keep moving",PREFERENCE
+m007,tpl-0019,template,Jason,胡志明市去过了，兰卡威吧,DESTINATION
+m008,tpl-0019,template,Aiman,"Settle, Langkawi",DECISION
+m009,tpl-0019,template,Aiman,i get carsick easily leh,PREFERENCE
+m010,tpl-0019,template,Hui Min,let's do underwater world langkawi in the evening,ATTRACTION
+m011,tpl-0019,template,Wei Jie,没问题,DECISION
+m012,tpl-0019,template,Jason,可以啊,DECISION
+m013,tpl-0019,template,Farah,yes!! let's do it,DECISION
+m014,tpl-0019,template,Aiman,行 😅,DECISION
+m015,tpl-0019,template,Farah,many thanks,OTHER
+m016,tpl-0019,template,Farah,"Done, booking underwater world now leh",DECISION
+m017,tpl-0019,template,Jason,谢谢大家,OTHER
+m018,tpl-0019,template,Farah,sorry baru nampak msg,OTHER
+m019,tpl-0019,template,Farah,Telaga Harbour假日酒店一晚才RM420,ACCOMMODATION
+m020,tpl-0019,template,Hui Min,nah 😊,DECISION
+m021,tpl-0019,template,Jason,我觉得Telaga Harbour假日酒店不太好,DECISION
+m022,tpl-0019,template,Aiman,"Holiday Inn Express Telaga Harbour looks old leh, a homestay in Pantai Cenang better?",ACCOMMODATION
+m023,tpl-0019,template,Hui Min,sorry sorry ah,OTHER
+m024,tpl-0019,template,Aiman,含早餐,ACCOMMODATION
+m025,tpl-0019,template,Hui Min,not sure yet,DECISION
+m026,tpl-0019,template,Hui Min,Can we add skycab?,ATTRACTION
+m027,tpl-0019,template,Hui Min,need to book skycab tickets online,ATTRACTION
+m028,tpl-0019,template,Wei Jie,aku ok je,DECISION
+m029,tpl-0019,template,Wei Jie,waalaikumsalam,OTHER
+m030,tpl-0019,template,Hui Min,I like taking photos so want nice spots,PREFERENCE
+m031,tpl-0019,template,Aiman,我想去巨鹰广场,ATTRACTION
+m032,tpl-0019,template,Hui Min,yesss,DECISION
+m033,tpl-0019,template,Farah,"sure, i'm in",DECISION
+m034,tpl-0019,template,Hui Min,my phone battery low,OTHER
+m035,tpl-0019,template,Farah,+1 for skycab,DECISION
+m036,tpl-0019,template,Hui Min,How about end of Feb?,DATE
+m037,tpl-0019,template,Farah,omg can't wait,OTHER
+m038,tpl-0019,template,Hui Min,i need to apply leave early,DATE
+m039,tpl-0019,template,Jason,我在开车,OTHER
+m040,tpl-0019,template,Farah,end of Feb ok for me,DECISION
+m041,tpl-0019,template,Farah,lunch time!!,OTHER
+m042,tpl-0019,template,Aiman,final: end of Feb,DECISION
+m043,tpl-0019,template,Jason,行程不要太赶,PREFERENCE
+m044,tpl-0019,template,Farah,bored !!,OTHER
+m001,tpl-0206,template,Grace,jom pergi langkawi,DESTINATION
+m002,tpl-0206,template,Kumar,我想去香港,DESTINATION
+m003,tpl-0206,template,Kumar,我不想一直换酒店,PREFERENCE
+m004,tpl-0206,template,Kumar,手机快没电 😅,OTHER
+m005,tpl-0206,template,Grace,i'm in for hong kong ya,DECISION
+m006,tpl-0206,template,Ethan,香港就这样决定,DECISION
+m007,tpl-0206,template,Kumar,第1天去迪士尼怎么样,ATTRACTION
+m008,tpl-0206,template,Grace,so disneyland confirm ya,DECISION
+m009,tpl-0206,template,Kumar,塞车了,OTHER
+m010,tpl-0206,template,Grace,can see my msg?,OTHER
+m011,tpl-0206,template,Grace,18 hingga 23 Disember boleh tak?,DATE
+m012,tpl-0206,template,Kumar,Ok confirm Dec 18 to 23,DECISION
+m013,tpl-0206,template,Grace,每人RM3500应该够吧,BUDGET
+m014,tpl-0206,template,Grace,"ok confirmed then, RM3500",DECISION
+m015,tpl-0206,template,Grace,see you guys leh,OTHER
+m016,tpl-0206,template,Grace,Kita kena pergi Ladies' Market,ATTRACTION
+m017,tpl-0206,template,Ethan,那就这样定了，女人街,DECISION
+m018,tpl-0206,template,Kumar,mong kok的citadines比较便宜，一晚rm200,ACCOMMODATION
+m019,tpl-0206,template,Grace,我想要多一点购物时间,PREFERENCE
+m020,tpl-0206,template,Grace,那就这样定了，mong kok的citadines !!,DECISION
+m021,tpl-0206,template,Grace,全程叫grab吧，比较便宜,TRANSPORT
+m022,tpl-0206,template,Kumar,那边Grab很便宜,TRANSPORT
+m023,tpl-0206,template,Ethan,全程叫Grab太贵了,DECISION
+m024,tpl-0206,template,Ethan,人呢,OTHER
+m001,tpl-0083,template,Siti,I can only afford RM2k per person max,BUDGET
+m002,tpl-0083,template,Yusuf,ok no problem,DECISION
+m003,tpl-0083,template,Yusuf,eating now,OTHER
+m004,tpl-0083,template,Lisa,setuju rm2000,DECISION
+m005,tpl-0083,template,Siti,I'm thinking harajuku for day 1,ATTRACTION
+m006,tpl-0083,template,Siti,need to book takeshita tickets online leh !!,ATTRACTION
+m007,tpl-0083,template,Lisa,可以,DECISION
+m008,tpl-0083,template,Yusuf,i really want to see teamlab planets,ATTRACTION
+m009,tpl-0083,template,Lisa,Aku suka tempat tak ramai orang,PREFERENCE
+m010,tpl-0083,template,Siti,I love nature stuff more than malls,PREFERENCE
+m011,tpl-0083,template,Lisa,selamat malam semua 😊,OTHER
+m012,tpl-0083,template,Lisa,agree ya !!,DECISION
+m013,tpl-0083,template,Yusuf,takeshita not worth it la,DECISION
+m014,tpl-0083,template,Yusuf,we should visit ginza,ATTRACTION
+m015,tpl-0083,template,Siti,don't want,DECISION
+m016,tpl-0083,template,Yusuf,"ok fine, never mind then",DECISION
+m017,tpl-0083,template,Siti,monday blues,OTHER
+m018,tpl-0083,template,Yusuf,I can't eat spicy food ah,PREFERENCE
+m019,tpl-0083,template,Lisa,我们去迪士尼吧,ATTRACTION
+m020,tpl-0083,template,Yusuf,maybe? need to check my leave first,DECISION
+m021,tpl-0083,template,Lisa,How about a homestay in Urayasu? RM150 per night,ACCOMMODATION
+m022,tpl-0083,template,Lisa,三点才能check in,ACCOMMODATION
+m023,tpl-0083,template,Siti,yes!! let's do it la,DECISION
+m024,tpl-0083,template,Yusuf,"settled, the homestay Urayasu it is",DECISION
+m001,tpl-0177,template,Grace,pertengahan Februari boleh tak?,DATE
+m002,tpl-0177,template,Darren,ok mid Feb sounds good,DECISION
+m003,tpl-0177,template,Marcus,jap aku drive,OTHER
+m004,tpl-0177,template,Marcus,"settle, mid feb",DECISION
+m005,tpl-0177,template,Darren,I think 4k per pax is reasonable,BUDGET
+m006,tpl-0177,template,Marcus,sama-sama,OTHER
+m007,tpl-0177,template,Marcus,helo semua haha,OTHER
+m008,tpl-0177,template,Grace,Aku nak try street food,PREFERENCE
+m009,tpl-0177,template,Grace,nanti kita decide,DECISION
+m010,tpl-0177,template,Marcus,Jom makan kat street food market,ATTRACTION
+m011,tpl-0177,template,Darren,aku book street food market sekarang,DECISION
+m012,tpl-0177,template,Marcus,aku nak sangat pergi central post office,ATTRACTION
+m013,tpl-0177,template,Marcus,post office tutup hari isnin,ATTRACTION
+m014,tpl-0177,template,Darren,agree with post office,DECISION
+m015,tpl-0177,template,Marcus,tak sabar dah,OTHER
+m016,tpl-0177,template,Grace,set,DECISION
+m017,tpl-0177,template,Grace,"Aku jumpa Citadines Cu Chi, review ok",ACCOMMODATION
+m018,tpl-0177,template,Darren,How about Hilton District 1? RM200 per night,ACCOMMODATION
+m019,tpl-0177,template,Grace,setuju Hilton District 1,DECISION
+m020,tpl-0177,template,Marcus,Aku nak makanan halal,PREFERENCE
+m021,tpl-0177,template,Darren,我不想一直换酒店,PREFERENCE
+m022,tpl-0177,template,Marcus,aku ok je,DECISION
+m023,tpl-0177,template,Grace,aku book hilton district 1 sekarang,DECISION
+m024,tpl-0177,template,Grace,"skydeck best tau, nak pergi tak?",ATTRACTION
+m025,tpl-0177,template,Darren,need to book bitexco tickets online,ATTRACTION
+m026,tpl-0177,template,Darren,hmm I'd rather not do bitexco leh,DECISION
+m027,tpl-0177,template,Grace,takpe la skip bitexco,DECISION
+m028,tpl-0177,template,Darren,brb,OTHER
+m029,tpl-0177,template,Marcus,kita naik airasia je,TRANSPORT
+m030,tpl-0177,template,Grace,AirAsia on,DECISION
+m031,tpl-0177,template,Marcus,Aku book AirAsia sekarang,DECISION
+m032,tpl-0177,template,Marcus,jom pergi pho hoa pasteur,ATTRACTION
+m033,tpl-0177,template,Grace,skip pho hoa je la,DECISION
+m034,tpl-0177,template,Darren,hmm I'd rather not do pho hoa,DECISION
+m001,tpl-0099,template,Amy,Singapore trip anyone?~,DESTINATION
+m002,tpl-0099,template,Ethan,那边比较方便,DESTINATION
+m003,tpl-0099,template,Priya,How about Seoul?,DESTINATION
+m004,tpl-0099,template,Amy,Ok confirm Seoul,DECISION
+m005,tpl-0099,template,Amy,😂,OTHER
+m006,tpl-0099,template,Amy,jom pergi cheonggyecheon stream,ATTRACTION
+m007,tpl-0099,template,Priya,行,DECISION
+m008,tpl-0099,template,Ethan,清溪川我同意,DECISION
+m009,tpl-0099,template,Oscar,定了！清溪川,DECISION
+m010,tpl-0099,template,Oscar,Seoul boleh,DECISION
+m011,tpl-0099,template,Amy,+1 for Seoul,DECISION
+m012,tpl-0099,template,Ethan,jaga diri,OTHER
+m013,tpl-0099,template,Ethan,8月6号到9号去怎样？,DATE
+m014,tpl-0099,template,Ethan,网络很慢,OTHER
+m015,tpl-0099,template,Amy,baru habis kerja,OTHER
+m016,tpl-0099,template,Amy,可以,DECISION
+m017,tpl-0099,template,Oscar,好,DECISION
+m018,tpl-0099,template,Oscar,我想去乐天世界~,ATTRACTION
+m019,tpl-0099,template,Oscar,看到了,OTHER
+m020,tpl-0099,template,Ethan,没问题,DECISION
+m021,tpl-0099,template,Ethan,我先去洗澡,OTHER
+m022,tpl-0099,template,Priya,I'm in for lotte world,DECISION
+m023,tpl-0099,template,Amy,wrong group lol,OTHER
+m024,tpl-0099,template,Ethan,我想去仁寺洞,ATTRACTION
+m025,tpl-0099,template,Oscar,定了！仁寺洞,DECISION
+m026,tpl-0099,template,Ethan,听说土俗村很好吃 !!,ATTRACTION
+m027,tpl-0099,template,Priya,tosokchon entrance is free,ATTRACTION
+m028,tpl-0099,template,Oscar,我觉得土俗村不太好,DECISION
+m029,tpl-0099,template,Ethan,那土俗村就不去了,DECISION
+m030,tpl-0099,template,Oscar,要不要坐高铁？,TRANSPORT
+m031,tpl-0099,template,Ethan,不好意思,OTHER
+m032,tpl-0099,template,Priya,Tak nak lah train,DECISION
+m033,tpl-0099,template,Amy,"no la, train too expensive",DECISION
+m034,tpl-0099,template,Amy,Aku lagi suka alam semula jadi,PREFERENCE
+m035,tpl-0099,template,Priya,"I found the hostel at Namsan, reviews are good",ACCOMMODATION
+m036,tpl-0099,template,Amy,一间房可以住四个人,ACCOMMODATION
+m037,tpl-0099,template,Ethan,之后再决定,DECISION
+m038,tpl-0099,template,Oscar,我想去starfield library,ATTRACTION
+m039,tpl-0099,template,Priya,fine by me,DECISION
+m040,tpl-0099,template,Amy,nice pic,OTHER
+m041,tpl-0099,template,Amy,deal,DECISION
+m042,tpl-0099,template,Priya,omg can't wait,OTHER
+m043,tpl-0099,template,Ethan,行,DECISION
+m044,tpl-0099,template,Oscar,namsan的青旅可以,DECISION
+m045,tpl-0099,template,Priya,lunch time!!,OTHER
+m001,tpl-0203,template,Yusuf,Tokyo trip anyone?,DESTINATION
+m002,tpl-0203,template,Oscar,hello everyone,OTHER
+m003,tpl-0203,template,Xin Yi,hmm tokyo ah... not sure ah,DECISION
+m004,tpl-0203,template,Yusuf,i need halal food ya,PREFERENCE
+m005,tpl-0203,template,Yusuf,alamak,OTHER
+m006,tpl-0203,template,Daniel,东京再看看,DECISION
+m007,tpl-0203,template,Xin Yi,appreciate it,OTHER
+m008,tpl-0203,template,Yusuf,for real ya,OTHER
+m009,tpl-0203,template,Daniel,要不要去晴空塔？,ATTRACTION
+m010,tpl-0203,template,Xin Yi,Let's go meiji jingu,ATTRACTION
+m011,tpl-0203,template,Yusuf,+1,DECISION
+m012,tpl-0203,template,Oscar,gonna sleep soon leh,OTHER
+m013,tpl-0203,template,Daniel,明治神宫再看看,DECISION
+m014,tpl-0203,template,Yusuf,hmm skytree ah... not sure la,DECISION
+m015,tpl-0203,template,Oscar,Nak trip santai je !!,PREFERENCE
+m016,tpl-0203,template,Xin Yi,I can only afford RM 1500 per head max,BUDGET
+m017,tpl-0203,template,Yusuf,appreciate it,OTHER
+m018,tpl-0203,template,Daniel,这张照片好看,OTHER
+m019,tpl-0203,template,Oscar,RM1500 ok for me,DECISION
+m020,tpl-0203,template,Yusuf,hmm let me think ah,DECISION
+m021,tpl-0203,template,Daniel,要不要去筑地市场？,ATTRACTION
+m022,tpl-0203,template,Yusuf,筑地市场算了吧,DECISION
+m023,tpl-0203,template,Xin Yi,let's book a capsule hotel in Harajuku?,ACCOMMODATION
+m024,tpl-0203,template,Daniel,一间房可以住四个人,ACCOMMODATION
+m025,tpl-0203,template,Daniel,可以啊,DECISION
+m026,tpl-0203,template,Yusuf,"ok confirmed then, the capsule hotel Harajuku",DECISION
+m027,tpl-0203,template,Daniel,好吧那算了 (筑地市场),DECISION
+m028,tpl-0203,template,Oscar,easier to rent a car lah,TRANSPORT
+m029,tpl-0203,template,Yusuf,the metro card is around RM20,TRANSPORT
+m030,tpl-0203,template,Xin Yi,I get carsick easily,PREFERENCE
+m031,tpl-0203,template,Xin Yi,not keen on rent car,DECISION
+m032,tpl-0203,template,Oscar,ok the capsule hotel Harajuku sounds good,DECISION
+m033,tpl-0203,template,Oscar,shibuya sky anyone?,ATTRACTION
+m034,tpl-0203,template,Daniel,我在开车,OTHER
+m035,tpl-0203,template,Xin Yi,shibuya sky is quite far from the city leh,ATTRACTION
+m036,tpl-0203,template,Daniel,就shibuya sky吧,DECISION
+m037,tpl-0203,template,Yusuf,let's decide later 😅,DECISION
+m038,tpl-0203,template,Oscar,"ok fine, never mind then (rent car)",DECISION
+m001,tpl-0086,template,Lisa,我比较喜欢大自然,PREFERENCE
+m002,tpl-0086,template,Priya,我想吃当地小吃,PREFERENCE
+m003,tpl-0086,template,Darren,你们好,OTHER
+m004,tpl-0086,template,Ryan,我只能2月中请假,DATE
+m005,tpl-0086,template,Lisa,之后再决定,DECISION
+m006,tpl-0086,template,Priya,看情况吧,DECISION
+m007,tpl-0086,template,Darren,look at this meme,OTHER
+m008,tpl-0086,template,Ryan,要不要去天星小轮？,ATTRACTION
+m009,tpl-0086,template,Darren,天星小轮门票好像要100多,ATTRACTION
+m010,tpl-0086,template,Lisa,加油,OTHER
+m011,tpl-0086,template,Darren,我再想想 !!,DECISION
+m012,tpl-0086,template,Lisa,还不确定,DECISION
+m013,tpl-0086,template,Priya,星光大道好像不错欸，去吗,ATTRACTION
+m014,tpl-0086,template,Priya,Tsim Sha Tsui的胶囊旅馆比较便宜，一晚RM350,ACCOMMODATION
+m015,tpl-0086,template,Darren,看情况吧,DECISION
+m016,tpl-0086,template,Ryan,星光大道算了吧,DECISION
+m017,tpl-0086,template,Ryan,庙街一定要去,ATTRACTION
+m018,tpl-0086,template,Darren,庙街可以,DECISION
+m019,tpl-0086,template,Lisa,好啊,DECISION
+m020,tpl-0086,template,Ryan,我想要多一点购物时间,PREFERENCE
+m021,tpl-0086,template,Lisa,海港城听说很值得去,ATTRACTION
+m022,tpl-0086,template,Priya,harbour city nanti la fikir,DECISION
+m023,tpl-0086,template,Ryan,之后再决定,DECISION
+m001,tpl-0225,template,Jason,wrong group lol,OTHER
+m002,tpl-0225,template,Siti,hari 1 pergi oriental pearl ok tak?,ATTRACTION
+m003,tpl-0225,template,Siti,need to book oriental pearl tickets online,ATTRACTION
+m004,tpl-0225,template,Siti,see you guys,OTHER
+m005,tpl-0225,template,Jason,yes!! let's do it,DECISION
+m006,tpl-0225,template,Siti,ok I'll book oriental pearl tonight,DECISION
+m007,tpl-0225,template,Mei Ling,My budget is around 1.5k per pax ya,BUDGET
+m008,tpl-0225,template,Siti,"1.5k per pax too much la, RM5k per person can?",BUDGET
+m009,tpl-0225,template,Jason,ok,DECISION
+m010,tpl-0225,template,Siti,ok we go with RM5000,DECISION
+m011,tpl-0225,template,Siti,RM1500 can,DECISION
+m012,tpl-0225,template,Jason,gym later,OTHER
+m013,tpl-0225,template,Jason,I get carsick easily,PREFERENCE
+m014,tpl-0225,template,Jason,just checking,OTHER
+m015,tpl-0225,template,Jason,Put shanghai tower in the plan pls,ATTRACTION
+m016,tpl-0225,template,Siti,so shanghai tower confirm ya,DECISION
+m017,tpl-0225,template,Jason,jiajia soup dumplings for supper?,ATTRACTION
+m018,tpl-0225,template,Mei Ling,sounds good,DECISION
+m019,tpl-0225,template,Siti,hmm i'd rather not do jia jia tang bao~,DECISION
+m020,tpl-0225,template,Jason,I think we should take taxis,TRANSPORT
+m021,tpl-0225,template,Siti,"can we not wake up too early, no 6am start pls",PREFERENCE
+m022,tpl-0225,template,Mei Ling,这张照片好看 😊,OTHER
+m023,tpl-0225,template,Siti,the metro card is around rm20,TRANSPORT
+m024,tpl-0225,template,Siti,I'm in for taxi,DECISION
+m025,tpl-0225,template,Siti,坐的士就这样决定,DECISION
+m026,tpl-0225,template,Mei Ling,"a homestay in Qingpu is cheaper, RM420/night",ACCOMMODATION
+m027,tpl-0225,template,Jason,"settle, the homestay qingpu",DECISION
+m028,tpl-0225,template,Siti,internet down,OTHER
+m029,tpl-0225,template,Siti,Let's go Tianzifang,ATTRACTION
+m030,tpl-0225,template,Mei Ling,tian zi fang is quite far from the city leh,ATTRACTION
+m031,tpl-0225,template,Jason,"sure, I'm in",DECISION
+m032,tpl-0225,template,Mei Ling,"I prefer cheaper options, saving money",PREFERENCE
+m033,tpl-0225,template,Mei Ling,"no la, tian zi fang too expensive",DECISION
+m034,tpl-0225,template,Siti,Let's go disney,ATTRACTION
+m035,tpl-0225,template,Jason,disney not worth it la,DECISION
+m036,tpl-0225,template,Siti,ok la forget disney (disney),DECISION
+m001,tpl-0213,template,Zara,What about Osaka for this trip?,DESTINATION
+m002,tpl-0213,template,Natasha,Osaka mahal sangat,DECISION
+m003,tpl-0213,template,Zara,"ok fine, never mind then lah",DECISION
+m004,tpl-0213,template,Bryan,"I want a chill trip, not too packed",PREFERENCE
+m005,tpl-0213,template,Natasha,"Osaka dah pergi, Melaka pulak? !!",DESTINATION
+m006,tpl-0213,template,Bryan, area is more convenient,DESTINATION
+m007,tpl-0213,template,Bryan,ok,DECISION
+m008,tpl-0213,template,Natasha,sama-sama,OTHER
+m009,tpl-0213,template,Zara,Melaka ok for me 😅,DECISION
+m010,tpl-0213,template,Zara,Put st paul hill in the plan pls,ATTRACTION
+m011,tpl-0213,template,Bryan,sian,OTHER
+m012,tpl-0213,template,Natasha,Tiket st paul hill kena beli online,ATTRACTION
+m013,tpl-0213,template,Natasha,"klebang coconut shake sedap gila, nak try?",ATTRACTION
+m014,tpl-0213,template,Zara,+1 for klebang coconut shake,DECISION
+m015,tpl-0213,template,Natasha,"settle, klebang coconut shake",DECISION
+m016,tpl-0213,template,Bryan,not keen on st paul hill,DECISION
+m017,tpl-0213,template,Natasha,st paul hill tak best,DECISION
+m018,tpl-0213,template,Natasha,Aku nak sangat pergi A Famosa,ATTRACTION
+m019,tpl-0213,template,Zara,我再想想,DECISION
+m020,tpl-0213,template,Natasha,ada orang tak?,OTHER
+m021,tpl-0213,template,Bryan,can we discuss porta de santiago later?,DECISION
+m022,tpl-0213,template,Zara,good morning everyone,OTHER
+m023,tpl-0213,template,Natasha,Aku free 1 hingga 3 November,DATE
+m024,tpl-0213,template,Zara,i need to apply leave early,DATE
+m025,tpl-0213,template,Bryan,no la,DECISION
+m026,tpl-0213,template,Natasha,aku free 22 hingga 25 julai,DATE
+m027,tpl-0213,template,Natasha,bosan,OTHER
+m028,tpl-0213,template,Zara,hmm ok leh,OTHER
+m029,tpl-0213,template,Natasha,aduh,OTHER
+m030,tpl-0213,template,Natasha,"Settle, 22 to 25 Jul",DECISION
+m031,tpl-0213,template,Zara,lolol,OTHER
+m032,tpl-0213,template,Natasha,Kita sewa driver je,TRANSPORT
+m033,tpl-0213,template,Natasha,再见,OTHER
+m034,tpl-0213,template,Bryan,yesss leh,DECISION
+m035,tpl-0213,template,Natasha,hujan la,OTHER
+m036,tpl-0213,template,Zara,"Heard Menara Taming Sari is worth it, let's go",ATTRACTION
+m037,tpl-0213,template,Bryan,pass on taming sari tower ah,DECISION
+m038,tpl-0213,template,Zara,I prefer less crowded places,PREFERENCE
+m039,tpl-0213,template,Natasha,taming sari tower mahal sangat,DECISION
+m040,tpl-0213,template,Zara,I don't think private driver is a good idea,DECISION
+m041,tpl-0213,template,Zara,"jonker walk best tau, nak pergi tak?",ATTRACTION
+m042,tpl-0213,template,Natasha,jonker street tak best 😊,DECISION
+m043,tpl-0213,template,Bryan,大家早安,OTHER
+m044,tpl-0213,template,Bryan,jonker street not worth it la,DECISION
+m045,tpl-0213,template,Natasha,jap aku drive,OTHER
+m046,tpl-0213,template,Zara,oh i see,OTHER
+m047,tpl-0213,template,Bryan,"Heard Melaka River Cruise is worth it, let's go",ATTRACTION
+m048,tpl-0213,template,Bryan,river cruise entrance is free,ATTRACTION
+m049,tpl-0213,template,Zara,eh?,OTHER
+m050,tpl-0213,template,Natasha,agree,DECISION
+m051,tpl-0213,template,Zara,river cruise boleh 🤔,DECISION
+m001,tpl-0004,template,Grace,Taipei trip anyone?,DESTINATION
+m002,tpl-0004,template,Ethan,skip Taipei lah~,DECISION
+m003,tpl-0004,template,Grace,"Taipei went before already, Langkawi?",DESTINATION
+m004,tpl-0004,template,Ethan, area is more convenient,DESTINATION
+m005,tpl-0004,template,Zara,no way lol ya,OTHER
+m006,tpl-0004,template,Grace,wtf 😅,OTHER
+m007,tpl-0004,template,Zara,driving now ah,OTHER
+m008,tpl-0004,template,Ethan,same lol ah,OTHER
+m009,tpl-0004,template,Ethan,ahh ok leh,OTHER
+m010,tpl-0004,template,Zara,Langkawi can,DECISION
+m011,tpl-0004,template,Ethan,ok Langkawi sounds good,DECISION
+m012,tpl-0004,template,Aiman,hello everyone,OTHER
+m013,tpl-0004,template,Aiman,agree with Langkawi,DECISION
+m014,tpl-0004,template,Grace,jumpa nanti,OTHER
+m015,tpl-0004,template,Grace,i get carsick easily lah,PREFERENCE
+m016,tpl-0004,template,Ethan,"settled, langkawi it is~",DECISION
+m017,tpl-0004,template,Aiman,Aku nak sangat pergi Island Hopping Tour,ATTRACTION
+m018,tpl-0004,template,Zara,跳岛游门票好像要100多,ATTRACTION
+m019,tpl-0004,template,Zara,agree with island hopping 🤔,DECISION
+m020,tpl-0004,template,Ethan,ok I'll book island hopping tonight,DECISION
+m021,tpl-0004,template,Grace,let's keep it under rm4000 per person,BUDGET
+m022,tpl-0004,template,Zara,I don't think RM4000 is a good idea,DECISION
+m023,tpl-0004,template,Grace,"ok fine, never mind then lah",DECISION
+m024,tpl-0004,template,Grace,look at this meme,OTHER
+m025,tpl-0004,template,Aiman,i love nature stuff more than malls,PREFERENCE
+m026,tpl-0004,template,Ethan,let's keep it under RM1500 per person,BUDGET
+m027,tpl-0004,template,Grace,tengah drive,OTHER
+m028,tpl-0004,template,Aiman,ok RM1500 sounds good,DECISION
+m029,tpl-0004,template,Grace,setuju RM1500,DECISION
+m030,tpl-0004,template,Zara,RM1500 can,DECISION
+m031,tpl-0004,template,Ethan,Let's go mid Mar,DATE
+m032,tpl-0004,template,Zara,"no la, mid Mar too expensive",DECISION
+m033,tpl-0004,template,Ethan,oh i see,OTHER
+m034,tpl-0004,template,Zara,so true,OTHER
+m035,tpl-0004,template,Ethan,ok skip it,DECISION
+m036,tpl-0004,template,Ethan,"i'm busy mid mar, how about 1-5 mar",DATE
+m037,tpl-0004,template,Zara,ok 1-5 Mar sounds good ya,DECISION
+m038,tpl-0004,template,Aiman,1-5 mar ok for me ah,DECISION
+m039,tpl-0004,template,Grace,I don't think mid Mar is a good idea la,DECISION
+m040,tpl-0004,template,Ethan,Put telaga tujuh in the plan pls~,ATTRACTION
+m041,tpl-0004,template,Ethan,I want more shopping time,PREFERENCE
+m042,tpl-0004,template,Zara,my phone battery low,OTHER
+m043,tpl-0004,template,Zara,seven wells waterfall not worth it la,DECISION
+m044,tpl-0004,template,Grace,"no la, seven wells waterfall too expensive",DECISION
+m045,tpl-0004,template,Ethan,ok skip it (seven wells waterfall),DECISION
+m046,tpl-0004,template,Aiman,"This one looks ok: Citadines Tanjung Rhu, RM420 a night",ACCOMMODATION
+m047,tpl-0004,template,Aiman,"ok confirmed then, Citadines Tanjung Rhu",DECISION
+m001,tpl-0174,template,Mei Ling,RM12000 total should be enough right?,BUDGET
+m002,tpl-0174,template,Mei Ling,"total RM12000 mahal sangat, total RM15000 boleh?",BUDGET
+m003,tpl-0174,template,Li Wei,ok RM15000 sounds good,DECISION
+m004,tpl-0174,template,Vivian,我ok,DECISION
+m005,tpl-0174,template,Mei Ling,Aku nak makanan halal,PREFERENCE
+m006,tpl-0174,template,Priya,agree,DECISION
+m007,tpl-0174,template,Vivian,全部一万五就这样决定 haha,DECISION
+m008,tpl-0174,template,Li Wei,how about we take taxis?,TRANSPORT
+m009,tpl-0174,template,Priya,"no la, taxi too expensive",DECISION
+m010,tpl-0174,template,Wei Jie,not keen on taxi,DECISION
+m011,tpl-0174,template,Mei Ling,Hari 4 pergi Gyeongbokgung Palace ok tak?,ATTRACTION
+m012,tpl-0174,template,Li Wei,need to book gyeongbokgung tickets online,ATTRACTION
+m013,tpl-0174,template,Li Wei,景福宫太贵了,DECISION
+m014,tpl-0174,template,Priya,skip gyeongbokgung lah,DECISION
+m015,tpl-0174,template,Priya,"citadines namsan is cheaper, rm180/night",ACCOMMODATION
+m016,tpl-0174,template,Mei Ling,"Citadines Namsan jauh la, Novotel Namsan lagi ok",ACCOMMODATION
+m017,tpl-0174,template,Priya,hmm let me think,DECISION
+m018,tpl-0174,template,Vivian,要不要去汉江公园？ haha,ATTRACTION
+m019,tpl-0174,template,Li Wei,hi everyone,OTHER
+m020,tpl-0174,template,Priya,hangang park opens at 9am btw lah,ATTRACTION
+m021,tpl-0174,template,Vivian,汉江公园就这样决定,DECISION
+m022,tpl-0174,template,Vivian,保重,OTHER
+m023,tpl-0174,template,Vivian,第2天去starfield library怎么样,ATTRACTION
+m024,tpl-0174,template,Wei Jie,"I prefer staying in one hotel, don't want to keep moving",PREFERENCE
+m025,tpl-0174,template,Wei Jie,hahaha true,OTHER
+m026,tpl-0174,template,Mei Ling,starfield library tutup hari Isnin,ATTRACTION
+m027,tpl-0174,template,Li Wei,I'm in for starfield library,DECISION
+m028,tpl-0174,template,Priya,"sure, I'm in",DECISION
+m029,tpl-0174,template,Vivian,10月17号到19号大家可以吗,DATE
+m030,tpl-0174,template,Mei Ling,tq semua,OTHER
+m031,tpl-0174,template,Vivian,去几天？,DATE
+m032,tpl-0174,template,Wei Jie,look at this meme ah haha,OTHER
+m033,tpl-0174,template,Mei Ling,Tak nak lah 17 to 19 Oct,DECISION
+m034,tpl-0174,template,Priya,no la,DECISION
+m035,tpl-0174,template,Wei Jie,starfield library好啊 haha,DECISION
+m036,tpl-0174,template,Vivian,10月17号到19号没空，改7月底好吗,DATE
+m037,tpl-0174,template,Wei Jie,"settled, end of Jul it is",DECISION
+m038,tpl-0174,template,Priya,"heard bukchon hanok village is worth it, let's go lah",ATTRACTION
+m039,tpl-0174,template,Vivian,我想去拍照好看的地方,PREFERENCE
+m040,tpl-0174,template,Wei Jie,bukchon opens at 9am btw ah,ATTRACTION
+m041,tpl-0174,template,Mei Ling,tak payah,DECISION
+m042,tpl-0174,template,Wei Jie,I'm thinking Nami Island for day 3 🤔,ATTRACTION
+m043,tpl-0174,template,Li Wei,agree,DECISION
+m044,tpl-0174,template,Li Wei,so nami island confirm ya,DECISION
+m045,tpl-0174,template,Vivian,有人在吗,OTHER
+m046,tpl-0174,template,Priya,we should visit myeongdong shopping street,ATTRACTION
+m047,tpl-0174,template,Li Wei,ok no problem,DECISION
+m048,tpl-0174,template,Wei Jie,myeongdong ok for me leh,DECISION
+m049,tpl-0174,template,Vivian,可以啊,DECISION
+m050,tpl-0174,template,Vivian,收到收到,OTHER
+m001,tpl-0060,template,Jia Hao,玉佛寺一定要去,ATTRACTION
+m002,tpl-0060,template,Nurul,jade buddha temple ok for me,DECISION
+m003,tpl-0060,template,Yusuf,anyone awake,OTHER
+m004,tpl-0060,template,Priya,ok setuju,DECISION
+m005,tpl-0060,template,Priya,Aku free awal April,DATE
+m006,tpl-0060,template,Nurul,can can,DECISION
+m007,tpl-0060,template,Yusuf,"same, ok",DECISION
+m008,tpl-0060,template,Oscar,可以,DECISION
+m009,tpl-0060,template,Oscar,定了！4月初,DECISION
+m010,tpl-0060,template,Jia Hao,保重,OTHER
+m011,tpl-0060,template,Oscar,玉佛寺好啊,DECISION
+m012,tpl-0060,template,Jia Hao,我不太能吃辣,PREFERENCE
+m013,tpl-0060,template,Priya,aduh,OTHER
+m014,tpl-0060,template,Yusuf,+1 for jade buddha temple ah,DECISION
+m015,tpl-0060,template,Oscar,我预算大概rm3500一个人,BUDGET
+m016,tpl-0060,template,Priya,Aku nak try street food,PREFERENCE
+m017,tpl-0060,template,Jia Hao,笑死人,OTHER
+m018,tpl-0060,template,Yusuf,RM3500 ok for me,DECISION
+m019,tpl-0060,template,Nurul,don't want leh,DECISION
+m020,tpl-0060,template,Priya,Kita naik keretapi laju je,TRANSPORT
+m021,tpl-0060,template,Jia Hao,看到了,OTHER
+m022,tpl-0060,template,Oscar,好,DECISION
+m023,tpl-0060,template,Nurul,hmm i'd rather not do train,DECISION
+m024,tpl-0060,template,Priya,Jom pergi tian zi fang,ATTRACTION
+m025,tpl-0060,template,Jia Hao,发错了,OTHER
+m026,tpl-0060,template,Oscar,大家早,OTHER
+m027,tpl-0060,template,Oscar,定了！田子坊,DECISION
+m028,tpl-0060,template,Yusuf,cya,OTHER
+m029,tpl-0060,template,Priya,hai korang,OTHER
+m030,tpl-0060,template,Oscar,Zhongshan East 1st Road的青旅一晚才RM250,ACCOMMODATION
+m031,tpl-0060,template,Jia Hao,田子坊可以,DECISION
+m032,tpl-0060,template,Oscar,在吗？,OTHER
+m033,tpl-0060,template,Jia Hao,Pudong的民宿一晚才RM200,ACCOMMODATION
+m034,tpl-0060,template,Nurul,不想去Zhongshan East 1st Road的青旅,DECISION
+m035,tpl-0060,template,Nurul,"Citadines Pudong is cheaper, RM250/night",ACCOMMODATION
+m036,tpl-0060,template,Yusuf,Citadines Pudong ok for me ya,DECISION
+m037,tpl-0060,template,Oscar,我觉得Pudong的Citadines不太好,DECISION
+m001,tpl-0219,template,Chloe,Jom pergi Singapura 😅,DESTINATION
+m002,tpl-0219,template,Chloe,kawasan  lagi senang,DESTINATION
+m003,tpl-0219,template,Ryan,Jom pergi Seoul,DESTINATION
+m004,tpl-0219,template,Chloe,on!,DECISION
+m005,tpl-0219,template,Chloe,"Settle, Seoul",DECISION
+m006,tpl-0219,template,Chloe,hari 2 pergi ihwa mural village ok tak?,ATTRACTION
+m007,tpl-0219,template,Ryan,goodnight guys ya,OTHER
+m008,tpl-0219,template,Natasha,need to book ihwa mural village tickets online,ATTRACTION
+m009,tpl-0219,template,Ryan,huh?,OTHER
+m010,tpl-0219,template,Ryan,selamat petang,OTHER
+m011,tpl-0219,template,Natasha,首尔可以,DECISION
+m012,tpl-0219,template,Ryan,我想去拍照好看的地方,PREFERENCE
+m013,tpl-0219,template,Natasha,lotte world anyone?,ATTRACTION
+m014,tpl-0219,template,Chloe,tak pasti lagi,DECISION
+m015,tpl-0219,template,Ryan,ihwa mural village? no thanks,DECISION
+m016,tpl-0219,template,Chloe,RM2500 per orang cukup kot?,BUDGET
+m017,tpl-0219,template,Ryan,之后再决定,DECISION
+m018,tpl-0219,template,Xin Yi,nanti kita decide,DECISION
+m019,tpl-0219,template,Xin Yi,我不太能吃辣,PREFERENCE
+m020,tpl-0219,template,Chloe,panas gila,OTHER
+m021,tpl-0219,template,Chloe,"Aku jumpa Holiday Inn Express Jongno, review ok",ACCOMMODATION
+m022,tpl-0219,template,Natasha,"can we not wake up too early, no 6am start pls",PREFERENCE
+m023,tpl-0219,template,Natasha,I don't think Holiday Inn Express Jongno is a good idea,DECISION
+m024,tpl-0219,template,Xin Yi,"no la, Holiday Inn Express Jongno too expensive",DECISION
+m025,tpl-0219,template,Natasha,wtf,OTHER
+m026,tpl-0219,template,Xin Yi,let's book a homestay in Myeongdong? !!,ACCOMMODATION
+m027,tpl-0219,template,Natasha,agree with the homestay Myeongdong lah,DECISION
+m028,tpl-0219,template,Ryan,i don't think the homestay myeongdong is a good idea,DECISION
+m029,tpl-0219,template,Ryan,Jom pergi ddp,ATTRACTION
+m030,tpl-0219,template,Xin Yi,ddp not worth it la ah,DECISION
+m031,tpl-0219,template,Natasha,anyone watched the game last night?,OTHER
+m032,tpl-0219,template,Natasha,hmm I'd rather not do ddp,DECISION
+m033,tpl-0219,template,Natasha,end Aug ok for everyone?,DATE
+m034,tpl-0219,template,Ryan,end Aug tak best,DECISION
+m035,tpl-0219,template,Natasha,ok skip it (end Aug),DECISION
+m036,tpl-0219,template,Natasha,"i'm busy end aug, how about may 7 to 9 😊",DATE
+m037,tpl-0219,template,Chloe,Ok confirm May 7 to 9,DECISION
+m038,tpl-0219,template,Chloe,end aug mahal sangat,DECISION
+m001,tpl-0010,template,Elaine,"Taipei lah, been wanting to go",DESTINATION
+m002,tpl-0010,template,Tan,take care guys,OTHER
+m003,tpl-0010,template,Kumar,笑死,OTHER
+m004,tpl-0010,template,Tan,Taipei can,DECISION
+m005,tpl-0010,template,Elaine,final: Taipei,DECISION
+m006,tpl-0010,template,Tan,exam tomorrow 😭,OTHER
+m007,tpl-0010,template,Kumar,rm5000一个人应该够吧,BUDGET
+m008,tpl-0010,template,Kumar,flight alone is about rm1200,BUDGET
+m009,tpl-0010,template,Elaine,aiyo,OTHER
+m010,tpl-0010,template,Elaine,I'm ok with that,DECISION
+m011,tpl-0010,template,Elaine,take care guys,OTHER
+m012,tpl-0010,template,Kumar,要不要去象山？,ATTRACTION
+m013,tpl-0010,template,Kumar,aku book xiangshan sekarang,DECISION
+m014,tpl-0010,template,Tan,RM5000 ok for me,DECISION
+m015,tpl-0010,template,Tan,let's go early jun ah,DATE
+m016,tpl-0010,template,Kumar,hehehe ya,OTHER
+m017,tpl-0010,template,Kumar,"awal jun aku tak boleh, pertengahan disember?",DATE
+m018,tpl-0010,template,Elaine,boleh je,DECISION
+m019,tpl-0010,template,Tan,agree with mid dec,DECISION
+m020,tpl-0010,template,Kumar,"the hostel at da'an murah gila, rm420 semalam",ACCOMMODATION
+m021,tpl-0010,template,Tan,let's decide later lah,DECISION
+m022,tpl-0010,template,Kumar,aku vegetarian,PREFERENCE
+m023,tpl-0010,template,Elaine,not sure yet 😅,DECISION
+m024,tpl-0010,template,Tan,"Heard Ximending is worth it, let's go",ATTRACTION
+m025,tpl-0010,template,Elaine,so true,OTHER
+m026,tpl-0010,template,Tan,gd morning !!,OTHER
+m027,tpl-0010,template,Elaine,ximending not worth it la,DECISION
+m028,tpl-0010,template,Tan,Let's eat at Yongkang Street,ATTRACTION
+m029,tpl-0010,template,Elaine,"no la, yongkang street too expensive",DECISION
+m030,tpl-0010,template,Tan,ok la forget yongkang street,DECISION
+m031,tpl-0010,template,Tan,🙈 lah,OTHER
+m032,tpl-0010,template,Kumar,hmm I'd rather not do ximending leh,DECISION
+m033,tpl-0010,template,Tan,ok la forget ximending (ximending) ya,DECISION
+m001,tpl-0197,template,Daniel,I need halal food ya leh haha,PREFERENCE
+m002,tpl-0197,template,Grace,Let's go KL this year! 😊,DESTINATION
+m003,tpl-0197,template,Daniel,exactly,OTHER
+m004,tpl-0197,template,Daniel,depends on the price,DECISION
+m005,tpl-0197,template,Daniel,Lot 10 Hutong Food Court for supper?,ATTRACTION
+m006,tpl-0197,template,Xin Yi,skip lot 10 hutong je la,DECISION
+m007,tpl-0197,template,Daniel,ok la forget lot 10 hutong,DECISION
+m008,tpl-0197,template,Xin Yi,"I found a capsule hotel in Bukit Bintang, reviews are good",ACCOMMODATION
+m009,tpl-0197,template,Grace,the capsule hotel Bukit Bintang? no thanks,DECISION
+m010,tpl-0197,template,Xin Yi,"a capsule hotel in bukit bintang looks old leh, novotel klcc better?",ACCOMMODATION
+m011,tpl-0197,template,Daniel,hmm Novotel KLCC ah... not sure,DECISION
+m012,tpl-0197,template,Daniel,"Heard klcc is worth it, let's go",ATTRACTION
+m013,tpl-0197,template,Daniel,klcc is quite far from the city leh,ATTRACTION
+m014,tpl-0197,template,Xin Yi,klcc can,DECISION
+m015,tpl-0197,template,Grace,"ok confirmed then, klcc",DECISION
+m016,tpl-0197,template,Grace,how about Thean Hou Temple on day 1?,ATTRACTION
+m017,tpl-0197,template,Daniel,wahh,OTHER
+m018,tpl-0197,template,Xin Yi,🥲,OTHER
+m019,tpl-0197,template,Xin Yi,thank you so much,OTHER
+m020,tpl-0197,template,Xin Yi,thean hou on,DECISION
+m021,tpl-0197,template,Daniel,agree with thean hou !!,DECISION
+m022,tpl-0197,template,Daniel,maaf lambat reply,OTHER
+m023,tpl-0197,template,Xin Yi,we must try jalan alor,ATTRACTION
+m024,tpl-0197,template,Grace,+1 for jalan alor,DECISION
+m025,tpl-0197,template,Grace,"can we not wake up too early, no 6am start pls",PREFERENCE
+m026,tpl-0197,template,Daniel,i'm in for jalan alor,DECISION
+m027,tpl-0197,template,Daniel,stuck in traffic 🤔,OTHER
+m028,tpl-0197,template,Grace,Kita Grab je semua je,TRANSPORT
+m029,tpl-0197,template,Xin Yi,agree,DECISION
+m030,tpl-0197,template,Grace,定了！全程叫Grab~,DECISION
+m031,tpl-0197,template,Xin Yi,🥲 ah,OTHER
+m032,tpl-0197,template,Xin Yi,anyone watched the game last night?,OTHER
+m001,tpl-0048,template,Vivian,I vote Seoul,DESTINATION
+m002,tpl-0048,template,Yusuf,i don't think seoul is a good idea,DECISION
+m003,tpl-0048,template,Ryan,不想去首尔,DECISION
+m004,tpl-0048,template,Ryan,首尔太贵，去马六甲好了,DESTINATION
+m005,tpl-0048,template,Vivian,离市中心近吗,DESTINATION
+m006,tpl-0048,template,Vivian,马六甲可以,DECISION
+m007,tpl-0048,template,Yusuf,+1,DECISION
+m008,tpl-0048,template,Vivian,我想要多一点购物时间,PREFERENCE
+m009,tpl-0048,template,Ryan,好饿,OTHER
+m010,tpl-0048,template,Vivian,不要超过每人RM5000,BUDGET
+m011,tpl-0048,template,Vivian,加油,OTHER
+m012,tpl-0048,template,Yusuf,"Heard taming sari tower is worth it, let's go",ATTRACTION
+m013,tpl-0048,template,Vivian,就taming sari tower吧,DECISION
+m014,tpl-0048,template,Yusuf,hmm RM5000 ah... not sure,DECISION
+m015,tpl-0048,template,Vivian,发错了,OTHER
+m016,tpl-0048,template,Ryan,每人RM5000再看看,DECISION
+m017,tpl-0048,template,Ryan,我们去峇峇娘惹博物馆吧,ATTRACTION
+m018,tpl-0048,template,Vivian,no la ya,DECISION
+m019,tpl-0048,template,Ryan,taming sari tower可以,DECISION
+m020,tpl-0048,template,Vivian,Makan capitol satay celup jom,ATTRACTION
+m021,tpl-0048,template,Yusuf,人呢,OTHER
+m022,tpl-0048,template,Yusuf,need to book capitol satay celup tickets online,ATTRACTION
+m023,tpl-0048,template,Yusuf,capitol satay celup can,DECISION
+m024,tpl-0048,template,Yusuf,I'm in for baba nyonya museum ya,DECISION
+m025,tpl-0048,template,Yusuf,I'm thinking dutch square for day 1 la,ATTRACTION
+m026,tpl-0048,template,Yusuf,need to book stadthuys tickets online !!,ATTRACTION
+m027,tpl-0048,template,Ryan,不要,DECISION
+m028,tpl-0048,template,Vivian,红屋不要啦,DECISION
+m029,tpl-0048,template,Yusuf,my cat just knocked over my coffee,OTHER
+m030,tpl-0048,template,Ryan,沙爹朱律好啊,DECISION
+m031,tpl-0048,template,Yusuf,How about mid Sep?,DATE
+m032,tpl-0048,template,Ryan,加油,OTHER
+m033,tpl-0048,template,Vivian,刚下课,OTHER
+m034,tpl-0048,template,Vivian,哈哈,OTHER
+m035,tpl-0048,template,Vivian,9月中再看看,DECISION
+m036,tpl-0048,template,Ryan,抱歉,OTHER
+m037,tpl-0048,template,Yusuf,I think we should take the bus,TRANSPORT
+m038,tpl-0048,template,Ryan,我吃素,PREFERENCE
+m039,tpl-0048,template,Ryan,真的假的,OTHER
+m040,tpl-0048,template,Ryan,can can,DECISION
+m041,tpl-0048,template,Vivian,"Settle, bus",DECISION
+m042,tpl-0048,template,Vivian,要不要买交通一日券？,TRANSPORT
+m043,tpl-0048,template,Yusuf,I'm in for day pass,DECISION
+m044,tpl-0048,template,Vivian,I'm in for bus,DECISION
+m045,tpl-0048,template,Ryan,你们好,OTHER
+m046,tpl-0048,template,Ryan,要不要去圣保罗山？,ATTRACTION
+m047,tpl-0048,template,Ryan,鸡场街一定要去,ATTRACTION
+m048,tpl-0048,template,Vivian,我ok~,DECISION
+m049,tpl-0048,template,Ryan,我在上班,OTHER
+m050,tpl-0048,template,Yusuf,"can we not walk too much, my knee pain",PREFERENCE
+m051,tpl-0048,template,Vivian,我在上班,OTHER
+m052,tpl-0048,template,Yusuf,鸡场街我同意,DECISION
+m053,tpl-0048,template,Vivian,我去订鸡场街了,DECISION
+m054,tpl-0048,template,Vivian,圣保罗山不要啦,DECISION
+m055,tpl-0048,template,Ryan,对啊,OTHER
+m056,tpl-0048,template,Ryan,晚安大家,OTHER
+m057,tpl-0048,template,Ryan,好吧那算了 (圣保罗山),DECISION
+m001,tpl-0198,template,Daniel,alamak,OTHER
+m002,tpl-0198,template,Hui Min,kl trip anyone?,DESTINATION
+m003,tpl-0198,template,Cheng,no la,DECISION
+m004,tpl-0198,template,Hui Min,ok skip it,DECISION
+m005,tpl-0198,template,Daniel,Aku nak makanan halal,PREFERENCE
+m006,tpl-0198,template,Hui Min,"KL went before already, Melaka?",DESTINATION
+m007,tpl-0198,template,Cheng,i want to try local street food leh,PREFERENCE
+m008,tpl-0198,template,Daniel,kawasan  lagi senang,DESTINATION
+m009,tpl-0198,template,Cheng,melaka ok for me,DECISION
+m010,tpl-0198,template,Daniel,Jom pergi Baba & Nyonya Heritage Museum,ATTRACTION
+m011,tpl-0198,template,Cheng,哈哈,OTHER
+m012,tpl-0198,template,Hui Min,not sure yet,DECISION
+m013,tpl-0198,template,Hui Min,i think 1.5k per pax is reasonable,BUDGET
+m014,tpl-0198,template,Daniel,skip RM1500 je la,DECISION
+m015,tpl-0198,template,Hui Min,ok la forget rm1500,DECISION
+m016,tpl-0198,template,Hui Min,testing,OTHER
+m017,tpl-0198,template,Cheng,can we discuss baba nyonya museum later?,DECISION
+m018,tpl-0198,template,Daniel,Budget aku dalam RM2500 seorang,BUDGET
+m019,tpl-0198,template,Cheng,hello everyone,OTHER
+m020,tpl-0198,template,Cheng,lol,OTHER
+m021,tpl-0198,template,Hui Min,omg can't wait ya,OTHER
+m022,tpl-0198,template,Hui Min,can can lah,DECISION
+m023,tpl-0198,template,Cheng,RM2500? no thanks leh,DECISION
+m024,tpl-0198,template,Cheng,"no la, RM1500 too expensive",DECISION
+m025,tpl-0198,template,Cheng,"heard klebang coconut shake is super good, go?",ATTRACTION
+m026,tpl-0198,template,Hui Min,not keen on coconut shake,DECISION
+m027,tpl-0198,template,Daniel,Apa kata stay kat ibis Jalan Tun Tan Cheng Lock?,ACCOMMODATION
+m028,tpl-0198,template,Hui Min,I'm in for ibis Jalan Tun Tan Cheng Lock,DECISION
+m029,tpl-0198,template,Cheng,don't want,DECISION
+m030,tpl-0198,template,Hui Min,Capitol Satay Celup anyone?,ATTRACTION
+m031,tpl-0198,template,Cheng,can we discuss satay celup later?,DECISION
+m032,tpl-0198,template,Daniel,16 hingga 20 November boleh tak?,DATE
+m033,tpl-0198,template,Cheng,ok we go with 16 to 20 nov,DECISION
+m034,tpl-0198,template,Cheng,easier to take taxis 🤔,TRANSPORT
+m035,tpl-0198,template,Hui Min,so taxi confirm ya leh,DECISION
+m036,tpl-0198,template,Hui Min,I get carsick easily ya,PREFERENCE
+m037,tpl-0198,template,Daniel,Jom pergi The Stadthuys,ATTRACTION
+m038,tpl-0198,template,Hui Min,"sure, i'm in",DECISION
+m039,tpl-0198,template,Hui Min,no way lol,OTHER
+m040,tpl-0198,template,Cheng,"same, ok",DECISION
+m041,tpl-0198,template,Cheng,"Done, booking dutch square now",DECISION
+m001,tpl-0095,template,Nurul,Singapura best ni,DESTINATION
+m002,tpl-0095,template,Wei Jie,"ok confirmed then, Singapore",DECISION
+m003,tpl-0095,template,Qistina,kampong glam anyone?,ATTRACTION
+m004,tpl-0095,template,Qistina,I'm vegetarian btw,PREFERENCE
+m005,tpl-0095,template,Nurul,maaf lambat reply 😊,OTHER
+m006,tpl-0095,template,Wei Jie,行,DECISION
+m007,tpl-0095,template,Nurul,haji lane on,DECISION
+m008,tpl-0095,template,Yusuf,不要超过RM2000一个人,BUDGET
+m009,tpl-0095,template,Qistina,加油,OTHER
+m010,tpl-0095,template,Yusuf,RM2000一个人太多了，一个人三千五块可以吗？,BUDGET
+m011,tpl-0095,template,Qistina,I don't think RM3500 is a good idea,DECISION
+m012,tpl-0095,template,Wei Jie,maxwell for supper?,ATTRACTION
+m013,tpl-0095,template,Qistina,麦士威门票好像要100多,ATTRACTION
+m014,tpl-0095,template,Yusuf,麦士威再看看,DECISION
+m015,tpl-0095,template,Nurul,maxwell nanti la fikir,DECISION
+m016,tpl-0095,template,Wei Jie,RM3500 ok for me,DECISION
+m017,tpl-0095,template,Yusuf,我不太能吃辣,PREFERENCE
+m018,tpl-0095,template,Nurul,"Jangan jalan banyak sangat, lutut aku sakit",PREFERENCE
+m019,tpl-0095,template,Yusuf,我看了raffles quay的ibis，评价不错,ACCOMMODATION
+m020,tpl-0095,template,Nurul,set,DECISION
+m021,tpl-0095,template,Nurul,selamat malam semua,OTHER
+m022,tpl-0095,template,Yusuf,那就这样定了，Raffles Quay的ibis,DECISION
+m023,tpl-0095,template,Yusuf,5月底去怎样？,DATE
+m024,tpl-0095,template,Qistina,我觉得5月底不太好,DECISION
+m025,tpl-0095,template,Wei Jie,wahh,OTHER
+m026,tpl-0095,template,Yusuf,好吧那算了,DECISION
+m027,tpl-0095,template,Qistina,anybody here lah,OTHER
+m028,tpl-0095,template,Qistina,我只能5月16号到21号请假,DATE
+m029,tpl-0095,template,Nurul,boleh je,DECISION
+m030,tpl-0095,template,Qistina,final: May 16 to 21,DECISION
+m031,tpl-0095,template,Wei Jie,easier to take taxis,TRANSPORT
+m032,tpl-0095,template,Wei Jie,I need halal food ya,PREFERENCE
+m033,tpl-0095,template,Yusuf,我ok,DECISION
+m034,tpl-0095,template,Qistina,can can,DECISION
+m035,tpl-0095,template,Nurul,taxi on,DECISION
+m036,tpl-0095,template,Wei Jie,lolol ya,OTHER
+m001,tpl-0055,template,Qistina,Taipei trip anyone?,DESTINATION
+m002,tpl-0055,template,Qistina,so taipei confirm ya,DECISION
+m003,tpl-0055,template,Zara,yo guys,OTHER
+m004,tpl-0055,template,Hafiz,龙山寺听说很值得去,ATTRACTION
+m005,tpl-0055,template,Zara,longshan temple? no thanks,DECISION
+m006,tpl-0055,template,Wen,good morning everyone,OTHER
+m007,tpl-0055,template,Natasha,👋👋,OTHER
+m008,tpl-0055,template,Qistina,How about mid Dec?,DATE
+m009,tpl-0055,template,Natasha,mid dec ok for me lah,DECISION
+m010,tpl-0055,template,Hafiz,赞成,DECISION
+m011,tpl-0055,template,Natasha,eating now,OTHER
+m012,tpl-0055,template,Qistina,final: mid dec,DECISION
+m013,tpl-0055,template,Wen,"no la, longshan temple too expensive leh",DECISION
+m014,tpl-0055,template,Natasha,How about budget RM 1500 per head? !!,BUDGET
+m015,tpl-0055,template,Wen,skip rm1500 lah,DECISION
+m016,tpl-0055,template,Zara,mid dec boleh,DECISION
+m017,tpl-0055,template,Hafiz,"RM 1500 per head too much la, RM6,000 for the whole group can?",BUDGET
+m018,tpl-0055,template,Zara,agree with rm6000,DECISION
+m019,tpl-0055,template,Qistina,I like taking photos so want nice spots,PREFERENCE
+m020,tpl-0055,template,Natasha,RM6000 ok for me,DECISION
+m021,tpl-0055,template,Qistina,"ok confirmed then, RM6000",DECISION
+m022,tpl-0055,template,Wen,Put taipei 101 in the plan pls,ATTRACTION
+m023,tpl-0055,template,Natasha,depends on the price,DECISION
+m024,tpl-0055,template,Zara,Apa kata stay kat a homestay in Zhongzheng?,ACCOMMODATION
+m025,tpl-0055,template,Hafiz,breakfast included for that one,ACCOMMODATION
+m026,tpl-0055,template,Wen,nah la,DECISION
+m027,tpl-0055,template,Qistina,"a homestay in Zhongzheng looks old leh, Hotel Jen Songshan better? 😅",ACCOMMODATION
+m028,tpl-0055,template,Hafiz,I want to try local street food,PREFERENCE
+m029,tpl-0055,template,Zara,Hotel Jen Songshan mahal sangat,DECISION
+m030,tpl-0055,template,Qistina,ok skip it ah 😊,DECISION
+m031,tpl-0055,template,Hafiz,helo semua,OTHER
+m032,tpl-0055,template,Zara,那Zhongzheng的民宿就不去了 (Zhongzheng的民宿),DECISION
+m033,tpl-0055,template,Zara,"nah Hotel Jen Songshan too far, how about Hilton Tamsui? RM120",ACCOMMODATION
+m034,tpl-0055,template,Hafiz,so Hilton Tamsui confirm ya leh 😅,DECISION
+m035,tpl-0055,template,Zara,must go beitou leh,ATTRACTION
+m036,tpl-0055,template,Zara,what you guys doing,OTHER
+m037,tpl-0055,template,Natasha,yesss leh,DECISION
+m038,tpl-0055,template,Hafiz,ok beitou sounds good,DECISION
+m039,tpl-0055,template,Wen,beitou can,DECISION
+m040,tpl-0055,template,Zara,"ok confirmed then, beitou",DECISION
+m041,tpl-0055,template,Zara,sorry sorry,OTHER
+m042,tpl-0055,template,Natasha,Let's go ximending leh,ATTRACTION
+m043,tpl-0055,template,Zara,就西门町吧,DECISION
+m044,tpl-0055,template,Wen,in a meeting,OTHER
+m045,tpl-0055,template,Natasha,"can we not walk too much, my knee pain la !!",PREFERENCE
+m046,tpl-0055,template,Qistina,+1,DECISION
+m047,tpl-0055,template,Qistina,I'm in for beitou,DECISION
+m048,tpl-0055,template,Zara,shilin for dinner?,ATTRACTION
+m049,tpl-0055,template,Natasha,cya,OTHER
+m050,tpl-0055,template,Wen,setuju shilin,DECISION
+m051,tpl-0055,template,Qistina,ok lor,DECISION
+m052,tpl-0055,template,Natasha,士林夜市可以,DECISION
+m053,tpl-0055,template,Hafiz,"sure, I'm in",DECISION
+m054,tpl-0055,template,Zara,Aku nak makanan halal,PREFERENCE
+m055,tpl-0055,template,Natasha,I want to makan at fuhang,ATTRACTION
+m056,tpl-0055,template,Wen,ok I'll book fu hang dou jiang tonight,DECISION
+m001,tpl-0259,template,Marcus,alamak,OTHER
+m002,tpl-0259,template,Marcus,I want to try local street food ya,PREFERENCE
+m003,tpl-0259,template,Jia Hao,Jom pergi Melaka~,DESTINATION
+m004,tpl-0259,template,Wei Jie,is  near the city centre?,DESTINATION
+m005,tpl-0259,template,Wei Jie,i want more shopping time,PREFERENCE
+m006,tpl-0259,template,Marcus,boleh,DECISION
+m007,tpl-0259,template,Jia Hao,我想去拍照好看的地方,PREFERENCE
+m008,tpl-0259,template,Wei Jie,"nah Melaka too expensive, Langkawi better",DESTINATION
+m009,tpl-0259,template,Marcus,"settled, Langkawi it is leh",DECISION
+m010,tpl-0259,template,Marcus,tahniah!,OTHER
+m011,tpl-0259,template,Marcus,"let's keep it under RM12,000 for the whole group",BUDGET
+m012,tpl-0259,template,Wei Jie,😴,OTHER
+m013,tpl-0259,template,Jia Hao,预算多少？,BUDGET
+m014,tpl-0259,template,Jia Hao,好 😅,DECISION
+m015,tpl-0259,template,Jia Hao,"wonderland seafood best tau, nak pergi tak?",ATTRACTION
+m016,tpl-0259,template,Jia Hao,wonderland food store早上比较少人,ATTRACTION
+m017,tpl-0259,template,Marcus,can we discuss wonderland seafood later?,DECISION
+m018,tpl-0259,template,Wei Jie,😅 ya,OTHER
+m019,tpl-0259,template,Wei Jie,tq all,OTHER
+m020,tpl-0259,template,Marcus,let's do makam mahsuri in the afternoon,ATTRACTION
+m021,tpl-0259,template,Wei Jie,makam mahsuri is quite far from the city leh,ATTRACTION
+m022,tpl-0259,template,Marcus,just reached office,OTHER
+m023,tpl-0259,template,Jia Hao,你们吃饭了吗,OTHER
+m024,tpl-0259,template,Wei Jie,makam mahsuri? no thanks,DECISION
+m025,tpl-0259,template,Marcus,yo guys haha,OTHER
+m026,tpl-0259,template,Jia Hao,谢谢大家,OTHER
+m027,tpl-0259,template,Marcus,ok skip it,DECISION
+m028,tpl-0259,template,Marcus,Let's eat at Yellow Beach Cafe,ATTRACTION
+m029,tpl-0259,template,Jia Hao,还不确定,DECISION
+m030,tpl-0259,template,Jia Hao,Let's go Tanjung Rhu Beach,ATTRACTION
+m031,tpl-0259,template,Wei Jie,tanjung rhu beach就这样决定,DECISION
+m032,tpl-0259,template,Marcus,Let's go 5-10 Aug 🤔,DATE
+m033,tpl-0259,template,Wei Jie,just reached office,OTHER
+m034,tpl-0259,template,Wei Jie,"sure, i'm in",DECISION
+m035,tpl-0259,template,Jia Hao,8月5号到10号可以,DECISION
+m036,tpl-0259,template,Wei Jie,ok we go with 5-10 aug,DECISION
+m001,tpl-0081,template,Xin Yi,我想去曼谷,DESTINATION
+m002,tpl-0081,template,Wei Jie,ok we go with Bangkok,DECISION
+m003,tpl-0081,template,Ivy,hahaha true lah,OTHER
+m004,tpl-0081,template,Xin Yi,"Damnoen Saduak Floating Market looks nice, want to go?",ATTRACTION
+m005,tpl-0081,template,Ivy,need to book floating market tickets online,ATTRACTION
+m006,tpl-0081,template,Ivy,👍,DECISION
+m007,tpl-0081,template,Ivy,sleep first,OTHER
+m008,tpl-0081,template,Ivy,aiya,OTHER
+m009,tpl-0081,template,Xin Yi,"Done, booking floating market now la 🤔",DECISION
+m010,tpl-0081,template,Ivy,let's do icon siam in the afternoon,ATTRACTION
+m011,tpl-0081,template,Wei Jie,yes!! let's do it 😊,DECISION
+m012,tpl-0081,template,Ivy,ok I'll book icon siam tonight,DECISION
+m013,tpl-0081,template,Xin Yi,"heard thipsamai is super good, go?",ATTRACTION
+m014,tpl-0081,template,Ivy,thipsamai opens at 9am btw,ATTRACTION
+m015,tpl-0081,template,Xin Yi,just checking,OTHER
+m016,tpl-0081,template,Wei Jie,pass on thipsamai,DECISION
+m017,tpl-0081,template,Xin Yi,那thipsamai就不去了 (thipsamai),DECISION
+m018,tpl-0081,template,Ivy,How about a capsule hotel in Chao Phraya River? RM420 per night haha,ACCOMMODATION
+m019,tpl-0081,template,Ivy,thipsamai not worth it la,DECISION
+m020,tpl-0081,template,Xin Yi,"a capsule hotel in Chao Phraya River jauh la, Holiday Inn Express Bangkok Yai lagi ok",ACCOMMODATION
+m021,tpl-0081,template,Ivy,can we discuss Holiday Inn Express Bangkok Yai later?,DECISION
+m022,tpl-0081,template,Wei Jie,how about Wat Arun on day 1?,ATTRACTION
+m023,tpl-0081,template,Xin Yi,tak pasti lagi 😅,DECISION
+m024,tpl-0081,template,Wei Jie,rm4000 per person should be enough right?,BUDGET
+m025,tpl-0081,template,Wei Jie,hotel will take like rm1200 each,BUDGET
+m026,tpl-0081,template,Xin Yi,yo guys,OTHER
+m027,tpl-0081,template,Ivy,ok no problem,DECISION
+m028,tpl-0081,template,Ivy,"RM4000 per person too much la, RM8,000 for the whole group can?",BUDGET
+m029,tpl-0081,template,Ivy,just checking,OTHER
+m030,tpl-0081,template,Xin Yi,hmm RM8000 ah... not sure,DECISION
+m031,tpl-0081,template,Ivy,exactly,OTHER
+m032,tpl-0081,template,Xin Yi,After You Dessert Cafe好像不错欸，去吗,ATTRACTION
+m033,tpl-0081,template,Ivy,gd morning,OTHER
+m034,tpl-0081,template,Ivy,ok lor,DECISION
+m035,tpl-0081,template,Xin Yi,嘻嘻~,OTHER
+m036,tpl-0081,template,Wei Jie,+1 for after you,DECISION
+m037,tpl-0081,template,Xin Yi,aku nak masa shopping lebih,PREFERENCE
+m038,tpl-0081,template,Wei Jie,I'm thinking grand palace for day 3,ATTRACTION
+m039,tpl-0081,template,Xin Yi,"Done, booking grand palace now",DECISION
+m040,tpl-0081,template,Xin Yi,otw balik,OTHER
+m041,tpl-0081,template,Ivy,let's go mid jan ah,DATE
+m042,tpl-0081,template,Ivy,congrats bro,OTHER
+m043,tpl-0081,template,Xin Yi,agree with mid Jan,DECISION
+m044,tpl-0081,template,Ivy,so mid Jan confirm ya la 😅,DECISION
+m001,tpl-0186,template,Bryan,I'm thinking jim thompson house for day 3 ah,ATTRACTION
+m002,tpl-0186,template,Uma,"sure, I'm in",DECISION
+m003,tpl-0186,template,Elaine,赞成,DECISION
+m004,tpl-0186,template,Elaine,I think RM5000 per person is reasonable ya,BUDGET
+m005,tpl-0186,template,Bryan,hmm let me think,DECISION
+m006,tpl-0186,template,Bryan,How about Novotel Bangkok Yai? RM150 per night,ACCOMMODATION
+m007,tpl-0186,template,Uma,hmm i'd rather not do novotel bangkok yai,DECISION
+m008,tpl-0186,template,Bryan,"can we not wake up too early, no 6am start pls",PREFERENCE
+m009,tpl-0186,template,Uma,"heard jodd fairs is super good, go?",ATTRACTION
+m010,tpl-0186,template,Elaine,deal,DECISION
+m011,tpl-0186,template,Bryan,sounds good,DECISION
+m012,tpl-0186,template,Elaine,Novotel Bangkok Yai can,DECISION
+m013,tpl-0186,template,Bryan,wahh,OTHER
+m014,tpl-0186,template,Elaine,bye bye,OTHER
+m015,tpl-0186,template,Uma,i can only take leave sep 22 to 24,DATE
+m016,tpl-0186,template,Uma,hahaha true leh !!,OTHER
+m017,tpl-0186,template,Elaine,hmm sep 22 to 24 ah... not sure,DECISION
+m018,tpl-0186,template,Bryan,hmm let me think,DECISION
+m019,tpl-0186,template,Bryan,must go ICONSIAM leh,ATTRACTION
+m020,tpl-0186,template,Elaine,happy bday!!,OTHER
+m021,tpl-0186,template,Uma,let's decide later,DECISION
+m022,tpl-0186,template,Elaine,let's decide later leh,DECISION
+m023,tpl-0186,template,Uma,platinum mall anyone?,ATTRACTION
+m024,tpl-0186,template,Bryan,boleh je,DECISION
+m025,tpl-0186,template,Elaine,"done, booking platinum now",DECISION
+m026,tpl-0186,template,Bryan,After You Dessert Cafe for lunch?,ATTRACTION
+m027,tpl-0186,template,Elaine,agree with after you,DECISION
+m028,tpl-0186,template,Bryan,"Done, booking after you now",DECISION
+m029,tpl-0186,template,Uma,考山路一定要去,ATTRACTION
+m030,tpl-0186,template,Bryan,ok,DECISION
+m031,tpl-0186,template,Elaine,khao san? no thanks haha,DECISION
+m032,tpl-0186,template,Uma,I'm in for after you,DECISION
+m001,tpl-0130,template,Jason,"Bali lah, been wanting to go",DESTINATION
+m002,tpl-0130,template,Ivy,kawasan  lagi senang,DESTINATION
+m003,tpl-0130,template,Mei Ling,巴厘岛可以,DECISION
+m004,tpl-0130,template,Siti,I want to try local street food~,PREFERENCE
+m005,tpl-0130,template,Ivy,"nah Bali too expensive, Taipei better",DESTINATION
+m006,tpl-0130,template,Jason,agree,DECISION
+m007,tpl-0130,template,Tan,congrats bro ya,OTHER
+m008,tpl-0130,template,Tan,look at this meme,OTHER
+m009,tpl-0130,template,Tan,setuju,DECISION
+m010,tpl-0130,template,Mei Ling,我吃素,PREFERENCE
+m011,tpl-0130,template,Ivy,end of sep ok for everyone?,DATE
+m012,tpl-0130,template,Mei Ling,I'm in for end of Sep 😊,DECISION
+m013,tpl-0130,template,Mei Ling,测试一下,OTHER
+m014,tpl-0130,template,Jason,hmm let me think,DECISION
+m015,tpl-0130,template,Siti,下大雨了,OTHER
+m016,tpl-0130,template,Siti,🥲 ah,OTHER
+m017,tpl-0130,template,Siti,我觉得坐巴士比较方便,TRANSPORT
+m018,tpl-0130,template,Siti,grab kat sana murah,TRANSPORT
+m019,tpl-0130,template,Ivy,bus can la 😅,DECISION
+m020,tpl-0130,template,Jason,i'm ok with that,DECISION
+m021,tpl-0130,template,Tan,可以啊,DECISION
+m022,tpl-0130,template,Tan,heya 🤔,OTHER
+m023,tpl-0130,template,Ivy,happy friday guys,OTHER
+m024,tpl-0130,template,Tan,Jangan lebih RM1500 per orang la,BUDGET
+m025,tpl-0130,template,Mei Ling,坐巴士好啊,DECISION
+m026,tpl-0130,template,Ivy,hiya~,OTHER
+m027,tpl-0130,template,Siti,一个人一千五块有点贵，一个人两千块吧 😅,BUDGET
+m028,tpl-0130,template,Siti,机票大概RM500,BUDGET
+m029,tpl-0130,template,Mei Ling,哇,OTHER
+m030,tpl-0130,template,Mei Ling,一个人两千块再看看,DECISION
+m031,tpl-0130,template,Jason,Can we add ximending?,ATTRACTION
+m032,tpl-0130,template,Ivy,ximen can,DECISION
+m033,tpl-0130,template,Siti,salam semua,OTHER
+m034,tpl-0130,template,Tan,i prefer less crowded places,PREFERENCE
+m035,tpl-0130,template,Tan,I don't think ximen is a good idea,DECISION
+m036,tpl-0130,template,Siti,中正纪念堂一定要去,ATTRACTION
+m037,tpl-0130,template,Jason,cks memorial is quite far from the city leh,ATTRACTION
+m038,tpl-0130,template,Ivy,好啊,DECISION
+m039,tpl-0130,template,Jason,no la,DECISION
+m040,tpl-0130,template,Mei Ling,坐高铁吧，比较便宜,TRANSPORT
+m041,tpl-0130,template,Tan,the metro card is around RM20,TRANSPORT
+m042,tpl-0130,template,Jason,fine by me ya,DECISION
+m043,tpl-0130,template,Ivy,+1 for train,DECISION
+m044,tpl-0130,template,Tan,ok train sounds good ah,DECISION
+m045,tpl-0130,template,Siti,坐高铁就这样决定,DECISION
+m046,tpl-0130,template,Ivy,"heard Raohe Street Night Market is super good, go?",ATTRACTION
+m047,tpl-0130,template,Mei Ling,看情况吧 🤔,DECISION
+m001,tpl-0090,template,Aiman,What about Shanghai for this trip?,DESTINATION
+m002,tpl-0090,template,Marcus,ok we go with Shanghai ah,DECISION
+m003,tpl-0090,template,Aiman,Can we add Shanghai Museum?,ATTRACTION
+m004,tpl-0090,template,Li Wei,shanghai museum nanti la fikir,DECISION
+m005,tpl-0090,template,Li Wei,good morning everyone,OTHER
+m006,tpl-0090,template,Nurul,I think we should take the high-speed train,TRANSPORT
+m007,tpl-0090,template,Aiman,happy friday guys ya,OTHER
+m008,tpl-0090,template,Marcus,"sure, I'm in",DECISION
+m009,tpl-0090,template,Aiman,final: train,DECISION
+m010,tpl-0090,template,Marcus,上海博物馆再看看,DECISION
+m011,tpl-0090,template,Marcus,rm 5000 per head should be enough right?,BUDGET
+m012,tpl-0090,template,Li Wei,sounds good,DECISION
+m013,tpl-0090,template,Aiman,i'm ok with that,DECISION
+m014,tpl-0090,template,Nurul,我ok,DECISION
+m015,tpl-0090,template,Li Wei,jumpa nanti,OTHER
+m016,tpl-0090,template,Marcus,jiajia soup dumplings for lunch?,ATTRACTION
+m017,tpl-0090,template,Li Wei,jia jia tang bao opens at 9am btw,ATTRACTION
+m018,tpl-0090,template,Li Wei,boleh,DECISION
+m019,tpl-0090,template,Nurul,没问题,DECISION
+m020,tpl-0090,template,Marcus,i want to makan at yang's fried dumplings,ATTRACTION
+m021,tpl-0090,template,Aiman,ok,DECISION
+m022,tpl-0090,template,Nurul,wahh,OTHER
+m023,tpl-0090,template,Li Wei,"settled, shengjian it is",DECISION
+m024,tpl-0090,template,Li Wei,Let's go Tianzifang lah,ATTRACTION
+m025,tpl-0090,template,Nurul,how about Shanghai Tower Observation Deck on day 1? haha,ATTRACTION
+m026,tpl-0090,template,Marcus,can can,DECISION
+m027,tpl-0090,template,Li Wei,aku suka tempat tak ramai orang,PREFERENCE
+m028,tpl-0090,template,Li Wei,maaf lambat reply,OTHER
+m029,tpl-0090,template,Nurul,final: shanghai tower,DECISION
+m030,tpl-0090,template,Nurul,hmm tian zi fang ah... not sure,DECISION
+m031,tpl-0090,template,Li Wei,哈哈,OTHER
+m032,tpl-0090,template,Nurul,2月12号到16号去怎样？,DATE
+m033,tpl-0090,template,Aiman,look at this meme,OTHER
+m034,tpl-0090,template,Marcus,can we discuss 12 to 16 Feb later?,DECISION
+m035,tpl-0090,template,Aiman,talk later,OTHER
+m036,tpl-0090,template,Nurul,sorry baru nampak msg,OTHER
+m037,tpl-0090,template,Aiman,ok shanghai tower sounds good,DECISION
+m038,tpl-0090,template,Nurul,Apa kata stay kat the hostel at Huangpu?,ACCOMMODATION
+m039,tpl-0090,template,Aiman,"I want a chill trip, not too packed",PREFERENCE
+m040,tpl-0090,template,Li Wei,Huangpu的青旅我同意,DECISION
+m041,tpl-0090,template,Marcus,not sure yet,DECISION
+m042,tpl-0090,template,Nurul,how about we take taxis?,TRANSPORT
+m043,tpl-0090,template,Nurul,我想吃当地小吃,PREFERENCE
+m044,tpl-0090,template,Li Wei,地铁卡要先买吗,TRANSPORT
+m045,tpl-0090,template,Marcus,I don't think taxi is a good idea,DECISION
+m046,tpl-0090,template,Li Wei,I don't think taxi is a good idea,DECISION
+m001,tpl-0037,template,Li Wei,I get carsick easily,PREFERENCE
+m002,tpl-0037,template,Li Wei,库塔海滩听说很值得去,ATTRACTION
+m003,tpl-0037,template,Jia Hao,库塔海滩再看看,DECISION
+m004,tpl-0037,template,Li Wei,不要超过大家一共rm10000,BUDGET
+m005,tpl-0037,template,Ryan,RM10000 nanti la fikir,DECISION
+m006,tpl-0037,template,Ryan,Let's go Sacred Monkey Forest Sanctuary !!,ATTRACTION
+m007,tpl-0037,template,Ryan,"can we not walk too much, my knee pain lah",PREFERENCE
+m008,tpl-0037,template,Jia Hao,我不太能吃辣,PREFERENCE
+m009,tpl-0037,template,Li Wei,猴子森林再看看,DECISION
+m010,tpl-0037,template,Li Wei,我们去脏鸭餐吧,ATTRACTION
+m011,tpl-0037,template,Jia Hao,我觉得脏鸭餐不太好,DECISION
+m012,tpl-0037,template,Ryan,脏鸭餐太贵了,DECISION
+m013,tpl-0037,template,Li Wei,我觉得买交通一日券比较方便,TRANSPORT
+m014,tpl-0037,template,Ryan,+1 for day pass,DECISION
+m015,tpl-0037,template,Jia Hao,早啊,OTHER
+m016,tpl-0037,template,Ryan,Ok confirm day pass,DECISION
+m017,tpl-0037,template,Jia Hao,第2天去seminyak beach怎么样 !!,ATTRACTION
+m018,tpl-0037,template,Ryan,weekend yay,OTHER
+m019,tpl-0037,template,Li Wei,之后再决定,DECISION
+m020,tpl-0037,template,Ryan,gd morning,OTHER
+m021,tpl-0037,template,Jia Hao,Kita naik bas je,TRANSPORT
+m022,tpl-0037,template,Li Wei,还不确定,DECISION
+m023,tpl-0037,template,Jia Hao,好困,OTHER

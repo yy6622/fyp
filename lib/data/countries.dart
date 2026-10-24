@@ -45,6 +45,41 @@ const List<Country> kCountries = [
   Country(name: 'Mexico', code: 'MX', currencyCode: 'MXN', currencySymbol: 'MX\$'),
 ];
 
+/// Countries that actually have real scraped catalog data (catalog_places /
+/// catalog_restaurants) in Firestore, verified directly against live
+/// Firestore doc counts on 2026-10-19 via a one-off admin_web diagnostic
+/// page (since deleted — see admin_web/js/data.js history if it's ever
+/// needed again). Picking a [kCountries] entry NOT in this set would show
+/// an empty Explore tab for that trip (no real attractions/restaurants
+/// scraped for it yet), so Create Plan's destination picker offers
+/// [kDestinationCountries] instead of the full [kCountries] list.
+///
+/// Re-run that diagnostic and update this set by hand if more countries'
+/// data get scraped later — this is not auto-derived from Firestore at
+/// build/run time.
+const Set<String> kCountriesWithCatalogData = {
+  'MY', // Malaysia
+  'SG', // Singapore
+  'ID', // Indonesia
+  'TH', // Thailand
+  'VN', // Vietnam
+  'JP', // Japan
+  'KR', // South Korea
+  'CN', // China
+  'GB', // United Kingdom
+  'DE', // Germany
+  'IT', // Italy
+  'ES', // Spain
+  'NL', // Netherlands
+  'TR', // Turkey
+  'MX', // Mexico
+};
+
+/// [kCountries] filtered down to [kCountriesWithCatalogData] — what Create
+/// Plan's destination picker actually offers, so nobody can pick a
+/// destination with no real attraction/restaurant data behind it.
+List<Country> get kDestinationCountries => kCountries.where((c) => kCountriesWithCatalogData.contains(c.code)).toList();
+
 /// The set of currencies offered on the Currency step — deduplicated from
 /// [kCountries] plus a couple of common ones a traveller may want even if
 /// they didn't pick that country (e.g. USD as a fallback reference

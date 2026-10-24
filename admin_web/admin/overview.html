@@ -6,8 +6,8 @@
 <title>Overview — Voya Admin</title>
 <link rel="stylesheet" href="../css/tokens.css?v=20261006b" />
 <link rel="stylesheet" href="../css/base.css?v=20261006b" />
-<link rel="stylesheet" href="../css/layout.css?v=20261006b" />
-<link rel="stylesheet" href="../css/components.css?v=20261006b" />
+<link rel="stylesheet" href="../css/layout.css?v=20261021" />
+<link rel="stylesheet" href="../css/components.css?v=20261021c" />
 </head>
 <body>
 <div class="shell">
@@ -29,7 +29,12 @@
         <h1 class="h1">Overview</h1>
         <p class="subtitle">Monitor platform performance and key metrics</p>
       </div>
-      <div class="topbar-search"><span data-icon="search"></span><input placeholder="Search anything…" id="globalSearch" /></div>
+      <div class="inline-flex" style="gap:10px;align-items:flex-start;">
+        <button class="btn btn-outline bell-btn" id="notifBell" style="display:none;" title="You have new notifications — click to review">
+          <span data-icon="bell"></span><span class="bell-dot"></span>
+        </button>
+        <div class="topbar-search"><span data-icon="search"></span><input placeholder="Search anything…" id="globalSearch" /></div>
+      </div>
     </div>
 
     <div class="stat-grid" id="statGrid">
@@ -59,17 +64,37 @@
 </div>
 
 <script type="module">
-import { requireRole } from "../js/auth-guard.js?v=20261007e";
-import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261007e";
-import { mountIcons } from "../js/icons.js?v=20261007e";
-import { listUsers, listAttractions, listTransactions, listClaims } from "../js/data.js?v=20261007e";
-import { money, number, statCard, plainCard, trendDelta, pointDelta, sumInMonth, sumBefore, countBefore, countBetween, monthBounds, rateOf } from "../js/ui.js?v=20261007e";
+import { requireRole } from "../js/auth-guard.js?v=20261021";
+import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261021";
+import { mountIcons } from "../js/icons.js?v=20261021";
+import { listUsers, listAttractions, listTransactions, listClaims, countPendingPartners, listReportedPosts, countFlaggedReviews } from "../js/data.js?v=20261021";
+import { money, number, statCard, plainCard, trendDelta, pointDelta, sumInMonth, sumBefore, countBefore, countBetween, monthBounds, rateOf } from "../js/ui.js?v=20261021";
 
 mountSidebarNav({ role: "admin", active: "overview" });
 const session = await requireRole("admin", "login.html");
 if (session) {
   setSidebarUser({ displayName: session.profile.name || "Admin", roleLabel: "Administrator" });
   await loadOverview();
+  loadNotifBell(); // separate from the stats above — shouldn't block them, and shouldn't be blocked by them
+}
+
+async function loadNotifBell() {
+  const [pendingPartners, reportedPosts, flaggedReviews] = await Promise.all([
+    countPendingPartners().catch(() => 0),
+    listReportedPosts().then((p) => p.length).catch(() => 0),
+    countFlaggedReviews().catch(() => 0),
+  ]);
+  const moderationCount = reportedPosts + flaggedReviews;
+  const total = pendingPartners + moderationCount;
+  const bell = document.getElementById("notifBell");
+  if (total > 0) {
+    bell.style.display = "";
+    const parts = [];
+    if (pendingPartners) parts.push(`${pendingPartners} new partner request${pendingPartners === 1 ? "" : "s"}`);
+    if (moderationCount) parts.push(`${moderationCount} item${moderationCount === 1 ? "" : "s"} to moderate`);
+    bell.title = `${parts.join(" · ")} — click to review`;
+    bell.addEventListener("click", () => { location.href = "notifications.html"; });
+  }
 }
 
 async function loadOverview() {

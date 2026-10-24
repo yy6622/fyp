@@ -12,6 +12,13 @@ class PlaceReview {
   final String comment;
   final DateTime? createdAt;
 
+  /// True when [ContentModerationService] flagged this review's comment
+  /// at write time (see `review_helpers.dart`'s `addReviewFor`) and it's
+  /// still awaiting an admin's approve/reject decision. `watchReviewsFor`
+  /// hides a flagged review from everyone except its own author, same
+  /// pattern as [CommunityPost.autoFlagged] for whole posts.
+  final bool autoFlagged;
+
   const PlaceReview({
     required this.id,
     required this.authorId,
@@ -19,5 +26,6 @@ class PlaceReview {
     required this.rating,
     required this.comment,
     this.createdAt,
+    this.autoFlagged = false,
   });
 }

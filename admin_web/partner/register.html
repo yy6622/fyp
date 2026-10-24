@@ -6,7 +6,7 @@
 <title>Register — Voya Insurance Partner</title>
 <link rel="stylesheet" href="../css/tokens.css?v=20261006b" />
 <link rel="stylesheet" href="../css/base.css?v=20261006b" />
-<link rel="stylesheet" href="../css/components.css?v=20261006b" />
+<link rel="stylesheet" href="../css/components.css?v=20261021c" />
 <link rel="stylesheet" href="../css/auth.css?v=20261006b" />
 <style>.auth-card{max-width:520px;}</style>
 </head>
@@ -47,7 +47,11 @@
         </div>
         <div class="auth-field">
           <label for="password">Password</label>
-          <input class="input" type="password" id="password" placeholder="At least 6 characters" required autocomplete="new-password" minlength="6" />
+          <input class="input" type="password" id="password" placeholder="At least 8 characters" required autocomplete="new-password" minlength="8" />
+        </div>
+        <div class="auth-field">
+          <label for="confirmPassword">Confirm password</label>
+          <input class="input" type="password" id="confirmPassword" placeholder="Re-enter your password" required autocomplete="new-password" minlength="8" />
         </div>
         <button class="btn btn-primary btn-block" type="submit" id="submitBtn">Create partner account</button>
       </form>
@@ -57,9 +61,9 @@
 </div>
 
 <script type="module">
-import { mountIcons } from "../js/icons.js?v=20261007";
-import { registerWithRole, authErrorMessage } from "../js/auth-guard.js?v=20261007";
-import { setBusy } from "../js/ui.js?v=20261007";
+import { mountIcons } from "../js/icons.js?v=20261021";
+import { registerWithRole, authErrorMessage } from "../js/auth-guard.js?v=20261021";
+import { setBusy } from "../js/ui.js?v=20261021";
 
 mountIcons(document);
 const errBox = document.getElementById("authError");
@@ -72,6 +76,17 @@ document.getElementById("regForm").addEventListener("submit", async (e) => {
   const phone = document.getElementById("phone").value.trim();
   const email = document.getElementById("email").value;
   const password = document.getElementById("password").value;
+  const confirmPassword = document.getElementById("confirmPassword").value;
+  if (password.length < 8) {
+    errBox.textContent = "Password must be at least 8 characters.";
+    errBox.classList.add("show");
+    return;
+  }
+  if (password !== confirmPassword) {
+    errBox.textContent = "Passwords don't match.";
+    errBox.classList.add("show");
+    return;
+  }
   const btn = document.getElementById("submitBtn");
   setBusy(btn, true, "Creating account…");
   try {

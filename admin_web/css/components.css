@@ -13,6 +13,15 @@
 .btn-danger-outline { background: #fff; border-color: var(--red-text); color: var(--red-text); }
 .btn-danger-outline:hover:not(:disabled) { background: var(--red-bg); }
 .btn-teal { background: var(--teal-600); color: #fff; }
+/* Dashboard notification bell (admin/overview.html) — a small button with
+   a red dot overlay, same idea as sidebar.js's nav-dot but sized/colored
+   for sitting on a white button instead of the dark sidebar. */
+.bell-btn { position: relative; padding: 11px 13px; }
+.bell-dot {
+  position: absolute; top: 5px; right: 6px;
+  width: 9px; height: 9px; border-radius: 50%;
+  background: #ff4d4f; border: 2px solid #fff;
+}
 .btn-teal:hover:not(:disabled) { background: var(--teal-500); }
 .btn-sm { padding: 8px 14px; font-size: 13px; border-radius: var(--radius-sm); }
 .btn-block { width: 100%; }
@@ -56,7 +65,24 @@
   padding: 11px 14px; background: #fff; color: var(--text-900); outline: none;
 }
 .input:focus, .select:focus { border-color: var(--teal-600); box-shadow: 0 0 0 3px var(--teal-100); }
+.input[readonly], .input:disabled { background: #f3f5f6; color: var(--text-500); cursor: default; }
 .filter-bar .select { width: auto; min-width: 150px; }
+/* Every dropdown in the app shares this one .select class (18 of them,
+   admin + partner, confirmed via grep), so this single rule moves the
+   arrow on ALL of them at once — nothing to miss page by page. Native
+   select arrows sit flush against the right border in most browsers,
+   which is what looked like it was about to spill out of the box; this
+   swaps in our own arrow icon (matching the app's line-icon style) and
+   explicitly insets it 12px from the edge, with matching right padding
+   so the selected text never runs under it. */
+.select {
+  appearance: none; -webkit-appearance: none; -moz-appearance: none;
+  padding-right: 38px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M6 9l6 6 6-6' fill='none' stroke='%238a95a1' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 16px 16px;
+}
 .search-input-wrap { position: relative; flex: 1; min-width: 220px; }
 .search-input-wrap .icon { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); stroke: var(--text-400); }
 .search-input-wrap input { padding-left: 40px; }

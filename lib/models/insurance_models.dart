@@ -40,19 +40,45 @@ class InsurancePlan {
   final String provider;
   final String logoText;
   final Color logoColor;
+  // The partner's real uploaded logo (admin_web/partner/organization.html),
+  // denormalized onto the plan doc as `providerLogoUrl` when the partner
+  // creates/edits a plan — see admin_web/partner/plans.html. Null/empty
+  // when the partner never uploaded one, or for plans saved before this
+  // existed; [insuranceLogo] falls back to the letter badge in that case.
+  final String? logoUrl;
   final String name;
   final String coverage;
   final String price;
   final InsuranceCategory category;
+  // Real per-plan detail the partner fills in on admin_web/partner/
+  // plans.html — a structured breakdown (medical/baggage/trip-cancellation
+  // amounts, etc.) and a short list of highlight badges, rather than the
+  // same fixed 5 coverage lines and 5 icons every plan used to show.
+  // Empty for a plan saved before this existed, or a partner who hasn't
+  // filled it in yet — the detail page hides each section rather than
+  // ever padding it out with made-up numbers.
+  final List<InsuranceCoverageItem> coverageItems;
+  final List<String> highlights;
   const InsurancePlan({
     required this.id,
     required this.partnerId,
     required this.provider,
     required this.logoText,
     required this.logoColor,
+    this.logoUrl,
     required this.name,
     required this.coverage,
     required this.price,
     required this.category,
+    this.coverageItems = const [],
+    this.highlights = const [],
   });
+}
+
+/// One line of [InsurancePlan.coverageItems] — "Medical Expenses
+/// (Overseas)" paired with the real RM amount the partner entered for it.
+class InsuranceCoverageItem {
+  final String label;
+  final double amount;
+  const InsuranceCoverageItem({required this.label, required this.amount});
 }

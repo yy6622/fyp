@@ -21,7 +21,18 @@ class AiItineraryAdd {
   /// That day already has an activity with this name.
   final bool alreadyInPlan;
 
+  /// Where the place came from: "saved" (the group's saved list - it becomes a rich activity
+  /// card in the plan), "voya" / "catalog" (a real place Voya knows), "pattern" (only its name).
+  final String source;
+
+  /// Why it is suggested, e.g. "Emily suggested · Alex, Mia agreed".
+  final String reason;
+
+  bool get fromSaved => source == 'saved';
+
   const AiItineraryAdd({
+    this.source = '',
+    this.reason = '',
     required this.day,
     required this.dayIndex,
     required this.time,
@@ -47,7 +58,11 @@ class AiItineraryUpdate {
   final String oldTime;
   final String newTime;
 
+  /// Why it moves, e.g. "Best in the evening" (Optimise); empty when not given.
+  final String reason;
+
   const AiItineraryUpdate({
+    this.reason = '',
     required this.itemId,
     required this.label,
     required this.location,
@@ -79,6 +94,27 @@ class AiItineraryRemove {
   });
 }
 
+/// Something the group wants without a place yet ("Dessert", "Museum (if it rains)").
+class AiItineraryIdea {
+  final String label;
+  final String hint;
+
+  /// A saved place that would fit, if any.
+  final String saved;
+  const AiItineraryIdea({required this.label, required this.hint, this.saved = ''});
+}
+
+/// A booked flight / hotel check-in or check-out (or a time the chat gave) the plan was built around.
+class AiItineraryFixed {
+  final int day;
+  final String time;
+  final String label;
+
+  /// "flight" or "hotel".
+  final String kind;
+  const AiItineraryFixed({required this.day, required this.time, required this.label, required this.kind});
+}
+
 class AiItineraryResult {
   final List<AiItineraryAdd> add;
   final List<AiItineraryUpdate> update;
@@ -86,6 +122,12 @@ class AiItineraryResult {
 
   /// Places that came up in the chat but the group never decided on.
   final List<String> unresolved;
+  final List<AiItineraryIdea> ideas;
+
+  /// Flights and hotel stays AI Summarise planned around.
+  final List<AiItineraryFixed> fixed;
+  final bool flightsBooked;
+  final bool hotelsBooked;
   final int messageCount;
   final int savedCount;
 
@@ -94,11 +136,15 @@ class AiItineraryResult {
     required this.update,
     required this.remove,
     required this.unresolved,
+    this.ideas = const [],
+    this.fixed = const [],
+    this.flightsBooked = false,
+    this.hotelsBooked = false,
     required this.messageCount,
     required this.savedCount,
   });
 
-  bool get isEmpty => add.isEmpty && update.isEmpty && remove.isEmpty && unresolved.isEmpty;
+  bool get isEmpty => add.isEmpty && update.isEmpty && remove.isEmpty && unresolved.isEmpty && ideas.isEmpty;
 }
 
 /// Thrown with a message that is safe to show to the user as-is.
@@ -135,7 +181,9 @@ class AiItineraryJob {
 /// [jobFor]) so something that doesn't already know which trip to watch —
 /// [GlobalAiItineraryBar], shown on every tab via [MainPage], not just the
 /// one group's own page — can still react the instant any trip's run
-/// changes status, the same reason [LanguageService] became one.
+/// changes status — the same reason CurrencyService's live rate updates
+/// are pushed through a ChangeNotifier-backed pattern rather than
+/// requiring every listener to poll.
 class ItineraryAiService extends ChangeNotifier {
   ItineraryAiService._();
   static final ItineraryAiService instance = ItineraryAiService._();
@@ -235,6 +283,8 @@ class ItineraryAiService extends ChangeNotifier {
               iconKey: str(m, 'icon').isEmpty ? 'activity' : str(m, 'icon'),
               warnNotSaved: m['warnNotSaved'] == true,
               alreadyInPlan: m['alreadyInPlan'] == true,
+              source: str(m, 'source'),
+              reason: str(m, 'reason'),
             ),
       ],
       update: [
@@ -265,6 +315,22 @@ class ItineraryAiService extends ChangeNotifier {
             ),
       ],
       unresolved: [for (final u in (data['unresolved'] as List? ?? const [])) u.toString()],
+      ideas: [
+        for (final m in rows('ideas'))
+          if (str(m, 'label').isNotEmpty) AiItineraryIdea(label: str(m, 'label'), hint: str(m, 'hint'), saved: str(m, 'saved')),
+      ],
+      fixed: [
+        for (final raw in ((data['logistics'] as Map?)?['fixed'] as List? ?? const []))
+          if (raw is Map)
+            AiItineraryFixed(
+              day: (raw['day'] as num?)?.toInt() ?? 0,
+              time: (raw['time'] as String?) ?? '',
+              label: (raw['label'] as String?) ?? '',
+              kind: (raw['kind'] as String?) ?? 'flight',
+            ),
+      ],
+      flightsBooked: (data['logistics'] as Map?)?['flightsBooked'] == true,
+      hotelsBooked: (data['logistics'] as Map?)?['hotelsBooked'] == true,
       messageCount: (data['messageCount'] as num?)?.toInt() ?? 0,
       savedCount: (data['savedCount'] as num?)?.toInt() ?? 0,
     );

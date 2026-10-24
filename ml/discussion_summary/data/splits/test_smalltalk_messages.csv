@@ -1,0 +1,127 @@
+﻿message_id,conv_id,source,speaker,message,label
+m001,smalltalk-01,smalltalk,Ann,hi,OTHER
+m002,smalltalk-01,smalltalk,Bob,Hi,OTHER
+m003,smalltalk-01,smalltalk,Cai,hii,OTHER
+m004,smalltalk-01,smalltalk,Dee,hiii guys,OTHER
+m005,smalltalk-01,smalltalk,Ann,hai,OTHER
+m006,smalltalk-01,smalltalk,Bob,hello,OTHER
+m007,smalltalk-01,smalltalk,Cai,hellooo,OTHER
+m008,smalltalk-01,smalltalk,Dee,helo,OTHER
+m009,smalltalk-01,smalltalk,Ann,hey,OTHER
+m010,smalltalk-01,smalltalk,Bob,hey guys,OTHER
+m011,smalltalk-01,smalltalk,Cai,heyyy,OTHER
+m012,smalltalk-01,smalltalk,Dee,yo,OTHER
+m013,smalltalk-01,smalltalk,Ann,sup,OTHER
+m014,smalltalk-01,smalltalk,Bob,morning,OTHER
+m015,smalltalk-01,smalltalk,Cai,good morning!!,OTHER
+m016,smalltalk-01,smalltalk,Dee,gm,OTHER
+m017,smalltalk-01,smalltalk,Ann,good afternoon,OTHER
+m018,smalltalk-01,smalltalk,Bob,good evening,OTHER
+m019,smalltalk-01,smalltalk,Cai,good night,OTHER
+m020,smalltalk-01,smalltalk,Dee,gn,OTHER
+m001,smalltalk-02,smalltalk,Ann,nite,OTHER
+m002,smalltalk-02,smalltalk,Bob,night all,OTHER
+m003,smalltalk-02,smalltalk,Cai,bye,OTHER
+m004,smalltalk-02,smalltalk,Dee,byeee,OTHER
+m005,smalltalk-02,smalltalk,Ann,see ya,OTHER
+m006,smalltalk-02,smalltalk,Bob,ttyl,OTHER
+m007,smalltalk-02,smalltalk,Cai,back,OTHER
+m008,smalltalk-02,smalltalk,Dee,im back,OTHER
+m009,smalltalk-02,smalltalk,Ann,ok noted,OTHER
+m010,smalltalk-02,smalltalk,Bob,noted,OTHER
+m011,smalltalk-02,smalltalk,Cai,noted with thanks,OTHER
+m012,smalltalk-02,smalltalk,Dee,thanks,OTHER
+m013,smalltalk-02,smalltalk,Ann,thank you!,OTHER
+m014,smalltalk-02,smalltalk,Bob,thx,OTHER
+m015,smalltalk-02,smalltalk,Cai,tq,OTHER
+m016,smalltalk-02,smalltalk,Dee,tqvm,OTHER
+m017,smalltalk-02,smalltalk,Ann,ty,OTHER
+m018,smalltalk-02,smalltalk,Bob,lmao,OTHER
+m019,smalltalk-02,smalltalk,Cai,hahahaha,OTHER
+m020,smalltalk-02,smalltalk,Dee,hehe,OTHER
+m001,smalltalk-03,smalltalk,Ann,wkwkwk,OTHER
+m002,smalltalk-03,smalltalk,Bob,😂😂😂,OTHER
+m003,smalltalk-03,smalltalk,Cai,🤣,OTHER
+m004,smalltalk-03,smalltalk,Dee,😊,OTHER
+m005,smalltalk-03,smalltalk,Ann,👋,OTHER
+m006,smalltalk-03,smalltalk,Bob,🙏,OTHER
+m007,smalltalk-03,smalltalk,Cai,❤️,OTHER
+m008,smalltalk-03,smalltalk,Dee,?,OTHER
+m009,smalltalk-03,smalltalk,Ann,??,OTHER
+m010,smalltalk-03,smalltalk,Bob,...,OTHER
+m011,smalltalk-03,smalltalk,Cai,test,OTHER
+m012,smalltalk-03,smalltalk,Dee,testing 123,OTHER
+m013,smalltalk-03,smalltalk,Ann,is this working,OTHER
+m014,smalltalk-03,smalltalk,Bob,are you there,OTHER
+m015,smalltalk-03,smalltalk,Cai,anyone here?,OTHER
+m016,smalltalk-03,smalltalk,Dee,where are you,OTHER
+m017,smalltalk-03,smalltalk,Ann,what time is it,OTHER
+m018,smalltalk-03,smalltalk,Bob,i'm hungry,OTHER
+m019,smalltalk-03,smalltalk,Cai,so sleepy,OTHER
+m020,smalltalk-03,smalltalk,Dee,just woke up,OTHER
+m001,smalltalk-04,smalltalk,Ann,going to shower first,OTHER
+m002,smalltalk-04,smalltalk,Bob,on the way,OTHER
+m003,smalltalk-04,smalltalk,Cai,reached home,OTHER
+m004,smalltalk-04,smalltalk,Dee,my phone almost die,OTHER
+m005,smalltalk-04,smalltalk,Ann,my wifi so slow today,OTHER
+m006,smalltalk-04,smalltalk,Bob,work so busy today,OTHER
+m007,smalltalk-04,smalltalk,Cai,traffic jam again,OTHER
+m008,smalltalk-04,smalltalk,Dee,raining heavily here,OTHER
+m009,smalltalk-04,smalltalk,Ann,it's so hot today,OTHER
+m010,smalltalk-04,smalltalk,Bob,happy birthday!!,OTHER
+m011,smalltalk-04,smalltalk,Cai,congrats!!,OTHER
+m012,smalltalk-04,smalltalk,Dee,sorry late reply,OTHER
+m013,smalltalk-04,smalltalk,Ann,sorry just saw,OTHER
+m014,smalltalk-04,smalltalk,Bob,nvm,OTHER
+m015,smalltalk-04,smalltalk,Cai,oops wrong group,OTHER
+m016,smalltalk-04,smalltalk,Dee,wrong chat sorry,OTHER
+m017,smalltalk-04,smalltalk,Ann,who changed the group photo,OTHER
+m018,smalltalk-04,smalltalk,Bob,nice photo,OTHER
+m019,smalltalk-04,smalltalk,Cai,cute,OTHER
+m020,smalltalk-04,smalltalk,Dee,true true,OTHER
+m001,smalltalk-05,smalltalk,Ann,omg really,OTHER
+m002,smalltalk-05,smalltalk,Bob,wah seriously,OTHER
+m003,smalltalk-05,smalltalk,Cai,you ok?,OTHER
+m004,smalltalk-05,smalltalk,Dee,take care,OTHER
+m005,smalltalk-05,smalltalk,Ann,get well soon,OTHER
+m006,smalltalk-05,smalltalk,Bob,good luck for your exam,OTHER
+m007,smalltalk-05,smalltalk,Cai,早,OTHER
+m008,smalltalk-05,smalltalk,Dee,早安,OTHER
+m009,smalltalk-05,smalltalk,Ann,早上好,OTHER
+m010,smalltalk-05,smalltalk,Bob,你好,OTHER
+m011,smalltalk-05,smalltalk,Cai,大家好,OTHER
+m012,smalltalk-05,smalltalk,Dee,嗨,OTHER
+m013,smalltalk-05,smalltalk,Ann,在吗,OTHER
+m014,smalltalk-05,smalltalk,Bob,在不在,OTHER
+m015,smalltalk-05,smalltalk,Cai,笑死我了,OTHER
+m016,smalltalk-05,smalltalk,Dee,晚安,OTHER
+m017,smalltalk-05,smalltalk,Ann,拜拜,OTHER
+m018,smalltalk-05,smalltalk,Bob,谢谢,OTHER
+m019,smalltalk-05,smalltalk,Cai,谢谢你,OTHER
+m020,smalltalk-05,smalltalk,Dee,收到,OTHER
+m001,smalltalk-06,smalltalk,Ann,好累,OTHER
+m002,smalltalk-06,smalltalk,Bob,刚起床,OTHER
+m003,smalltalk-06,smalltalk,Cai,在开会,OTHER
+m004,smalltalk-06,smalltalk,Dee,吃饱了吗,OTHER
+m005,smalltalk-06,smalltalk,Ann,下雨了,OTHER
+m006,smalltalk-06,smalltalk,Bob,生日快乐,OTHER
+m007,smalltalk-06,smalltalk,Cai,不好意思刚看到,OTHER
+m008,smalltalk-06,smalltalk,Dee,发错群了,OTHER
+m009,smalltalk-06,smalltalk,Ann,测试,OTHER
+m010,smalltalk-06,smalltalk,Bob,hai semua,OTHER
+m011,smalltalk-06,smalltalk,Cai,selamat pagi,OTHER
+m012,smalltalk-06,smalltalk,Dee,selamat malam,OTHER
+m013,smalltalk-06,smalltalk,Ann,assalamualaikum,OTHER
+m014,smalltalk-06,smalltalk,Bob,apa khabar,OTHER
+m015,smalltalk-06,smalltalk,Cai,terima kasih,OTHER
+m016,smalltalk-06,smalltalk,Dee,tq ye,OTHER
+m017,smalltalk-06,smalltalk,Ann,ok noted ya,OTHER
+m018,smalltalk-06,smalltalk,Bob,jap,OTHER
+m019,smalltalk-06,smalltalk,Cai,nanti aku reply,OTHER
+m020,smalltalk-06,smalltalk,Dee,sorry baru nampak,OTHER
+m001,smalltalk-07,smalltalk,Ann,otw,OTHER
+m002,smalltalk-07,smalltalk,Bob,dah sampai rumah,OTHER
+m003,smalltalk-07,smalltalk,Cai,penat gila,OTHER
+m004,smalltalk-07,smalltalk,Dee,lapar la,OTHER
+m005,smalltalk-07,smalltalk,Ann,hujan lebat,OTHER
+m006,smalltalk-07,smalltalk,Bob,happy birthday bro,OTHER

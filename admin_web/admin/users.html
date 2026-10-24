@@ -6,8 +6,8 @@
 <title>User Management — Voya Admin</title>
 <link rel="stylesheet" href="../css/tokens.css?v=20261006b" />
 <link rel="stylesheet" href="../css/base.css?v=20261006b" />
-<link rel="stylesheet" href="../css/layout.css?v=20261006b" />
-<link rel="stylesheet" href="../css/components.css?v=20261006b" />
+<link rel="stylesheet" href="../css/layout.css?v=20261021" />
+<link rel="stylesheet" href="../css/components.css?v=20261021c" />
 </head>
 <body>
 <div class="shell">
@@ -91,12 +91,12 @@
 </div>
 
 <script type="module">
-import { requireRole } from "../js/auth-guard.js?v=20261007e";
-import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261007e";
-import { mountIcons } from "../js/icons.js?v=20261007e";
-import { listUsers, setUserRoleStatus } from "../js/data.js?v=20261007e";
-import { number, shortDate, statusBadge, initials, escapeHtml, paginate, renderPager, toast, setBusy, statCard, plainCard, trendDelta, countBefore, monthBounds } from "../js/ui.js?v=20261007e";
-import { openModal, closeModal, wireModalDismiss } from "../js/ui.js?v=20261007e";
+import { requireRole } from "../js/auth-guard.js?v=20261021";
+import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261021";
+import { mountIcons } from "../js/icons.js?v=20261021";
+import { listUsers, setUserRoleStatus } from "../js/data.js?v=20261021";
+import { number, shortDate, statusBadge, initials, escapeHtml, paginate, renderPager, toast, setBusy, statCard, plainCard, trendDelta, countBefore, monthBounds } from "../js/ui.js?v=20261021";
+import { openModal, closeModal, wireModalDismiss } from "../js/ui.js?v=20261021";
 
 mountSidebarNav({ role: "admin", active: "users" });
 const session = await requireRole("admin", "login.html");

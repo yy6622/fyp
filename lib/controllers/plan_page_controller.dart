@@ -21,6 +21,18 @@ class PlanPageController extends ChangeNotifier {
 
   bool get showVoting => _selectedTab == PlanTab.all || _selectedTab == PlanTab.voting;
 
+  // Real text search over the signed-in user's own trips — matched
+  // against the trip's real name/destination (same fields PlanGroup
+  // already shows), not a decorative box that did nothing. Case-
+  // insensitive, applied in [planGroups] itself so every downstream
+  // view ([activePlanGroups]/[pastPlanGroups]) picks it up for free.
+  String _searchQuery = '';
+  String get searchQuery => _searchQuery;
+  void setSearchQuery(String value) {
+    _searchQuery = value;
+    notifyListeners();
+  }
+
   double get totalYouOwe => planGroups.fold(0.0, (sum, g) => sum + g.yourShare);
   int get groupsWithBalance => planGroups.where((g) => g.yourShare > 0).length;
 
@@ -105,7 +117,10 @@ class PlanPageController extends ChangeNotifier {
   /// Polls the signed-in user hasn't voted on yet, across every trip they
   /// belong to. A poll they've already voted on no longer needs their
   /// attention here — it's left off the Plan Home page entirely (it's
-  /// still visible inside that trip's own Vote tab).
+  /// still visible inside that trip's own Vote tab). Same for a poll past
+  /// its own deadline ([Vote.isClosed]) — it no longer needs anyone's
+  /// vote, so it's just as done as one the person already voted on; the
+  /// Vote tab itself still shows it, greyed out with "Voting closed".
   List<VotingItem> get votingItems {
     final items = <VotingItem>[];
     for (final trip in _trips) {
@@ -113,12 +128,15 @@ class PlanPageController extends ChangeNotifier {
       final memberCount = trip.memberIds.isEmpty ? 1 : trip.memberIds.length;
       for (final v in votes) {
         final alreadyVoted = v.options.any((o) => o.votedBy.contains(_uid));
-        if (alreadyVoted) continue;
+        if (alreadyVoted || v.isClosed) continue;
         final leading = v.leading;
         items.add(VotingItem(
           title: trip.name,
           subtitle: v.title,
-          date: trip.dateRangeLabel,
+          // The short "Oct 2026" form, not the full dateRangeLabel — that
+          // one's "23 Sep 2026 - 27 Sep 2026  ·  5 days 4 nights" is far
+          // too long for the card's corner badge and spilled out of it.
+          date: trip.shortDateLabel,
           votes: '${v.totalVoters}/$memberCount voted',
           image: trip.coverImage,
           progress: v.totalVoters / memberCount,
@@ -127,6 +145,7 @@ class PlanPageController extends ChangeNotifier {
               : '${leading.label} is leading with ${leading.votedBy.length} votes',
           tripId: trip.id,
           voteId: v.id,
+          voterUids: v.voterUids,
         ));
       }
     }
@@ -134,17 +153,30 @@ class PlanPageController extends ChangeNotifier {
   }
 
   List<PlanGroup> get planGroups {
-    return _trips.map((trip) {
+    final q = _searchQuery.trim().toLowerCase();
+    final trips = q.isEmpty
+        ? _trips
+        : _trips.where((t) => t.name.toLowerCase().contains(q) || t.destination.toLowerCase().contains(q)).toList();
+    return trips.map((trip) {
       final expenses = _expensesByTrip[trip.id] ?? const [];
       final votes = _votesByTrip[trip.id] ?? const [];
       final totalExpenses = expenses.fold(0.0, (s, e) => s + e.amount);
       final yourShare = expenses.fold(
           0.0, (s, e) => s + e.participants.where((p) => p.uid == _uid && !p.paid).fold(0.0, (s2, p) => s2 + p.share));
-      final hasActivities = trip.days.any((d) => d.items.isNotEmpty);
+      // Each tag is a live, "needs your attention right now" state, not a
+      // once-true-forever label — see Trip.planUnseenFor/expensesUnseenFor
+      // (an edit someone else made that this member hasn't opened that tab
+      // to see since) and the same "active + not yet voted" check
+      // votingItems above uses for a poll. A tag disappears the moment its
+      // condition stops holding (the member opens the tab, votes, or the
+      // poll closes) — it's fine, and expected, for a card to show no tags
+      // at all once everything's been seen/voted.
+      final hasActiveUnvotedPoll =
+          votes.any((v) => !v.isClosed && !v.options.any((o) => o.votedBy.contains(_uid)));
       final tags = <String>[
-        if (hasActivities) 'Plan Updated',
-        if (expenses.isNotEmpty) 'Expenses Updated',
-        if (votes.isNotEmpty) 'Poll Ongoing',
+        if (trip.planUnseenFor(_uid)) 'Plan Updated',
+        if (trip.expensesUnseenFor(_uid)) 'Expenses Updated',
+        if (hasActiveUnvotedPoll) 'Poll Ongoing',
       ];
       return PlanGroup(
         title: trip.name,
@@ -152,10 +184,10 @@ class PlanPageController extends ChangeNotifier {
         timeAgo: trip.createdAt == null ? 'Just now' : formatTimeAgo(trip.createdAt!),
         lastMessage: '${trip.destination} · ${trip.dateRangeLabel}',
         unread: 0,
-        tags: tags.isEmpty ? ['Plan Updated'] : tags,
+        tags: tags,
         totalExpenses: totalExpenses,
         yourShare: yourShare,
-        lastExpenseLabel: expenses.isEmpty ? '' : expenses.first.title,
+        lastExpenseLabel: expenses.isEmpty ? '' : expenseLabel(expenses.first),
         lastExpenseAmount: expenses.isEmpty ? 0 : expenses.first.amount,
         tripId: trip.id,
         coverImage: trip.coverImage,

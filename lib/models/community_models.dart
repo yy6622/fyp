@@ -75,6 +75,23 @@ class CommunityPost {
   /// Report's "user-report count" column.
   final int reportCount;
 
+  /// True when [ContentModerationService] flagged this post's text as
+  /// possibly inappropriate at creation time (see
+  /// [CommunityRepository.createPost]) and it's still awaiting an admin's
+  /// approve/reject decision in admin/content-moderation.html. While
+  /// true, [CommunityRepository.watchPosts] hides the post from everyone
+  /// except its own author — see that method's doc comment — so the UI
+  /// only ever needs this to show the author their own "pending review"
+  /// state, never to filter anything itself.
+  final bool autoFlagged;
+
+  /// Hashtags the author attached when composing this post (e.g. "foodie",
+  /// "budget", "solo") — lowercase, no leading '#'. Shown as tappable chips
+  /// on the feed card and detail page, and the basis for
+  /// [CommunityRepository.recordView]'s per-viewer tag-affinity tracking,
+  /// which in turn drives [CommunityController.recommendedPosts].
+  final List<String> tags;
+
   CommunityPostTab tab;
   int? expandedDay;
   CommunityPost({
@@ -99,6 +116,8 @@ class CommunityPost {
     this.viewCount = 0,
     this.uniqueViewerCount = 0,
     this.reportCount = 0,
+    this.autoFlagged = false,
+    this.tags = const [],
     this.tab = CommunityPostTab.itinerary,
     this.expandedDay = 1,
   });

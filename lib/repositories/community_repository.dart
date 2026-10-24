@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../models/community_models.dart';
 import '../models/review_models.dart';
+import '../services/content_moderation_service.dart';
 import '../services/format_utils.dart';
 import 'review_helpers.dart';
 
@@ -19,12 +20,53 @@ class CommunityRepository {
 
   CollectionReference<Map<String, dynamic>> get _posts => FirebaseFirestore.instance.collection('posts');
 
-  Stream<List<CommunityPost>> watchPosts(String myUid) {
-    return _posts.orderBy('createdAt', descending: true).snapshots().map(
-        (snap) => snap.docs.map((d) => _fromDoc(d, myUid)).toList());
+  /// Cleans up author-typed hashtags before they're stored: trims
+  /// whitespace, lowercases, strips a leading '#' (so "#Foodie" and
+  /// "foodie" land on the same tag), drops anything left empty, and
+  /// de-duplicates while keeping the author's original order.
+  static List<String> normalizeTags(List<String> raw) {
+    final seen = <String>{};
+    final out = <String>[];
+    for (final t in raw) {
+      var tag = t.trim().toLowerCase();
+      if (tag.startsWith('#')) tag = tag.substring(1);
+      if (tag.isEmpty || seen.contains(tag)) continue;
+      seen.add(tag);
+      out.add(tag);
+    }
+    return out;
   }
 
-  Future<void> createPost({
+  /// Hides a post that [ContentModerationService] auto-flagged (see
+  /// [createPost]) from everyone except its own author, while it's still
+  /// awaiting an admin's approve/reject decision — a manually-reported
+  /// post (plain `reported`, no `autoFlagged`) stays visible to everyone
+  /// throughout review, same as before this feature; only an
+  /// AI-auto-flagged one is held back, since unlike a human report it was
+  /// never seen and judged fine by anyone before going live.
+  /// [approvePostReport] (admin_web/js/data.js) clears `autoFlagged` on
+  /// approve, which is what makes an approved post reappear for everyone.
+  Stream<List<CommunityPost>> watchPosts(String myUid) {
+    return _posts.orderBy('createdAt', descending: true).snapshots().map((snap) => snap.docs
+        .where((d) => d.data()['autoFlagged'] != true || d.data()['authorId'] == myUid)
+        .map((d) => _fromDoc(d, myUid))
+        .toList());
+  }
+
+  /// Creates the post, after first checking its title+description with
+  /// [ContentModerationService]. Returns true when the post was flagged
+  /// (so the caller — see CreatePostController.publish — can tell the
+  /// author it's pending review instead of saying it's live). A flagged
+  /// post is still created, never blocked outright: it's saved with the
+  /// same `reported`/`reportedBy`/`reportReason`/`reportedAt` fields a
+  /// human "Report post" tap sets (see [reportPost]) — `reportedBy:
+  /// 'system'` marks it as AI-detected rather than human-reported, for
+  /// admin/content-moderation.html's display — plus `autoFlagged: true`,
+  /// which is what [watchPosts] uses to hold it out of the public feed
+  /// until an admin reviews it. Deliberately does NOT bump `reportCount`
+  /// — that field is specifically a lifetime count of human reports (see
+  /// its doc comment on [CommunityPost]), and an auto-flag isn't one.
+  Future<bool> createPost({
     required String authorId,
     required String author,
     required String title,
@@ -32,8 +74,10 @@ class CommunityRepository {
     required String location,
     String flagEmoji = '📍',
     List<Map<String, dynamic>> itinerary = const [],
-  }) {
-    return _posts.add({
+    List<String> tags = const [],
+  }) async {
+    final moderation = await ContentModerationService.instance.check('$title\n$description');
+    await _posts.add({
       'authorId': authorId,
       'author': author,
       'handle': handleForName(author),
@@ -44,11 +88,20 @@ class CommunityRepository {
       'flagEmoji': flagEmoji,
       'images': <String>[],
       'itinerary': itinerary,
+      'tags': normalizeTags(tags),
       'likedBy': <String>[],
       'ratings': <String, dynamic>{},
       'commentsCount': 0,
       'createdAt': FieldValue.serverTimestamp(),
+      if (moderation.flagged) ...{
+        'autoFlagged': true,
+        'reported': true,
+        'reportedBy': 'system',
+        'reportReason': 'Auto-detected: ${moderation.reason}',
+        'reportedAt': FieldValue.serverTimestamp(),
+      },
     });
+    return moderation.flagged;
   }
 
   Future<void> toggleLike(String postId, String uid, bool liked) {
@@ -70,10 +123,20 @@ class CommunityRepository {
   /// Best-effort: a logged-in uid is required, but any failure (offline,
   /// a stale/deleted post) is swallowed — a view counter is analytics,
   /// never something worth blocking or erroring the post page over.
-  Future<void> recordView(String postId, String uid) async {
+  ///
+  /// [tags] — the viewed post's own [CommunityPost.tags] — are folded
+  /// into `users/{uid}.tagAffinity`, a `{tag: viewCount}` map that is the
+  /// whole basis for [CommunityController.recommendedPosts] ("based on
+  /// what you've viewed before"). Only bumped on a first view of this
+  /// post by this viewer (same `isFirstView` check as `uniqueViewerCount`
+  /// above) — re-opening a post you already saw shouldn't make its tags
+  /// look more interesting to you than a brand-new one you just glanced
+  /// at once.
+  Future<void> recordView(String postId, String uid, {List<String> tags = const []}) async {
     if (uid.isEmpty || postId.isEmpty) return;
     final postRef = _posts.doc(postId);
     final viewerRef = postRef.collection('viewers').doc(uid);
+    final userRef = FirebaseFirestore.instance.collection('users').doc(uid);
     final now = DateTime.now();
     final monthKey = '${now.year}-${now.month.toString().padLeft(2, '0')}';
     final statsRef = FirebaseFirestore.instance.collection('post_view_stats').doc(monthKey);
@@ -94,10 +157,28 @@ class CommunityRepository {
           if (isFirstView) 'uniqueViewerCount': FieldValue.increment(1),
         });
         tx.set(statsRef, {'viewCount': FieldValue.increment(1)}, SetOptions(merge: true));
+        if (isFirstView && tags.isNotEmpty) {
+          tx.set(
+            userRef,
+            {'tagAffinity': {for (final tag in normalizeTags(tags)) tag: FieldValue.increment(1)}},
+            SetOptions(merge: true),
+          );
+        }
       });
     } catch (_) {
       // Analytics-only — see doc comment above.
     }
+  }
+
+  /// Streams [uid]'s `tagAffinity` map (tag → number of distinct posts
+  /// with that tag they've viewed) — see [recordView]. Missing/empty for
+  /// a user who hasn't viewed any tagged post yet.
+  Stream<Map<String, int>> watchTagAffinity(String uid) {
+    if (uid.isEmpty) return Stream.value(const {});
+    return FirebaseFirestore.instance.collection('users').doc(uid).snapshots().map((snap) {
+      final raw = snap.data()?['tagAffinity'] as Map? ?? const {};
+      return raw.map((k, v) => MapEntry(k as String, (v as num).toInt()));
+    });
   }
 
   /// Files a report against [postId] (the mobile-side half of the
@@ -131,7 +212,7 @@ class CommunityRepository {
   /// A post's written reviews — real, Firestore-backed, one per author.
   /// Not the same data as [CommunityPost.reviews], which is always empty;
   /// that field predates this and is no longer read anymore.
-  Stream<List<PlaceReview>> watchReviews(String postId) => watchReviewsFor(_posts.doc(postId));
+  Stream<List<PlaceReview>> watchReviews(String postId, {String myUid = ''}) => watchReviewsFor(_posts.doc(postId), myUid: myUid);
 
   /// Which post ids [uid] has left a written review on — backs the merged
   /// "Rating & Review" tab on Profile's Community Post page (My Posts /
@@ -159,9 +240,19 @@ class CommunityRepository {
   /// instead of a separate standalone tap. [bumpAggregate] stays false:
   /// posts track their average through the per-uid `ratings` map, not a
   /// summed `ratingSum`/`ratingCount` pair.
-  Future<void> addReview(String postId, {required String authorId, required String authorName, required int rating, required String comment}) async {
-    await addReviewFor(_posts.doc(postId), authorId: authorId, authorName: authorName, rating: rating, comment: comment, bumpAggregate: false);
-    await setRating(postId, authorId, rating);
+  ///
+  /// Returns true when [addReviewFor] flagged the comment as possibly
+  /// inappropriate — when that happens, [setRating] is deliberately
+  /// skipped too, same reasoning as [addReviewFor]'s deferred
+  /// `ratingSum`/`ratingCount` bump for hotels/restaurants/attractions:
+  /// a flagged review's star rating shouldn't count toward the post's
+  /// average until an admin approves it. admin_web/js/data.js's
+  /// `approveReview` sets `ratings.$authorId` directly to finish that
+  /// deferred write then.
+  Future<bool> addReview(String postId, {required String authorId, required String authorName, required int rating, required String comment}) async {
+    final flagged = await addReviewFor(_posts.doc(postId), authorId: authorId, authorName: authorName, rating: rating, comment: comment, bumpAggregate: false);
+    if (!flagged) await setRating(postId, authorId, rating);
+    return flagged;
   }
 
   // There used to be a seedIfEmpty(myUid) here that wrote two fake starter
@@ -209,6 +300,8 @@ class CommunityRepository {
       viewCount: (data['viewCount'] as num?)?.toInt() ?? 0,
       uniqueViewerCount: (data['uniqueViewerCount'] as num?)?.toInt() ?? 0,
       reportCount: (data['reportCount'] as num?)?.toInt() ?? 0,
+      autoFlagged: data['autoFlagged'] == true,
+      tags: List<String>.from(data['tags'] as List? ?? const []),
     );
   }
 }

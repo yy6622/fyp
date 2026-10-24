@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -10,6 +11,7 @@ import '../models/review_models.dart';
 import '../services/currency_service.dart';
 import '../services/duffel_api_service.dart';
 import '../services/format_utils.dart';
+import '../services/name_translation_service.dart';
 import '../services/places_api_service.dart';
 import '../services/rollinggo_api_service.dart';
 import 'review_helpers.dart';
@@ -223,9 +225,9 @@ class CatalogRepository {
   Future<void> toggleHotelFavorite(String id, String uid, String tripId, bool fav) =>
       _toggleFav(_hotels, id, '$uid#$tripId', fav);
 
-  Stream<List<PlaceReview>> watchHotelReviews(String hotelId) => watchReviewsFor(_hotels.doc(hotelId));
+  Stream<List<PlaceReview>> watchHotelReviews(String hotelId, {String myUid = ''}) => watchReviewsFor(_hotels.doc(hotelId), myUid: myUid);
 
-  Future<void> addHotelReview(String hotelId, {required String authorId, required String authorName, required int rating, required String comment}) =>
+  Future<bool> addHotelReview(String hotelId, {required String authorId, required String authorName, required int rating, required String comment}) =>
       addReviewFor(_hotels.doc(hotelId), authorId: authorId, authorName: authorName, rating: rating, comment: comment);
 
   /// Same idea as [saveDuffelFlight] — persists a real hotel search
@@ -391,44 +393,131 @@ class CatalogRepository {
     );
   }
 
-  Future<void> toggleAttractionFavorite(String id, String uid, String tripId, bool fav) =>
-      _toggleFav(_attractions, id, '$uid#$tripId', fav);
+  /// [categories] — the attraction's own [CatalogAttraction.categoryTags]
+  /// — are only used when [fav] is true: favoriting is a much stronger
+  /// "this is the kind of thing I like" signal than a casual view, so it
+  /// bumps `users/{uid}.attractionCategoryAffinity` by
+  /// [_favoriteAffinityWeight] per category instead of the view-only +1
+  /// (see [recordAttractionView], which feeds the same map). Omitted (or
+  /// empty) is fine for a caller that only ever un-favorites — see
+  /// [SavedItemsController.unsaveAttraction]. Un-favoriting never
+  /// decrements the map — losing interest in one specific place doesn't
+  /// mean the category itself stopped being relevant, same "only ever
+  /// grows" philosophy CommunityRepository.recordView's tagAffinity uses.
+  Future<void> toggleAttractionFavorite(String id, String uid, String tripId, bool fav, {List<String> categories = const []}) {
+    if (fav && categories.isNotEmpty) {
+      unawaited(_bumpAffinity(uid, 'attractionCategoryAffinity', categories, _favoriteAffinityWeight));
+    }
+    return _toggleFav(_attractions, id, '$uid#$tripId', fav);
+  }
 
-  Stream<List<PlaceReview>> watchAttractionReviews(String attractionId) => watchReviewsFor(_attractions.doc(attractionId));
+  Stream<List<PlaceReview>> watchAttractionReviews(String attractionId, {String myUid = ''}) => watchReviewsFor(_attractions.doc(attractionId), myUid: myUid);
 
-  Future<void> addAttractionReview(String attractionId, {required String authorId, required String authorName, required int rating, required String comment}) =>
+  Future<bool> addAttractionReview(String attractionId, {required String authorId, required String authorName, required int rating, required String comment}) =>
       addReviewFor(_attractions.doc(attractionId), authorId: authorId, authorName: authorName, rating: rating, comment: comment);
 
   // ---------------- Restaurants ----------------
+  //
+  // `catalog_restaurants` has documents from two different writers with
+  // two different field conventions:
+  //  - the live refresh path below (`_refreshRestaurants`), camelCase,
+  //    matching every other catalog_* collection ('priceRange',
+  //    'openingHours', 'image', 'description', 'cuisineTags',
+  //    'destinationQuery', a plain 'location' string).
+  //  - a one-off bulk OSM import done outside this app, snake_case
+  //    ('price_range', 'opening_hours', 'image_url', 'about', 'cuisine'),
+  //    which also stored 'location' as a Firestore GeoPoint (lat/lng),
+  //    not the human "City, Country" string this field is for, and never
+  //    wrote 'destinationQuery' at all.
+  // The old version of this method only ever read the camelCase names and
+  // cast 'location' straight to `as String?` — on a GeoPoint that throws
+  // at runtime, and the missing 'destinationQuery' meant every
+  // destination-filtered query silently excluded the entire bulk import
+  // regardless. Together that's the vast majority of this collection's
+  // real, already-scraped data (name/address/phone/website/hours/photo/
+  // description) never actually reaching the app. The helpers below read
+  // both conventions so that real data shows up under either writer.
   Stream<List<CatalogRestaurant>> watchRestaurants({String? favoritedBy, String? destination}) {
+    final normalizedDestination = destination == null ? null : _normalizeDestination(destination);
     return _restaurants.snapshots().map((snap) => snap.docs
         .where((d) => favoritedBy == null || _favBy(d).contains(favoritedBy))
-        .where((d) => destination == null || (d.data()['destinationQuery'] as String?) == _normalizeDestination(destination))
+        .where((d) => normalizedDestination == null || _restaurantMatchesDestination(d.data(), normalizedDestination))
         .map((d) => CatalogRestaurant(
               id: d.id,
               favoritedBy: _favBy(d),
               name: (d.data()['name'] as String?) ?? '',
-              cuisineTags: List<String>.from(d.data()['cuisineTags'] as List? ?? const []),
-              location: (d.data()['location'] as String?) ?? '',
+              cuisineTags: _restaurantCuisineTags(d.data()),
+              location: _restaurantLocationLabel(d.data()),
               rating: _ratingLabel(d.data()),
               reviews: _reviewCountLabel(d.data()),
-              priceRange: (d.data()['priceRange'] as String?) ?? '',
-              image: (d.data()['image'] as String?) ?? '',
-              openingHours: (d.data()['openingHours'] as String?) ?? 'Daily, 11:00 AM - 10:00 PM',
+              priceRange: (d.data()['priceRange'] as String?) ?? (d.data()['price_range'] as String?) ?? '',
+              image: (d.data()['image'] as String?) ?? (d.data()['image_url'] as String?) ?? '',
+              // No hardcoded fallback hours — 'opening_hours' genuinely
+              // isn't scraped for every place, and showing a guessed
+              // '11 AM - 10 PM' as if it were real is exactly the kind of
+              // fake data this app is trying to not have anywhere.
+              openingHours: (d.data()['openingHours'] as String?) ?? (d.data()['opening_hours'] as String?) ?? '',
               address: (d.data()['address'] as String?) ?? '',
               phone: (d.data()['phone'] as String?) ?? '',
               website: (d.data()['website'] as String?) ?? '',
-              description: (d.data()['description'] as String?) ?? '',
+              description: (d.data()['description'] as String?) ?? (d.data()['about'] as String?) ?? '',
             ))
         .toList());
   }
 
-  Future<void> toggleRestaurantFavorite(String id, String uid, String tripId, bool fav) =>
-      _toggleFav(_restaurants, id, '$uid#$tripId', fav);
+  /// The bulk OSM import's 'location' is a Firestore GeoPoint (lat/lng) —
+  /// a raw `as String?` cast on that throws at runtime, which is very
+  /// likely why restaurants from that import never rendered right. Falls
+  /// back to a real "City, Country" label built from 'city'/'country'
+  /// (both bulk-import fields) whenever 'location' isn't actually usable
+  /// as a string.
+  String _restaurantLocationLabel(Map<String, dynamic> data) {
+    final raw = data['location'];
+    if (raw is String && raw.isNotEmpty) return raw;
+    final city = data['city'] as String?;
+    final country = data['country'] as String?;
+    if (city != null && city.isNotEmpty && country != null && country.isNotEmpty) return '$city, $country';
+    return city ?? country ?? '';
+  }
 
-  Stream<List<PlaceReview>> watchRestaurantReviews(String restaurantId) => watchReviewsFor(_restaurants.doc(restaurantId));
+  /// The bulk import wrote the same cuisine tags under 'cuisine' (a
+  /// List<String> there) instead of 'cuisineTags'.
+  List<String> _restaurantCuisineTags(Map<String, dynamic> data) {
+    final tags = data['cuisineTags'] as List?;
+    if (tags != null && tags.isNotEmpty) return List<String>.from(tags);
+    final cuisine = data['cuisine'];
+    if (cuisine is List) return List<String>.from(cuisine);
+    if (cuisine is String && cuisine.isNotEmpty) return [cuisine];
+    return const [];
+  }
 
-  Future<void> addRestaurantReview(String restaurantId, {required String authorId, required String authorName, required int rating, required String comment}) =>
+  /// The bulk import never wrote 'destinationQuery' at all, so a plain
+  /// equality check against it (the live-refresh path's own scoping
+  /// field) excludes every bulk-imported restaurant from any
+  /// destination-filtered query. Falls back to matching against this
+  /// doc's own 'city'/'country' when 'destinationQuery' is absent.
+  bool _restaurantMatchesDestination(Map<String, dynamic> data, String normalizedDestination) {
+    final dq = data['destinationQuery'] as String?;
+    if (dq != null && dq.isNotEmpty) return dq == normalizedDestination;
+    final city = (data['city'] as String?) ?? '';
+    final country = (data['country'] as String?) ?? '';
+    final combined = _normalizeDestination('$city $country'.trim());
+    if (combined.isEmpty) return false;
+    return combined == normalizedDestination || combined.contains(normalizedDestination) || normalizedDestination.contains(combined);
+  }
+
+  /// See [toggleAttractionFavorite]'s doc comment — same idea, just for
+  /// `restaurantCuisineAffinity`/[CatalogRestaurant.cuisineTags].
+  Future<void> toggleRestaurantFavorite(String id, String uid, String tripId, bool fav, {List<String> cuisineTags = const []}) {
+    if (fav && cuisineTags.isNotEmpty) {
+      unawaited(_bumpAffinity(uid, 'restaurantCuisineAffinity', cuisineTags, _favoriteAffinityWeight));
+    }
+    return _toggleFav(_restaurants, id, '$uid#$tripId', fav);
+  }
+
+  Stream<List<PlaceReview>> watchRestaurantReviews(String restaurantId, {String myUid = ''}) => watchReviewsFor(_restaurants.doc(restaurantId), myUid: myUid);
+
+  Future<bool> addRestaurantReview(String restaurantId, {required String authorId, required String authorName, required int rating, required String comment}) =>
       addReviewFor(_restaurants.doc(restaurantId), authorId: authorId, authorName: authorName, rating: rating, comment: comment);
 
   // ---------------- Near-by places ----------------
@@ -504,6 +593,31 @@ class CatalogRepository {
     return earthRadiusKm * c;
   }
 
+  /// Resolves the English `name` (and, if translated, the original
+  /// `nameLocal`) to store for a scraped/live place — see
+  /// [NameTranslationService]'s doc comment for why this happens at write
+  /// time rather than at display time. [existing] is this place's current
+  /// Firestore doc data, if any (pass null for a brand-new one); when its
+  /// `nameLocal` already matches [rawName], the previous translation is
+  /// reused instead of calling the API again, so a place that was already
+  /// translated once doesn't get re-translated on every ~20-minute refresh.
+  Future<({String name, String? nameLocal})> _resolveName(String rawName, Map<String, dynamic>? existing) async {
+    final trimmed = rawName.trim();
+    if (trimmed.isEmpty || !NameTranslationService.looksNonEnglish(trimmed)) {
+      return (name: trimmed, nameLocal: null);
+    }
+    final existingLocal = existing?['nameLocal'] as String?;
+    final existingName = existing?['name'] as String?;
+    if (existingLocal == trimmed && existingName != null && existingName.isNotEmpty) {
+      return (name: existingName, nameLocal: existingLocal);
+    }
+    final translated = await NameTranslationService.instance.translateToEnglish(trimmed);
+    if (translated == null || translated.isEmpty) {
+      return (name: trimmed, nameLocal: null);
+    }
+    return (name: translated, nameLocal: trimmed);
+  }
+
   List<String> _favBy(QueryDocumentSnapshot<Map<String, dynamic>> d) =>
       List<String>.from(d.data()['favoritedBy'] as List? ?? const []);
 
@@ -532,6 +646,109 @@ class CatalogRepository {
   Future<void> _toggleFav(CollectionReference<Map<String, dynamic>> col, String id, String key, bool fav) {
     return col.doc(id).update({
       'favoritedBy': fav ? FieldValue.arrayUnion([key]) : FieldValue.arrayRemove([key]),
+    });
+  }
+
+  // ==================== Explore personalization ("based on what you've
+  // looked at before", same idea as CommunityRepository's tagAffinity,
+  // just scoped to attraction categories / restaurant cuisines instead
+  // of post hashtags) ====================
+
+  /// A view is worth 1 point of affinity per tag; favoriting something
+  /// (a much more deliberate action) is worth this many — see
+  /// [toggleAttractionFavorite]/[toggleRestaurantFavorite].
+  static const int _favoriteAffinityWeight = 5;
+
+  /// Adds [weight] to `users/{uid}.{field}.{tag}` for every tag in
+  /// [tags] (merge:true, so this never needs the doc to already exist).
+  /// Fire-and-forget and best-effort — the same "never block or error
+  /// the page over a personalization signal" rule
+  /// CommunityRepository.recordView documents for its own tagAffinity
+  /// write.
+  Future<void> _bumpAffinity(String uid, String field, List<String> tags, int weight) async {
+    if (uid.isEmpty || tags.isEmpty) return;
+    try {
+      await FirebaseFirestore.instance.collection('users').doc(uid).set({
+        field: {for (final t in tags) t: FieldValue.increment(weight)},
+      }, SetOptions(merge: true));
+    } catch (_) {
+      // best-effort — see doc comment above.
+    }
+  }
+
+  /// Records one view of [attractionId] by [uid] — bumps
+  /// `users/{uid}.attractionCategoryAffinity` by 1 for every tag in
+  /// [categories] (the attraction's own [CatalogAttraction.categoryTags]).
+  /// Only counted on the FIRST view of this particular attraction by this
+  /// uid (tracked in `users/{uid}.viewedAttractionIds`, read/written in
+  /// one transaction so two near-simultaneous opens can't both think
+  /// they're first) — otherwise re-opening the same museum five times
+  /// while planning a trip would make "Museum" look five times more
+  /// interesting than a single glance at a beach never visited again.
+  /// Same idea as CommunityRepository.recordView's own first-view guard,
+  /// just backed by an id array on the user doc instead of a viewers
+  /// subcollection on the post — there's no separate "attraction doc"
+  /// here that needs its own view counter the way a post does, so a
+  /// subcollection would be pure overhead.
+  Future<void> recordAttractionView(String attractionId, String uid, List<String> categories) async {
+    if (uid.isEmpty || attractionId.isEmpty || categories.isEmpty) return;
+    final userRef = FirebaseFirestore.instance.collection('users').doc(uid);
+    try {
+      await FirebaseFirestore.instance.runTransaction((tx) async {
+        final snap = await tx.get(userRef);
+        final viewed = List<String>.from(snap.data()?['viewedAttractionIds'] as List? ?? const []);
+        if (viewed.contains(attractionId)) return;
+        tx.set(userRef, {
+          'viewedAttractionIds': FieldValue.arrayUnion([attractionId]),
+          'attractionCategoryAffinity': {for (final c in categories) c: FieldValue.increment(1)},
+        }, SetOptions(merge: true));
+      });
+    } catch (_) {
+      // best-effort — see _bumpAffinity's doc comment.
+    }
+  }
+
+  /// See [recordAttractionView] — same idea for
+  /// `restaurantCuisineAffinity`/`viewedRestaurantIds`/
+  /// [CatalogRestaurant.cuisineTags].
+  Future<void> recordRestaurantView(String restaurantId, String uid, List<String> cuisineTags) async {
+    if (uid.isEmpty || restaurantId.isEmpty || cuisineTags.isEmpty) return;
+    final userRef = FirebaseFirestore.instance.collection('users').doc(uid);
+    try {
+      await FirebaseFirestore.instance.runTransaction((tx) async {
+        final snap = await tx.get(userRef);
+        final viewed = List<String>.from(snap.data()?['viewedRestaurantIds'] as List? ?? const []);
+        if (viewed.contains(restaurantId)) return;
+        tx.set(userRef, {
+          'viewedRestaurantIds': FieldValue.arrayUnion([restaurantId]),
+          'restaurantCuisineAffinity': {for (final c in cuisineTags) c: FieldValue.increment(1)},
+        }, SetOptions(merge: true));
+      });
+    } catch (_) {
+      // best-effort — see _bumpAffinity's doc comment.
+    }
+  }
+
+  /// Streams [uid]'s `attractionCategoryAffinity` map (category → weighted
+  /// score from views + favorites) — the whole basis for
+  /// [ExploreController]'s personalized attraction ordering. Missing/empty
+  /// for a user who hasn't viewed/favorited any attraction yet, in which
+  /// case Explore just shows its normal, unpersonalized order.
+  Stream<Map<String, int>> watchAttractionCategoryAffinity(String uid) {
+    if (uid.isEmpty) return Stream.value(const {});
+    return FirebaseFirestore.instance.collection('users').doc(uid).snapshots().map((snap) {
+      final raw = snap.data()?['attractionCategoryAffinity'] as Map? ?? const {};
+      return raw.map((k, v) => MapEntry(k as String, (v as num).toInt()));
+    });
+  }
+
+  /// See [watchAttractionCategoryAffinity] — same idea for
+  /// `restaurantCuisineAffinity`.
+  Stream<Map<String, int>> watchRestaurantCuisineAffinity(String uid) {
+    if (uid.isEmpty) return Stream.value(const {});
+    return FirebaseFirestore.instance.collection('users').doc(uid).snapshots().map((snap) {
+      final raw = snap.data()?['restaurantCuisineAffinity'] as Map? ?? const {};
+      return raw.map((k, v) => MapEntry(k as String, (v as num).toInt()));
     });
   }
 
@@ -603,7 +820,7 @@ class CatalogRepository {
     String destination,
     String key,
     String countryCode,
-    ({double lat, double lon, String? countryCode}) point,
+    ({double lat, double lon, String? countryCode, String? label}) point,
   ) async {
     QuerySnapshot<Map<String, dynamic>> snap;
     try {
@@ -628,6 +845,9 @@ class CatalogRepository {
     final withDistance = <({QueryDocumentSnapshot<Map<String, dynamic>> doc, Map<String, dynamic> data, double km})>[];
     for (final d in snap.docs) {
       final data = d.data();
+      // AI Summarise also stores restaurants / cafés it found on OpenStreetMap here
+      // (functions/planner/osm_places.js, `type: 'restaurant'`) — not attractions.
+      if (data['type'] == 'restaurant') continue;
       final lat = (data['lat'] as num?)?.toDouble();
       final lng = (data['lng'] as num?)?.toDouble();
       if (lat == null || lng == null) continue;
@@ -647,15 +867,28 @@ class CatalogRepository {
       if (wikipedia.isEmpty) return null;
       return PlacesApiService.instance.resolveDescription({'wikipedia': wikipedia});
     }));
+    // Resolved against each place's *existing* doc (if any) so a name
+    // already translated on a previous refresh is reused rather than
+    // re-sent to the translation API every ~20 minutes — see
+    // [_resolveName]'s doc comment.
+    final existingDocs = await Future.wait(nearest.map((e) => _attractions.doc('place_${e.doc.id}').get()));
+    final baseNames = [
+      for (final e in nearest)
+        (((e.data['nameEn'] as String?)?.trim().isNotEmpty ?? false)
+            ? (e.data['nameEn'] as String).trim()
+            : ((e.data['name'] as String?) ?? '')),
+    ];
+    final resolvedNames = await Future.wait([
+      for (var i = 0; i < nearest.length; i++) _resolveName(baseNames[i], existingDocs[i].data()),
+    ]);
     for (var i = 0; i < nearest.length; i++) {
       final data = nearest[i].data;
       final category = (data['category'] as String?) ?? '';
-      final nameEn = (data['nameEn'] as String?)?.trim();
-      final name = (nameEn != null && nameEn.isNotEmpty) ? nameEn : ((data['name'] as String?) ?? '');
       final imageUrl = data['imageUrl'] as String?;
       try {
         await _attractions.doc('place_${nearest[i].doc.id}').set({
-          'name': name,
+          'name': resolvedNames[i].name,
+          if (resolvedNames[i].nameLocal != null) 'nameLocal': resolvedNames[i].nameLocal,
           'category': category.isEmpty ? 'Attraction' : _titleCase(category.replaceAll('_', ' ')),
           'categories': [if (category.isNotEmpty) _titleCase(category.replaceAll('_', ' '))],
           'price': '',
@@ -667,7 +900,7 @@ class CatalogRepository {
           // change only, not another backfill.
           if (data['imageAuthor'] != null) 'imageAuthor': data['imageAuthor'],
           if (data['imageLicense'] != null) 'imageLicense': data['imageLicense'],
-          'location': destination.trim(),
+          'location': point.label ?? destination.trim(),
           'destinationQuery': key,
           'openingHours': '',
           'address': '',
@@ -690,7 +923,7 @@ class CatalogRepository {
   /// fallbacks) — now only reached by [refreshAttractions] when `catalog_places`
   /// has nothing for this destination's country yet. See that method's
   /// doc comment.
-  Future<void> _refreshAttractionsFromOsm(String destination, String key, ({double lat, double lon, String? countryCode}) point) async {
+  Future<void> _refreshAttractionsFromOsm(String destination, String key, ({double lat, double lon, String? countryCode, String? label}) point) async {
     final found = await PlacesApiService.instance.searchNearby(
       lat: point.lat,
       lon: point.lon,
@@ -722,12 +955,19 @@ class CatalogRepository {
     ]);
     final images = [for (final f in filled) f.image];
     final descriptions = [for (final f in filled) f.description];
+    // Same existing-doc reuse as the catalog_places path above — see
+    // [_resolveName]'s doc comment.
+    final existingDocs = await Future.wait(found.map((p) => _attractions.doc('osm_${p.id}').get()));
+    final resolvedNames = await Future.wait([
+      for (var i = 0; i < found.length; i++) _resolveName(found[i].name, existingDocs[i].data()),
+    ]);
     for (var i = 0; i < found.length; i++) {
       final p = found[i];
       final tourism = p.tags['tourism'] ?? '';
       try {
         await _attractions.doc('osm_${p.id}').set({
-          'name': p.name,
+          'name': resolvedNames[i].name,
+          if (resolvedNames[i].nameLocal != null) 'nameLocal': resolvedNames[i].nameLocal,
           'category': tourism.isEmpty ? 'Attraction' : _titleCase(tourism.replaceAll('_', ' ')),
           'categories': [if (tourism.isNotEmpty) _titleCase(tourism.replaceAll('_', ' '))],
           'price': p.tags['fee'] == 'no' ? 'Free entry' : '',
@@ -735,7 +975,7 @@ class CatalogRepository {
           // this particular refresh shouldn't blank out an image this
           // same place already got from an earlier successful refresh.
           if (images[i] != null) 'image': images[i],
-          'location': destination.trim(),
+          'location': point.label ?? destination.trim(),
           'destinationQuery': key,
           'openingHours': p.tags['opening_hours'] ?? '',
           'address': p.address,
@@ -789,6 +1029,12 @@ class CatalogRepository {
     ]);
     final images = [for (final f in filled) f.image];
     final descriptions = [for (final f in filled) f.description];
+    // Same existing-doc reuse as the attractions paths above — see
+    // [_resolveName]'s doc comment.
+    final existingDocs = await Future.wait(found.map((p) => _restaurants.doc('osm_${p.id}').get()));
+    final resolvedNames = await Future.wait([
+      for (var i = 0; i < found.length; i++) _resolveName(found[i].name, existingDocs[i].data()),
+    ]);
     for (var i = 0; i < found.length; i++) {
       final p = found[i];
       final cuisine = p.tags['cuisine'] ?? '';
@@ -797,9 +1043,10 @@ class CatalogRepository {
           : cuisine.split(';').map((s) => _titleCase(s.trim().replaceAll('_', ' '))).where((s) => s.isNotEmpty).toList();
       try {
         await _restaurants.doc('osm_${p.id}').set({
-          'name': p.name,
+          'name': resolvedNames[i].name,
+          if (resolvedNames[i].nameLocal != null) 'nameLocal': resolvedNames[i].nameLocal,
           'cuisineTags': cuisineTags,
-          'location': destination.trim(),
+          'location': point.label ?? destination.trim(),
           'destinationQuery': key,
           'priceRange': '',
           if (images[i] != null) 'image': images[i],

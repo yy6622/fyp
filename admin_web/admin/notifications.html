@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Notifications — Voya Admin</title>
+<link rel="stylesheet" href="../css/tokens.css?v=20261021" />
+<link rel="stylesheet" href="../css/base.css?v=20261021" />
+<link rel="stylesheet" href="../css/layout.css?v=20261021" />
+<link rel="stylesheet" href="../css/components.css?v=20261021c" />
+</head>
+<body>
+<div class="shell">
+  <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+  <aside class="sidebar" id="sidebar">
+    <img class="sidebar-brand" src="../img/voya-logo-white.png" alt="Voya" />
+    <div class="sidebar-user">
+      <div class="name" id="sbUserName">Loading…</div>
+      <div class="role" id="sbUserRole">Administrator</div>
+    </div>
+    <nav class="nav" id="sidebarNav"></nav>
+    <button class="sidebar-logout" id="logoutBtn"><span data-icon="log-out"></span>Log out</button>
+  </aside>
+
+  <main class="content">
+    <div class="topbar">
+      <div>
+        <button class="menu-toggle" id="menuToggle"><span data-icon="menu"></span></button>
+        <a href="overview.html" class="inline-flex" style="gap:4px;font-size:12.5px;color:var(--text-500);text-decoration:none;margin-bottom:4px;"><span data-icon="chevron-left" data-icon-size="12"></span>Back to Dashboard</a>
+        <h1 class="h1">Notifications</h1>
+        <p class="subtitle">Everything waiting on an admin decision — new partner requests, reported content, and recent decisions</p>
+      </div>
+    </div>
+
+    <div class="card card-pad" id="pendingSection"><div class="skeleton" style="height:90px;"></div></div>
+    <div class="card card-pad" id="moderationSection" style="margin-top:20px;"><div class="skeleton" style="height:90px;"></div></div>
+    <div class="card card-pad" id="recentSection" style="margin-top:20px;"></div>
+  </main>
+</div>
+
+<div class="modal-backdrop" id="dummyModalAnchor" style="display:none;"></div>
+
+<script type="module">
+import { requireRole } from "../js/auth-guard.js?v=20261021";
+import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261021";
+import { mountIcons } from "../js/icons.js?v=20261021";
+import { listPartners, setPartnerStatus, listReportedPosts, listFlaggedReviews } from "../js/data.js?v=20261021";
+import {
+  fullDate, timeAgo, statusBadge, escapeHtml, toast, setBusy, reporterLabel,
+  confirmDialog, promptDialog, detailDialog, wireModalDismiss,
+} from "../js/ui.js?v=20261021";
+
+// No "Notifications" nav item in the sidebar anymore — this page is only
+// reached from the Dashboard's bell button now, not a permanent tab (see
+// js/sidebar.js). Highlighting "overview" keeps the Dashboard tab marked
+// active while the admin is here, since that's conceptually where they
+// came from and where the "Back to Dashboard" link above returns to.
+mountSidebarNav({ role: "admin", active: "overview" });
+const session = await requireRole("admin", "login.html");
+let partners = [];
+let reportedPosts = [];
+let flaggedReviews = [];
+
+if (session) {
+  setSidebarUser({ displayName: session.profile.name || "Admin", roleLabel: "Administrator" });
+  wireModalDismiss();
+  await load();
+}
+
+async function load() {
+  const [p, posts, reviews] = await Promise.all([
+    listPartners(),
+    listReportedPosts(),
+    listFlaggedReviews().catch(() => []), // collectionGroup query — don't let a rules hiccup on this one break the whole page
+  ]);
+  partners = p;
+  reportedPosts = posts;
+  flaggedReviews = reviews;
+  renderPending();
+  renderModeration();
+  renderRecent();
+  mountIcons(document);
+}
+
+function renderPending() {
+  const section = document.getElementById("pendingSection");
+  const pending = partners.filter((p) => p.status === "pending" || !p.status);
+  if (!pending.length) {
+    section.innerHTML = `
+      <div class="inline-flex" style="gap:14px;align-items:center;">
+        <span data-icon="check-circle" style="color:var(--teal-600);" data-icon-size="22"></span>
+        <div>
+          <h3 class="h3" style="margin-bottom:2px;">All caught up</h3>
+          <p class="muted small">No new insurance partner requests right now.</p>
+        </div>
+      </div>`;
+    return;
+  }
+  section.innerHTML = `
+    <div class="section-head"><h3 class="h3">New partner requests (${pending.length})</h3></div>
+    <div style="display:flex;flex-direction:column;gap:10px;margin-top:4px;">
+      ${pending.map((p) => `
+        <div class="inline-flex" style="justify-content:space-between;gap:12px;padding:14px;border:1px solid #ECECEC;border-radius:12px;cursor:pointer;" data-open-partner="${p.id}">
+          <div class="inline-flex" style="gap:12px;">
+            <div style="width:38px;height:38px;border-radius:10px;background:var(--teal-100);display:flex;align-items:center;justify-content:center;flex:none;">
+              <span data-icon="building" style="color:var(--teal-600);"></span>
+            </div>
+            <div>
+              <div style="font-weight:700;font-size:13.5px;">${escapeHtml(p.companyName || "—")} wants to become an insurance partner</div>
+              <div class="muted small">${escapeHtml(p.email || "—")} · registered ${timeAgo(p.createdAt)}</div>
+            </div>
+          </div>
+          <div class="row-actions" style="flex:none;">
+            <button class="btn btn-primary btn-sm" data-approve="${p.id}">Approve</button>
+            <button class="btn btn-danger-outline btn-sm" data-reject="${p.id}">Reject</button>
+          </div>
+        </div>`).join("")}
+    </div>`;
+  section.querySelectorAll("[data-open-partner]").forEach((row) => row.addEventListener("click", (e) => {
+    if (e.target.closest(".row-actions")) return;
+    openPartnerDetail(row.dataset.openPartner);
+  }));
+  section.querySelectorAll("[data-approve]").forEach((b) => b.addEventListener("click", (e) => { e.stopPropagation(); setStatus(b.dataset.approve, "approved", b); }));
+  section.querySelectorAll("[data-reject]").forEach((b) => b.addEventListener("click", (e) => { e.stopPropagation(); setStatus(b.dataset.reject, "rejected", b); }));
+  mountIcons(section);
+}
+
+// Reported community posts + flagged reviews — the OTHER thing that needs
+// an admin's attention, not just partner approvals. Kept lightweight here
+// (no inline Approve/Reject) since Content Moderation already has the
+// full review flow for both (image preview for a post, star rating +
+// parent lookup for a review) — duplicating that here would just be two
+// copies of the same logic to keep in sync. Clicking a card instead opens
+// Content Moderation already on the right tab with that exact item's
+// review popup open (?tab=…&focus=<id> — see content-moderation.html's
+// applyDeepLink()), so it's still a one-click "go look at this" from here.
+function renderModeration() {
+  const section = document.getElementById("moderationSection");
+  const items = [
+    ...reportedPosts.map((p) => ({ kind: "post", id: p.id, title: p.title || "Untitled post", ...p })),
+    ...flaggedReviews.map((r) => ({ kind: "review", id: r.id, title: `Review on ${r.parentName || "Unknown"}`, ...r })),
+  ].sort((a, b) => (b.reportedAt?.seconds || 0) - (a.reportedAt?.seconds || 0));
+
+  if (!items.length) {
+    section.innerHTML = `
+      <div class="inline-flex" style="gap:14px;align-items:center;">
+        <span data-icon="check-circle" style="color:var(--teal-600);" data-icon-size="22"></span>
+        <div>
+          <h3 class="h3" style="margin-bottom:2px;">Nothing reported</h3>
+          <p class="muted small">No reported posts or reviews waiting on a decision right now.</p>
+        </div>
+      </div>`;
+    return;
+  }
+  section.innerHTML = `
+    <div class="section-head"><h3 class="h3">Content needing review (${items.length})</h3></div>
+    <div style="display:flex;flex-direction:column;gap:10px;margin-top:4px;">
+      ${items.map((it) => `
+        <div class="inline-flex" style="justify-content:space-between;gap:12px;padding:14px;border:1px solid #ECECEC;border-radius:12px;cursor:pointer;" data-open-report="${it.kind}:${it.id}">
+          <div class="inline-flex" style="gap:12px;">
+            <div style="width:38px;height:38px;border-radius:10px;background:var(--amber-bg);display:flex;align-items:center;justify-content:center;flex:none;">
+              <span data-icon="flag" style="color:var(--amber-text);"></span>
+            </div>
+            <div>
+              <div style="font-weight:700;font-size:13.5px;">${escapeHtml(it.title)} was reported</div>
+              <div class="muted small">Reported by ${escapeHtml(reporterLabel(it))} · ${timeAgo(it.reportedAt)} · ${escapeHtml(it.reportReason || "No reason given")}</div>
+            </div>
+          </div>
+          <span class="badge badge-amber" style="flex:none;">${it.kind === "post" ? "Post" : "Review"}</span>
+        </div>`).join("")}
+    </div>`;
+  section.querySelectorAll("[data-open-report]").forEach((row) => row.addEventListener("click", () => {
+    const [kind, id] = row.dataset.openReport.split(":");
+    location.href = kind === "post" ? `content-moderation.html?tab=posts&focus=${id}` : `content-moderation.html?tab=reviews&focus=${id}`;
+  }));
+  mountIcons(section);
+}
+
+// Recent, already-decided partners — just for context/history, no
+// actions needed (approved/suspended/rejected/blocked all already have
+// their real action buttons on Insurance Management's full directory).
+function renderRecent() {
+  const section = document.getElementById("recentSection");
+  const decided = partners
+    .filter((p) => p.status && p.status !== "pending")
+    .sort((a, b) => (recentAt(b)?.seconds || 0) - (recentAt(a)?.seconds || 0))
+    .slice(0, 8);
+  if (!decided.length) { section.innerHTML = ""; return; }
+  section.innerHTML = `
+    <div class="section-head"><h3 class="h3">Recent decisions</h3></div>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-top:4px;">
+      ${decided.map((p) => `
+        <div class="inline-flex" style="justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid #F3F3F3;cursor:pointer;" data-open-partner="${p.id}">
+          <div>
+            <span class="cell-strong" style="font-size:13.5px;">${escapeHtml(p.companyName || "—")}</span>
+            <span class="muted small"> — ${timeAgo(recentAt(p))}</span>
+          </div>
+          ${statusBadge(p.status === "approved" ? "active" : p.status)}
+        </div>`).join("")}
+    </div>`;
+  section.querySelectorAll("[data-open-partner]").forEach((row) => row.addEventListener("click", () => openPartnerDetail(row.dataset.openPartner)));
+  mountIcons(section);
+}
+function recentAt(p) {
+  return p.blockedAt || p.rejectedAt || p.approvedAt || p.createdAt || null;
+}
+
+function openPartnerDetail(uid) {
+  const p = partners.find((x) => x.id === uid);
+  if (!p) return;
+  const status = p.status || "pending";
+  const rows = [
+    { label: "Registration no.", value: escapeHtml(p.registrationNumber) },
+    { label: "Email", value: escapeHtml(p.email) },
+    { label: "Phone", value: escapeHtml(p.phone) },
+    { label: "Contact person", value: escapeHtml(p.contact?.fullName) },
+    { label: "Contact designation", value: escapeHtml(p.contact?.designation) },
+    { label: "Contact email", value: escapeHtml(p.contact?.email) },
+    { label: "Contact phone", value: escapeHtml(p.contact?.phone) },
+    {
+      label: "Address",
+      value: [p.address?.line1, p.address?.city, p.address?.state, p.address?.postalCode].filter(Boolean).map(escapeHtml).join(", "),
+    },
+    { label: "Registered", value: fullDate(p.createdAt) },
+    { label: "Status", value: statusBadge(status === "approved" ? "active" : status) },
+  ];
+  if (status === "rejected" || status === "blocked") {
+    rows.push({ label: "Rejection reason", value: p.rejectionReason ? escapeHtml(p.rejectionReason) : "<span class=\"muted\">No reason given</span>" });
+    rows.push({ label: "Rejected", value: p.rejectedAt ? `${fullDate(p.rejectedAt)} (${timeAgo(p.rejectedAt)})` : "—" });
+  }
+  if (status === "blocked") rows.push({ label: "Blocked", value: p.blockedAt ? fullDate(p.blockedAt) : "—" });
+
+  const actions = [];
+  if (status === "pending") {
+    actions.push({ text: "Reject", className: "btn-danger-outline", onClick: () => setStatus(uid, "rejected") });
+    actions.push({ text: "Approve", className: "btn-primary", onClick: () => setStatus(uid, "approved") });
+  } else if (status === "approved") {
+    actions.push({ text: "Suspend", className: "btn-danger-outline", onClick: () => setStatus(uid, "suspended") });
+  } else if (status === "suspended" || status === "rejected" || status === "blocked") {
+    actions.push({ text: "Re-approve", className: "btn-primary", onClick: () => setStatus(uid, "approved") });
+  }
+  detailDialog({ title: p.companyName || "—", subtitle: `Insurance partner — ${status}`, rows, actions });
+}
+
+async function setStatus(uid, status, btn) {
+  let rejectionReason = "";
+  if (status === "suspended") {
+    const ok = await confirmDialog({ title: "Suspend this partner?", body: "They'll lose access to publish plans or handle claims until re-approved.", confirmText: "Suspend", danger: true });
+    if (!ok) return;
+  }
+  if (status === "rejected") {
+    const result = await promptDialog({
+      title: "Reject this application?",
+      body: "They won't be able to publish plans or handle claims. We'll let them know why, and their account will be automatically blocked if this isn't resolved within 30 days. This can be undone later by approving them.",
+      label: "Reason (shown to the partner)",
+      placeholder: "e.g. Registration number couldn't be verified — please re-submit with supporting documents.",
+      confirmText: "Reject", danger: true,
+    });
+    if (!result.confirmed) return;
+    rejectionReason = result.value;
+  }
+  setBusy(btn, true, "Working…");
+  try {
+    await setPartnerStatus(uid, status, status === "rejected" ? { rejectionReason } : {});
+    toast(status === "approved" ? "Partner approved." : status === "rejected" ? "Partner application rejected." : "Partner suspended.", "success");
+    await load();
+  } catch (err) {
+    toast(err.message || "Couldn't update partner.", "error");
+    setBusy(btn, false);
+  }
+}
+</script>
+</body>
+</html>

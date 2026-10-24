@@ -6,8 +6,8 @@
 <title>System Settings — Voya Admin</title>
 <link rel="stylesheet" href="../css/tokens.css?v=20261006b" />
 <link rel="stylesheet" href="../css/base.css?v=20261006b" />
-<link rel="stylesheet" href="../css/layout.css?v=20261006b" />
-<link rel="stylesheet" href="../css/components.css?v=20261006b" />
+<link rel="stylesheet" href="../css/layout.css?v=20261021" />
+<link rel="stylesheet" href="../css/components.css?v=20261021c" />
 </head>
 <body>
 <div class="shell">
@@ -49,22 +49,15 @@
         <div class="field"><label>Signed in as</label><p class="value" id="meLine">—</p></div>
       </div>
     </div>
-
-    <div class="card card-pad">
-      <h3 class="h3" style="margin-bottom:6px;">Demo data</h3>
-      <p class="subtitle" style="margin-bottom:18px;">Remove every sample transaction, plan and claim created by "Seed demo data" on the Insurance Management page.</p>
-      <button class="btn btn-danger-outline" id="clearBtn"><span data-icon="trash"></span>Clear demo data</button>
-    </div>
   </main>
 </div>
 
 <script type="module">
-import { requireRole } from "../js/auth-guard.js?v=20261007e";
-import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261007e";
-import { mountIcons } from "../js/icons.js?v=20261007e";
-import { listAdmins } from "../js/data.js?v=20261007e";
-import { clearDemoData } from "../js/seed.js?v=20261007e";
-import { fullDate, escapeHtml, toast, setBusy, confirmDialog } from "../js/ui.js?v=20261007e";
+import { requireRole } from "../js/auth-guard.js?v=20261021";
+import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261021";
+import { mountIcons } from "../js/icons.js?v=20261021";
+import { listAdmins } from "../js/data.js?v=20261021";
+import { fullDate, escapeHtml, toast, setBusy, confirmDialog } from "../js/ui.js?v=20261021";
 
 mountSidebarNav({ role: "admin", active: "settings" });
 const session = await requireRole("admin", "login.html");
@@ -82,20 +75,6 @@ async function load() {
     : `<tr><td colspan="3" class="muted" style="text-align:center;padding:24px 0;">No admin accounts found.</td></tr>`;
   mountIcons(document);
 }
-
-document.getElementById("clearBtn").addEventListener("click", async (e) => {
-  const ok = await confirmDialog({ title: "Clear all demo data?", body: "This deletes every sample plan, transaction and claim tagged as demo data across every partner. This can't be undone.", confirmText: "Clear demo data", danger: true });
-  if (!ok) return;
-  setBusy(e.currentTarget, true, "Clearing…");
-  try {
-    const count = await clearDemoData();
-    toast(`Removed ${count} demo record(s).`, "success");
-  } catch (err) {
-    toast(err.message || "Couldn't clear demo data.", "error");
-  } finally {
-    setBusy(e.currentTarget, false);
-  }
-});
 </script>
 </body>
 </html>

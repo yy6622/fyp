@@ -3,11 +3,9 @@ import 'package:image_picker/image_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../controllers/group_trip_controller.dart';
-import '../../repositories/catalog_repository.dart';
 import '../../repositories/trip_repository.dart';
 import '../../services/hotel_document_service.dart';
 import '../../theme.dart';
-import '../detail/detail_widgets.dart';
 import '../shared/member_select_section.dart';
 
 // ---------------------------------------------------------------------
@@ -17,9 +15,11 @@ import '../shared/member_select_section.dart';
 // Hotel" purchase bar) — confusing for something already booked, and
 // wrong since it has nothing to do with this stay's real check-in/
 // check-out/guest data. This is the read-only counterpart to
-// PlanFlightDetailPage — same Detail/Guests/Documents(/Review) tab
-// structure, same real document upload, now that TripHotelStay carries
+// PlanFlightDetailPage — same Detail/Guests/Documents tab structure,
+// same real document upload, now that TripHotelStay carries
 // bookingRef/status/refId/documents the same way TripFlight does.
+// (No Review tab — reviews were removed from every hotel/attraction/
+// restaurant surface per the user's request.)
 // ---------------------------------------------------------------------
 class PlanHotelDetailPage extends StatefulWidget {
   final String tripId;
@@ -36,8 +36,8 @@ class PlanHotelDetailPage extends StatefulWidget {
   final String guestIdNumber;
   final String specialRequests;
   // The `catalog_hotels` doc id this stay was booked from — blank for a
-  // manually-typed stay, in which case the Review tab is hidden (same
-  // idea as HistoryHotelDetailPage.hotelId).
+  // manually-typed stay. No longer read by this page itself (the Review
+  // tab that used it is gone), kept since callers still pass it through.
   final String refId;
   final Map<String, String> documents;
   // Who this stay is for, and the trip's full member roster to resolve
@@ -93,7 +93,6 @@ class _PlanHotelDetailPageState extends State<PlanHotelDetailPage> {
 
   @override
   Widget build(BuildContext context) {
-    final hasReviews = widget.refId.isNotEmpty;
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: VoyaAppBar(
@@ -110,7 +109,6 @@ class _PlanHotelDetailPageState extends State<PlanHotelDetailPage> {
                   Expanded(child: _tab('Detail', PlanHotelTab.detail)),
                   Expanded(child: _tab('Guests', PlanHotelTab.guests)),
                   Expanded(child: _tab('Documents', PlanHotelTab.documents)),
-                  if (hasReviews) Expanded(child: _tab('Review', PlanHotelTab.review)),
                 ],
               ),
             ),
@@ -120,7 +118,6 @@ class _PlanHotelDetailPageState extends State<PlanHotelDetailPage> {
                 PlanHotelTab.detail => _detailContent(),
                 PlanHotelTab.guests => _guestsContent(),
                 PlanHotelTab.documents => _documentsContent(),
-                PlanHotelTab.review => hasReviews ? _reviewContent() : _detailContent(),
               },
             ),
           ],
@@ -315,27 +312,6 @@ class _PlanHotelDetailPageState extends State<PlanHotelDetailPage> {
           ),
         );
       },
-    );
-  }
-
-  Widget _reviewContent() {
-    return ListView(
-      padding: const EdgeInsets.all(20),
-      children: [
-        ReviewsSection(
-          title: widget.name,
-          ratingSummary: 'Guest Reviews',
-          reviewsStream: CatalogRepository.instance.watchHotelReviews(widget.refId).map((list) => list.map(reviewDataFromPlace).toList()),
-          onSubmitReview: ({required authorId, required authorName, required rating, required comment}) =>
-              CatalogRepository.instance.addHotelReview(
-            widget.refId,
-            authorId: authorId,
-            authorName: authorName,
-            rating: rating,
-            comment: comment,
-          ),
-        ),
-      ],
     );
   }
 

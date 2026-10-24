@@ -8,7 +8,6 @@ import '../../services/location_service.dart';
 import '../../theme.dart';
 import '../detail/detail_page_place.dart';
 import '../shared/maps_launcher.dart';
-import '../shared/translated_text.dart';
 
 class NearByPage extends StatefulWidget {
   const NearByPage({super.key});
@@ -306,7 +305,7 @@ class _NearByPageState extends State<NearByPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  TranslatedText(place.name, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold, color: Colors.black)),
+                  Text(place.name, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold, color: Colors.black)),
                   const SizedBox(height: 4),
                   Text(place.categoryLabel, style: const TextStyle(fontSize: 11, color: AppColors.textGrey)),
                   const SizedBox(height: 4),

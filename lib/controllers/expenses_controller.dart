@@ -8,11 +8,15 @@ import '../services/auth_service.dart';
 import '../services/receipt_service.dart';
 
 /// Controller for [ExpensesTab] (Groups / Personal toggle). Both views are
-/// scoped to this one trip only — "Groups" is every expense on this trip;
-/// "Personal" is just the subset of this trip's expenses where the
-/// signed-in user is a participant (their own share of this trip's costs).
-/// Neither view ever pulls in another trip's expenses: a "fee for this
-/// trip" must not interconnect with any other trip's data.
+/// scoped to this one trip only, and both list every expense the
+/// signed-in user is a participant in — the difference is the AMOUNT
+/// shown for each one. "Groups" shows each bill's full amount (what the
+/// whole group spent). "Personal" shows only the signed-in user's own
+/// share of each bill (what it actually costs THEM), regardless of who
+/// paid it — RM25 split two ways is RM25 under Groups and RM12.50 under
+/// Personal, never RM25 under both. See [displayAmount]. Neither view
+/// ever pulls in another trip's expenses: a "fee for this trip" must not
+/// interconnect with any other trip's data.
 class ExpensesTabController extends ChangeNotifier {
   final String tripId;
   ExpensesTabController({required this.tripId}) {
@@ -21,9 +25,16 @@ class ExpensesTabController extends ChangeNotifier {
       _loading = false;
       notifyListeners();
     });
+    _tripSub = TripRepository.instance.watchTrip(tripId, _uid).listen((t) {
+      _trip = t;
+      notifyListeners();
+    });
   }
 
   String get _uid => AuthService.instance.currentUser?.uid ?? '';
+
+  Trip? _trip;
+  Trip? get trip => _trip;
 
   bool _personal = false;
   bool get personal => _personal;
@@ -38,17 +49,41 @@ class ExpensesTabController extends ChangeNotifier {
   List<TripExpense> _groupExpenses = [];
 
   StreamSubscription<List<TripExpense>>? _groupSub;
+  StreamSubscription<Trip?>? _tripSub;
 
   /// This trip's expenses where the signed-in user is a participant —
   /// derived client-side from [_groupExpenses] (already scoped to
   /// [tripId]) rather than a separate cross-trip query, so it can never
-  /// show another trip's transactions.
+  /// show another trip's transactions. Same set of bills as "I have a
+  /// share in this" — who paid is irrelevant to whether a bill belongs
+  /// here, only to how much of it is "mine" (see [displayAmount]).
   List<TripExpense> get _personalExpenses =>
       _groupExpenses.where((e) => e.participants.any((p) => p.uid == _uid)).toList();
 
   List<TripExpense> get visibleExpenses => _personal ? _personalExpenses : _groupExpenses;
 
-  double get totalExpenses => visibleExpenses.fold(0.0, (s, e) => s + e.amount);
+  /// The signed-in user's own share of [e] — 0 if they're somehow not a
+  /// participant (shouldn't happen for anything in [visibleExpenses]).
+  double myShareOf(TripExpense e) => e.participants.where((p) => p.uid == _uid).fold(0.0, (s, p) => s + p.share);
+
+  /// What to show as "the amount" for [e] in the current view: the whole
+  /// bill under Groups, just the signed-in user's own share under
+  /// Personal. Used for the summary total, the category breakdown and
+  /// each transaction row, so a RM25 bill split two ways reads as RM25
+  /// in Groups and RM12.50 in Personal everywhere it's shown — never RM25
+  /// in both, which is exactly what looked broken before this existed.
+  double displayAmount(TripExpense e) => _personal ? myShareOf(e) : e.amount;
+
+  double get totalExpenses => visibleExpenses.fold(0.0, (s, e) => s + displayAmount(e));
+
+  /// Total number of bills recorded for this trip — every real expense,
+  /// never filtered down to just the signed-in user's own bills, so it
+  /// stays the same number regardless of which tab is open. Replaces an
+  /// earlier "remaining budget" tile here: that one kept reusing
+  /// [budgetPerPerson] (a single person's own allowance, set at creation)
+  /// under a "Group" stat, which read as a personal number no matter how
+  /// it was computed — a plain count sidesteps that entirely.
+  int get totalBillsCount => _groupExpenses.length;
 
   /// What the signed-in user still owes (their unpaid share of bills
   /// someone else paid).
@@ -63,13 +98,27 @@ class ExpensesTabController extends ChangeNotifier {
         return s + e.participants.where((p) => p.uid != _uid && !p.paid).fold(0.0, (s2, p) => s2 + p.share);
       });
 
-  int get unsettledCount => visibleExpenses.where((e) => e.participants.any((p) => !p.paid)).length;
+  /// A bill is settled only when every participant has paid their share.
+  bool isSettled(TripExpense e) => e.participants.isNotEmpty && e.participants.every((p) => p.paid);
 
-  /// Category -> total amount, for the simple breakdown bar list.
+  int get unsettledCount => visibleExpenses.where((e) => !isSettled(e)).length;
+
+  int get settledCount => visibleExpenses.where(isSettled).length;
+
+  /// Share of all the money in these bills that has been paid (the pie chart). 0.5 with no bills.
+  double get settledFraction {
+    final total = visibleExpenses.fold(0.0, (s, e) => s + e.participants.fold(0.0, (s2, p) => s2 + p.share));
+    if (total <= 0) return visibleExpenses.isEmpty ? 0.5 : 1.0;
+    final paid = visibleExpenses.fold(0.0, (s, e) => s + e.participants.where((p) => p.paid).fold(0.0, (s2, p) => s2 + p.share));
+    return (paid / total).clamp(0.0, 1.0);
+  }
+
+  /// Category -> total amount, for the simple breakdown bar list. Same
+  /// Groups-vs-Personal amount rule as [displayAmount].
   Map<String, double> get byCategory {
     final map = <String, double>{};
     for (final e in visibleExpenses) {
-      map[e.category] = (map[e.category] ?? 0) + e.amount;
+      map[e.category] = (map[e.category] ?? 0) + displayAmount(e);
     }
     return map;
   }
@@ -78,11 +127,157 @@ class ExpensesTabController extends ChangeNotifier {
     return TripRepository.instance.setParticipantPaid(expense.tripId, expense.id, _uid, paid);
   }
 
+  /// A snapshot of every report-relevant stat for [personal] (true) or
+  /// Group (false), independent of whatever the Groups/Personal toggle is
+  /// currently showing on screen — used by "Generate Report" so a PDF can
+  /// be produced for either view without flipping (and having to restore)
+  /// the live toggle. Deliberately reimplements the same formulas as the
+  /// getters above (rather than calling them, which only ever read
+  /// [_personal]) so generating a report can never have the side effect
+  /// of changing what's on screen.
+  ExpensesReportSnapshot snapshotFor(bool personal) {
+    final visible = personal ? _personalExpenses : _groupExpenses;
+    double amountOf(TripExpense e) => personal ? myShareOf(e) : e.amount;
+    bool settledOf(TripExpense e) => e.participants.isNotEmpty && e.participants.every((p) => p.paid);
+
+    final rows = visible.map((e) => ExpenseReportRow(expense: e, amount: amountOf(e), settled: settledOf(e))).toList();
+    final totalExpenses = rows.fold(0.0, (s, r) => s + r.amount);
+    final unsettledCount = rows.where((r) => !r.settled).length;
+    final settledCount = rows.where((r) => r.settled).length;
+
+    double youOwe = 0, youAreOwed = 0;
+    for (final e in visible) {
+      if (e.paidBy == _uid) {
+        youAreOwed += e.participants.where((p) => p.uid != _uid && !p.paid).fold(0.0, (s, p) => s + p.share);
+      } else {
+        youOwe += e.participants.where((p) => p.uid == _uid && !p.paid).fold(0.0, (s, p) => s + p.share);
+      }
+    }
+
+    final byCategory = <String, double>{};
+    for (final r in rows) {
+      byCategory[r.expense.category] = (byCategory[r.expense.category] ?? 0) + r.amount;
+    }
+
+    // "Trip Budget" stat: [Trip.budgetPerPerson] is already documented
+    // elsewhere in this file as a single person's own allowance, so the
+    // Personal report uses it as-is; the Group report multiplies it by
+    // the member count as its best real approximation of a whole-group
+    // budget (there is no separate group-level budget field to read
+    // instead). Both are real, derived numbers — never a placeholder.
+    final memberCount = _trip?.memberIds.length ?? 0;
+    final perPersonBudget = _trip?.budgetPerPerson ?? 0;
+    final tripBudget = personal ? perPersonBudget : perPersonBudget * memberCount;
+
+    return ExpensesReportSnapshot(
+      trip: _trip,
+      personal: personal,
+      generatedForUid: _uid,
+      generatedForName: _trip?.memberNames[_uid] ?? 'You',
+      memberCount: memberCount,
+      rows: rows,
+      totalExpenses: totalExpenses,
+      totalBillsCount: _groupExpenses.length,
+      settledCount: settledCount,
+      unsettledCount: unsettledCount,
+      youOwe: youOwe,
+      youAreOwed: youAreOwed,
+      byCategory: byCategory,
+      tripBudget: tripBudget,
+      dailyTotals: _dailyTotalsFor(rows),
+    );
+  }
+
+  /// One entry per calendar day of the trip (from [Trip.startDate] to
+  /// [Trip.endDate] inclusive, zero-filled for days with no spending) for
+  /// the report's "Daily Expense Trend" chart — falls back to just the
+  /// dates that actually have an expense, sorted, when the trip has no
+  /// date range set.
+  List<MapEntry<DateTime, double>> _dailyTotalsFor(List<ExpenseReportRow> rows) {
+    DateTime dayOnly(DateTime d) => DateTime(d.year, d.month, d.day);
+    final byDay = <DateTime, double>{};
+    for (final r in rows) {
+      final d = r.expense.date;
+      if (d == null) continue;
+      final key = dayOnly(d);
+      byDay[key] = (byDay[key] ?? 0) + r.amount;
+    }
+    final start = _trip?.startDate;
+    final end = _trip?.endDate;
+    if (start != null && end != null && !end.isBefore(start)) {
+      final days = <MapEntry<DateTime, double>>[];
+      var cur = dayOnly(start);
+      final last = dayOnly(end);
+      while (!cur.isAfter(last)) {
+        days.add(MapEntry(cur, byDay[cur] ?? 0));
+        cur = cur.add(const Duration(days: 1));
+      }
+      return days;
+    }
+    final entries = byDay.entries.toList()..sort((a, b) => a.key.compareTo(b.key));
+    return entries;
+  }
+
   @override
   void dispose() {
     _groupSub?.cancel();
+    _tripSub?.cancel();
     super.dispose();
   }
+}
+
+/// One row of an [ExpensesReportSnapshot] — the expense plus the two
+/// values that depend on whether the snapshot is Personal or Group
+/// ([ExpensesTabController.displayAmount]/[ExpensesTabController.isSettled]
+/// computed once up front, instead of every reader re-deriving them).
+class ExpenseReportRow {
+  final TripExpense expense;
+  final double amount;
+  final bool settled;
+  const ExpenseReportRow({required this.expense, required this.amount, required this.settled});
+}
+
+/// Everything [PdfReportService]'s expense report needs, computed once by
+/// [ExpensesTabController.snapshotFor] so the PDF generator never touches
+/// Firestore or the live controller state directly.
+class ExpensesReportSnapshot {
+  final Trip? trip;
+  final bool personal;
+  final String generatedForUid;
+  final String generatedForName;
+  final int memberCount;
+  final List<ExpenseReportRow> rows;
+  final double totalExpenses;
+  final int totalBillsCount;
+  final int settledCount;
+  final int unsettledCount;
+  final double youOwe;
+  final double youAreOwed;
+  final Map<String, double> byCategory;
+  final double tripBudget;
+  /// One entry per day of the trip, zero-filled — see [ExpensesTabController._dailyTotalsFor].
+  final List<MapEntry<DateTime, double>> dailyTotals;
+  const ExpensesReportSnapshot({
+    required this.trip,
+    required this.personal,
+    required this.generatedForUid,
+    required this.generatedForName,
+    required this.memberCount,
+    required this.rows,
+    required this.totalExpenses,
+    required this.totalBillsCount,
+    required this.settledCount,
+    required this.unsettledCount,
+    required this.youOwe,
+    required this.youAreOwed,
+    required this.byCategory,
+    required this.tripBudget,
+    required this.dailyTotals,
+  });
+
+  /// Trip Budget minus Total Expenses — can go negative (over budget),
+  /// shown as-is rather than clamped, so going over is actually visible.
+  double get remainingBudget => tripBudget - totalExpenses;
 }
 
 /// One line item on a scanned/entered receipt, with who it's split between.
@@ -104,6 +299,8 @@ class AddExpenseController extends ChangeNotifier {
   final Trip trip;
   AddExpenseController({required this.tripId, required this.trip}) {
     selectedUids = trip.memberIds.toSet();
+    // start from the trip's destination instead of "Unknown"; still editable
+    if (trip.destination.trim().isNotEmpty) location = trip.destination.trim();
   }
 
   final TextEditingController titleController = TextEditingController();
@@ -208,10 +405,12 @@ class AddExpenseController extends ChangeNotifier {
   Future<bool> submit() async {
     final uid = AuthService.instance.currentUser?.uid;
     if (uid == null) return false;
-    final title = titleController.text.trim();
+    // No separate title any more: the note describes the expense (it is kept as the title too, so
+    // older screens and notifications that read `title` still have something to show).
+    final title = noteController.text.trim();
     final amt = amount;
     final shares = _computeShares();
-    if (title.isEmpty || amt <= 0 || shares.isEmpty) return false;
+    if (amt <= 0 || amt > 1000000 || shares.isEmpty) return false;
     // Itemized split: every line item must have at least one assignee, or
     // the shares (derived only from assigned items) would silently add up
     // to less than the saved total — money "lost" from the split.

@@ -56,6 +56,106 @@ export function confirmDialog({ title, body, confirmText = "Confirm", danger = f
   });
 }
 
+/**
+ * Same shape as confirmDialog, plus a free-text textarea (e.g. "why are
+ * you rejecting this?"). Resolves { confirmed, value } — value is the
+ * trimmed textarea text ("" if left blank or the dialog was cancelled).
+ * Pass required:true to block confirming with an empty field.
+ */
+export function promptDialog({ title, body, label, placeholder = "", confirmText = "Confirm", danger = false, required = false }) {
+  return new Promise((resolve) => {
+    const backdrop = document.createElement("div");
+    backdrop.className = "modal-backdrop open";
+    backdrop.innerHTML = `
+      <div class="modal" role="dialog" aria-modal="true">
+        <div class="modal-head">
+          <h3 class="h2">${title}</h3>
+          <button class="modal-close" data-close><span data-icon="x"></span></button>
+        </div>
+        ${body ? `<p class="muted" style="font-size:14px;line-height:1.55;margin-bottom:14px;">${body}</p>` : ""}
+        <div class="field">
+          ${label ? `<label>${label}</label>` : ""}
+          <textarea class="input" id="promptDialogInput" rows="3" placeholder="${placeholder}" style="resize:vertical;width:100%;"></textarea>
+        </div>
+        <div class="form-actions">
+          <button class="btn btn-outline" data-cancel>Cancel</button>
+          <button class="btn ${danger ? "btn-danger-outline" : "btn-primary"}" data-confirm>${confirmText}</button>
+        </div>
+      </div>`;
+    document.body.appendChild(backdrop);
+    mountIcons(backdrop);
+    const input = backdrop.querySelector("#promptDialogInput");
+    requestAnimationFrame(() => input.focus());
+    const close = (confirmed) => {
+      const value = input.value.trim();
+      backdrop.remove();
+      resolve({ confirmed, value });
+    };
+    backdrop.querySelector("[data-close]").onclick = () => close(false);
+    backdrop.querySelector("[data-cancel]").onclick = () => close(false);
+    backdrop.querySelector("[data-confirm]").onclick = () => {
+      if (required && !input.value.trim()) {
+        input.focus();
+        input.style.borderColor = "var(--red-text, #c0392b)";
+        return;
+      }
+      close(true);
+    };
+    backdrop.addEventListener("click", (e) => {
+      if (e.target === backdrop) close(false);
+    });
+  });
+}
+
+/**
+ * Read-only detail popup: a title + a list of {label, value} rows (value
+ * can be HTML, e.g. a statusBadge() call), plus optional footer buttons
+ * ({ text, className, onClick, close: true }) — close:true closes the
+ * popup before calling onClick, for actions like Approve/Reject that
+ * should act on the underlying row, not just the popup. Used for the
+ * "click a row to see full details" pattern (insurance partners, etc.).
+ */
+export function detailDialog({ title, subtitle, rows, actions = [] }) {
+  return new Promise((resolve) => {
+    const backdrop = document.createElement("div");
+    backdrop.className = "modal-backdrop open";
+    const rowsHtml = rows
+      .filter((r) => r.value !== undefined && r.value !== null && r.value !== "")
+      .map((r) => `
+        <div style="display:flex;justify-content:space-between;gap:16px;padding:9px 0;border-bottom:1px solid #F0F0F0;">
+          <span class="small muted" style="flex:none;width:150px;">${escapeHtml(r.label)}</span>
+          <span style="text-align:right;font-size:13.5px;">${r.value}</span>
+        </div>`).join("");
+    backdrop.innerHTML = `
+      <div class="modal" role="dialog" aria-modal="true">
+        <div class="modal-head">
+          <div>
+            <h3 class="h2">${escapeHtml(title)}</h3>
+            ${subtitle ? `<p class="muted small" style="margin-top:2px;">${escapeHtml(subtitle)}</p>` : ""}
+          </div>
+          <button class="modal-close" data-close><span data-icon="x"></span></button>
+        </div>
+        <div>${rowsHtml || `<p class="muted small">No details on file.</p>`}</div>
+        <div class="form-actions" style="margin-top:16px;">
+          <button class="btn btn-outline" data-close-btn>Close</button>
+          ${actions.map((a, i) => `<button class="btn ${a.className || "btn-primary"}" data-action="${i}">${escapeHtml(a.text)}</button>`).join("")}
+        </div>
+      </div>`;
+    document.body.appendChild(backdrop);
+    mountIcons(backdrop);
+    const close = () => { backdrop.remove(); resolve(); };
+    backdrop.querySelector("[data-close]").onclick = close;
+    backdrop.querySelector("[data-close-btn]").onclick = close;
+    backdrop.addEventListener("click", (e) => { if (e.target === backdrop) close(); });
+    actions.forEach((a, i) => {
+      backdrop.querySelector(`[data-action="${i}"]`).onclick = () => {
+        if (a.close !== false) close();
+        a.onClick?.();
+      };
+    });
+  });
+}
+
 export function openModal(id) {
   document.getElementById(id)?.classList.add("open");
 }
@@ -126,10 +226,21 @@ export function initials(name) {
   return (parts[0][0] + (parts[1]?.[0] || "")).toUpperCase();
 }
 
+/** `reportedBy` on a reported post/review is a real traveller's uid for a
+ * human "Report" tap, or the literal string "system" for content the AI
+ * filter auto-flagged at creation time (see CommunityRepository.createPost
+ * / review_helpers.dart's addReviewFor in the Flutter app) — shown here as
+ * a readable label instead of the raw sentinel either way. Shared by
+ * admin/content-moderation.html and admin/notifications.html so both name
+ * the same reporter the same way. */
+export function reporterLabel(item) {
+  return item.reportedBy === "system" ? "AI content filter" : (item.reportedBy || "a traveller");
+}
+
 const STATUS_BADGE = {
   active: "green", approved: "green", paid: "green", "in force": "green",
   pending: "amber", "under review": "amber", "under_review": "amber", draft: "amber", new: "blue",
-  suspended: "red", rejected: "red", removed: "red",
+  suspended: "red", rejected: "red", removed: "red", blocked: "red",
 };
 export function statusBadge(status) {
   const key = (status || "").toLowerCase().replace(/_/g, " ");

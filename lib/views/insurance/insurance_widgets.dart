@@ -5,6 +5,14 @@ import '../../theme.dart';
 import 'insurance_plan_detail_page.dart';
 
 Widget insuranceLogo(InsurancePlan plan, {double size = 46}) {
+  final letterBadge = Text(
+    plan.logoText,
+    style: TextStyle(
+      color: plan.logoColor,
+      fontWeight: FontWeight.bold,
+      fontSize: plan.logoText.length > 1 ? size * 0.24 : size * 0.34,
+    ),
+  );
   return Container(
     width: size,
     height: size,
@@ -14,14 +22,21 @@ Widget insuranceLogo(InsurancePlan plan, {double size = 46}) {
       border: Border.all(color: const Color(0xFFECECEC)),
     ),
     alignment: Alignment.center,
-    child: Text(
-      plan.logoText,
-      style: TextStyle(
-        color: plan.logoColor,
-        fontWeight: FontWeight.bold,
-        fontSize: plan.logoText.length > 1 ? size * 0.24 : size * 0.34,
-      ),
-    ),
+    // Real uploaded partner logo when there is one (set in the partner
+    // console's Organization Profile page), falling back to the
+    // letter+color badge if there isn't one yet or it fails to load.
+    child: (plan.logoUrl != null && plan.logoUrl!.isNotEmpty)
+        ? ClipOval(
+            child: Image.network(
+              plan.logoUrl!,
+              width: size,
+              height: size,
+              fit: BoxFit.cover,
+              loadingBuilder: (context, child, progress) => progress == null ? child : letterBadge,
+              errorBuilder: (context, error, stackTrace) => letterBadge,
+            ),
+          )
+        : letterBadge,
   );
 }
 

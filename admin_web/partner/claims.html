@@ -6,8 +6,8 @@
 <title>Refunds & Claims — Voya Insurance Partner</title>
 <link rel="stylesheet" href="../css/tokens.css?v=20261006b" />
 <link rel="stylesheet" href="../css/base.css?v=20261006b" />
-<link rel="stylesheet" href="../css/layout.css?v=20261006b" />
-<link rel="stylesheet" href="../css/components.css?v=20261006b" />
+<link rel="stylesheet" href="../css/layout.css?v=20261021" />
+<link rel="stylesheet" href="../css/components.css?v=20261021c" />
 </head>
 <body>
 <div class="shell">
@@ -30,8 +30,7 @@
         <p class="subtitle">Manage and review claim and refund submissions</p>
       </div>
       <div class="inline-flex">
-        <button class="btn btn-outline" id="newBtn"><span data-icon="plus"></span>New claim</button>
-        <button class="btn btn-primary" id="exportBtn"><span data-icon="download"></span>Export</button>
+        <button class="btn btn-primary" id="newBtn"><span data-icon="plus"></span>New claim</button>
       </div>
     </div>
 
@@ -92,11 +91,11 @@
 </div>
 
 <script type="module">
-import { requireRole } from "../js/auth-guard.js?v=20261007e";
-import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261007e";
-import { mountIcons } from "../js/icons.js?v=20261007e";
-import { listClaims, createClaim, listRefunds, createRefund } from "../js/data.js?v=20261007e";
-import { number, moneyExact, statusBadge, escapeHtml, paginate, renderPager, toast, setBusy, openModal, closeModal, wireModalDismiss, statCard, trendDelta, countByStatusInMonth } from "../js/ui.js?v=20261007e";
+import { requireRole } from "../js/auth-guard.js?v=20261021";
+import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261021";
+import { mountIcons } from "../js/icons.js?v=20261021";
+import { listClaims, createClaim, listRefunds, createRefund } from "../js/data.js?v=20261021";
+import { number, moneyExact, statusBadge, escapeHtml, paginate, renderPager, toast, setBusy, openModal, closeModal, wireModalDismiss, statCard, trendDelta, countByStatusInMonth } from "../js/ui.js?v=20261021";
 
 const CLAIM_CATEGORIES = ["Medical", "Trip Cancellation", "Baggage Loss", "Flight Delay"];
 const REFUND_CATEGORIES = ["Policy Cancellation", "Duplicate Payment", "Overpayment", "Premium Refund", "Service Not Rendered"];
@@ -106,10 +105,15 @@ const session = await requireRole("partner", "login.html");
 let items = [], filtered = [], page = 1;
 let type = new URLSearchParams(location.search).get("type") === "refund" ? "refund" : "claim";
 const PAGE_SIZE = 8;
+// Same approval gate as Insurance Plans — firestore.rules' claims/refunds
+// create now also checks the partner's own status, this just keeps the
+// button from offering an action that would fail.
+const isApproved = session?.profile.status === "approved";
 
 if (session) {
   setSidebarUser({ displayName: session.profile.companyName || "Partner", roleLabel: `${session.profile.companyName || "Insurance"} · Insurance Partner` });
   wireModalDismiss();
+  if (!isApproved) document.getElementById("newBtn").style.display = "none";
   setTab(type);
   await load();
 }
@@ -241,21 +245,6 @@ document.getElementById("saveNewBtn").addEventListener("click", async () => {
   }
 });
 
-document.getElementById("exportBtn").addEventListener("click", () => {
-  if (!filtered.length) return;
-  const refField = type === "claim" ? "claimRef" : "refundRef";
-  const label = type === "claim" ? "Claim ID" : "Refund ID";
-  const rows = [[label, "Policyholder", "Plan", "Amount (RM)", "Status"]];
-  filtered.forEach((c) => rows.push([c[refField], c.policyholderName || "", c.planName || "", (Number(c.amount) || 0).toFixed(2), c.status || ""]));
-  const csv = rows.map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `voya-${type}s-${new Date().toISOString().slice(0, 10)}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
-});
 </script>
 </body>
 </html>

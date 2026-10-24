@@ -16,6 +16,7 @@ class PlanPage extends StatefulWidget {
 
 class _PlanPageState extends State<PlanPage> {
   final PlanPageController controller = PlanPageController();
+  final TextEditingController _searchCtrl = TextEditingController();
 
   /// Whether the "Past Plans" fold (groups/polls whose trip has had no
   /// activity for 30+ days) is expanded. Starts collapsed — that's the
@@ -25,6 +26,7 @@ class _PlanPageState extends State<PlanPage> {
   @override
   void dispose() {
     controller.dispose();
+    _searchCtrl.dispose();
     super.dispose();
   }
 
@@ -88,22 +90,32 @@ class _PlanPageState extends State<PlanPage> {
   }
 
   Widget _buildEmptyState() {
+    // A real search with no match is a different state from genuinely
+    // having no trips yet — "create your first plan" would be a
+    // confusing thing to show someone whose search just didn't match
+    // any of their existing (real) trips.
+    final searching = controller.searchQuery.isNotEmpty;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 60),
       child: Column(
         children: [
           const Icon(Icons.inbox_outlined, size: 40, color: AppColors.textGrey),
           const SizedBox(height: 12),
-          const Text('No trips yet', style: TextStyle(color: AppColors.textGrey, fontSize: 13)),
-          const SizedBox(height: 4),
-          const Text('Start planning your first trip with friends', style: TextStyle(color: AppColors.textGrey, fontSize: 11.5)),
-          const SizedBox(height: 16),
-          OutlinedButton.icon(
-            style: OutlinedButton.styleFrom(side: const BorderSide(color: AppColors.primary)),
-            onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const NewPlanPage())),
-            icon: const Icon(Icons.add, size: 16, color: AppColors.primary),
-            label: const Text('New Plan', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.w600)),
+          Text(
+            searching ? 'No plans match "${controller.searchQuery}"' : 'No trips yet',
+            style: const TextStyle(color: AppColors.textGrey, fontSize: 13),
           ),
+          if (!searching) ...[
+            const SizedBox(height: 4),
+            const Text('Start planning your first trip with friends', style: TextStyle(color: AppColors.textGrey, fontSize: 11.5)),
+            const SizedBox(height: 16),
+            OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(side: const BorderSide(color: AppColors.primary)),
+              onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const NewPlanPage())),
+              icon: const Icon(Icons.add, size: 16, color: AppColors.primary),
+              label: const Text('New Plan', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.w600)),
+            ),
+          ],
         ],
       ),
     );
@@ -170,13 +182,24 @@ class _PlanPageState extends State<PlanPage> {
           children: [
             const Icon(Icons.search, color: AppColors.textGrey, size: 20),
             const SizedBox(width: 8),
-            const Expanded(
+            Expanded(
               child: TextField(
+                controller: _searchCtrl,
+                onChanged: controller.setSearchQuery,
                 decoration: InputDecoration(
                   hintText: 'Search plans',
-                  hintStyle: TextStyle(color: AppColors.textGrey, fontSize: 13),
+                  hintStyle: const TextStyle(color: AppColors.textGrey, fontSize: 13),
                   border: InputBorder.none,
                   isDense: true,
+                  suffixIcon: controller.searchQuery.isEmpty
+                      ? null
+                      : IconButton(
+                          icon: const Icon(Icons.close, size: 16, color: AppColors.textGrey),
+                          onPressed: () {
+                            _searchCtrl.clear();
+                            controller.setSearchQuery('');
+                          },
+                        ),
                 ),
               ),
             ),
@@ -307,11 +330,18 @@ class _PlanPageState extends State<PlanPage> {
           ),
           Positioned(
             top: 8,
+            left: 8,
             right: 8,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-              decoration: BoxDecoration(color: Colors.black.withOpacity(0.55), borderRadius: BorderRadius.circular(8)),
-              child: Text(item.date, style: const TextStyle(color: Colors.white, fontSize: 8)),
+            child: Align(
+              alignment: Alignment.topRight,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                decoration: BoxDecoration(color: Colors.black.withOpacity(0.55), borderRadius: BorderRadius.circular(8)),
+                // maxLines/overflow so a longer date never spills past the
+                // image's rounded corner (it used to, with no width limit
+                // and no truncation at all).
+                child: Text(item.date, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 8)),
+              ),
             ),
           ),
           Positioned(
@@ -337,26 +367,7 @@ class _PlanPageState extends State<PlanPage> {
                   const SizedBox(height: 4),
                   Row(
                     children: [
-                      SizedBox(
-                        width: 34,
-                        height: 14,
-                        child: Stack(
-                          children: List.generate(3, (i) {
-                            return Positioned(
-                              left: i * 10.0,
-                              child: Container(
-                                width: 14,
-                                height: 14,
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  color: [Colors.orange, Colors.blue, Colors.pink][i],
-                                  border: Border.all(color: Colors.white, width: 1),
-                                ),
-                              ),
-                            );
-                          }),
-                        ),
-                      ),
+                      _voterAvatarStack(item.voterUids),
                       const SizedBox(width: 4),
                       Text(item.votes, style: const TextStyle(color: Colors.white, fontSize: 7.5)),
                     ],
@@ -367,6 +378,32 @@ class _PlanPageState extends State<PlanPage> {
           ),
         ],
       ),
+      ),
+    );
+  }
+
+  /// Real voter avatars (not an unlabelled 3-color placeholder) next to
+  /// [VotingItem.votes] — same "[UserAvatar] fetches each uid's current
+  /// profile photo live" convention the Vote tab's own option footers use
+  /// (see vote_tab.dart's _voterAvatarStack), sized to fit this card's
+  /// smaller 14px-circle slot.
+  Widget _voterAvatarStack(List<String> voterUids) {
+    final shown = voterUids.length.clamp(0, 3);
+    if (shown == 0) return const SizedBox.shrink();
+    return SizedBox(
+      width: 14.0 + (shown - 1) * 10.0,
+      height: 14,
+      child: Stack(
+        children: [
+          for (int i = 0; i < shown; i++)
+            Positioned(
+              left: i * 10.0,
+              child: Container(
+                decoration: const BoxDecoration(shape: BoxShape.circle, border: Border.fromBorderSide(BorderSide(color: Colors.white, width: 1))),
+                child: UserAvatar(uid: voterUids[i], radius: 7),
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -426,7 +463,13 @@ class _PlanPageState extends State<PlanPage> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(item.title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.navy)),
+                      Expanded(
+                        child: Text(item.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.navy)),
+                      ),
+                      const SizedBox(width: 6),
                       Text(item.date, style: const TextStyle(fontSize: 10, color: AppColors.textGrey)),
                     ],
                   ),

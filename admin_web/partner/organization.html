@@ -6,8 +6,8 @@
 <title>Organization Profile — Voya Insurance Partner</title>
 <link rel="stylesheet" href="../css/tokens.css?v=20261006b" />
 <link rel="stylesheet" href="../css/base.css?v=20261006b" />
-<link rel="stylesheet" href="../css/layout.css?v=20261006b" />
-<link rel="stylesheet" href="../css/components.css?v=20261006b" />
+<link rel="stylesheet" href="../css/layout.css?v=20261021" />
+<link rel="stylesheet" href="../css/components.css?v=20261021c" />
 </head>
 <body>
 <div class="shell">
@@ -29,15 +29,16 @@
         <h1 class="h1">Organization Profile</h1>
         <p class="subtitle">Manage organization information and settings</p>
       </div>
+      <button class="btn btn-outline" id="editBtn"><span data-icon="edit"></span>Edit</button>
     </div>
 
     <div class="card form-card">
       <h3 class="h3" style="margin-bottom:18px;">Company information</h3>
       <div class="form-grid">
-        <div class="field"><label>Company name</label><input class="input" id="companyName" /></div>
-        <div class="field"><label>Registration number</label><input class="input" id="registrationNumber" /></div>
-        <div class="field"><label>Support email</label><input class="input" id="supportEmail" type="email" /></div>
-        <div class="field"><label>Phone</label><input class="input" id="phone" /></div>
+        <div class="field"><label>Company name</label><input class="input" id="companyName" readonly /></div>
+        <div class="field"><label>Registration number</label><input class="input" id="registrationNumber" readonly /></div>
+        <div class="field"><label>Support email</label><input class="input" id="supportEmail" type="email" readonly /></div>
+        <div class="field"><label>Phone</label><input class="input" id="phone" readonly /></div>
       </div>
     </div>
 
@@ -53,7 +54,7 @@
         </div>
         <div class="field">
           <label>Upload new logo</label>
-          <input class="input" id="logoFile" type="file" accept="image/*" />
+          <input class="input" id="logoFile" type="file" accept="image/*" disabled />
           <p class="hint">PNG or JPG, square works best.</p>
         </div>
       </div>
@@ -62,24 +63,24 @@
     <div class="card form-card">
       <h3 class="h3" style="margin-bottom:18px;">Registered address</h3>
       <div class="form-grid">
-        <div class="field"><label>Address line 1</label><input class="input" id="addrLine1" /></div>
-        <div class="field"><label>City</label><input class="input" id="addrCity" /></div>
-        <div class="field"><label>State / Province</label><input class="input" id="addrState" /></div>
-        <div class="field"><label>Postal code</label><input class="input" id="addrPostal" /></div>
+        <div class="field"><label>Address line 1</label><input class="input" id="addrLine1" readonly /></div>
+        <div class="field"><label>City</label><input class="input" id="addrCity" readonly /></div>
+        <div class="field"><label>State / Province</label><input class="input" id="addrState" readonly /></div>
+        <div class="field"><label>Postal code</label><input class="input" id="addrPostal" readonly /></div>
       </div>
     </div>
 
     <div class="card form-card">
       <h3 class="h3" style="margin-bottom:18px;">Primary contact</h3>
       <div class="form-grid">
-        <div class="field"><label>Full name</label><input class="input" id="contactName" /></div>
-        <div class="field"><label>Designation</label><input class="input" id="contactDesignation" /></div>
-        <div class="field"><label>Email address</label><input class="input" id="contactEmail" type="email" /></div>
-        <div class="field"><label>Phone</label><input class="input" id="contactPhone" /></div>
+        <div class="field"><label>Full name</label><input class="input" id="contactName" readonly /></div>
+        <div class="field"><label>Designation</label><input class="input" id="contactDesignation" readonly /></div>
+        <div class="field"><label>Email address</label><input class="input" id="contactEmail" type="email" readonly /></div>
+        <div class="field"><label>Phone</label><input class="input" id="contactPhone" readonly /></div>
       </div>
     </div>
 
-    <div class="form-actions split">
+    <div class="form-actions split" id="formActions" style="display:none;">
       <button class="btn btn-outline" id="discardBtn">Discard</button>
       <button class="btn btn-primary" id="saveBtn">Save changes</button>
     </div>
@@ -87,17 +88,32 @@
 </div>
 
 <script type="module">
-import { requireRole } from "../js/auth-guard.js?v=20261007";
-import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261007";
-import { mountIcons } from "../js/icons.js?v=20261007";
-import { getPartnerProfile, savePartnerProfile } from "../js/data.js?v=20261007";
+import { requireRole } from "../js/auth-guard.js?v=20261021";
+import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261021";
+import { mountIcons } from "../js/icons.js?v=20261021";
+import { getPartnerProfile, savePartnerProfile } from "../js/data.js?v=20261021";
 import { storage } from "../js/firebase-config.js?v=20261007";
 import { ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-storage.js";
-import { toast, setBusy } from "../js/ui.js?v=20261007";
+import { toast, setBusy } from "../js/ui.js?v=20261021";
 
 mountSidebarNav({ role: "partner", active: "organization" });
 const session = await requireRole("partner", "login.html");
 let profile = null;
+
+// Fields stay read-only until "Edit" is clicked, so nothing changes by
+// accident while just browsing the page — see setEditing() below.
+const EDITABLE_IDS = [
+  "companyName", "registrationNumber", "supportEmail", "phone",
+  "addrLine1", "addrCity", "addrState", "addrPostal",
+  "contactName", "contactDesignation", "contactEmail", "contactPhone",
+];
+
+function setEditing(on) {
+  EDITABLE_IDS.forEach((id) => { document.getElementById(id).readOnly = !on; });
+  document.getElementById("logoFile").disabled = !on;
+  document.getElementById("editBtn").style.display = on ? "none" : "";
+  document.getElementById("formActions").style.display = on ? "flex" : "none";
+}
 
 if (session) {
   setSidebarUser({ displayName: session.profile.companyName || "Partner", roleLabel: `${session.profile.companyName || "Insurance"} · Insurance Partner` });
@@ -135,6 +151,8 @@ async function uploadLogoIfNeeded() {
   return getDownloadURL(storageRef);
 }
 
+document.getElementById("editBtn").addEventListener("click", () => setEditing(true));
+
 document.getElementById("saveBtn").addEventListener("click", async () => {
   const btn = document.getElementById("saveBtn");
   setBusy(btn, true, "Saving…");
@@ -162,6 +180,7 @@ document.getElementById("saveBtn").addEventListener("click", async () => {
     await savePartnerProfile(session.uid, data);
     toast("Organization profile saved.", "success");
     await load();
+    setEditing(false);
   } catch (err) {
     toast(err.message || "Couldn't save changes.", "error");
   } finally {
@@ -169,7 +188,10 @@ document.getElementById("saveBtn").addEventListener("click", async () => {
   }
 });
 
-document.getElementById("discardBtn").addEventListener("click", () => load());
+document.getElementById("discardBtn").addEventListener("click", async () => {
+  await load();
+  setEditing(false);
+});
 </script>
 </body>
 </html>

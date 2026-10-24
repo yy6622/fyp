@@ -8,7 +8,6 @@ import '../../data/popular_destinations.dart';
 import '../../repositories/user_repository.dart';
 import '../../services/auth_service.dart';
 import '../../services/avatar_service.dart';
-import '../../services/language_service.dart';
 import '../../services/location_service.dart';
 import '../../theme.dart';
 import '../shared/nice_dialog.dart';
@@ -114,28 +113,6 @@ class _AccountSettingPageState extends State<AccountSettingPage> {
     final uid = AuthService.instance.currentUser?.uid;
     if (uid == null) return;
     await UserRepository.instance.updateProfile(uid, currencyCode: picked.code);
-  }
-
-  /// Attraction/restaurant/hotel names show translated into whichever
-  /// language is picked here (see LanguageService/TranslatedText) — this
-  /// row used to just read 'English' with no way to change it at all.
-  Future<void> _changeLanguage() async {
-    final picked = await showModalBottomSheet<LanguageOption>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (ctx) => _PickerSheet<LanguageOption>(
-        title: 'Language',
-        items: kSupportedLanguages,
-        labelOf: (l) => l.label,
-        trailingOf: (l) => l.code,
-      ),
-    );
-    if (picked == null) return;
-    final uid = AuthService.instance.currentUser?.uid;
-    if (uid == null) return;
-    await UserRepository.instance.updateProfile(uid, languageCode: picked.code);
   }
 
   /// "Kuala Lumpur (KUL)" for a known airport code, or the bare code
@@ -244,7 +221,6 @@ class _AccountSettingPageState extends State<AccountSettingPage> {
               profileNavRow('Password', '••••••••'),
               profileNavRow('Email', email),
               profileNavRow('Phone Number', phone, onTap: () => _editPhone(phone)),
-              profileNavRow('Language', LanguageService.instance.labelFor(profile?.languageCode ?? ''), onTap: _changeLanguage),
               profileNavRow('Country / Region', country, onTap: _changeCountry),
               profileNavRow('Currency', currency, onTap: _changeCurrency),
               profileNavRow('Home Airport', homeAirport, onTap: _changeHomeAirport),

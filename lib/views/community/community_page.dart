@@ -16,7 +16,12 @@ import 'itinerary_select_page.dart';
 // own itinerary breakdown + reviews, expandable right on the card).
 // ---------------------------------------------------------------------
 class CommunityPage extends StatefulWidget {
-  const CommunityPage({super.key});
+  /// Set when arriving here from a hashtag tap elsewhere (see
+  /// CommunityPostDetailPage's tag chips) — applied once in [initState]
+  /// so the feed opens already filtered to that tag, same as tapping the
+  /// chip directly on this page would do.
+  final String? initialTagFilter;
+  const CommunityPage({super.key, this.initialTagFilter});
 
   @override
   State<CommunityPage> createState() => _CommunityPageState();
@@ -34,6 +39,9 @@ class _CommunityPageState extends State<CommunityPage> {
   void initState() {
     super.initState();
     controller.search.addListener(controller.refreshSearch);
+    if (widget.initialTagFilter != null) {
+      controller.setActiveTagFilter(widget.initialTagFilter);
+    }
   }
 
   @override
@@ -212,6 +220,138 @@ class _CommunityPageState extends State<CommunityPage> {
     );
   }
 
+  // Small "Showing: #tag ✕" pill under the search bar while a hashtag chip
+  // filter is active (see CommunityController.activeTagFilter) — tapping
+  // the ✕ clears it, same as tapping the chip itself again would.
+  Widget _buildTagFilterIndicator() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: GestureDetector(
+          onTap: () => controller.setActiveTagFilter(null),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+            decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(18)),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('Showing: #${controller.activeTagFilter}',
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.primary)),
+                const SizedBox(width: 6),
+                const Icon(Icons.close, size: 14, color: AppColors.primary),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // "Recommended for you" — posts sharing tags with what the signed-in
+  // traveller has viewed before (CommunityController.recommendedPosts).
+  // A horizontal shelf rather than full cards in the main feed, since this
+  // is a highlight reel sitting above the real feed, not a second copy of
+  // it.
+  Widget _buildRecommendedSection(List<CommunityPost> recommended) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 20),
+          child: Text('Recommended for you', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.black)),
+        ),
+        const SizedBox(height: 10),
+        SizedBox(
+          height: 128,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            itemCount: recommended.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 10),
+            itemBuilder: (context, i) => _recommendedCard(recommended[i]),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _recommendedCard(CommunityPost post) {
+    return GestureDetector(
+      onTap: () => _openDetail(post),
+      child: Container(
+        width: 170,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: const Color(0xFFECECEC)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(post.title,
+                maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.black)),
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                const Icon(Icons.location_on_outlined, size: 12, color: AppColors.primary),
+                const SizedBox(width: 2),
+                Expanded(
+                  child: Text(post.location,
+                      maxLines: 1, overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 10.5, color: AppColors.primary)),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            if (post.tags.isNotEmpty)
+              Wrap(
+                spacing: 4,
+                runSpacing: 4,
+                children: post.tags.take(2).map((t) => _tagChip(t, dense: true)).toList(),
+              ),
+            const Spacer(),
+            Row(
+              children: [
+                Icon(post.liked ? Icons.favorite : Icons.favorite_border, size: 13, color: post.liked ? Colors.redAccent : AppColors.textGrey),
+                const SizedBox(width: 4),
+                Text('${post.likes}', style: const TextStyle(fontSize: 10.5, color: AppColors.textGrey)),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// A single tappable "#tag" chip — tapping it sets
+  /// [CommunityController.activeTagFilter], filtering the whole feed down
+  /// to posts carrying that tag. [dense] shrinks it for the recommended
+  /// shelf's tighter cards.
+  Widget _tagChip(String tag, {bool dense = false}) {
+    final active = controller.activeTagFilter == tag;
+    return GestureDetector(
+      onTap: () => controller.setActiveTagFilter(active ? null : tag),
+      child: Container(
+        padding: EdgeInsets.symmetric(horizontal: dense ? 7 : 10, vertical: dense ? 3 : 5),
+        decoration: BoxDecoration(
+          color: active ? AppColors.primary : AppColors.chipGrey,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Text(
+          '#$tag',
+          style: TextStyle(
+            fontSize: dense ? 10 : 11,
+            fontWeight: FontWeight.w600,
+            color: active ? Colors.white : AppColors.navy,
+          ),
+        ),
+      ),
+    );
+  }
+
   // ---------------- Scrollable body (search bar + banner + feed) ----------------
   // Everything below the fixed header scrolls as one — the search bar
   // and story banner used to be fixed Column children with only the
@@ -222,6 +362,7 @@ class _CommunityPageState extends State<CommunityPage> {
   // scroll together under one shared scroll position instead.
   Widget _buildScrollableBody() {
     final posts = controller.filteredPosts;
+    final recommended = controller.recommendedPosts;
     return CustomScrollView(
       slivers: [
         SliverToBoxAdapter(
@@ -229,8 +370,16 @@ class _CommunityPageState extends State<CommunityPage> {
             children: [
               const SizedBox(height: 10),
               _buildSearchBar(),
+              if (controller.activeTagFilter != null) ...[
+                const SizedBox(height: 10),
+                _buildTagFilterIndicator(),
+              ],
               const SizedBox(height: 12),
               _buildStoryBanner(),
+              if (recommended.isNotEmpty) ...[
+                const SizedBox(height: 18),
+                _buildRecommendedSection(recommended),
+              ],
               const SizedBox(height: 14),
             ],
           ),
@@ -333,7 +482,35 @@ class _CommunityPageState extends State<CommunityPage> {
                   ],
                 ),
                 const SizedBox(height: 4),
+                // Only ever renders for the post's own author — watchPosts
+                // already hides an autoFlagged post from everyone else, so
+                // reaching this card at all means either it's not flagged,
+                // or the viewer is the author checking on their own post.
+                if (post.autoFlagged) ...[
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    margin: const EdgeInsets.only(bottom: 8),
+                    decoration: BoxDecoration(color: AppColors.orange.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(8)),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: const [
+                        Icon(Icons.hourglass_top, size: 13, color: AppColors.orange),
+                        SizedBox(width: 6),
+                        Text('Pending review — only visible to you until an admin checks it',
+                            style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600, color: AppColors.orange)),
+                      ],
+                    ),
+                  ),
+                ],
                 Text(post.description, style: const TextStyle(fontSize: 12.5, color: Colors.black87, height: 1.35)),
+                if (post.tags.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: post.tags.map((t) => _tagChip(t)).toList(),
+                  ),
+                ],
                 const SizedBox(height: 10),
                 SizedBox(
                   height: 78,

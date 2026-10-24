@@ -6,8 +6,8 @@
 <title>Refund Detail — Voya Insurance Partner</title>
 <link rel="stylesheet" href="../css/tokens.css?v=20261006b" />
 <link rel="stylesheet" href="../css/base.css?v=20261006b" />
-<link rel="stylesheet" href="../css/layout.css?v=20261006b" />
-<link rel="stylesheet" href="../css/components.css?v=20261006b" />
+<link rel="stylesheet" href="../css/layout.css?v=20261021" />
+<link rel="stylesheet" href="../css/components.css?v=20261021c" />
 </head>
 <body>
 <div class="shell">
@@ -41,11 +41,11 @@
 </div>
 
 <script type="module">
-import { requireRole } from "../js/auth-guard.js?v=20261007";
-import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261007";
-import { mountIcons } from "../js/icons.js?v=20261007";
-import { getRefund, updateRefundStatus } from "../js/data.js?v=20261007";
-import { moneyExact, statusBadge, escapeHtml, fullDate, toast, confirmDialog } from "../js/ui.js?v=20261007";
+import { requireRole } from "../js/auth-guard.js?v=20261021";
+import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261021";
+import { mountIcons } from "../js/icons.js?v=20261021";
+import { getRefund, updateRefundStatus } from "../js/data.js?v=20261021";
+import { moneyExact, statusBadge, escapeHtml, fullDate, toast, confirmDialog } from "../js/ui.js?v=20261021";
 
 mountSidebarNav({ role: "partner", active: "claims" });
 const session = await requireRole("partner", "login.html");

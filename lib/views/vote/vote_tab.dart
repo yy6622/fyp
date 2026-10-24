@@ -5,7 +5,7 @@ import '../../repositories/catalog_repository.dart';
 import '../../repositories/trip_repository.dart';
 import '../../services/currency_service.dart';
 import '../../theme.dart';
-import '../shared/translated_text.dart';
+import '../shared/nice_dialog.dart';
 
 // ---------------------------------------------------------------------
 // Vote tab — lives inside GroupTripPage. Shows every real poll created for
@@ -31,10 +31,27 @@ class VoteTab extends StatefulWidget {
 class _VoteTabState extends State<VoteTab> {
   late final VoteTabController controller = VoteTabController(tripId: widget.tripId);
 
-  /// Poll ids the person has folded closed — every poll starts expanded
-  /// (nothing hidden by default), same as the tab always behaved before
-  /// this got a collapse affordance at all.
-  final Set<String> _collapsed = {};
+  /// A poll's collapsed state, once the person has tapped its header to
+  /// fold/unfold it themselves — overrides [_defaultCollapsed] for that
+  /// poll id for the rest of this screen's lifetime. A poll id absent
+  /// from this map just uses the default: a closed poll starts folded
+  /// (it doesn't need anyone's vote any more), and among open polls only
+  /// the newest starts unfolded — if there are several open polls at
+  /// once, the rest start folded too rather than filling the screen with
+  /// every one of them expanded.
+  final Map<String, bool> _collapsedOverride = {};
+
+  bool _defaultCollapsed(TripVote vote) {
+    if (vote.isClosed) return true;
+    final openVotes = controller.votes.where((v) => !v.isClosed);
+    if (openVotes.isEmpty) return false;
+    // controller.votes is already newest-first (TripRepository.watchVotes
+    // orders by createdAt descending), so the first open poll found is
+    // the latest one.
+    return vote.id != openVotes.first.id;
+  }
+
+  bool _isCollapsed(TripVote vote) => _collapsedOverride[vote.id] ?? _defaultCollapsed(vote);
 
   @override
   void dispose() {
@@ -72,7 +89,7 @@ class _VoteTabState extends State<VoteTab> {
 
   // ---------------- Poll card (collapsible header + its option cards) ----------------
   Widget _voteCard(TripVote vote) {
-    final collapsed = _collapsed.contains(vote.id);
+    final collapsed = _isCollapsed(vote);
     return Container(
       decoration: BoxDecoration(color: Colors.white, border: Border.all(color: AppColors.border), borderRadius: BorderRadius.circular(16)),
       child: Column(
@@ -80,13 +97,7 @@ class _VoteTabState extends State<VoteTab> {
         children: [
           InkWell(
             borderRadius: BorderRadius.circular(16),
-            onTap: () => setState(() {
-              if (collapsed) {
-                _collapsed.remove(vote.id);
-              } else {
-                _collapsed.add(vote.id);
-              }
-            }),
+            onTap: () => setState(() => _collapsedOverride[vote.id] = !collapsed),
             child: Padding(
               padding: const EdgeInsets.all(14),
               child: Row(
@@ -128,11 +139,57 @@ class _VoteTabState extends State<VoteTab> {
           if (!collapsed)
             Padding(
               padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
-              child: Column(children: vote.options.map((o) => _optionCard(vote, o)).toList()),
+              child: Column(
+                children: [
+                  ...vote.options.map((o) => _optionCard(vote, o)),
+                  if (vote.allowAddOptions && !vote.isClosed) _addOptionRow(vote),
+                ],
+              ),
             ),
         ],
       ),
     );
+  }
+
+  /// Shown under a poll's option cards only when its creator turned on
+  /// "Allow members to add options" and the poll is still open — the
+  /// control [TripVote.allowAddOptions] actually enables now, after
+  /// previously being stored on the vote but read nowhere.
+  Widget _addOptionRow(TripVote vote) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: OutlinedButton.icon(
+        style: OutlinedButton.styleFrom(
+          minimumSize: const Size.fromHeight(44),
+          side: const BorderSide(color: AppColors.border),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+        onPressed: () => _promptAddOption(vote),
+        icon: const Icon(Icons.add, color: AppColors.primary, size: 18),
+        label: const Text('Add option', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.w600)),
+      ),
+    );
+  }
+
+  Future<void> _promptAddOption(TripVote vote) async {
+    final textController = TextEditingController();
+    final confirmed = await showNiceFormDialog(
+      context: context,
+      title: 'Add option',
+      headerIcon: Icons.add_circle_outline,
+      confirmLabel: 'Add',
+      fieldsBuilder: (ctx, setState) => [
+        niceDialogField(textController, 'Option', icon: Icons.edit_outlined, autofocus: true),
+      ],
+    );
+    if (confirmed != true) return;
+    final ok = await controller.addOption(vote, textController.text);
+    if (!mounted) return;
+    if (!ok) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Enter an option that isn't already on the list.")),
+      );
+    }
   }
 
   String _deadlineLabel(TripVote vote) {
@@ -206,7 +263,7 @@ class _VoteTabState extends State<VoteTab> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              TranslatedText(hotel.name,
+              Text(hotel.name,
                   maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold, color: Colors.black)),
               const SizedBox(height: 4),
               if (hotel.rating.isNotEmpty) _ratingRow(hotel.rating, hotel.reviews),
@@ -233,7 +290,7 @@ class _VoteTabState extends State<VoteTab> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              TranslatedText(attraction.name,
+              Text(attraction.name,
                   maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold, color: Colors.black)),
               const SizedBox(height: 4),
               if (attraction.rating.isNotEmpty) _ratingRow(attraction.rating, attraction.reviews),
@@ -261,7 +318,7 @@ class _VoteTabState extends State<VoteTab> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              TranslatedText(restaurant.name,
+              Text(restaurant.name,
                   maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold, color: Colors.black)),
               const SizedBox(height: 4),
               if (restaurant.rating.isNotEmpty) _ratingRow(restaurant.rating, restaurant.reviews),

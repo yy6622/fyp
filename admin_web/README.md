@@ -17,8 +17,7 @@ loaded straight from Google's CDN — nothing to install.
   `register.html` for partner self-registration.
 - `setup-admin.html` — one-time tool to create your **first** admin account.
 - `css/`, `js/` — shared design system and Firebase data layer. `js/data.js`
-  is the one place that talks to Firestore; `js/seed.js` is the demo-data
-  tool (mirrors the Flutter app's own `dev_seed_service.dart` pattern).
+  is the one place that talks to Firestore.
 
 ## One-time setup
 
@@ -42,12 +41,13 @@ loaded straight from Google's CDN — nothing to install.
    Insurance Partner registrations (they self-register at
    `partner/register.html` → `login.html`, starting as "Pending" until you
    approve them).
-5. **Seed demo data.** Claims, transactions, plans and partner
-   organizations don't exist yet — the mobile app doesn't generate them.
-   Use the "Seed demo data" button (Admin → Insurance Management, or
-   Partner → Dashboard) to populate realistic sample rows so every screen
-   has something to show. It never overwrites real data, and "Clear demo
-   data" (System Settings, both sides) removes only what it created.
+5. **Add real data.** Claims, transactions, plans and partner
+   organizations don't exist yet — the mobile app doesn't generate them,
+   and there's no demo-data seeder here any more (it was removed, along
+   with every "Seed demo data"/"Clear demo data" button). A partner
+   registers at `partner/register.html`, an admin approves them in
+   *System Settings*, and the partner then creates their own real plans
+   from *Insurance Plans*.
 
 ## What's real vs. what's a deliberate simplification
 
@@ -83,7 +83,7 @@ also read plans from `insurance_plans` and write to
   yet (a real deployment would add that check to `auth_controller.dart`).
 - Claims have no submission flow in the mobile app yet, so Partner →
   Refunds & Claims has a "New claim" button to file one manually (e.g. when
-  a customer calls in) in addition to what the demo seeder creates.
+  a customer calls in).
 
 ## Design notes
 

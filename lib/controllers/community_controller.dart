@@ -28,8 +28,25 @@ class CommunityController extends ChangeNotifier {
   Set<String> _myReviewedPostIds = {};
   Set<String> get myReviewedPostIds => _myReviewedPostIds;
 
+  // Tag the user tapped on a post's hashtag chip, filtering the feed down
+  // to just posts carrying it — cleared by tapping it again or the "✕" on
+  // the "Showing: #tag" indicator CommunityPage shows while this is set.
+  String? _activeTagFilter;
+  String? get activeTagFilter => _activeTagFilter;
+
+  void setActiveTagFilter(String? tag) {
+    _activeTagFilter = tag;
+    notifyListeners();
+  }
+
+  // tag -> number of distinct posts with that tag the signed-in user has
+  // viewed (see CommunityRepository.recordView/watchTagAffinity) — the
+  // whole basis for [recommendedPosts] below.
+  Map<String, int> _tagAffinity = {};
+
   StreamSubscription<List<CommunityPost>>? _sub;
   StreamSubscription<Set<String>>? _reviewedSub;
+  StreamSubscription<Map<String, int>>? _affinitySub;
 
   CommunityController() {
     final uid = AuthService.instance.currentUser?.uid;
@@ -54,6 +71,10 @@ class CommunityController extends ChangeNotifier {
         _myReviewedPostIds = ids;
         notifyListeners();
       });
+      _affinitySub = CommunityRepository.instance.watchTagAffinity(uid).listen((affinity) {
+        _tagAffinity = affinity;
+        notifyListeners();
+      });
     } else {
       _loading = false;
     }
@@ -72,14 +93,42 @@ class CommunityController extends ChangeNotifier {
   void refreshSearch() => notifyListeners();
 
   List<CommunityPost> get filteredPosts {
+    var result = _posts;
+    final tag = _activeTagFilter;
+    if (tag != null) {
+      result = result.where((p) => p.tags.contains(tag)).toList();
+    }
     final query = search.text.trim().toLowerCase();
-    if (query.isEmpty) return _posts;
-    return _posts
+    if (query.isEmpty) return result;
+    return result
         .where((p) =>
             p.title.toLowerCase().contains(query) ||
             p.location.toLowerCase().contains(query) ||
             p.author.toLowerCase().contains(query))
         .toList();
+  }
+
+  /// Posts whose tags overlap the signed-in user's most-viewed tags,
+  /// ranked by how much they overlap (ties broken newest-first — [_posts]
+  /// already comes back `createdAt` descending from [watchPosts], and
+  /// `List.sort` is stable, so that ordering survives among equal-overlap
+  /// posts). Backs the feed's "Recommended for you" section, only shown
+  /// there while this is non-empty. Capped at 10 so it stays a highlight
+  /// reel, not a second copy of the whole feed.
+  ///
+  /// Deliberately not tag-filter-aware ([activeTagFilter]) or
+  /// search-aware ([filteredPosts]) — it's the user's standing "what
+  /// you're into" shelf, not another view of whatever they're currently
+  /// filtering the main feed to.
+  List<CommunityPost> get recommendedPosts {
+    if (_tagAffinity.isEmpty) return const [];
+    final topTags = _tagAffinity.keys.toSet();
+    final scored = _posts
+        .where((p) => p.tags.any(topTags.contains))
+        .map((p) => (post: p, score: p.tags.where(topTags.contains).length))
+        .toList()
+      ..sort((a, b) => b.score.compareTo(a.score));
+    return scored.map((e) => e.post).take(10).toList();
   }
 
   void toggleLike(CommunityPost post) {
@@ -94,7 +143,7 @@ class CommunityController extends ChangeNotifier {
   void recordView(CommunityPost post) {
     final uid = AuthService.instance.currentUser?.uid;
     if (uid == null || post.id.isEmpty) return;
-    CommunityRepository.instance.recordView(post.id, uid);
+    CommunityRepository.instance.recordView(post.id, uid, tags: post.tags);
   }
 
   /// Returns null on success, or an error message to show. Reports as the
@@ -132,6 +181,7 @@ class CommunityController extends ChangeNotifier {
   void dispose() {
     _sub?.cancel();
     _reviewedSub?.cancel();
+    _affinitySub?.cancel();
     search.dispose();
     super.dispose();
   }
@@ -141,6 +191,37 @@ class CommunityController extends ChangeNotifier {
 class CreatePostController extends ChangeNotifier {
   final TextEditingController titleController = TextEditingController();
   final TextEditingController descController = TextEditingController();
+  final TextEditingController tagInputController = TextEditingController();
+
+  // Hashtags the author has added so far (chip-style, see CreatePostPage) —
+  // normalized on publish by CommunityRepository.normalizeTags, but kept
+  // as-typed here so a chip can still show "#Foodie" back to the author
+  // exactly as they wrote it.
+  final List<String> _tags = [];
+  List<String> get tags => List.unmodifiable(_tags);
+
+  /// Adds [tagInputController]'s current text as a tag chip and clears the
+  /// field, ready for the next one. No-ops on blank input or a duplicate
+  /// (case-insensitive, '#' ignored) so the chip row never shows the same
+  /// tag twice.
+  void addTagFromInput() {
+    final raw = tagInputController.text.trim();
+    if (raw.isEmpty) return;
+    final normalized = raw.toLowerCase().replaceFirst('#', '');
+    if (normalized.isEmpty || _tags.any((t) => t.toLowerCase().replaceFirst('#', '') == normalized)) {
+      tagInputController.clear();
+      notifyListeners();
+      return;
+    }
+    _tags.add(raw);
+    tagInputController.clear();
+    notifyListeners();
+  }
+
+  void removeTag(String tag) {
+    _tags.remove(tag);
+    notifyListeners();
+  }
 
   bool _mediaAdded = false;
   bool get mediaAdded => _mediaAdded;
@@ -153,6 +234,14 @@ class CreatePostController extends ChangeNotifier {
 
   bool _publishing = false;
   bool get publishing => _publishing;
+
+  /// Whether the most recent successful [publish] call got auto-flagged
+  /// by content moderation (see CommunityRepository.createPost) and is
+  /// therefore pending admin review rather than already live — read by
+  /// CreatePostPage right after a successful publish to show the right
+  /// message.
+  bool _lastPublishWasFlagged = false;
+  bool get lastPublishWasFlagged => _lastPublishWasFlagged;
 
   void toggleMediaAdded() {
     _mediaAdded = !_mediaAdded;
@@ -195,13 +284,14 @@ class CreatePostController extends ChangeNotifier {
         }
       }
 
-      await CommunityRepository.instance.createPost(
+      _lastPublishWasFlagged = await CommunityRepository.instance.createPost(
         authorId: user.uid,
         author: name,
         title: title,
         description: descController.text.trim(),
         location: itineraryTitle ?? '',
         itinerary: itinerary,
+        tags: _tags,
       );
       return null;
     } catch (e) {
@@ -216,6 +306,7 @@ class CreatePostController extends ChangeNotifier {
   void dispose() {
     titleController.dispose();
     descController.dispose();
+    tagInputController.dispose();
     super.dispose();
   }
 }

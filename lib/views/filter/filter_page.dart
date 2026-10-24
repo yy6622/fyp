@@ -14,7 +14,14 @@ class FilterPage extends StatefulWidget {
   // and survive the sheet being closed and reopened. That page is also
   // responsible for disposing it — this sheet only reads/mutates it.
   final FilterController controller;
-  const FilterPage({super.key, required this.type, required this.controller});
+  // Real airlines actually present in the current flight search
+  // results (ExplorePage passes `flightResults.map((f) => f.airlineName)`
+  // deduped/sorted) — never a fixed airline list, so searching a
+  // different route only ever offers airlines that could actually show
+  // up in that route's results (e.g. a China route offers Chinese
+  // carriers, a Europe route doesn't). Empty before any search has run.
+  final List<String> availableAirlines;
+  const FilterPage({super.key, required this.type, required this.controller, this.availableAirlines = const []});
 
   @override
   State<FilterPage> createState() => _FilterPageState();
@@ -151,10 +158,16 @@ class _FilterPageState extends State<FilterPage> {
       _chipsGroup(['Direct', '1 Stop', '2+ Stops'], controller.stops, singleSelect: true),
       const SizedBox(height: 20),
       _sectionTitle('Airlines'),
-      _checklistGroup(
-        ['AirAsia', 'Malaysia Airlines', 'Singapore Airlines', 'Emirates', 'Batik Air'],
-        controller.airlines,
-      ),
+      if (widget.availableAirlines.isEmpty)
+        const Padding(
+          padding: EdgeInsets.symmetric(vertical: 6),
+          child: Text(
+            'Search flights to see airlines for this route.',
+            style: TextStyle(fontSize: 12, color: AppColors.textGrey),
+          ),
+        )
+      else
+        _checklistGroup(widget.availableAirlines, controller.airlines),
       const SizedBox(height: 20),
       _sectionTitle('Flight Duration (hrs)'),
       _priceRangeSlider(controller.durationRange, 0, 24, controller.setDurationRange, prefix: '', suffix: 'h'),
@@ -162,6 +175,13 @@ class _FilterPageState extends State<FilterPage> {
   }
 
   // ---------------- HOTEL ----------------
+  // Property Type and Amenities checklists used to live here as fixed
+  // inline option lists ('Hotel'/'Resort'/..., 'Free WiFi'/'Pool'/...),
+  // but neither Duffel's stays search nor RollingGo's searchHotels
+  // returns a property-type field at all, and the Amenities checklist
+  // was never actually wired into _visibleHotels's match logic even
+  // though the field itself is real — both removed rather than kept as
+  // filters that look functional but silently do nothing.
   List<Widget> _hotelFilters() {
     return [
       _sectionTitle('Price Range (per night)'),
@@ -170,24 +190,17 @@ class _FilterPageState extends State<FilterPage> {
       _sectionTitle('Star Rating'),
       _chipsGroup(['3★', '4★', '5★'], controller.starRatings),
       const SizedBox(height: 20),
-      _sectionTitle('Property Type'),
-      _chipsGroup(
-        ['Hotel', 'Resort', 'Villa', 'Apartment', 'Hostel'],
-        controller.propertyTypes,
-      ),
-      const SizedBox(height: 20),
-      _sectionTitle('Amenities'),
-      _checklistGroup(
-        ['Free WiFi', 'Swimming Pool', 'Breakfast Included', 'Parking', 'Gym', 'Pet Friendly'],
-        controller.amenities,
-      ),
-      const SizedBox(height: 20),
       _sectionTitle('Guest Rating'),
       _singleChoiceRow(['Any', '3.5+', '4.0+', '4.5+'], controller.guestRating, controller.setGuestRating),
     ];
   }
 
   // ---------------- ATTRACTION / PLACES ----------------
+  // Duration and Rating used to live here (a hardcoded duration-bucket
+  // chip row that was display-only — recommendedDuration isn't
+  // consistently structured across every attraction, so it never
+  // actually matched anything — and a star-rating selector) — both
+  // removed by request.
   List<Widget> _attractionFilters() {
     return [
       _sectionTitle('Category'),
@@ -210,20 +223,11 @@ class _FilterPageState extends State<FilterPage> {
         controller.attractionPrice,
         controller.setAttractionPrice,
       ),
-      const SizedBox(height: 20),
-      _sectionTitle('Duration'),
-      _singleChoiceRow(
-        ['Any', '< 1 hr', '1 - 3 hrs', 'Half day', 'Full day'],
-        controller.attractionDuration,
-        controller.setAttractionDuration,
-      ),
-      const SizedBox(height: 20),
-      _sectionTitle('Rating'),
-      _ratingSelector(),
     ];
   }
 
   // ---------------- RESTAURANT ----------------
+  // Rating selector removed by request (same as Attraction's above).
   List<Widget> _restaurantFilters() {
     return [
       _sectionTitle('Cuisine'),
@@ -246,9 +250,6 @@ class _FilterPageState extends State<FilterPage> {
         controller.restaurantPrice,
         controller.setRestaurantPrice,
       ),
-      const SizedBox(height: 20),
-      _sectionTitle('Rating'),
-      _ratingSelector(),
     ];
   }
 
@@ -568,24 +569,6 @@ class _FilterPageState extends State<FilterPage> {
           ),
         ],
       ),
-    );
-  }
-
-  Widget _ratingSelector() {
-    return Row(
-      children: List.generate(5, (i) {
-        final filled = i < controller.ratingStars;
-        return IconButton(
-          padding: EdgeInsets.zero,
-          constraints: const BoxConstraints(),
-          icon: Icon(
-            filled ? Icons.star : Icons.star_border,
-            color: AppColors.orange,
-            size: 26,
-          ),
-          onPressed: () => controller.setRatingStars(i + 1),
-        );
-      }),
     );
   }
 

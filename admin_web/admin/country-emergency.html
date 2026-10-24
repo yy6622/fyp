@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Country Emergency Info — Voya Admin</title>
+<link rel="stylesheet" href="../css/tokens.css?v=20261020c" />
+<link rel="stylesheet" href="../css/base.css?v=20261020c" />
+<link rel="stylesheet" href="../css/layout.css?v=20261021" />
+<link rel="stylesheet" href="../css/components.css?v=20261021c" />
+</head>
+<body>
+<div class="shell">
+  <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+  <aside class="sidebar" id="sidebar">
+    <img class="sidebar-brand" src="../img/voya-logo-white.png" alt="Voya" />
+    <div class="sidebar-user">
+      <div class="name" id="sbUserName">Loading…</div>
+      <div class="role" id="sbUserRole">Administrator</div>
+    </div>
+    <nav class="nav" id="sidebarNav"></nav>
+    <button class="sidebar-logout" id="logoutBtn"><span data-icon="log-out"></span>Log out</button>
+  </aside>
+
+  <main class="content">
+    <div class="topbar">
+      <div>
+        <button class="menu-toggle" id="menuToggle"><span data-icon="menu"></span></button>
+        <h1 class="h1">Country Emergency Info</h1>
+        <p class="subtitle">Manage the local emergency numbers and consulate details travellers see in the app's Emergency tab.</p>
+      </div>
+      <div class="inline-flex" style="gap:10px;">
+        <button class="btn btn-outline" id="importDefaultsBtn"><span data-icon="download"></span>Import missing defaults</button>
+        <button class="btn btn-primary" id="addBtn"><span data-icon="plus"></span>Add country</button>
+      </div>
+    </div>
+
+    <div class="stat-grid" id="statGrid"><div class="skeleton" style="height:90px;grid-column:1/-1;"></div></div>
+
+    <div class="filter-bar">
+      <div class="search-input-wrap"><span data-icon="search"></span><input class="input" id="searchInput" placeholder="Search countries…" /></div>
+      <select class="select" id="statusFilter">
+        <option value="">All</option>
+        <option value="configured">Numbers configured</option>
+        <option value="default">Using default numbers</option>
+        <option value="noembassy">No embassy on file</option>
+      </select>
+    </div>
+
+    <div class="table-wrap scroll-x">
+      <table class="data-table">
+        <thead><tr><th>Country</th><th>Police</th><th>Ambulance</th><th>Fire</th><th>Embassies</th><th></th></tr></thead>
+        <tbody id="tableBody"><tr><td colspan="6"><div class="skeleton" style="height:40px;"></div></td></tr></tbody>
+      </table>
+      <div class="empty-state" id="emptyState" style="display:none;">
+        <span data-icon="alert-triangle" class="icon-lg"></span>
+        <div class="h3">No countries found</div>
+        <p class="small">Try a different search, or add one.</p>
+      </div>
+    </div>
+    <div class="table-foot">
+      <p class="small muted" id="resultsLabel"></p>
+      <div class="pagination" id="pagination"></div>
+    </div>
+  </main>
+</div>
+
+<script type="module">
+import { requireRole } from "../js/auth-guard.js?v=20261021";
+import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261021";
+import { mountIcons } from "../js/icons.js?v=20261021";
+import {
+  listCountryEmergencyInfo, deleteCountryEmergencyInfo, saveCountryEmergencyInfo,
+  listEmbassies, getEmbassy, saveEmbassy,
+} from "../js/data.js?v=20261021";
+import {
+  number, escapeHtml, paginate, renderPager, toast, confirmDialog, statCard, plainCard,
+} from "../js/ui.js?v=20261021";
+import { DEFAULT_EMERGENCY_NUMBERS, DEFAULT_EMBASSIES, titleCase } from "./country-emergency-defaults.js?v=20261020c";
+
+mountSidebarNav({ role: "admin", active: "emergency" });
+const session = await requireRole("admin", "login.html");
+const COUNTRY_KEYS = Object.keys(DEFAULT_EMERGENCY_NUMBERS).sort();
+
+let docsByKey = {};
+let items = [], filtered = [], page = 1;
+const PAGE_SIZE = 10;
+
+if (session) {
+  setSidebarUser({ displayName: session.profile.name || "Admin", roleLabel: "Administrator" });
+  await load();
+}
+
+async function load() {
+  const rows = await listCountryEmergencyInfo();
+  docsByKey = {};
+  rows.forEach((r) => { docsByKey[r.id] = r; });
+  const allKeys = [...new Set([...COUNTRY_KEYS, ...Object.keys(docsByKey)])].sort();
+
+  // One embassies query per destination — fine at this scale (~30
+  // countries, an infrequently-used admin page), and the only way to
+  // show an accurate "how many embassies does this destination have"
+  // count since embassies now live in a subcollection per destination.
+  const embassyLists = await Promise.all(allKeys.map((key) => listEmbassies(key)));
+
+  items = allKeys.map((key, idx) => {
+    const doc = docsByKey[key];
+    const def = DEFAULT_EMERGENCY_NUMBERS[key];
+    const configured = Boolean(doc);
+    const embassies = embassyLists[idx];
+    return {
+      key,
+      label: titleCase(key),
+      police: doc?.police || def?.police || "—",
+      ambulance: doc?.ambulance || def?.ambulance || "—",
+      fire: doc?.fire || def?.fire || "—",
+      embassyCount: embassies.length,
+      embassyNames: embassies.map((e) => titleCase(e.id)),
+      configured,
+    };
+  });
+  renderStats();
+  applyFilters();
+}
+
+function renderStats() {
+  const configured = items.filter((i) => i.configured).length;
+  const noEmbassy = items.filter((i) => i.embassyCount === 0).length;
+  document.getElementById("statGrid").innerHTML = [
+    statCard("Countries", number(items.length), "flag", null),
+    plainCard("Numbers configured", number(configured)),
+    plainCard("No embassy on file", number(noEmbassy)),
+  ].join("");
+  mountIcons(document);
+}
+
+function applyFilters() {
+  const q = document.getElementById("searchInput").value.trim().toLowerCase();
+  const status = document.getElementById("statusFilter").value;
+  filtered = items.filter((i) => {
+    const matchesQ = !q || i.label.toLowerCase().includes(q);
+    const matchesStatus = !status || (
+      status === "configured" ? i.configured :
+      status === "default" ? !i.configured :
+      i.embassyCount === 0
+    );
+    return matchesQ && matchesStatus;
+  });
+  page = 1;
+  renderTable();
+}
+
+function renderTable() {
+  const { pageItems, pages, total } = paginate(filtered, page, PAGE_SIZE);
+  const body = document.getElementById("tableBody");
+  const empty = document.getElementById("emptyState");
+  if (!pageItems.length) { body.innerHTML = ""; empty.style.display = "block"; }
+  else {
+    empty.style.display = "none";
+    body.innerHTML = pageItems.map((i) => `
+      <tr style="cursor:pointer;" data-open="${i.key}">
+        <td class="cell-strong">${escapeHtml(i.label)}</td>
+        <td class="muted">${escapeHtml(i.police)}</td>
+        <td class="muted">${escapeHtml(i.ambulance)}</td>
+        <td class="muted">${escapeHtml(i.fire)}</td>
+        <td class="muted">${i.embassyCount ? escapeHtml(i.embassyNames.join(", ")) : "—"}</td>
+        <td>
+          <div class="row-actions">
+            <button class="btn btn-outline btn-sm" data-edit="${i.key}"><span data-icon="edit" data-icon-size="14"></span></button>
+            <button class="btn btn-danger-outline btn-sm" data-del="${i.key}" ${i.configured ? "" : "disabled"}><span data-icon="trash" data-icon-size="14"></span></button>
+          </div>
+        </td>
+      </tr>`).join("");
+    body.querySelectorAll("[data-open]").forEach((row) => row.addEventListener("click", (e) => {
+      if (e.target.closest(".row-actions")) return;
+      location.href = `country-emergency-form.html?key=${encodeURIComponent(row.dataset.open)}`;
+    }));
+    body.querySelectorAll("[data-edit]").forEach((b) => b.addEventListener("click", (e) => {
+      e.stopPropagation();
+      location.href = `country-emergency-form.html?key=${encodeURIComponent(b.dataset.edit)}`;
+    }));
+    body.querySelectorAll("[data-del]").forEach((b) => b.addEventListener("click", (e) => {
+      e.stopPropagation();
+      remove(b.dataset.del);
+    }));
+  }
+  document.getElementById("resultsLabel").textContent = total
+    ? `Showing ${(page - 1) * PAGE_SIZE + 1} to ${Math.min(page * PAGE_SIZE, total)} of ${total} results` : "No results";
+  renderPager("pagination", { page, pages }, (n) => { page = n; renderTable(); });
+  mountIcons(document);
+}
+
+async function remove(key) {
+  const i = items.find((x) => x.key === key);
+  const ok = await confirmDialog({
+    title: `Clear "${i?.label || key}"?`,
+    body: "This removes the admin-entered emergency numbers from Firestore (embassies for this country are untouched — delete those individually from the country's edit page). The app will go back to showing the built-in default numbers (if any). This can't be undone.",
+    confirmText: "Clear", danger: true,
+  });
+  if (!ok) return;
+  try {
+    await deleteCountryEmergencyInfo(key);
+    toast("Cleared.", "success");
+    await load();
+  } catch (err) {
+    toast(err.message || "Couldn't clear.", "error");
+  }
+}
+
+document.getElementById("addBtn").addEventListener("click", () => { location.href = "country-emergency-form.html"; });
+document.getElementById("searchInput").addEventListener("input", applyFilters);
+document.getElementById("statusFilter").addEventListener("change", applyFilters);
+
+document.getElementById("importDefaultsBtn").addEventListener("click", async () => {
+  const missingNumbers = COUNTRY_KEYS.filter((k) => !docsByKey[k]);
+  const embassyKeys = Object.keys(DEFAULT_EMBASSIES);
+  if (!missingNumbers.length && !embassyKeys.length) { toast("Nothing to import.", "info"); return; }
+  const ok = await confirmDialog({
+    title: "Import built-in defaults?",
+    body: `Writes the built-in emergency numbers for ${missingNumbers.length} countr${missingNumbers.length === 1 ? "y" : "ies"} without data yet, and every home country's embassy details that this admin tool has pre-filled (Malaysia, Brunei, Singapore, Indonesia, Thailand — more as research is added) for any (destination, home country) pair that doesn't already have one on file. This never overwrites anything you've already edited.`,
+    confirmText: "Import", danger: false,
+  });
+  if (!ok) return;
+  const btn = document.getElementById("importDefaultsBtn");
+  btn.disabled = true;
+  const failures = []; // { what, err }
+  try {
+    for (const key of missingNumbers) {
+      try {
+        const def = DEFAULT_EMERGENCY_NUMBERS[key];
+        await saveCountryEmergencyInfo(key, { country: titleCase(key), police: def.police || "", ambulance: def.ambulance || "", fire: def.fire || "" });
+      } catch (err) {
+        console.error(`Import: failed to save numbers for "${key}"`, err);
+        failures.push({ what: `${titleCase(key)} numbers`, err });
+      }
+    }
+    let embassiesImported = 0;
+    for (const key of embassyKeys) {
+      for (const [homeKey, def] of Object.entries(DEFAULT_EMBASSIES[key])) {
+        try {
+          const existing = await getEmbassy(key, homeKey);
+          if (existing) continue;
+          await saveEmbassy(key, homeKey, {
+            homeCountry: titleCase(homeKey),
+            missionName: def.missionName || "",
+            address: def.address || "",
+            officeLines: def.officeLines || [],
+            emergencyPhone: def.emergencyPhone || "",
+            email: def.email || "",
+            embassyPhotoUrl: "",
+          });
+          embassiesImported++;
+        } catch (err) {
+          // One bad (destination, home country) pair must never abort the
+          // rest of the batch — that's what previously caused the import
+          // to silently stop after whichever entry threw first, leaving
+          // every destination after it in DEFAULT_EMBASSIES's key order
+          // untouched. Log it, record it, and keep going.
+          console.error(`Import: failed to save embassy "${homeKey}" for "${key}"`, err);
+          failures.push({ what: `${titleCase(homeKey)}'s embassy in ${titleCase(key)}`, err });
+        }
+      }
+    }
+    const summary = `Imported ${missingNumbers.length} countr${missingNumbers.length === 1 ? "y" : "ies"}' numbers and ${embassiesImported} embass${embassiesImported === 1 ? "y" : "ies"}.`;
+    if (failures.length) {
+      console.error("Import: failed items", failures);
+      const sample = failures.slice(0, 3).map((f) => `${f.what} (${f.err?.message || f.err})`).join("; ");
+      toast(`${summary} ${failures.length} item${failures.length === 1 ? "" : "s"} failed and were skipped — ${sample}${failures.length > 3 ? "; …see console for all" : ""}. Already-imported items are safe; re-click Import to retry just the failed ones.`, "error");
+    } else {
+      toast(summary, "success");
+    }
+    await load();
+  } catch (err) {
+    // Should only reach here for something outside the per-item loops
+    // (e.g. load() itself failing) — the loops above no longer let a
+    // single item's error escape and abort the whole import.
+    console.error("Import: unexpected top-level failure", err);
+    toast(err.message || "Import stopped partway — try again, it skips what's already written.", "error");
+  } finally {
+    btn.disabled = false;
+  }
+});
+</script>
+</body>
+</html>

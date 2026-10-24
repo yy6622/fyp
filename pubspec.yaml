@@ -128,6 +128,20 @@ dependencies:
   # it and fails to compile against that parameter.
   flutter_svg: ^2.3.0
 
+  # Branded PDF export for Expenses > Generate Report (Personal / Group),
+  # styled to match admin_web's own generate-report PDFs (navy header +
+  # logo, metadata row, stat row, category breakdown, zebra-striped
+  # transaction table, "Page X of Y" footer) — see lib/services/
+  # pdf_report_service.dart. `pdf` draws the document; `printing` hands it
+  # to the OS print/share sheet (Printing.layoutPdf), so no manual file
+  # saving/permissions code is needed. NOT verified against pub.dev from
+  # here (no Flutter/Dart toolchain in this environment, same limitation
+  # noted elsewhere in this file) — run `flutter pub get` on your machine
+  # after pulling this; if either version below doesn't resolve, bump it
+  # to whatever `flutter pub get` suggests.
+  pdf: ^3.11.1
+  printing: ^5.13.4
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -182,3 +196,13 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+
+# `image` (a transitive dependency of `pdf`/`printing`, added for the
+# Expenses > Generate Report PDF feature) resolved to 4.11.0, whose PNG
+# decoder calls archive's ZLibDecoder.decodeLazy() — a method the
+# transitively-resolved archive 4.0.9 doesn't have. `dependency_overrides`
+# must be a top-level key (a sibling of `dependencies`/`flutter` above),
+# not nested under `flutter:` — it was briefly added in the wrong place
+# and caused "Unexpected child dependency_overrides found under flutter".
+dependency_overrides:
+  archive: ^4.1.0

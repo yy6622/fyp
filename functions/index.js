@@ -59,5 +59,14 @@ exports.createPaymentIntent = onCall({ secrets: [stripeSecretKey] }, async (requ
   return { clientSecret: paymentIntent.client_secret };
 });
 
-// AI itinerary from the group chat - see itinerary.js and ml/itinerary_model/README.md.
+// AI Summarise (plan suggestions from the group chat) - see itinerary.js, itinerary_engine.js and planner/.
 exports.generateItinerary = require("./itinerary").generateItinerary;
+
+// AI "Optimise" - reworks a day's or the whole trip's existing plan into a
+// better-flowing schedule, without reading the chat - see optimise.js.
+exports.optimiseItinerary = require("./optimise").optimiseItinerary;
+
+
+// Discussion summary - Voya's own trained model (no external AI API) - see
+// discussion_summary/index.js and ml/discussion_summary/README.md.
+exports.summariseDiscussion = require("./discussion_summary").summariseDiscussion;

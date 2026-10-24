@@ -1,0 +1,469 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Country Emergency Info — Voya Admin</title>
+<link rel="stylesheet" href="../css/tokens.css?v=20261020c" />
+<link rel="stylesheet" href="../css/base.css?v=20261020c" />
+<link rel="stylesheet" href="../css/layout.css?v=20261021" />
+<link rel="stylesheet" href="../css/components.css?v=20261021c" />
+</head>
+<body>
+<div class="shell">
+  <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+  <aside class="sidebar" id="sidebar">
+    <img class="sidebar-brand" src="../img/voya-logo-white.png" alt="Voya" />
+    <div class="sidebar-user">
+      <div class="name" id="sbUserName">Loading…</div>
+      <div class="role" id="sbUserRole">Administrator</div>
+    </div>
+    <nav class="nav" id="sidebarNav"></nav>
+    <button class="sidebar-logout" id="logoutBtn"><span data-icon="log-out"></span>Log out</button>
+  </aside>
+
+  <main class="content">
+    <div class="topbar">
+      <div>
+        <button class="menu-toggle" id="menuToggle"><span data-icon="menu"></span></button>
+        <a href="country-emergency.html" class="inline-flex" style="color:var(--text-500);font-weight:700;font-size:13.5px;margin-bottom:10px;">
+          <span data-icon="arrow-left" data-icon-size="14"></span>Back to Country Emergency Info
+        </a>
+        <h1 class="h1" id="pageTitle">Loading…</h1>
+        <p class="subtitle">Shown in the app's Group &gt; Emergency tab for any trip whose destination matches this country.</p>
+      </div>
+    </div>
+
+    <div class="card card-pad">
+      <div class="form-section">
+        <div class="form-section-title"><span data-icon="flag"></span>Country</div>
+        <div class="form-grid">
+          <div class="field" style="grid-column:1/-1;">
+            <label>Country name</label>
+            <input class="input" id="fCountry" placeholder="e.g. Thailand — must match the trip's destination field" />
+            <p class="hint" id="countryHint">Type the country exactly as it appears in the app's destination picker (not case-sensitive).</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="form-section">
+        <div class="form-section-title"><span data-icon="phone"></span>Emergency contact</div>
+        <p class="hint" style="margin-top:-6px;margin-bottom:12px;">Local police/ambulance/fire numbers — these don't depend on which country a trip member is from.</p>
+        <div class="form-grid">
+          <div class="field"><label>Police</label><input class="input" id="fPolice" placeholder="e.g. 999" /></div>
+          <div class="field"><label>Ambulance</label><input class="input" id="fAmbulance" placeholder="e.g. 995" /></div>
+          <div class="field"><label>Fire</label><input class="input" id="fFire" placeholder="e.g. 995" /></div>
+        </div>
+      </div>
+
+      <div class="form-actions split">
+        <div>
+          <button class="btn btn-outline" id="deleteBtn" style="display:none;"><span data-icon="trash"></span>Delete numbers</button>
+        </div>
+        <div style="display:flex;gap:10px;">
+          <button class="btn btn-outline" id="fillDefaultBtn" style="display:none;">Fill with default numbers</button>
+          <a class="btn btn-outline" href="country-emergency.html">Cancel</a>
+          <button class="btn btn-primary" id="saveBtn">Save</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card card-pad" style="margin-top:20px;">
+      <div class="form-section-title" style="margin-bottom:4px;"><span data-icon="building"></span>Embassies</div>
+      <p class="hint" style="margin-bottom:14px;">The app isn't Malaysia-only — add one entry per home country whose travellers should see their own embassy here. A trip member sees the embassy matching their own Account Setting &gt; Country/Region.</p>
+      <div id="noKeyNotice" class="hint" style="display:none;">Save the country above first — embassies are added per country.</div>
+      <div id="embassyList" style="display:flex;flex-direction:column;gap:10px;margin-bottom:14px;"></div>
+      <button class="btn btn-outline" id="addEmbassyBtn" style="display:none;"><span data-icon="plus"></span>Add embassy</button>
+    </div>
+  </main>
+</div>
+
+<div class="modal-backdrop" id="embassyModal">
+  <div class="modal" style="max-width:600px;">
+    <div class="modal-head"><h3 class="h2" id="embassyModalTitle">Add embassy</h3><button class="modal-close" data-close><span data-icon="x"></span></button></div>
+    <div>
+      <div class="form-section">
+        <div class="form-grid">
+          <div class="field" style="grid-column:1/-1;">
+            <label>Home country</label>
+            <input class="input" id="eHomeCountry" list="homeCountrySuggestions" placeholder="e.g. Malaysia, Singapore, Indonesia…" />
+            <datalist id="homeCountrySuggestions"></datalist>
+            <p class="hint">Whose embassy this is — matched against a trip member's own Account Setting &gt; Country/Region.</p>
+          </div>
+          <div class="field" style="grid-column:1/-1;"><label>Mission name</label><input class="input" id="eMissionName" placeholder="e.g. Embassy of Malaysia, Bangkok" /></div>
+          <div class="field" style="grid-column:1/-1;"><label>Address</label><input class="input" id="eAddress" placeholder="Full address" /></div>
+          <div class="field" style="grid-column:1/-1;">
+            <label>Office lines</label>
+            <div class="tag-input-box" id="officeLinesBox"><input placeholder="Type a phone number and press Enter…" /></div>
+          </div>
+          <div class="field"><label>Emergency (after hours)</label><input class="input" id="eEmergencyPhone" placeholder="Optional" /></div>
+          <div class="field"><label>Email</label><input class="input" id="eEmail" placeholder="e.g. mwbangkok@kln.gov.my" /></div>
+        </div>
+      </div>
+      <div class="form-section">
+        <div class="form-section-title"><span data-icon="upload"></span>Embassy photo</div>
+        <div class="inline-flex" style="gap:14px;align-items:center;">
+          <div id="ePhotoPreview" style="width:72px;height:72px;border-radius:12px;background:var(--teal-100);flex:none;background-size:cover;background-position:center;"></div>
+          <div style="flex:1;">
+            <input class="input" id="ePhotoFile" type="file" accept="image/jpeg,image/png,image/webp" />
+            <p class="hint" id="ePhotoStatus">No photo uploaded yet — a plain icon is shown in the app instead.</p>
+          </div>
+        </div>
+      </div>
+      <div class="form-actions split">
+        <button class="btn btn-outline" id="eFillDefaultBtn" style="display:none;">Fill with default values</button>
+        <div style="display:flex;gap:10px;">
+          <button class="btn btn-outline" data-close>Cancel</button>
+          <button class="btn btn-primary" id="eSaveBtn">Save embassy</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import { requireRole } from "../js/auth-guard.js?v=20261021";
+import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261021";
+import { mountIcons } from "../js/icons.js?v=20261021";
+import {
+  getCountryEmergencyInfo, saveCountryEmergencyInfo, deleteCountryEmergencyInfo,
+  listEmbassies, getEmbassy, saveEmbassy, deleteEmbassy, uploadEmbassyPhoto,
+} from "../js/data.js?v=20261021";
+import { toast, setBusy, escapeHtml, openModal, closeModal, wireModalDismiss, confirmDialog } from "../js/ui.js?v=20261021";
+import { DEFAULT_EMERGENCY_NUMBERS, DEFAULT_EMBASSIES, COMMON_HOME_COUNTRIES, titleCase } from "./country-emergency-defaults.js?v=20261020c";
+
+mountSidebarNav({ role: "admin", active: "emergency" });
+let countryKey = new URLSearchParams(location.search).get("key");
+
+// Everything in this block depends only on the URL's ?key= — not on the
+// auth check or any Firestore read — so it's set immediately: the right
+// title with no flash, and (for an edit link) the country name filled in
+// right away. The police/ambulance/fire fields are different: their real
+// values live in Firestore and genuinely can't be known until that read
+// comes back, so rather than showing them briefly blank-and-editable
+// (which looked like empty fields that then "snap" to having data, and
+// could let a fast keystroke get silently overwritten once the load
+// resolves), they're disabled with a "Loading…" placeholder until
+// loadNumbers() actually has the real values to put in them.
+document.getElementById("pageTitle").textContent = countryKey ? "Edit country" : "Add country";
+if (countryKey) {
+  document.getElementById("fCountry").value = titleCase(countryKey);
+  document.getElementById("fCountry").disabled = true;
+  document.getElementById("countryHint").textContent = "The country can't be renamed here — delete this entry and add it again under the new name if you need to.";
+  for (const id of ["fPolice", "fAmbulance", "fFire"]) {
+    const el = document.getElementById(id);
+    el.disabled = true;
+    el.placeholder = "Loading…";
+  }
+  document.getElementById("saveBtn").disabled = true;
+  // refreshEmbassies() replaces this element's entire contents once the
+  // real list (or "no embassy on file yet") comes back, so a skeleton here
+  // is free — no extra logic needed to clear it.
+  document.getElementById("embassyList").innerHTML = `<div class="skeleton" style="height:64px;"></div><div class="skeleton" style="height:64px;"></div>`;
+} else {
+  document.getElementById("noKeyNotice").style.display = "";
+}
+
+const session = await requireRole("admin", "login.html");
+let officeLinesTag;
+let pendingEmbassyPhotoFile = null;
+let existingEmbassyPhotoUrl = "";
+let editingEmbassyKey = null; // home-country key currently open in the modal, or null = adding
+
+document.getElementById("homeCountrySuggestions").innerHTML = COMMON_HOME_COUNTRIES.map((c) => `<option value="${escapeHtml(c)}"></option>`).join("");
+
+if (session) {
+  setSidebarUser({ displayName: session.profile.name || "Admin", roleLabel: "Administrator" });
+  wireModalDismiss();
+  officeLinesTag = mountTagInput("officeLinesBox", []);
+  wirePhotoPicker();
+
+  if (countryKey) {
+    await loadNumbers();
+    await refreshEmbassies();
+  } else {
+    document.getElementById("fCountry").addEventListener("input", updateFillDefaultVisibility);
+  }
+}
+
+// ==================== Numbers (the destination-level doc) ====================
+async function loadNumbers() {
+  const existing = await getCountryEmergencyInfo(countryKey);
+  const def = DEFAULT_EMERGENCY_NUMBERS[countryKey];
+  if (existing) {
+    document.getElementById("deleteBtn").style.display = "";
+  }
+  const base = existing || def || {};
+  const placeholders = { fPolice: "e.g. 999", fAmbulance: "e.g. 995", fFire: "e.g. 995" };
+  const values = { fPolice: base.police || "", fAmbulance: base.ambulance || "", fFire: base.fire || "" };
+  for (const id of ["fPolice", "fAmbulance", "fFire"]) {
+    const el = document.getElementById(id);
+    el.value = values[id];
+    el.placeholder = placeholders[id]; // restore the real hint, replacing the "Loading…" one
+    el.disabled = false; // re-enable now that the real saved values are actually in the fields
+  }
+  document.getElementById("saveBtn").disabled = false;
+  updateFillDefaultVisibility();
+}
+
+function updateFillDefaultVisibility() {
+  const key = currentCountryKey();
+  document.getElementById("fillDefaultBtn").style.display = key && DEFAULT_EMERGENCY_NUMBERS[key] ? "" : "none";
+}
+
+function currentCountryKey() {
+  if (countryKey) return countryKey;
+  return document.getElementById("fCountry").value.trim().toLowerCase();
+}
+
+document.getElementById("fillDefaultBtn").addEventListener("click", () => {
+  const def = DEFAULT_EMERGENCY_NUMBERS[currentCountryKey()];
+  if (!def) return;
+  document.getElementById("fPolice").value = def.police || "";
+  document.getElementById("fAmbulance").value = def.ambulance || "";
+  document.getElementById("fFire").value = def.fire || "";
+});
+
+document.getElementById("saveBtn").addEventListener("click", async () => {
+  const key = currentCountryKey();
+  if (!key) { toast("Enter the country's name first.", "error"); document.getElementById("fCountry").focus(); return; }
+
+  const btn = document.getElementById("saveBtn");
+  setBusy(btn, true, "Saving…");
+  try {
+    const wasNew = !countryKey;
+    if (wasNew) {
+      const already = await getCountryEmergencyInfo(key);
+      if (already) {
+        toast(`"${titleCase(key)}" already has data — opening it instead of creating a duplicate.`, "error");
+        location.href = `country-emergency-form.html?key=${encodeURIComponent(key)}`;
+        return;
+      }
+    }
+    await saveCountryEmergencyInfo(key, {
+      country: titleCase(key),
+      police: document.getElementById("fPolice").value.trim(),
+      ambulance: document.getElementById("fAmbulance").value.trim(),
+      fire: document.getElementById("fFire").value.trim(),
+    });
+    toast("Saved.", "success");
+    if (wasNew) {
+      location.href = `country-emergency-form.html?key=${encodeURIComponent(key)}`;
+    } else {
+      setBusy(btn, false);
+      await loadNumbers();
+    }
+  } catch (e) {
+    toast(e?.message || "Couldn't save — try again.", "error");
+    setBusy(btn, false);
+  }
+});
+
+document.getElementById("deleteBtn").addEventListener("click", async () => {
+  if (!countryKey) return;
+  const ok = await confirmDialog({
+    title: `Delete "${titleCase(countryKey)}"'s numbers?`,
+    body: "Embassies on file for this country are untouched — delete those individually below if you want them gone too. The app will go back to showing the built-in default numbers (if any).",
+    confirmText: "Delete", danger: true,
+  });
+  if (!ok) return;
+  const btn = document.getElementById("deleteBtn");
+  setBusy(btn, true, "Deleting…");
+  try {
+    await deleteCountryEmergencyInfo(countryKey);
+    toast("Deleted.", "success");
+    await loadNumbers();
+  } catch (e) {
+    toast(e?.message || "Couldn't delete — try again.", "error");
+    setBusy(btn, false);
+  }
+});
+
+// ==================== Embassies (subcollection list + modal form) ====================
+async function refreshEmbassies() {
+  document.getElementById("addEmbassyBtn").style.display = "";
+  const list = await listEmbassies(countryKey);
+  const container = document.getElementById("embassyList");
+  if (!list.length) {
+    container.innerHTML = `<p class="hint">No embassy on file yet for this country.</p>`;
+  } else {
+    container.innerHTML = list.map((e) => `
+      <div class="inline-flex" style="justify-content:space-between;gap:12px;padding:12px;border:1px solid #ECECEC;border-radius:12px;">
+        <div class="inline-flex" style="gap:12px;">
+          ${e.embassyPhotoUrl
+            ? `<img src="${escapeHtml(e.embassyPhotoUrl)}" style="width:40px;height:40px;border-radius:8px;object-fit:cover;" />`
+            : `<div style="width:40px;height:40px;border-radius:8px;background:var(--teal-100);display:flex;align-items:center;justify-content:center;"><span data-icon="building"></span></div>`}
+          <div>
+            <div style="font-weight:700;font-size:13.5px;">${escapeHtml(titleCase(e.id))}</div>
+            <div class="muted small">${escapeHtml(e.missionName || "—")}</div>
+          </div>
+        </div>
+        <div class="row-actions">
+          <button class="btn btn-outline btn-sm" data-edit-embassy="${e.id}"><span data-icon="edit" data-icon-size="14"></span></button>
+          <button class="btn btn-danger-outline btn-sm" data-del-embassy="${e.id}"><span data-icon="trash" data-icon-size="14"></span></button>
+        </div>
+      </div>`).join("");
+  }
+  mountIcons(container);
+  container.querySelectorAll("[data-edit-embassy]").forEach((b) => b.addEventListener("click", () => openEmbassyModal(b.dataset.editEmbassy)));
+  container.querySelectorAll("[data-del-embassy]").forEach((b) => b.addEventListener("click", () => removeEmbassy(b.dataset.delEmbassy)));
+}
+
+document.getElementById("addEmbassyBtn").addEventListener("click", () => openEmbassyModal(null));
+
+async function openEmbassyModal(homeKey) {
+  editingEmbassyKey = homeKey;
+  pendingEmbassyPhotoFile = null;
+  existingEmbassyPhotoUrl = "";
+  document.getElementById("ePhotoFile").value = "";
+
+  if (homeKey) {
+    document.getElementById("embassyModalTitle").textContent = `Edit embassy — ${titleCase(homeKey)}`;
+    document.getElementById("eHomeCountry").value = titleCase(homeKey);
+    document.getElementById("eHomeCountry").disabled = true;
+    const existing = await getEmbassy(countryKey, homeKey);
+    fillEmbassyForm(existing || {});
+    existingEmbassyPhotoUrl = existing?.embassyPhotoUrl || "";
+  } else {
+    document.getElementById("embassyModalTitle").textContent = "Add embassy";
+    document.getElementById("eHomeCountry").disabled = false;
+    fillEmbassyForm({});
+  }
+  setEmbassyPhotoPreview(existingEmbassyPhotoUrl);
+  updateEmbassyFillDefaultVisibility();
+  openModal("embassyModal");
+}
+
+function fillEmbassyForm(data) {
+  document.getElementById("eHomeCountry").value = data.homeCountry ? data.homeCountry : document.getElementById("eHomeCountry").value;
+  document.getElementById("eMissionName").value = data.missionName || "";
+  document.getElementById("eAddress").value = data.address || "";
+  document.getElementById("eEmergencyPhone").value = data.emergencyPhone || "";
+  document.getElementById("eEmail").value = data.email || "";
+  officeLinesTag.setTags(data.officeLines || []);
+}
+
+function updateEmbassyFillDefaultVisibility() {
+  const homeKey = currentEmbassyKey();
+  const def = DEFAULT_EMBASSIES[countryKey]?.[homeKey];
+  document.getElementById("eFillDefaultBtn").style.display = def ? "" : "none";
+}
+
+function currentEmbassyKey() {
+  if (editingEmbassyKey) return editingEmbassyKey;
+  return document.getElementById("eHomeCountry").value.trim().toLowerCase();
+}
+
+document.getElementById("eHomeCountry").addEventListener("input", updateEmbassyFillDefaultVisibility);
+
+document.getElementById("eFillDefaultBtn").addEventListener("click", () => {
+  const def = DEFAULT_EMBASSIES[countryKey]?.[currentEmbassyKey()];
+  if (def) fillEmbassyForm(def);
+});
+
+function setEmbassyPhotoPreview(url) {
+  const el = document.getElementById("ePhotoPreview");
+  el.style.backgroundImage = url ? `url('${url}')` : "none";
+  document.getElementById("ePhotoStatus").textContent = url ? "Photo uploaded." : "No photo uploaded yet — a plain icon is shown in the app instead.";
+}
+
+function wirePhotoPicker() {
+  document.getElementById("ePhotoFile").addEventListener("change", (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    pendingEmbassyPhotoFile = file;
+    setEmbassyPhotoPreview(URL.createObjectURL(file));
+  });
+}
+
+document.getElementById("eSaveBtn").addEventListener("click", async () => {
+  const homeKey = currentEmbassyKey();
+  if (!homeKey) { toast("Enter the home country first.", "error"); document.getElementById("eHomeCountry").focus(); return; }
+
+  const btn = document.getElementById("eSaveBtn");
+  setBusy(btn, true, "Saving…");
+  try {
+    if (!editingEmbassyKey) {
+      const already = await getEmbassy(countryKey, homeKey);
+      if (already) { toast(`${titleCase(homeKey)} already has an embassy on file for ${titleCase(countryKey)} — edit it instead.`, "error"); setBusy(btn, false); return; }
+    }
+    let embassyPhotoUrl = existingEmbassyPhotoUrl;
+    if (pendingEmbassyPhotoFile) {
+      embassyPhotoUrl = await uploadEmbassyPhoto(countryKey, homeKey, pendingEmbassyPhotoFile);
+    }
+    await saveEmbassy(countryKey, homeKey, {
+      homeCountry: titleCase(homeKey),
+      missionName: document.getElementById("eMissionName").value.trim(),
+      address: document.getElementById("eAddress").value.trim(),
+      officeLines: officeLinesTag.getTags(),
+      emergencyPhone: document.getElementById("eEmergencyPhone").value.trim(),
+      email: document.getElementById("eEmail").value.trim(),
+      embassyPhotoUrl,
+    });
+    toast("Embassy saved.", "success");
+    closeModal("embassyModal");
+    await refreshEmbassies();
+  } catch (e) {
+    toast(e?.message || "Couldn't save — try again.", "error");
+  } finally {
+    setBusy(btn, false);
+  }
+});
+
+async function removeEmbassy(homeKey) {
+  const ok = await confirmDialog({
+    title: `Delete ${titleCase(homeKey)}'s embassy?`,
+    body: `This removes ${titleCase(homeKey)} travellers' embassy info for ${titleCase(countryKey)}. This can't be undone.`,
+    confirmText: "Delete", danger: true,
+  });
+  if (!ok) return;
+  try {
+    await deleteEmbassy(countryKey, homeKey);
+    toast("Deleted.", "success");
+    await refreshEmbassies();
+  } catch (e) {
+    toast(e?.message || "Couldn't delete — try again.", "error");
+  }
+}
+
+// Same shape as attraction-form.html's mountTagInput — a free-text chip
+// list for the embassy's office phone lines (there can be more than one).
+function mountTagInput(boxId, initialTags = []) {
+  const box = document.getElementById(boxId);
+  const oldInput = box.querySelector("input");
+  const input = oldInput.cloneNode(true);
+  oldInput.replaceWith(input);
+  let tags = [...initialTags];
+
+  function render() {
+    box.querySelectorAll(".chip").forEach((c) => c.remove());
+    tags.forEach((tag, i) => {
+      const chip = document.createElement("span");
+      chip.className = "chip";
+      chip.innerHTML = `${tag}<button type="button" data-i="${i}"><span data-icon="x"></span></button>`;
+      box.insertBefore(chip, input);
+    });
+    box.querySelectorAll(".chip button").forEach((btn) =>
+      btn.addEventListener("click", () => { tags.splice(Number(btn.dataset.i), 1); render(); })
+    );
+    mountIcons(box);
+  }
+
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === ",") {
+      e.preventDefault();
+      const value = input.value.trim().replace(/,$/, "");
+      if (value && !tags.includes(value)) { tags.push(value); render(); }
+      input.value = "";
+    } else if (e.key === "Backspace" && !input.value && tags.length) {
+      tags.pop();
+      render();
+    }
+  });
+
+  render();
+  return { getTags: () => tags, setTags: (next) => { tags = [...next]; render(); } };
+}
+</script>
+</body>
+</html>

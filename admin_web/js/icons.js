@@ -2,6 +2,7 @@
 // Each entry is the *inner* SVG markup for a 24x24 viewBox, stroke=currentColor.
 const RAW = {
   home: '<path d="M4 11.5l8-7.5 8 7.5"/><path d="M6 10v10h5v-6h2v6h5V10"/>',
+  bell: '<path d="M6 10a6 6 0 0 1 12 0v4.2l2 2.8H4l2-2.8z"/><path d="M10 19.5a2 2 0 0 0 4 0"/>',
   user: '<circle cx="12" cy="8" r="3.6"/><path d="M4.5 20c1-4 4-6 7.5-6s6.5 2 7.5 6"/>',
   "user-check": '<circle cx="10.5" cy="8" r="3.4"/><path d="M3.5 20c1-3.8 3.7-5.7 7-5.7"/><path d="M15.8 12.8l1.6 1.6 3-3"/>',
   "user-x": '<circle cx="10.5" cy="8" r="3.4"/><path d="M3.5 20c1-3.8 3.7-5.7 7-5.7"/><path d="M15.5 12l4 4M19.5 12l-4 4"/>',

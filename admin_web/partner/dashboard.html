@@ -6,8 +6,8 @@
 <title>Dashboard — Voya Insurance Partner</title>
 <link rel="stylesheet" href="../css/tokens.css?v=20261006b" />
 <link rel="stylesheet" href="../css/base.css?v=20261006b" />
-<link rel="stylesheet" href="../css/layout.css?v=20261006b" />
-<link rel="stylesheet" href="../css/components.css?v=20261006b" />
+<link rel="stylesheet" href="../css/layout.css?v=20261021" />
+<link rel="stylesheet" href="../css/components.css?v=20261021c" />
 </head>
 <body>
 <div class="shell">
@@ -31,14 +31,10 @@
       </div>
     </div>
 
-    <div class="dev-tool-bar" id="pendingBar" style="display:none;">
-      <span><strong>Pending approval.</strong> An admin needs to approve your organization before you can publish plans or handle claims. You can still explore the console.</span>
+    <div class="dev-tool-bar" id="pendingBar" style="display:none;align-items:center;justify-content:space-between;gap:12px;">
+      <span id="pendingBarText"><strong>Pending approval.</strong> An admin needs to approve your organization before you can publish plans or handle claims. You can still explore the console.</span>
+      <button class="btn btn-sm btn-outline" id="pendingBarBtn" style="flex:none;">View details</button>
     </div>
-    <div class="dev-tool-bar" id="devBar" style="display:none;">
-      <span>New here? Seed some demo plans, transactions and claims to see how the console works.</span>
-      <button class="btn btn-outline btn-sm" id="seedBtn"><span data-icon="refresh" data-icon-size="14"></span>Seed demo data</button>
-    </div>
-
     <div class="stat-grid" id="statGrid"><div class="skeleton" style="height:90px;grid-column:1/-1;"></div></div>
 
     <div style="display:grid;grid-template-columns:1.6fr 1fr;gap:20px;align-items:start;" class="detail-grid">
@@ -56,29 +52,42 @@
 </div>
 
 <script type="module">
-import { requireRole } from "../js/auth-guard.js?v=20261007e";
-import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261007e";
-import { mountIcons } from "../js/icons.js?v=20261007e";
-import { listTransactions, listClaims, listPlans } from "../js/data.js?v=20261007e";
-import { seedPartnerDemoData } from "../js/seed.js?v=20261007e";
-import { money, moneyExact, number, statusBadge, escapeHtml, timeAgo, toast, setBusy, statCard, plainCard, trendDelta, pointDelta, sumInMonth, countInMonth, monthBounds, rateOf } from "../js/ui.js?v=20261007e";
+import { requireRole } from "../js/auth-guard.js?v=20261021";
+import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261021";
+import { mountIcons } from "../js/icons.js?v=20261021";
+import { listTransactions, listClaims, listPlans } from "../js/data.js?v=20261021";
+import { money, moneyExact, number, statusBadge, escapeHtml, timeAgo, toast, setBusy, statCard, plainCard, trendDelta, pointDelta, sumInMonth, countInMonth, monthBounds, rateOf } from "../js/ui.js?v=20261021";
 
 mountSidebarNav({ role: "partner", active: "dashboard" });
 const session = await requireRole("partner", "login.html");
 
 if (session) {
   setSidebarUser({ displayName: session.profile.companyName || "Partner", roleLabel: `${session.profile.companyName || "Insurance"} · Insurance Partner` });
-  if (session.profile.status !== "approved") document.getElementById("pendingBar").style.display = "flex";
+  showStatusBar(session.profile.status);
   const params = new URLSearchParams(location.search);
   if (params.get("welcome")) toast("Welcome to Voya! Your organization is now in the queue for admin approval.", "success");
   await load();
+}
+
+// Doubles as this page's "notification button" (the admin side's
+// equivalent is the bell on admin/overview.html) — only an
+// approved/pending/suspended partner ever sees the Dashboard at all (a
+// rejected/blocked one is redirected to Notifications before this runs),
+// so this only ever needs to tell those three apart.
+function showStatusBar(status) {
+  if (status === "approved") return;
+  const text = status === "suspended"
+    ? "<strong>Account suspended.</strong> You won't be able to publish plans or handle claims until an admin re-approves your account."
+    : "<strong>Pending approval.</strong> An admin needs to approve your organization before you can publish plans or handle claims. You can still explore the console.";
+  document.getElementById("pendingBarText").innerHTML = text;
+  document.getElementById("pendingBar").style.display = "flex";
+  document.getElementById("pendingBarBtn").addEventListener("click", () => { location.href = "notifications.html"; });
 }
 
 async function load() {
   const [txns, claims, plans] = await Promise.all([
     listTransactions(session.uid), listClaims(session.uid), listPlans(session.uid),
   ]);
-  document.getElementById("devBar").style.display = (!txns.length && !claims.length && !plans.length) ? "flex" : "none";
 
   const paid = txns.filter((t) => t.status === "paid");
   const gross = paid.reduce((s, t) => s + (Number(t.premium) || 0), 0);
@@ -136,19 +145,6 @@ async function load() {
 
   mountIcons(document);
 }
-
-document.getElementById("seedBtn")?.addEventListener("click", async (e) => {
-  setBusy(e.currentTarget, true, "Seeding…");
-  try {
-    const notes = await seedPartnerDemoData(session.uid, session.profile.companyName || "Your organization");
-    toast(notes.join(" · "), "success");
-    await load();
-  } catch (err) {
-    toast(err.message || "Couldn't seed data.", "error");
-  } finally {
-    setBusy(e.currentTarget, false);
-  }
-});
 </script>
 </body>
 </html>

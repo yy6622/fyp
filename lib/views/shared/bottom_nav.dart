@@ -9,7 +9,6 @@ import '../../repositories/user_repository.dart';
 import '../../services/auth_service.dart';
 import '../../services/currency_service.dart';
 import '../../services/itinerary_ai_service.dart';
-import '../../services/language_service.dart';
 import '../../services/location_service.dart';
 import '../../theme.dart';
 import '../explore/explore_page.dart';
@@ -78,9 +77,6 @@ class _MainPageState extends State<MainPage> {
         // is the one long-lived subscription that keeps it current for
         // every screen other than Explore (which tracks its own).
         CurrencyService.instance.lastKnownUserCurrency = user?.currencyCode;
-        // Same idea, for LanguageService/TranslatedText — see its doc
-        // comment.
-        LanguageService.instance.lastKnownLanguageCode = user?.languageCode;
         _wantsTracking = user?.shareLocation ?? false;
         if (_wantsTracking && !_tracking) {
           _startTracking(uid);

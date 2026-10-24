@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../../repositories/catalog_repository.dart';
+import '../../services/auth_service.dart';
 import '../../theme.dart';
 import '../shared/contact_launcher.dart';
-import '../shared/translated_text.dart';
 import 'detail_widgets.dart';
 
 // ---------------------------------------------------------------------
@@ -34,6 +34,21 @@ class DetailPageRestaurant extends StatefulWidget {
 class _DetailPageRestaurantState extends State<DetailPageRestaurant> {
   late bool _saved = widget.saved;
 
+  @override
+  void initState() {
+    super.initState();
+    // Personalization signal ("based on what you've looked at before",
+    // same idea as CommunityPostDetailPage's own recordView call) — one
+    // view, counted once per person per place (see
+    // CatalogRepository.recordRestaurantView's doc comment). Fire-and-forget:
+    // this never blocks or errors the detail page over an analytics/
+    // personalization write.
+    final uid = AuthService.instance.currentUser?.uid;
+    if (uid != null && uid.isNotEmpty) {
+      CatalogRepository.instance.recordRestaurantView(widget.restaurant.id, uid, widget.restaurant.cuisineTags);
+    }
+  }
+
   void _toggle() {
     setState(() => _saved = !_saved);
     widget.onToggleSave?.call();
@@ -51,7 +66,7 @@ class _DetailPageRestaurantState extends State<DetailPageRestaurant> {
               child: SingleChildScrollView(
                 child: Column(
                   children: [
-                    DetailHeader(title: r.name, imageUrl: r.image, translate: true),
+                    DetailHeader(title: r.name, imageUrl: r.image),
                     Padding(
                       padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
                       child: Column(
@@ -62,7 +77,7 @@ class _DetailPageRestaurantState extends State<DetailPageRestaurant> {
                         // Flight/Hotel's left-aligned layout.
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          TranslatedText(r.name, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.navy)),
+                          Text(r.name, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.navy)),
                           const SizedBox(height: 8),
                           // Star sits before the rating number, matching how every
                           // other detail page (Hotel, and now Attraction) shows a

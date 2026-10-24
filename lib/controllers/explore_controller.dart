@@ -105,6 +105,24 @@ class ExploreController extends ChangeNotifier {
           _runDefaultSearches();
         }
       });
+      // Personalized ordering ("based on what you've looked at/favorited
+      // before", same idea as CommunityController's tagAffinity-driven
+      // recommendations) — see _reorderByAffinity. Independent of the
+      // trips/profile streams above: whichever of these two resolves
+      // first just re-sorts whatever attractions/restaurants are already
+      // showing, and a later destination/search swap (_resubscribePlaces)
+      // re-applies the latest affinity map to the fresh list too, so
+      // there's no ordering dependency to get right here.
+      _attractionAffinitySub = CatalogRepository.instance.watchAttractionCategoryAffinity(_uid).listen((v) {
+        _attractionAffinity = v;
+        _reorderByAffinity<CatalogAttraction>(attractions, (a) => a.categoryTags, _attractionAffinity);
+        notifyListeners();
+      });
+      _restaurantAffinitySub = CatalogRepository.instance.watchRestaurantCuisineAffinity(_uid).listen((v) {
+        _restaurantAffinity = v;
+        _reorderByAffinity<CatalogRestaurant>(restaurants, (r) => r.cuisineTags, _restaurantAffinity);
+        notifyListeners();
+      });
     } else {
       _hasRunInitialSearch = true;
       _runDefaultSearches();
@@ -239,6 +257,44 @@ class ExploreController extends ChangeNotifier {
   StreamSubscription<List<CatalogRestaurant>>? _restaurantsSub;
   String? _placesDestination;
 
+  /// {category/cuisine -> weighted score} from
+  /// [CatalogRepository.watchAttractionCategoryAffinity]/
+  /// [watchRestaurantCuisineAffinity] — see where these are subscribed in
+  /// the constructor. Empty for a signed-out session or a user who
+  /// hasn't viewed/favorited anything yet, in which case
+  /// [_reorderByAffinity] is a no-op and Explore just shows its normal,
+  /// unpersonalized order.
+  Map<String, int> _attractionAffinity = {};
+  Map<String, int> _restaurantAffinity = {};
+  StreamSubscription<Map<String, int>>? _attractionAffinitySub;
+  StreamSubscription<Map<String, int>>? _restaurantAffinitySub;
+
+  /// Re-sorts [items] in place, highest affinity score first — a stable
+  /// sort (ties keep their original relative order) so that reordering
+  /// doesn't visibly shuffle a list of items the person has no measured
+  /// preference between yet. A no-op when [affinity] is empty, so an
+  /// unpersonalized list (signed out, or no affinity recorded yet) is
+  /// left exactly as Firestore returned it.
+  void _reorderByAffinity<T>(List<T> items, List<String> Function(T) tagsOf, Map<String, int> affinity) {
+    if (affinity.isEmpty || items.isEmpty) return;
+    int scoreOf(T item) {
+      var score = 0;
+      for (final tag in tagsOf(item)) {
+        score += affinity[tag] ?? 0;
+      }
+      return score;
+    }
+
+    final indexed = items.asMap().entries.toList()
+      ..sort((a, b) {
+        final cmp = scoreOf(b.value).compareTo(scoreOf(a.value));
+        return cmp != 0 ? cmp : a.key.compareTo(b.key);
+      });
+    items
+      ..clear()
+      ..addAll(indexed.map((e) => e.value));
+  }
+
   /// Kicks off a live OpenStreetMap fetch for [destination] (see
   /// [CatalogRepository.refreshAttractions]/[refreshRestaurants]) and
   /// re-points the Firestore streams to just that destination's results
@@ -257,11 +313,13 @@ class ExploreController extends ChangeNotifier {
     notifyListeners();
     _attractionsSub = CatalogRepository.instance.watchAttractions(destination: trimmed).listen((v) {
       attractions = v;
+      _reorderByAffinity<CatalogAttraction>(attractions, (a) => a.categoryTags, _attractionAffinity);
       loadingPlaces = false;
       notifyListeners();
     });
     _restaurantsSub = CatalogRepository.instance.watchRestaurants(destination: trimmed).listen((v) {
       restaurants = v;
+      _reorderByAffinity<CatalogRestaurant>(restaurants, (r) => r.cuisineTags, _restaurantAffinity);
       loadingPlaces = false;
       notifyListeners();
     });
@@ -486,15 +544,25 @@ class ExploreController extends ChangeNotifier {
   Future<void> toggleAttractionFavorite(CatalogAttraction attraction) {
     final tripId = selectedTrip?.id;
     if (tripId == null) return Future.value();
-    return CatalogRepository.instance
-        .toggleAttractionFavorite(attraction.id, _uid, tripId, !attraction.isSavedForTrip(_uid, tripId));
+    return CatalogRepository.instance.toggleAttractionFavorite(
+      attraction.id,
+      _uid,
+      tripId,
+      !attraction.isSavedForTrip(_uid, tripId),
+      categories: attraction.categoryTags,
+    );
   }
 
   Future<void> toggleRestaurantFavorite(CatalogRestaurant restaurant) {
     final tripId = selectedTrip?.id;
     if (tripId == null) return Future.value();
-    return CatalogRepository.instance
-        .toggleRestaurantFavorite(restaurant.id, _uid, tripId, !restaurant.isSavedForTrip(_uid, tripId));
+    return CatalogRepository.instance.toggleRestaurantFavorite(
+      restaurant.id,
+      _uid,
+      tripId,
+      !restaurant.isSavedForTrip(_uid, tripId),
+      cuisineTags: restaurant.cuisineTags,
+    );
   }
 
   /// Guards the `CurrencyService.instance.ensureRatesLoaded().then(...)`
@@ -510,6 +578,8 @@ class ExploreController extends ChangeNotifier {
     _disposed = true;
     _attractionsSub?.cancel();
     _restaurantsSub?.cancel();
+    _attractionAffinitySub?.cancel();
+    _restaurantAffinitySub?.cancel();
     _tripsSub?.cancel();
     _profileSub?.cancel();
     super.dispose();

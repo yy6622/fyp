@@ -6,7 +6,7 @@
 import { db, storage } from "./firebase-config.js";
 import {
   collection, collectionGroup, doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc,
-  setDoc, query, where, limit, serverTimestamp, deleteField, writeBatch, getCountFromServer,
+  setDoc, query, where, limit, serverTimestamp, deleteField, increment,
 } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
 import {
   ref as storageRef, uploadBytes, getDownloadURL, deleteObject,
@@ -70,8 +70,38 @@ export async function listPartners() {
   const items = await all(query(col("insurance_partners")));
   return items.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
 }
-export async function setPartnerStatus(uid, status) {
-  await updateDoc(doc(db, "insurance_partners", uid), { status });
+/**
+ * `extra` is for anything a specific transition wants to attach (e.g.
+ * { rejectionReason } when rejecting — see admin/insurance.html and
+ * admin/insurance-partners.html). rejectedAt/blockedAt are stamped here,
+ * not by the caller, so every reject/approve goes through the same
+ * timestamp logic no matter which page triggered it:
+ * - rejected → stamps rejectedAt (requireRole()'s auto-block check in
+ *   auth-guard.js reads this to compute the 30-day countdown).
+ * - approved → clears rejectionReason/rejectedAt/blockedAt, so a partner
+ *   who gets re-approved after a rejection (or even after being
+ *   auto-blocked) doesn't carry stale rejection data forward.
+ */
+export async function setPartnerStatus(uid, status, extra = {}) {
+  const payload = { status, ...extra };
+  if (status === "rejected") {
+    payload.rejectedAt = serverTimestamp();
+  } else if (status === "approved") {
+    payload.approvedAt = serverTimestamp();
+    payload.rejectionReason = deleteField();
+    payload.rejectedAt = deleteField();
+    payload.blockedAt = deleteField();
+  }
+  await updateDoc(doc(db, "insurance_partners", uid), payload);
+}
+/** Pending-partner count for the sidebar notification dot — "pending" or
+ * no status at all (a brand-new self-registration hasn't necessarily had
+ * the field set client-side the instant it lands, though registerWithRole
+ * always does; kept as a defensive fallback matching renderPartners()'s
+ * own `status === "pending" || !status` filter elsewhere). */
+export async function countPendingPartners() {
+  const items = await listPartners();
+  return items.filter((p) => p.status === "pending" || !p.status).length;
 }
 
 // ==================== INSURANCE PLANS (insurance_plans/{id}) ====================
@@ -219,6 +249,56 @@ function debugIgnore(e) {
   // Storage ref (e.g. a seeded Unsplash URL) — neither should block saving.
 }
 
+// ==================== CATALOG RESTAURANTS ====================
+// Originally restaurants had no admin CRUD equivalent of
+// listAttractions()/admin/attractions.html, since they have no
+// curated-collection source like catalog_places (see
+// lib/repositories/catalog_repository.dart) — admin/attractions.html (now
+// a tabbed "Places Management" page) and admin/restaurant-form.html added
+// that below, for the same reason attractions got one: an admin needs to
+// add/fix a restaurant by hand sometimes, not just wait for the next live
+// OSM refresh or bulk import.
+// (Also used to back admin/translate-names.html, a one-click
+// name-translation backfill tool — removed once the backfill finished; the
+// name-translation logic itself stays live in
+// lib/services/name_translation_service.dart +
+// lib/repositories/catalog_repository.dart, which keeps auto-translating
+// any new non-English name a future catalog refresh picks up.)
+export async function listAllRestaurants() {
+  return all(query(col("catalog_restaurants")));
+}
+/** Single restaurant by id — used by the Edit path of admin/restaurant-form.html. */
+export async function getRestaurant(id) {
+  const snap = await getDoc(doc(db, "catalog_restaurants", id));
+  return snap.exists() ? { id: snap.id, ...snap.data() } : null;
+}
+/** Pre-allocates a Firestore doc ref so its id is known before save. */
+export function newRestaurantRef() {
+  return doc(col("catalog_restaurants"));
+}
+/** Writes admin/restaurant-form.html's fields in the SAME camelCase
+ * convention lib/repositories/catalog_repository.dart's live-refresh path
+ * (`_refreshRestaurants`) already writes — name/cuisineTags/location/
+ * priceRange/openingHours/image/description — so a restaurant added or
+ * edited here is read by watchRestaurants() exactly like one the app
+ * found on OpenStreetMap, with no snake_case/GeoPoint quirks (see that
+ * file's big comment on catalog_restaurants' two writer conventions). */
+export async function createRestaurant(ref, data) {
+  await setDoc(ref, {
+    ...data,
+    favoritedBy: [],
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+  return ref;
+}
+export async function updateRestaurant(id, data) {
+  await updateDoc(doc(db, "catalog_restaurants", id), { ...data, updatedAt: serverTimestamp() });
+}
+export async function deleteRestaurant(id) {
+  await deleteDoc(doc(db, "catalog_restaurants", id));
+}
+
 // ==================== CONTENT MODERATION (posts/{id}) — shared w/ mobile app ====================
 export async function listReportedPosts() {
   return all(query(col("posts"), where("reported", "==", true)));
@@ -230,10 +310,83 @@ export async function listAllPosts() {
 export async function approvePostReport(postId) {
   await updateDoc(doc(db, "posts", postId), {
     reported: false, reportReason: deleteField(), reportedBy: deleteField(), reportedAt: deleteField(),
+    // Also clears the AI content-filter hold (see
+    // CommunityRepository.createPost / watchPosts in the Flutter app) —
+    // without this, an approved post that was auto-flagged would stay
+    // invisible to everyone but its author forever, even after approval.
+    // Harmless no-op field delete on a post that was never auto-flagged.
+    autoFlagged: deleteField(),
   });
 }
 export async function rejectPost(postId) {
   await deleteDoc(doc(db, "posts", postId));
+}
+
+// ==================== REPORTED REVIEWS (collectionGroup "reviews") ====================
+// A review is reported the same way a whole post is (see
+// review_helpers.dart's addReviewFor on the Flutter side), but it lives in
+// a `reviews` subcollection under a catalog_hotels/catalog_restaurants/
+// catalog_attractions/posts doc rather than being a top-level doc itself —
+// a collectionGroup query is the only way to find every flagged one at
+// once across all four parent collection types. Needs firestore.rules'
+// per-collection `match /reviews/{reviewId}` admin bypass on update/delete
+// (added alongside this feature) deployed before approve/reject will work.
+export async function listFlaggedReviews() {
+  const snap = await getDocs(query(collectionGroup(db, "reviews"), where("reported", "==", true)));
+  return Promise.all(
+    snap.docs.map(async (d) => {
+      const parentRef = d.ref.parent.parent; // the hotel/restaurant/attraction/post doc this review is under
+      const parentCollection = parentRef?.parent?.id || "";
+      let parentName = "Unknown";
+      if (parentRef) {
+        try {
+          const parentSnap = await getDoc(parentRef);
+          const pd = parentSnap.exists() ? parentSnap.data() : null;
+          parentName = pd?.name || pd?.title || "Untitled";
+        } catch (_) {
+          // Deleted/unreadable parent (e.g. the hotel/post was since
+          // removed) — still show the review itself, just without context.
+        }
+      }
+      return { id: d.id, ref: d.ref, parentRef, parentCollection, parentName, ...d.data() };
+    })
+  );
+}
+/** Cheap count for the sidebar notification dot — just `snap.size`, no
+ * per-review parent-doc lookups (those are only needed to *display* a
+ * review, in listFlaggedReviews() above; the dot only needs a number, and
+ * this runs on every admin page load via mountSidebarNav()). */
+export async function countFlaggedReviews() {
+  const snap = await getDocs(query(collectionGroup(db, "reviews"), where("reported", "==", true)));
+  return snap.size;
+}
+
+/** Clears the report/auto-flag fields on a review doc, and finishes the
+ * rating-average write addReviewFor (Flutter side) deliberately deferred
+ * for a flagged review: bumps ratingSum/ratingCount on the parent for a
+ * hotel/restaurant/attraction, or sets ratings.<uid> directly for a
+ * community post (posts track their average through a per-uid map, not a
+ * summed pair — same split the Flutter addReviewFor/addReview already
+ * make on write). [review] is one entry from listFlaggedReviews(). */
+export async function approveReview(review) {
+  await updateDoc(review.ref, {
+    reported: false, reportReason: deleteField(), reportedBy: deleteField(), reportedAt: deleteField(),
+    autoFlagged: deleteField(),
+  });
+  if (!review.parentRef) return;
+  if (review.parentCollection === "posts") {
+    await updateDoc(review.parentRef, { [`ratings.${review.authorId}`]: review.rating });
+  } else {
+    await updateDoc(review.parentRef, { ratingSum: increment(review.rating || 0), ratingCount: increment(1) });
+  }
+}
+
+/** Deletes the review outright. No aggregate "undo" needed on the parent
+ * — a flagged review's rating was never bumped into its average in the
+ * first place (see addReviewFor's doc comment), so rejecting it just
+ * removes the review doc, nothing more. */
+export async function rejectReview(review) {
+  await deleteDoc(review.ref);
 }
 
 // ==================== COMMUNITY POST ANALYSIS (posts/{id}, post_view_stats/{YYYY-MM}) ====================
@@ -296,76 +449,57 @@ export async function loadAdminOverviewData() {
   return { users, attractions, plans, claims, txns };
 }
 
-// ==================== CATALOG PLACES MIGRATION (one-off tool) ====================
-// `places` is the pre-scraped OSM dataset CatalogRepository.refreshAttractions
-// reads from (see lib/repositories/catalog_repository.dart) — never written by
-// this console. `catalog_places` used to be a different, now-unused seeded
-// collection from an earlier version of the app; nothing in the current
-// Flutter codebase reads it any more. This is the one-off tool
-// (admin/migrate-places.html) that retires the old catalog_places and
-// promotes `places` to that name, matching the catalog_* naming convention
-// every other collection here already follows (catalog_flights/_hotels/
-// _attractions/_restaurants). Needs firestore.rules' catalog_places + places
-// match blocks deployed first (admin create/delete on both) — see that
-// file's comments.
-const BATCH_LIMIT = 450; // Firestore's hard cap is 500 writes/batch; stay under it for headroom.
-
-async function countDocs(name) {
-  const snap = await getCountFromServer(col(name));
-  return snap.data().count;
+// ==================== COUNTRY EMERGENCY INFO (country_emergency_info/{countryKey}) ====================
+// Admin-entered reference data read by the Flutter app's Group > Emergency
+// tab (see lib/repositories/country_emergency_repository.dart). The parent
+// doc is destination-only (local police/ambulance/fire numbers — the same
+// regardless of the trip member's own nationality), falling back to the
+// static lib/data/emergency_info.dart maps for any destination not (yet)
+// entered here. countryKey is the same lowercased country-name convention
+// emergency_info.dart already uses (e.g. "south korea", "united kingdom").
+export async function listCountryEmergencyInfo() {
+  return all(query(col("country_emergency_info")));
+}
+export async function getCountryEmergencyInfo(countryKey) {
+  const snap = await getDoc(doc(db, "country_emergency_info", countryKey));
+  return snap.exists() ? { id: snap.id, ...snap.data() } : null;
+}
+export async function saveCountryEmergencyInfo(countryKey, data) {
+  await setDoc(doc(db, "country_emergency_info", countryKey), { ...data, updatedAt: serverTimestamp() }, { merge: true });
+}
+export async function deleteCountryEmergencyInfo(countryKey) {
+  await deleteDoc(doc(db, "country_emergency_info", countryKey));
 }
 
-/** Counts for the confirmation screen, before anything destructive runs. */
-export async function getPlacesMigrationCounts() {
-  const [oldCatalogPlaces, places] = await Promise.all([countDocs("catalog_places"), countDocs("places")]);
-  return { oldCatalogPlaces, places };
+// ---- Embassies (country_emergency_info/{countryKey}/embassies/{homeCountryKey}) ----
+// The app isn't used only by Malaysians, so a destination can have more
+// than one home country's embassy on file — EmbassyPage looks up the
+// SIGNED-IN USER'S OWN country (users/{uid}.country, Account Setting's
+// "Country/Region") rather than always assuming Malaysia.
+// homeCountryKey follows the same lowercased convention as countryKey.
+function embassiesCol(countryKey) {
+  return collection(db, "country_emergency_info", countryKey, "embassies");
 }
-
-async function deleteAllDocs(name, onProgress) {
-  const snap = await getDocs(col(name));
-  const docs = snap.docs;
-  for (let i = 0; i < docs.length; i += BATCH_LIMIT) {
-    const batch = writeBatch(db);
-    docs.slice(i, i + BATCH_LIMIT).forEach((d) => batch.delete(d.ref));
-    await batch.commit();
-    onProgress?.(Math.min(i + BATCH_LIMIT, docs.length), docs.length);
-  }
-  return docs.length;
+export async function listEmbassies(countryKey) {
+  return all(query(embassiesCol(countryKey)));
 }
-
-/** Read-only: fetches the current catalog_places' raw docs so the caller can
- * trigger a local backup-file download BEFORE calling [runPlacesMigration]
- * below — kept as its own function (rather than folded into the migration
- * function and handed back at the end) specifically so that download can
- * happen first, before anything destructive runs. */
-export async function backupCatalogPlaces() {
-  const snap = await getDocs(col("catalog_places"));
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+export async function getEmbassy(countryKey, homeCountryKey) {
+  const snap = await getDoc(doc(embassiesCol(countryKey), homeCountryKey));
+  return snap.exists() ? { id: snap.id, ...snap.data() } : null;
 }
-
-/** The destructive part of the migration — call only after the caller has
- * already backed up + downloaded the current catalog_places via
- * [backupCatalogPlaces] above. Deletes every existing catalog_places doc,
- * copies every `places` doc into catalog_places under the SAME doc id (so
- * anything that ever referenced a places doc id — e.g. catalog_attractions'
- * `place_<id>` doc ids — still lines up), then empties `places`. Each step
- * is batched (Firestore's 500-writes-per-batch limit). onProgress(stage,
- * current, total) is called throughout for a live progress UI. */
-export async function runPlacesMigration(onProgress) {
-  const oldCatalogPlacesDeleted = await deleteAllDocs("catalog_places", (done, total) => onProgress?.("deleting-old", done, total));
-
-  const placesSnap = await getDocs(col("places"));
-  const placesDocs = placesSnap.docs;
-  onProgress?.("copying", 0, placesDocs.length);
-  for (let i = 0; i < placesDocs.length; i += BATCH_LIMIT) {
-    const batch = writeBatch(db);
-    placesDocs.slice(i, i + BATCH_LIMIT).forEach((d) => batch.set(doc(db, "catalog_places", d.id), d.data()));
-    await batch.commit();
-    onProgress?.("copying", Math.min(i + BATCH_LIMIT, placesDocs.length), placesDocs.length);
-  }
-
-  onProgress?.("deleting-places", 0, placesDocs.length);
-  await deleteAllDocs("places", (done, total) => onProgress?.("deleting-places", done, total));
-
-  return { oldCatalogPlacesDeleted, copied: placesDocs.length };
+export async function saveEmbassy(countryKey, homeCountryKey, data) {
+  await setDoc(doc(embassiesCol(countryKey), homeCountryKey), { ...data, updatedAt: serverTimestamp() }, { merge: true });
+}
+export async function deleteEmbassy(countryKey, homeCountryKey) {
+  await deleteDoc(doc(embassiesCol(countryKey), homeCountryKey));
+}
+/** Uploads one embassy photo per (destination, home country) pair,
+ * overwriting any previous photo at the same path (same "one file per
+ * entity" convention as partner_logos/avatars). */
+export async function uploadEmbassyPhoto(countryKey, homeCountryKey, file) {
+  const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
+  const path = `country_emergency_photos/${countryKey}/${homeCountryKey}.${ext}`;
+  const ref = storageRef(storage, path);
+  await uploadBytes(ref, file);
+  return getDownloadURL(ref);
 }

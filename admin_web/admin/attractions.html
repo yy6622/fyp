@@ -3,11 +3,11 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Attraction Management — Voya Admin</title>
-<link rel="stylesheet" href="../css/tokens.css?v=20261006b" />
-<link rel="stylesheet" href="../css/base.css?v=20261006b" />
-<link rel="stylesheet" href="../css/layout.css?v=20261006b" />
-<link rel="stylesheet" href="../css/components.css?v=20261006b" />
+<title>Places Management — Voya Admin</title>
+<link rel="stylesheet" href="../css/tokens.css?v=20261022" />
+<link rel="stylesheet" href="../css/base.css?v=20261022" />
+<link rel="stylesheet" href="../css/layout.css?v=20261022" />
+<link rel="stylesheet" href="../css/components.css?v=20261022" />
 </head>
 <body>
 <div class="shell">
@@ -26,12 +26,17 @@
     <div class="topbar">
       <div>
         <button class="menu-toggle" id="menuToggle"><span data-icon="menu"></span></button>
-        <h1 class="h1">Attraction Management</h1>
-        <p class="subtitle">Manage attraction details and visibility</p>
+        <h1 class="h1">Places Management</h1>
+        <p class="subtitle" id="pageSubtitle">Manage attraction details and visibility</p>
       </div>
       <div class="inline-flex" style="gap:10px;">
         <button class="btn btn-primary" id="addBtn"><span data-icon="plus"></span>Add attraction</button>
       </div>
+    </div>
+
+    <div class="tabs" id="placesTabs">
+      <button class="tab-btn active" data-tab="attractions">Attractions</button>
+      <button class="tab-btn" data-tab="restaurants">Restaurants</button>
     </div>
 
     <div class="stat-grid" id="statGrid"><div class="skeleton" style="height:90px;grid-column:1/-1;"></div></div>
@@ -48,12 +53,12 @@
 
     <div class="table-wrap scroll-x">
       <table class="data-table">
-        <thead><tr><th>Attraction</th><th>Category</th><th>Location</th><th>Updated</th><th>Status</th><th></th></tr></thead>
+        <thead id="tableHead"><tr><th>Attraction</th><th>Category</th><th>Location</th><th>Updated</th><th>Status</th><th></th></tr></thead>
         <tbody id="tableBody"><tr><td colspan="6"><div class="skeleton" style="height:40px;"></div></td></tr></tbody>
       </table>
       <div class="empty-state" id="emptyState" style="display:none;">
         <span data-icon="map-pin" class="icon-lg"></span>
-        <div class="h3">No attractions found</div>
+        <div class="h3" id="emptyTitle">No attractions found</div>
         <p class="small">Add one, or try a different search.</p>
       </div>
     </div>
@@ -64,102 +69,266 @@
   </main>
 </div>
 
-<div class="modal-backdrop" id="attractionModal">
+<div class="modal-backdrop" id="placeModal">
   <div class="modal" style="max-width:600px;">
-    <div class="modal-head"><h3 class="h2">Attraction detail</h3><button class="modal-close" data-close><span data-icon="x"></span></button></div>
-    <div id="attractionModalBody"></div>
+    <div class="modal-head"><h3 class="h2" id="placeModalTitle">Attraction detail</h3><button class="modal-close" data-close><span data-icon="x"></span></button></div>
+    <div id="placeModalBody"></div>
   </div>
 </div>
 
 <script type="module">
-import { requireRole } from "../js/auth-guard.js?v=20261007e";
-import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261007e";
-import { mountIcons } from "../js/icons.js?v=20261007e";
-import { listAttractions, deleteAttraction } from "../js/data.js?v=20261007e";
+import { requireRole } from "../js/auth-guard.js?v=20261022";
+import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261022";
+import { mountIcons } from "../js/icons.js?v=20261022";
+import { listAttractions, deleteAttraction, listAllRestaurants, deleteRestaurant } from "../js/data.js?v=20261022";
 import {
   number, shortDate, fullDate, statusBadge, escapeHtml, paginate, renderPager, toast, confirmDialog,
   statCard, plainCard, trendDelta, countBefore, monthBounds, openModal, closeModal, wireModalDismiss,
-} from "../js/ui.js?v=20261007e";
+} from "../js/ui.js?v=20261022";
 
 mountSidebarNav({ role: "admin", active: "attractions" });
 const session = await requireRole("admin", "login.html");
-let items = [], filtered = [], page = 1;
+// Lets a link into this page pick which tab opens — e.g. restaurant-form.html
+// redirects back to "attractions.html?tab=restaurants" after saving, so
+// adding/editing a restaurant doesn't dump you back on the Attractions tab.
+const requestedTab = new URLSearchParams(location.search).get("tab");
+let activeTab = requestedTab === "restaurants" ? "restaurants" : "attractions";
+let filtered = [], page = 1;
 const PAGE_SIZE = 8;
+// Cache per tab so switching back and forth doesn't re-fetch every time.
+const cache = {};
+
+// catalog_restaurants carries docs from two different writers with two
+// different field conventions (camelCase live-refresh vs. snake_case bulk
+// import — see lib/repositories/catalog_repository.dart's big comment on
+// this). These read-only display helpers mirror that same fallback logic
+// so this table shows real data regardless of which writer wrote a given
+// restaurant doc, without changing anything on disk.
+function restaurantCuisineLabel(r) {
+  const tags = Array.isArray(r.cuisineTags) && r.cuisineTags.length ? r.cuisineTags : (Array.isArray(r.cuisine) ? r.cuisine : (typeof r.cuisine === "string" && r.cuisine ? [r.cuisine] : []));
+  return tags.length ? tags.slice(0, 2).join(", ") : "—";
+}
+function restaurantLocationLabel(r) {
+  if (typeof r.location === "string" && r.location) return r.location;
+  if (r.city && r.country) return `${r.city}, ${r.country}`;
+  return r.city || r.country || "—";
+}
+function restaurantImageUrl(r) {
+  return r.image || r.image_url || "";
+}
+function restaurantPriceRange(r) {
+  return r.priceRange || r.price_range || "—";
+}
+function restaurantOpeningHours(r) {
+  return r.openingHours || r.opening_hours || "—";
+}
+function restaurantDescription(r) {
+  return r.description || r.about || "—";
+}
+
+const TABS = {
+  attractions: {
+    noun: "attraction", nounCap: "Attraction", icon: "map-pin",
+    href: "attraction-form.html",
+    subtitle: "Manage attraction details and visibility",
+    async list() {
+      const items = await listAttractions();
+      items.forEach((a) => (a.status = a.status || "active"));
+      return items;
+    },
+    hasStatus: true,
+    columns: ["Attraction", "Category", "Location", "Updated", "Status", ""],
+    row(a) {
+      return `
+        <td class="cell-strong">${escapeHtml(a.name || "—")}</td>
+        <td class="muted">${escapeHtml(a.category || "—")}</td>
+        <td class="muted">${escapeHtml(a.location || "—")}</td>
+        <td class="muted">${shortDate(a.updatedAt)}</td>
+        <td>${statusBadge(a.status)}</td>`;
+    },
+    matches(a, q) { return (a.name || "").toLowerCase().includes(q) || (a.location || "").toLowerCase().includes(q); },
+    stats(items) {
+      const active = items.filter((a) => a.status === "active");
+      const pending = items.filter((a) => a.status === "pending").length;
+      const suspended = items.filter((a) => a.status === "suspended").length;
+      const { start: thisMonthStart } = monthBounds(0);
+      const totalDelta = trendDelta(items.length, countBefore(items, "createdAt", thisMonthStart));
+      const activeDelta = trendDelta(active.length, countBefore(active, "createdAt", thisMonthStart));
+      return [
+        statCard("Attractions", number(items.length), "map-pin", totalDelta),
+        statCard("Active", number(active.length), "sparkle", activeDelta),
+        plainCard("Pending", number(pending)),
+        plainCard("Suspended", number(suspended)),
+      ];
+    },
+    detail(a) {
+      const row = (label, value) => `<div class="field" style="margin-bottom:12px;"><label>${label}</label><p class="value">${value}</p></div>`;
+      const extraCategories = (a.categories || []).filter((cat) => cat !== (a.category || ""));
+      const categoryLine = extraCategories.length
+        ? `${escapeHtml(a.category || "—")} <span class="muted small">(+ ${extraCategories.map(escapeHtml).join(", ")})</span>`
+        : escapeHtml(a.category || "—");
+      const isFree = a.price === "Free entry" || (!a.fees?.adult && !a.fees?.child && !a.fees?.senior && !a.price);
+      const feeLine = isFree
+        ? "Free entry"
+        : [a.fees?.adult && `Adult ${a.fees.adult}`, a.fees?.child && `Child ${a.fees.child}`, a.fees?.senior && `Senior ${a.fees.senior}`].filter(Boolean).join(" · ") || "—";
+      return `
+        ${a.image ? `<img src="${a.image}" style="width:100%;border-radius:12px;margin-bottom:16px;max-height:220px;object-fit:cover;" />` : ""}
+        <div class="form-grid">
+          ${row("Name", escapeHtml(a.name || "—"))}
+          ${row("Status", statusBadge(a.status))}
+          ${row("Category", categoryLine)}
+          ${row("Location", escapeHtml(a.location || "—"))}
+          ${row("Full address", escapeHtml(a.address || "—"))}
+          ${row("Recommended duration", escapeHtml(a.recommendedDuration || "—"))}
+          ${row("Entry fee", feeLine)}
+          ${row("Opening hours", escapeHtml(a.openingHours || "—"))}
+          ${row("Phone", escapeHtml(a.phone || "—"))}
+          ${row("Website", a.website ? `<a href="${escapeHtml(/^https?:\/\//i.test(a.website) ? a.website : `https://${a.website}`)}" target="_blank" rel="noopener">${escapeHtml(a.website)}</a>` : "—")}
+          ${row("Rating", a.rating ? `${escapeHtml(String(a.rating))}${a.reviews ? ` <span class="muted small">(${escapeHtml(String(a.reviews))} reviews)</span>` : ""}` : "—")}
+          ${row("Facilities", (a.facilities || []).length ? a.facilities.map(escapeHtml).join(", ") : "—")}
+          ${row("Highlights", (a.highlights || []).length ? a.highlights.map(escapeHtml).join(", ") : "—")}
+          ${row("Last updated", shortDate(a.updatedAt))}
+          ${row("Added", fullDate(a.createdAt))}
+        </div>`;
+    },
+    async remove(id, name) {
+      await deleteAttraction(id);
+    },
+  },
+  restaurants: {
+    noun: "restaurant", nounCap: "Restaurant", icon: "coin",
+    href: "restaurant-form.html",
+    subtitle: "Manage restaurant details shown in the app's Explore catalogue.",
+    async list() { return listAllRestaurants(); },
+    hasStatus: false,
+    columns: ["Restaurant", "Cuisine", "Location", "Updated", ""],
+    row(r) {
+      return `
+        <td class="cell-strong">${escapeHtml(r.name || "—")}</td>
+        <td class="muted">${escapeHtml(restaurantCuisineLabel(r))}</td>
+        <td class="muted">${escapeHtml(restaurantLocationLabel(r))}</td>
+        <td class="muted">${shortDate(r.updatedAt)}</td>`;
+    },
+    matches(r, q) { return (r.name || "").toLowerCase().includes(q) || restaurantLocationLabel(r).toLowerCase().includes(q); },
+    stats(items) {
+      const { start: thisMonthStart } = monthBounds(0);
+      const totalDelta = trendDelta(items.length, countBefore(items, "createdAt", thisMonthStart));
+      // Mirrors Attractions' Active/Pending/Suspended breakdown — three
+      // buckets that sum to the total, instead of three counts that all
+      // land on roughly the same number. Almost every restaurant has
+      // *an* image (from the bulk-import enrichment pipeline), so "with
+      // a photo" told the admin nothing useful; whether that image is
+      // really a photo of that restaurant is the actually meaningful
+      // split, and `image_is_actual_place` is the honest-provenance flag
+      // the OSM-refresh/bulk-import pipelines already write.
+      const noPhoto = items.filter((r) => !restaurantImageUrl(r)).length;
+      const realPhoto = items.filter((r) => restaurantImageUrl(r) && r.image_is_actual_place === true).length;
+      const genericPhoto = items.length - noPhoto - realPhoto;
+      return [
+        statCard("Restaurants", number(items.length), "coin", totalDelta),
+        plainCard("Real photo", number(realPhoto)),
+        plainCard("Generic photo", number(genericPhoto)),
+        plainCard("No photo", number(noPhoto)),
+      ];
+    },
+    detail(r) {
+      const row = (label, value) => `<div class="field" style="margin-bottom:12px;"><label>${label}</label><p class="value">${value}</p></div>`;
+      const image = restaurantImageUrl(r);
+      const website = r.website || "";
+      return `
+        ${image ? `<img src="${image}" style="width:100%;border-radius:12px;margin-bottom:16px;max-height:220px;object-fit:cover;" />` : ""}
+        <div class="form-grid">
+          ${row("Name", escapeHtml(r.name || "—"))}
+          ${row("Cuisine", escapeHtml(restaurantCuisineLabel(r)))}
+          ${row("Location", escapeHtml(restaurantLocationLabel(r)))}
+          ${row("Full address", escapeHtml(r.address || "—"))}
+          ${row("Price range", escapeHtml(restaurantPriceRange(r)))}
+          ${row("Opening hours", escapeHtml(restaurantOpeningHours(r)))}
+          ${row("Phone", escapeHtml(r.phone || "—"))}
+          ${row("Website", website ? `<a href="${escapeHtml(/^https?:\/\//i.test(website) ? website : `https://${website}`)}" target="_blank" rel="noopener">${escapeHtml(website)}</a>` : "—")}
+          ${row("Rating", r.rating ? `${escapeHtml(String(r.rating))}${r.reviews ? ` <span class="muted small">(${escapeHtml(String(r.reviews))} reviews)</span>` : ""}` : "—")}
+          ${row("About", escapeHtml(restaurantDescription(r)))}
+          ${row("Last updated", shortDate(r.updatedAt))}
+          ${row("Added", fullDate(r.createdAt))}
+        </div>`;
+    },
+    async remove(id, name) {
+      await deleteRestaurant(id);
+    },
+  },
+};
 
 if (session) {
   setSidebarUser({ displayName: session.profile.name || "Admin", roleLabel: "Administrator" });
   wireModalDismiss();
+  document.querySelectorAll("#placesTabs .tab-btn").forEach((t) => t.classList.toggle("active", t.dataset.tab === activeTab));
+  applyTabChrome();
   await load();
 }
 
+function applyTabChrome() {
+  const cfg = TABS[activeTab];
+  document.getElementById("pageSubtitle").textContent = cfg.subtitle;
+  document.getElementById("addBtn").innerHTML = `<span data-icon="plus"></span>Add ${cfg.noun}`;
+  document.getElementById("statusFilter").style.display = cfg.hasStatus ? "" : "none";
+  document.getElementById("tableHead").innerHTML = `<tr>${cfg.columns.map((c) => `<th>${c}</th>`).join("")}</tr>`;
+  document.getElementById("emptyTitle").textContent = `No ${cfg.noun}s found`;
+  mountIcons(document);
+}
+
 async function load() {
-  items = await listAttractions();
-  items.forEach((a) => (a.status = a.status || "active"));
+  if (!cache[activeTab]) {
+    const cfg = TABS[activeTab];
+    document.getElementById("tableBody").innerHTML = `<tr><td colspan="${cfg.columns.length}"><div class="skeleton" style="height:40px;"></div></td></tr>`;
+    document.getElementById("statGrid").innerHTML = `<div class="skeleton" style="height:90px;grid-column:1/-1;"></div>`;
+    cache[activeTab] = await cfg.list();
+  }
   renderStats();
   applyFilters();
 }
 
 function renderStats() {
-  const active = items.filter((a) => a.status === "active");
-  const pending = items.filter((a) => a.status === "pending").length;
-  const suspended = items.filter((a) => a.status === "suspended").length;
-  // Real deltas (js/ui.js): Attractions/Active compare the current total
-  // to how many existed before this month. Pending/Suspended are live
-  // status snapshots with no honest baseline, so they're plainCards.
-  const { start: thisMonthStart } = monthBounds(0);
-  const totalDelta = trendDelta(items.length, countBefore(items, "createdAt", thisMonthStart));
-  const activeDelta = trendDelta(active.length, countBefore(active, "createdAt", thisMonthStart));
-  document.getElementById("statGrid").innerHTML = [
-    statCard("Attractions", number(items.length), "map-pin", totalDelta),
-    statCard("Active", number(active.length), "sparkle", activeDelta),
-    plainCard("Pending", number(pending)),
-    plainCard("Suspended", number(suspended)),
-  ].join("");
+  const cfg = TABS[activeTab];
+  document.getElementById("statGrid").innerHTML = cfg.stats(cache[activeTab]).join("");
   mountIcons(document);
 }
 
 function applyFilters() {
+  const cfg = TABS[activeTab];
   const q = document.getElementById("searchInput").value.trim().toLowerCase();
-  const status = document.getElementById("statusFilter").value;
-  filtered = items.filter((a) => {
-    const matchesQ = !q || (a.name || "").toLowerCase().includes(q) || (a.location || "").toLowerCase().includes(q);
-    return matchesQ && (!status || a.status === status);
+  const status = cfg.hasStatus ? document.getElementById("statusFilter").value : "";
+  filtered = cache[activeTab].filter((item) => {
+    const matchesQ = !q || cfg.matches(item, q);
+    return matchesQ && (!status || item.status === status);
   });
   page = 1;
   renderTable();
 }
 
 function renderTable() {
+  const cfg = TABS[activeTab];
   const { pageItems, pages, total } = paginate(filtered, page, PAGE_SIZE);
   const body = document.getElementById("tableBody");
   const empty = document.getElementById("emptyState");
   if (!pageItems.length) { body.innerHTML = ""; empty.style.display = "block"; }
   else {
     empty.style.display = "none";
-    body.innerHTML = pageItems.map((a) => `
-      <tr style="cursor:pointer;" data-open="${a.id}">
-        <td class="cell-strong">${escapeHtml(a.name || "—")}</td>
-        <td class="muted">${escapeHtml(a.category || "—")}</td>
-        <td class="muted">${escapeHtml(a.location || "—")}</td>
-        <td class="muted">${shortDate(a.updatedAt)}</td>
-        <td>${statusBadge(a.status)}</td>
+    body.innerHTML = pageItems.map((item) => `
+      <tr style="cursor:pointer;" data-open="${escapeHtml(item.id)}">
+        ${cfg.row(item)}
         <td>
           <div class="row-actions">
-            <button class="btn btn-outline btn-sm" data-edit="${a.id}"><span data-icon="edit" data-icon-size="14"></span></button>
-            <button class="btn btn-danger-outline btn-sm" data-del="${a.id}"><span data-icon="trash" data-icon-size="14"></span></button>
+            <button class="btn btn-outline btn-sm" data-edit="${escapeHtml(item.id)}"><span data-icon="edit" data-icon-size="14"></span></button>
+            <button class="btn btn-danger-outline btn-sm" data-del="${escapeHtml(item.id)}"><span data-icon="trash" data-icon-size="14"></span></button>
           </div>
         </td>
       </tr>`).join("");
-    // Click anywhere on the row to view the attraction's full detail in a
-    // popup — not a separate page. Clicks inside .row-actions (the edit
-    // pencil / delete trash buttons) are excluded so they keep their own
-    // behavior (edit still opens attraction-form.html; delete still deletes).
     body.querySelectorAll("[data-open]").forEach((row) => row.addEventListener("click", (e) => {
       if (e.target.closest(".row-actions")) return;
-      openAttractionDetail(row.dataset.open);
+      openDetail(row.dataset.open);
     }));
     body.querySelectorAll("[data-edit]").forEach((b) => b.addEventListener("click", () => {
-      location.href = `attraction-form.html?id=${encodeURIComponent(b.dataset.edit)}`;
+      location.href = `${cfg.href}?id=${encodeURIComponent(b.dataset.edit)}`;
     }));
     body.querySelectorAll("[data-del]").forEach((b) => b.addEventListener("click", () => remove(b.dataset.del)));
   }
@@ -169,70 +338,54 @@ function renderTable() {
   mountIcons(document);
 }
 
-/** Shows everything we know about one attraction — the table only has
- * room for Attraction/Category/Location/Updated/Status, but a real
- * catalog_attractions doc also carries address, fees, hours, contact
- * details, facilities and highlights — see attraction-form.html. */
-function openAttractionDetail(id) {
-  const a = items.find((x) => x.id === id);
-  if (!a) return;
-  const row = (label, value) => `<div class="field" style="margin-bottom:12px;"><label>${label}</label><p class="value">${value}</p></div>`;
-  const extraCategories = (a.categories || []).filter((cat) => cat !== (a.category || ""));
-  const categoryLine = extraCategories.length
-    ? `${escapeHtml(a.category || "—")} <span class="muted small">(+ ${extraCategories.map(escapeHtml).join(", ")})</span>`
-    : escapeHtml(a.category || "—");
-  const isFree = a.price === "Free entry" || (!a.fees?.adult && !a.fees?.child && !a.fees?.senior && !a.price);
-  const feeLine = isFree
-    ? "Free entry"
-    : [a.fees?.adult && `Adult ${a.fees.adult}`, a.fees?.child && `Child ${a.fees.child}`, a.fees?.senior && `Senior ${a.fees.senior}`].filter(Boolean).join(" · ") || "—";
-  document.getElementById("attractionModalBody").innerHTML = `
-    ${a.image ? `<img src="${a.image}" style="width:100%;border-radius:12px;margin-bottom:16px;max-height:220px;object-fit:cover;" />` : ""}
-    <div class="form-grid">
-      ${row("Name", escapeHtml(a.name || "—"))}
-      ${row("Status", statusBadge(a.status))}
-      ${row("Category", categoryLine)}
-      ${row("Location", escapeHtml(a.location || "—"))}
-      ${row("Full address", escapeHtml(a.address || "—"))}
-      ${row("Recommended duration", escapeHtml(a.recommendedDuration || "—"))}
-      ${row("Entry fee", feeLine)}
-      ${row("Opening hours", escapeHtml(a.openingHours || "—"))}
-      ${row("Phone", escapeHtml(a.phone || "—"))}
-      ${row("Website", a.website ? `<a href="${escapeHtml(/^https?:\/\//i.test(a.website) ? a.website : `https://${a.website}`)}" target="_blank" rel="noopener">${escapeHtml(a.website)}</a>` : "—")}
-      ${row("Rating", a.rating ? `${escapeHtml(String(a.rating))}${a.reviews ? ` <span class="muted small">(${escapeHtml(String(a.reviews))} reviews)</span>` : ""}` : "—")}
-      ${row("Facilities", (a.facilities || []).length ? a.facilities.map(escapeHtml).join(", ") : "—")}
-      ${row("Highlights", (a.highlights || []).length ? a.highlights.map(escapeHtml).join(", ") : "—")}
-      ${row("Last updated", shortDate(a.updatedAt))}
-      ${row("Added", fullDate(a.createdAt))}
-    </div>
+/** Shows everything we know about one place in a popup — the table only
+ * has room for a few columns, but a real doc carries much more. */
+function openDetail(id) {
+  const cfg = TABS[activeTab];
+  const item = cache[activeTab].find((x) => x.id === id);
+  if (!item) return;
+  document.getElementById("placeModalTitle").textContent = `${cfg.nounCap} detail`;
+  document.getElementById("placeModalBody").innerHTML = cfg.detail(item) + `
     <div class="form-actions">
-      <button class="btn btn-outline" data-modal-edit="${a.id}"><span data-icon="edit" data-icon-size="14"></span>Edit</button>
+      <button class="btn btn-outline" data-modal-edit="${escapeHtml(item.id)}"><span data-icon="edit" data-icon-size="14"></span>Edit</button>
     </div>`;
-  mountIcons(document.getElementById("attractionModalBody"));
-  document.getElementById("attractionModalBody").querySelector("[data-modal-edit]").onclick = () => {
-    closeModal("attractionModal");
-    location.href = `attraction-form.html?id=${encodeURIComponent(a.id)}`;
+  mountIcons(document.getElementById("placeModalBody"));
+  document.getElementById("placeModalBody").querySelector("[data-modal-edit]").onclick = () => {
+    closeModal("placeModal");
+    location.href = `${cfg.href}?id=${encodeURIComponent(item.id)}`;
   };
-  openModal("attractionModal");
+  openModal("placeModal");
 }
 
 async function remove(id) {
-  const a = items.find((x) => x.id === id);
+  const cfg = TABS[activeTab];
+  const item = cache[activeTab].find((x) => x.id === id);
   const ok = await confirmDialog({
-    title: `Delete "${a?.name || "this attraction"}"?`,
+    title: `Delete "${item?.name || `this ${cfg.noun}`}"?`,
     body: "This removes it from the Explore catalogue in the mobile app. This can't be undone.",
     confirmText: "Delete", danger: true,
   });
   if (!ok) return;
   try {
-    await deleteAttraction(id);
-    toast("Attraction deleted.", "success");
+    await cfg.remove(id, item?.name);
+    toast(`${cfg.nounCap} deleted.`, "success");
+    cache[activeTab] = null;
     await load();
   } catch (err) {
     toast(err.message || "Couldn't delete.", "error");
   }
 }
 
-document.getElementById("addBtn").addEventListener("click", () => { location.href = "attraction-form.html"; });
+document.querySelectorAll("#placesTabs .tab-btn").forEach((b) => b.addEventListener("click", async () => {
+  if (b.dataset.tab === activeTab) return;
+  activeTab = b.dataset.tab;
+  document.querySelectorAll("#placesTabs .tab-btn").forEach((t) => t.classList.toggle("active", t === b));
+  document.getElementById("searchInput").value = "";
+  applyTabChrome();
+  await load();
+}));
+
+document.getElementById("addBtn").addEventListener("click", () => { location.href = TABS[activeTab].href; });
 document.getElementById("searchInput").addEventListener("input", applyFilters);
 document.getElementById("statusFilter").addEventListener("change", applyFilters);
 </script>

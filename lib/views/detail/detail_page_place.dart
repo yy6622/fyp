@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import '../../models/nearby_models.dart';
 import '../../theme.dart';
 import '../shared/maps_launcher.dart';
-import '../shared/translated_text.dart';
 import 'detail_widgets.dart';
 
 // ---------------------------------------------------------------------
@@ -24,7 +23,7 @@ class DetailPagePlace extends StatelessWidget {
       body: SafeArea(
         child: Column(
           children: [
-            DetailHeader(title: place.name, imageUrl: place.image, translate: true),
+            DetailHeader(title: place.name, imageUrl: place.image),
             Expanded(
               child: ListView(
                 // ListView lays its children out full-width already (one
@@ -34,7 +33,7 @@ class DetailPagePlace extends StatelessWidget {
                 // the visual result is identical either way.
                 padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
                 children: [
-                  TranslatedText(place.name, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.navy)),
+                  Text(place.name, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.navy)),
                   const SizedBox(height: 6),
                   Text(place.categoryLabel, style: const TextStyle(fontSize: 12.5, color: AppColors.textGrey)),
                   const SizedBox(height: 12),

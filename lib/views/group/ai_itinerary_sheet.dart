@@ -5,6 +5,8 @@ import '../../models/day_plan_models.dart';
 import '../../repositories/trip_plan_edits.dart';
 import '../../repositories/trip_repository.dart';
 import '../../services/itinerary_ai_service.dart';
+import '../../services/discussion_summary_service.dart';
+import 'decide_now_sheet.dart';
 import '../../theme.dart';
 
 /// Opened from the chat's "AI Summarise" attachment option. Starts (or
@@ -99,6 +101,8 @@ class _AiItinerarySheetState extends State<_AiItinerarySheet> {
     super.initState();
     _job.addListener(_onJob);
     _syncSelection();
+    // The model's view of what is still undecided - behind the "Decide now" button below.
+    DiscussionSummaryService.instance.start(widget.controller.tripId);
   }
 
   @override
@@ -131,6 +135,7 @@ class _AiItinerarySheetState extends State<_AiItinerarySheet> {
 
   void _regenerate() {
     setState(() => _applyError = null);
+    DiscussionSummaryService.instance.start(widget.controller.tripId);
     ItineraryAiService.instance.clear(widget.controller.tripId);
     ItineraryAiService.instance.start(widget.controller.tripId);
   }
@@ -209,13 +214,6 @@ class _AiItinerarySheetState extends State<_AiItinerarySheet> {
     if (h == null) return time24;
     final h12 = h % 12 == 0 ? 12 : h % 12;
     return '$h12:${parts[1]} ${h < 12 ? 'AM' : 'PM'}';
-  }
-
-  String _dayTitle(int day) {
-    for (final plan in widget.controller.days) {
-      if (plan.day == day) return 'Day $day  ·  ${plan.weekday} ${plan.date}';
-    }
-    return 'Day $day';
   }
 
   @override
@@ -374,66 +372,155 @@ class _AiItinerarySheetState extends State<_AiItinerarySheet> {
       );
     }
 
-    final addDays = <int>{for (final a in result.add) a.day}.toList()..sort();
+    final planDays = <int>{
+      for (final a in result.add) a.day,
+      for (final u in result.update) u.toDay,
+    }.toList()
+      ..sort();
     return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+      padding: const EdgeInsets.fromLTRB(16, 6, 16, 16),
       children: [
-        Text(
-          'Based on ${result.messageCount} messages, ${result.savedCount} saved '
-          '${result.savedCount == 1 ? 'place' : 'places'} and your current plan. Tick what you want applied.',
-          style: const TextStyle(fontSize: 12, color: AppColors.textGrey),
-        ),
+        _overview(result),
         if (_applyError != null) ...[
           const SizedBox(height: 10),
           Text(_applyError!, style: const TextStyle(fontSize: 12, color: Colors.redAccent)),
         ],
-        if (result.add.isNotEmpty) ...[
-          _sectionTitle('Add to plan'),
-          for (final day in addDays) ...[
-            Padding(
-              padding: const EdgeInsets.only(top: 8, bottom: 2),
-              child: Text(_dayTitle(day),
-                  style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: AppColors.navy)),
-            ),
-            for (var i = 0; i < result.add.length; i++)
-              if (result.add[i].day == day) _addRow(result.add[i], 'a$i'),
-          ],
-        ],
-        if (result.update.isNotEmpty) ...[
-          _sectionTitle('Change in your plan'),
-          for (var i = 0; i < result.update.length; i++) _updateRow(result.update[i], 'u$i'),
+        if (planDays.isNotEmpty) ...[
+          _sectionTitle('Suggested plan', hint: 'Tick what to add. Grey rows are already in your plan, so nothing overlaps.'),
+          for (final day in planDays) _dayBlock(day, result),
         ],
         if (result.remove.isNotEmpty) ...[
-          _sectionTitle('Remove from your plan', hint: 'The group agreed to drop these. Tick to remove.'),
+          _sectionTitle('Take out of the plan', hint: 'The group agreed to drop these. Tick to remove.'),
           for (var i = 0; i < result.remove.length; i++) _removeRow(result.remove[i], 'r$i'),
         ],
         if (result.unresolved.isNotEmpty) ...[
-          _sectionTitle('Still undecided', hint: 'Mentioned in the chat, but the group hasn\'t agreed yet.'),
-          const SizedBox(height: 6),
+          _undecidedHeader(),
+          const SizedBox(height: 8),
           Wrap(
             spacing: 8,
             runSpacing: 8,
-            children: [
-              for (final name in result.unresolved)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(color: AppColors.chipGrey, borderRadius: BorderRadius.circular(16)),
-                  child: Text(name, style: const TextStyle(fontSize: 12, color: AppColors.navy)),
-                ),
-            ],
+            children: [for (final name in result.unresolved) _chip(name, Icons.help_outline, AppColors.orange)],
           ),
+        ],
+        if (result.ideas.isNotEmpty) ...[
+          _sectionTitle('Ideas without a place yet'),
+          const SizedBox(height: 4),
+          for (final idea in result.ideas) _ideaRow(idea),
         ],
       ],
     );
   }
 
-  Widget _sectionTitle(String title, {String? hint}) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 18),
+  /// "Still undecided" + a "Decide now" button (agree / skip / vote / split, see decide_now_sheet.dart),
+  /// enabled once the discussion summary for this trip is ready.
+  Widget _undecidedHeader() {
+    return ValueListenableBuilder<DiscussionSummaryJob>(
+      valueListenable: DiscussionSummaryService.instance.jobFor(widget.controller.tripId),
+      builder: (context, job, _) {
+        final summary = job.status == DiscussionSummaryStatus.ready ? job.result : null;
+        final open = summary == null ? 0 : summary.pending.where((p) => p.decided?.status != 'voting').length;
+        return Padding(
+          padding: const EdgeInsets.only(top: 18),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Still undecided', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.navy)),
+                    SizedBox(height: 2),
+                    Text('Talked about, but the group hasn\'t agreed yet.',
+                        style: TextStyle(fontSize: 11.5, color: AppColors.textGrey)),
+                  ],
+                ),
+              ),
+              if (job.status == DiscussionSummaryStatus.running)
+                const Padding(
+                  padding: EdgeInsets.all(8),
+                  child: SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.orange)),
+                )
+              else if (summary != null && summary.pending.isNotEmpty)
+                TextButton.icon(
+                  onPressed: () => showDecideNowSheet(context, widget.controller, summary),
+                  style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+                  icon: const Icon(Icons.how_to_vote_outlined, size: 16, color: AppColors.orange),
+                  label: Text(open > 0 ? 'Decide now' : 'In a poll',
+                      style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: AppColors.orange)),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  /// One line of numbers: what this run found, and where it came from.
+  Widget _overview(AiItineraryResult result) {
+    final saved = result.add.where((a) => a.fromSaved).length;
+    final stops = result.add.where((a) => !a.alreadyInPlan).length;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      decoration: BoxDecoration(color: AppColors.chipGrey, borderRadius: BorderRadius.circular(14)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold, color: AppColors.navy)),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              if (stops > 0) _chip('$stops new ${stops == 1 ? 'stop' : 'stops'}', Icons.add_location_alt_outlined, AppColors.navy),
+              if (saved > 0) _chip('$saved from saved list', Icons.bookmark_outline, _green),
+              if (result.update.isNotEmpty)
+                _chip('${result.update.length} ${result.update.length == 1 ? 'change' : 'changes'}', Icons.swap_horiz, AppColors.navy),
+              if (result.remove.isNotEmpty) _chip('${result.remove.length} to remove', Icons.remove_circle_outline, AppColors.textGrey),
+              // flights and hotel: shown so it is clear the plan was built around them
+              result.flightsBooked
+                  ? _chip('Around your flights', Icons.flight_outlined, _green)
+                  : _chip('No flight booked', Icons.flight_outlined, AppColors.orange),
+              result.hotelsBooked
+                  ? _chip('Around your hotel', Icons.hotel_outlined, _green)
+                  : _chip('No hotel booked', Icons.hotel_outlined, AppColors.orange),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'From ${result.messageCount} chat messages, ${result.savedCount} saved '
+            '${result.savedCount == 1 ? 'place' : 'places'}, your flights and hotel, and your current plan.',
+            style: const TextStyle(fontSize: 11.5, color: AppColors.textGrey),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static const _green = Color(0xFF2E9E5B);
+
+  Widget _chip(String text, IconData icon, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 13, color: color),
+          const SizedBox(width: 4),
+          Flexible(
+            child: Text(text,
+                overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: color)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _sectionTitle(String title, {String? hint}) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 18, bottom: 2),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.navy)),
           if (hint != null) ...[
             const SizedBox(height: 2),
             Text(hint, style: const TextStyle(fontSize: 11.5, color: AppColors.textGrey)),
@@ -443,85 +530,339 @@ class _AiItinerarySheetState extends State<_AiItinerarySheet> {
     );
   }
 
-  /// One tickable row. [disabled] rows are shown greyed and cannot be ticked.
-  Widget _row({
-    required String key,
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    String? warning,
-    bool disabled = false,
-  }) {
+  /// One day as a timeline: what is already planned (grey) and the suggestions (tickable), by time.
+  Widget _dayBlock(int day, AiItineraryResult result) {
+    DayPlan? plan;
+    for (final p in widget.controller.days) {
+      if (p.day == day) plan = p;
+    }
+    final removing = {for (final r in result.remove) r.itemId};
+    final moving = {for (final u in result.update) u.itemId: u};
+    final rows = <({String time, Widget child})>[];
+    for (final it in plan?.items ?? const <ActivityItem>[]) {
+      final u = moving[it.id];
+      if (u != null && !u.changesDay) continue; // shown below as its "new time" card
+      final note = removing.contains(it.id) ? 'Agreed to drop' : u != null ? 'Moves to Day ${u.toDay}' : 'In your plan';
+      rows.add((time: it.time, child: _existingRow(it, note: note)));
+    }
+    for (var i = 0; i < result.add.length; i++) {
+      if (result.add[i].day == day) rows.add((time: result.add[i].time, child: _addCard(result.add[i], 'a$i')));
+    }
+    for (var i = 0; i < result.update.length; i++) {
+      if (result.update[i].toDay == day) rows.add((time: result.update[i].newTime, child: _updateCard(result.update[i], 'u$i')));
+    }
+    // flights the plan was built around (hotel check-in / out come as suggestions or are already planned)
+    for (final f in result.fixed) {
+      if (f.day == day && f.kind == 'flight') rows.add((time: f.time, child: _fixedRow(f)));
+    }
+    rows.sort((a, b) => a.time.compareTo(b.time));
+    return Container(
+      margin: const EdgeInsets.only(top: 10),
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFEDEDED)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text('Day $day', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.navy)),
+              const SizedBox(width: 8),
+              if (plan != null)
+                Text('${plan.weekday} ${plan.date}', style: const TextStyle(fontSize: 12, color: AppColors.textGrey)),
+            ],
+          ),
+          const SizedBox(height: 8),
+          for (final r in rows)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(
+                    width: 62,
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 12),
+                      child: Text(r.time.isEmpty ? '—' : _time12h(r.time),
+                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.navy)),
+                    ),
+                  ),
+                  Expanded(child: r.child),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// The saved listing's photo when the place is in the saved list (same matching as the plan's
+  /// activity cards), otherwise the activity icon.
+  Widget _thumb(AiItineraryAdd a) {
+    final probe = ActivityItem(time: a.time, icon: iconForKey(a.iconKey), label: a.label, voted: 0, total: 0);
+    final c = widget.controller;
+    final url = c.attractionForActivity(probe)?.image ?? c.restaurantForActivity(probe)?.image ?? c.hotelForActivity(probe)?.image ?? '';
+    final fallback = Container(
+      width: 44,
+      height: 44,
+      decoration: BoxDecoration(color: AppColors.chipGrey, borderRadius: BorderRadius.circular(10)),
+      child: Icon(iconForKey(a.iconKey), size: 20, color: AppColors.navy),
+    );
+    if (url.isEmpty) return fallback;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(10),
+      child: Image.network(url, width: 44, height: 44, fit: BoxFit.cover, errorBuilder: (_, __, ___) => fallback),
+    );
+  }
+
+  Widget _tick(String key, {bool disabled = false}) {
+    if (disabled) return const SizedBox(width: 22);
     final selected = _selected.contains(key);
+    return Icon(selected ? Icons.check_circle : Icons.radio_button_unchecked,
+        size: 22, color: selected ? AppColors.primary : AppColors.textGrey);
+  }
+
+  void _toggle(String key) {
+    if (_applying) return;
+    setState(() => _selected.contains(key) ? _selected.remove(key) : _selected.add(key));
+  }
+
+  Widget _addCard(AiItineraryAdd a, String key) {
+    final selected = _selected.contains(key);
+    final disabled = a.alreadyInPlan;
     return InkWell(
-      borderRadius: BorderRadius.circular(12),
-      onTap: disabled || _applying
-          ? null
-          : () => setState(() => selected ? _selected.remove(key) : _selected.add(key)),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8),
+      borderRadius: BorderRadius.circular(14),
+      onTap: disabled ? null : () => _toggle(key),
+      child: Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: selected ? AppColors.primary.withValues(alpha: 0.05) : Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: selected ? AppColors.primary.withValues(alpha: 0.45) : const Color(0xFFE6E6E6)),
+        ),
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(icon, size: 20, color: disabled ? AppColors.textGrey : AppColors.navy),
-            const SizedBox(width: 12),
+            _thumb(a),
+            const SizedBox(width: 10),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title,
-                      style: TextStyle(
-                          fontSize: 13.5, fontWeight: FontWeight.w600, color: disabled ? AppColors.textGrey : Colors.black)),
-                  const SizedBox(height: 2),
-                  Text(subtitle, style: const TextStyle(fontSize: 11.5, color: AppColors.textGrey)),
-                  if (warning != null) ...[
-                    const SizedBox(height: 3),
-                    Row(
-                      children: [
-                        const Icon(Icons.info_outline, size: 13, color: AppColors.orange),
-                        const SizedBox(width: 4),
-                        Expanded(child: Text(warning, style: const TextStyle(fontSize: 11.5, color: AppColors.orange))),
-                      ],
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(a.label,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                                color: disabled ? AppColors.textGrey : AppColors.navy)),
+                      ),
+                      if (a.fromSaved) ...[const SizedBox(width: 6), _badge('Saved', _green)],
+                      if (a.source == 'booked') ...[const SizedBox(width: 6), _badge('Booked', AppColors.navy)],
+                      // a wish with no place yet ("Night market"): a time block to swap for a real place
+                      if (a.source == 'generic') ...[const SizedBox(width: 6), _badge('Pick a place', AppColors.orange)],
+                    ],
+                  ),
+                  if (a.location.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text(a.location,
+                          maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11.5, color: AppColors.textGrey)),
                     ),
-                  ],
+                  if (a.reason.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Padding(
+                            padding: EdgeInsets.only(top: 1),
+                            child: Icon(Icons.chat_bubble_outline, size: 11, color: AppColors.textGrey),
+                          ),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(a.reason, style: const TextStyle(fontSize: 11, color: AppColors.textGrey, height: 1.3)),
+                          ),
+                        ],
+                      ),
+                    ),
+                  if (disabled)
+                    const Padding(
+                      padding: EdgeInsets.only(top: 4),
+                      child: Text('Already in your plan', style: TextStyle(fontSize: 11, color: AppColors.textGrey)),
+                    )
+                  else if (a.warnNotSaved && a.source == 'pattern')
+                    const Padding(
+                      padding: EdgeInsets.only(top: 4),
+                      child: Text('Name taken from the chat — check it before you go',
+                          style: TextStyle(fontSize: 11, color: AppColors.orange)),
+                    ),
                 ],
               ),
             ),
-            if (!disabled)
-              Icon(selected ? Icons.check_circle : Icons.radio_button_unchecked,
-                  size: 22, color: selected ? AppColors.primary : AppColors.textGrey),
+            const SizedBox(width: 6),
+            _tick(key, disabled: disabled),
           ],
         ),
       ),
     );
   }
 
-  Widget _addRow(AiItineraryAdd a, String key) {
-    return _row(
-      key: key,
-      icon: iconForKey(a.iconKey),
-      title: a.label,
-      subtitle: [
-        _time12h(a.time),
-        if (a.location.isNotEmpty) a.location,
-        if (a.alreadyInPlan) 'Already in plan',
-      ].join('  ·  '),
-      warning: a.warnNotSaved && !a.alreadyInPlan ? 'Not in your group\'s saved list' : null,
-      disabled: a.alreadyInPlan,
+  Widget _badge(String text, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(color: color.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(8)),
+      child: Text(text, style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: color)),
     );
   }
 
-  Widget _updateRow(AiItineraryUpdate u, String key) {
-    final from = 'Day ${u.fromDay}, ${_time12h(u.oldTime)}';
-    final to = u.changesDay ? 'Day ${u.toDay}, ${_time12h(u.newTime)}' : _time12h(u.newTime);
-    return _row(key: key, icon: iconForKey(u.iconKey), title: u.label, subtitle: '$from  →  $to');
+  /// Something already in the plan, for context (not tickable).
+  Widget _existingRow(ActivityItem it, {required String note}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+      decoration: BoxDecoration(color: AppColors.chipGrey, borderRadius: BorderRadius.circular(14)),
+      child: Row(
+        children: [
+          Icon(it.icon, size: 18, color: AppColors.textGrey),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(it.label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                    fontSize: 13,
+                    color: AppColors.textGrey,
+                    decoration: note == 'Agreed to drop' ? TextDecoration.lineThrough : null)),
+          ),
+          const SizedBox(width: 6),
+          Text(note, style: const TextStyle(fontSize: 10.5, color: AppColors.textGrey)),
+        ],
+      ),
+    );
+  }
+
+  /// A booked flight (or one the chat mentioned): nothing is planned around it too closely.
+  Widget _fixedRow(AiItineraryFixed f) {
+    final fromChat = f.label.contains('(from the chat)');
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+      decoration: BoxDecoration(color: const Color(0xFFEAF2FF), borderRadius: BorderRadius.circular(14)),
+      child: Row(
+        children: [
+          const Icon(Icons.flight_outlined, size: 18, color: AppColors.navy),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(f.label.replaceAll(' (from the chat)', ''),
+                maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13, color: AppColors.navy)),
+          ),
+          const SizedBox(width: 6),
+          Text(fromChat ? 'From the chat' : 'Booked', style: const TextStyle(fontSize: 10.5, color: AppColors.textGrey)),
+        ],
+      ),
+    );
+  }
+
+  Widget _updateCard(AiItineraryUpdate u, String key) {
+    final selected = _selected.contains(key);
+    final from = u.changesDay ? 'Day ${u.fromDay}, ${_time12h(u.oldTime)}' : _time12h(u.oldTime);
+    return InkWell(
+      borderRadius: BorderRadius.circular(14),
+      onTap: () => _toggle(key),
+      child: Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: selected ? AppColors.primary.withValues(alpha: 0.05) : Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: selected ? AppColors.primary.withValues(alpha: 0.45) : const Color(0xFFE6E6E6)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(color: AppColors.chipGrey, borderRadius: BorderRadius.circular(10)),
+              child: const Icon(Icons.swap_horiz, size: 20, color: AppColors.navy),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(u.label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.navy)),
+                  const SizedBox(height: 2),
+                  Text(u.changesDay ? 'Moved here from $from' : 'New time (was $from)', style: const TextStyle(fontSize: 11.5, color: AppColors.textGrey)),
+                ],
+              ),
+            ),
+            _tick(key),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _removeRow(AiItineraryRemove r, String key) {
-    return _row(
-      key: key,
-      icon: Icons.remove_circle_outline,
-      title: r.label,
-      subtitle: 'Day ${r.day}${r.time.isEmpty ? '' : ', ${_time12h(r.time)}'}',
+    final selected = _selected.contains(key);
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: () => _toggle(key),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Row(
+          children: [
+            const Icon(Icons.remove_circle_outline, size: 20, color: AppColors.textGrey),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(r.label, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: Colors.black)),
+                  const SizedBox(height: 2),
+                  Text('Day ${r.day}${r.time.isEmpty ? '' : ', ${_time12h(r.time)}'}',
+                      style: const TextStyle(fontSize: 11.5, color: AppColors.textGrey)),
+                ],
+              ),
+            ),
+            Icon(selected ? Icons.check_circle : Icons.radio_button_unchecked,
+                size: 22, color: selected ? AppColors.primary : AppColors.textGrey),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _ideaRow(AiItineraryIdea idea) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Padding(
+            padding: EdgeInsets.only(top: 1),
+            child: Icon(Icons.lightbulb_outline, size: 18, color: AppColors.orange),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(idea.label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.navy)),
+                if (idea.hint.isNotEmpty)
+                  Text(idea.hint, style: const TextStyle(fontSize: 11.5, color: AppColors.textGrey, height: 1.3)),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 

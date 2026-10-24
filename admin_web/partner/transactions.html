@@ -6,8 +6,8 @@
 <title>Transactions — Voya Insurance Partner</title>
 <link rel="stylesheet" href="../css/tokens.css?v=20261006b" />
 <link rel="stylesheet" href="../css/base.css?v=20261006b" />
-<link rel="stylesheet" href="../css/layout.css?v=20261006b" />
-<link rel="stylesheet" href="../css/components.css?v=20261006b" />
+<link rel="stylesheet" href="../css/layout.css?v=20261021" />
+<link rel="stylesheet" href="../css/components.css?v=20261021c" />
 </head>
 <body>
 <div class="shell">
@@ -29,7 +29,6 @@
         <h1 class="h1">Transactions</h1>
         <p class="subtitle">Every policy sold through Voya</p>
       </div>
-      <button class="btn btn-primary" id="exportBtn"><span data-icon="download"></span>Export</button>
     </div>
 
     <div class="stat-grid" id="statGrid"><div class="skeleton" style="height:90px;grid-column:1/-1;"></div></div>
@@ -63,11 +62,11 @@
 </div>
 
 <script type="module">
-import { requireRole } from "../js/auth-guard.js?v=20261007e";
-import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261007e";
-import { mountIcons } from "../js/icons.js?v=20261007e";
-import { listTransactions } from "../js/data.js?v=20261007e";
-import { money, moneyExact, number, statusBadge, escapeHtml, paginate, renderPager, statCard, plainCard, trendDelta, countBefore, sumBefore, monthBounds } from "../js/ui.js?v=20261007e";
+import { requireRole } from "../js/auth-guard.js?v=20261021";
+import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261021";
+import { mountIcons } from "../js/icons.js?v=20261021";
+import { listTransactions } from "../js/data.js?v=20261021";
+import { money, moneyExact, number, statusBadge, escapeHtml, paginate, renderPager, statCard, plainCard, trendDelta, countBefore, sumBefore, monthBounds } from "../js/ui.js?v=20261021";
 
 mountSidebarNav({ role: "partner", active: "transactions" });
 const session = await requireRole("partner", "login.html");
@@ -130,19 +129,6 @@ function renderTable() {
 
 document.getElementById("searchInput").addEventListener("input", applyFilters);
 document.getElementById("statusFilter").addEventListener("change", applyFilters);
-document.getElementById("exportBtn").addEventListener("click", () => {
-  if (!filtered.length) return;
-  const rows = [["Reference", "Customer", "Destination", "Premium (RM)", "Status"]];
-  filtered.forEach((t) => rows.push([t.txnRef || t.id, t.customerName || "", t.destination || "", (Number(t.premium) || 0).toFixed(2), t.status || ""]));
-  const csv = rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `voya-transactions-${new Date().toISOString().slice(0, 10)}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
-});
 </script>
 </body>
 </html>

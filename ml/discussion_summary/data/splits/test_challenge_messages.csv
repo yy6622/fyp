@@ -1,0 +1,175 @@
+﻿message_id,conv_id,source,speaker,message,label
+m001,ch-01-shanghai,challenge,Wei Jie,guys so are we confirmed going Shanghai in Dec?,DESTINATION
+m002,ch-01-shanghai,challenge,Amanda,yes!! finally,DECISION
+m003,ch-01-shanghai,challenge,Hafiz,ok on,DECISION
+m004,ch-01-shanghai,challenge,Mei,我ok 🙌,DECISION
+m005,ch-01-shanghai,challenge,Wei Jie,budget wise I'm thinking RM3000 per person including flight,BUDGET
+m006,ch-01-shanghai,challenge,Hafiz,3k ok for me,DECISION
+m007,ch-01-shanghai,challenge,Amanda,hmm 3k tight leh if we want to go Disney,DECISION
+m008,ch-01-shanghai,challenge,Mei,机票现在大概RM1400来回,BUDGET
+m009,ch-01-shanghai,challenge,Amanda,"ok la 3k can, I'll skip some shopping 😂",DECISION
+m010,ch-01-shanghai,challenge,Wei Jie,dates? I'm thinking 14-19 Dec,DATE
+m011,ch-01-shanghai,challenge,Hafiz,"14-19 cannot, my company year end closing until 16th",DECISION
+m012,ch-01-shanghai,challenge,Hafiz,18-23 Dec?,DATE
+m013,ch-01-shanghai,challenge,Mei,12月18号到23号我可以,DECISION
+m014,ch-01-shanghai,challenge,Amanda,same,DECISION
+m015,ch-01-shanghai,challenge,Wei Jie,"ok 18-23 Dec then, I'll check flights tonight",DECISION
+m016,ch-01-shanghai,challenge,Mei,外滩一定要去，晚上很漂亮,ATTRACTION
+m017,ch-01-shanghai,challenge,Amanda,yesss the bund at night 😍,DECISION
+m018,ch-01-shanghai,challenge,Hafiz,bund confirm la,DECISION
+m019,ch-01-shanghai,challenge,Amanda,can we do Disneyland one day?,ATTRACTION
+m020,ch-01-shanghai,challenge,Hafiz,Disney ticket like RM400 leh 😬,ATTRACTION
+m021,ch-01-shanghai,challenge,Wei Jie,I'm not that into theme parks tbh,DECISION
+m022,ch-01-shanghai,challenge,Mei,我也可以不去，你们决定,DECISION
+m023,ch-01-shanghai,challenge,Amanda,ok we decide nearer the date lah,DECISION
+m024,ch-01-shanghai,challenge,Hafiz,"Yu Garden and Nanjing Road can do same day, both near",ATTRACTION
+m025,ch-01-shanghai,challenge,Mei,可以，豫园那边也有小笼包,DECISION
+m026,ch-01-shanghai,challenge,Amanda,👍,DECISION
+m027,ch-01-shanghai,challenge,Wei Jie,"hotel I found Jinjiang Inn near People's Square, RM180 a night for 2 pax",ACCOMMODATION
+m028,ch-01-shanghai,challenge,Amanda,"People's Square convenient, metro line 1 2 8 all there",DESTINATION
+m029,ch-01-shanghai,challenge,Hafiz,Or Airbnb in French Concession? more vibe,ACCOMMODATION
+m030,ch-01-shanghai,challenge,Mei,上海很多airbnb不能登记外国人哦,ACCOMMODATION
+m031,ch-01-shanghai,challenge,Hafiz,oh really? then hotel la,DECISION
+m032,ch-01-shanghai,challenge,Wei Jie,"ok I book Jinjiang Inn, 2 rooms",DECISION
+m033,ch-01-shanghai,challenge,Mei,交通的话就坐地铁，买张交通卡,TRANSPORT
+m034,ch-01-shanghai,challenge,Amanda,metro all the way 👍,DECISION
+m035,ch-01-shanghai,challenge,Hafiz,metro ok,DECISION
+m036,ch-01-shanghai,challenge,Hafiz,"I prefer not to wake up too early pls, holiday mah",PREFERENCE
+m037,ch-01-shanghai,challenge,Mei,我不吃牛肉哦,PREFERENCE
+m038,ch-01-shanghai,challenge,Wei Jie,noted 👌,OTHER
+m001,ch-02-penang,challenge,Aiman,weekend ni jom Penang? dah lama tak cuti,DESTINATION
+m002,ch-02-penang,challenge,Siti,jom!!,DECISION
+m003,ch-02-penang,challenge,Kumar,"on, I drive",DECISION
+m004,ch-02-penang,challenge,Kumar,"drive up from KL, petrol + toll maybe RM200 total",TRANSPORT
+m005,ch-02-penang,challenge,Siti,"ok best, no need flight",DECISION
+m006,ch-02-penang,challenge,Aiman,total budget for 3 of us around RM1200 boleh?,BUDGET
+m007,ch-02-penang,challenge,Siti,"hmm hotel pun mahal skrg, takut tak cukup",DECISION
+m008,ch-02-penang,challenge,Kumar,we see the hotel price first then decide,DECISION
+m009,ch-02-penang,challenge,Siti,hotel aku tengok Hotel Jen Penang RM380 semalam,ACCOMMODATION
+m010,ch-02-penang,challenge,Kumar,380 too much for one night bro,DECISION
+m011,ch-02-penang,challenge,Aiman,"ada homestay kat Armenian Street RM220, 2 bilik",ACCOMMODATION
+m012,ch-02-penang,challenge,Kumar,"homestay ok, near street art also",DECISION
+m013,ch-02-penang,challenge,Siti,ok fine homestay,DECISION
+m014,ch-02-penang,challenge,Aiman,ok aku book homestay tu,DECISION
+m015,ch-02-penang,challenge,Siti,lol my mom asking me to buy tau sar pneah back,OTHER
+m016,ch-02-penang,challenge,Kumar,hahaha the famous one at Ghee Hiang,OTHER
+m017,ch-02-penang,challenge,Siti,Kek Lok Si nak pergi tak?,ATTRACTION
+m018,ch-02-penang,challenge,Aiman,"boleh, pagi Sabtu",DECISION
+m019,ch-02-penang,challenge,Kumar,morning ok,DECISION
+m020,ch-02-penang,challenge,Kumar,Penang Hill also? sunset view,ATTRACTION
+m021,ch-02-penang,challenge,Siti,aku takut tinggi 😅,PREFERENCE
+m022,ch-02-penang,challenge,Aiman,"tengok la nanti, kalau ada masa",DECISION
+m023,ch-02-penang,challenge,Siti,must eat char koay teow at Siam Road!!,ATTRACTION
+m024,ch-02-penang,challenge,Kumar,100%,DECISION
+m025,ch-02-penang,challenge,Aiman,wajib,DECISION
+m026,ch-02-penang,challenge,Aiman,aku tak makan pedas sangat btw,PREFERENCE
+m027,ch-02-penang,challenge,Kumar,dates confirm this sat sun right? 14-15 Jun,DATE
+m028,ch-02-penang,challenge,Siti,yup,DECISION
+m029,ch-02-penang,challenge,Aiman,yes,DECISION
+m001,ch-03-tokyo-family,challenge,Jia Hao,爸妈，明年三月去东京好不好？樱花季,DESTINATION
+m002,ch-03-tokyo-family,challenge,妈妈,好啊，我一直想看樱花,DECISION
+m003,ch-03-tokyo-family,challenge,爸爸,可以,DECISION
+m004,ch-03-tokyo-family,challenge,Xin Yi,yay!! 🌸,DECISION
+m005,ch-03-tokyo-family,challenge,Jia Hao,我看了一下，3月25号到30号樱花最好,DATE
+m006,ch-03-tokyo-family,challenge,Xin Yi,25号我还在考试 😭,DECISION
+m007,ch-03-tokyo-family,challenge,Xin Yi,3月28号到4月2号呢？,DATE
+m008,ch-03-tokyo-family,challenge,妈妈,我们都可以，看Xin Yi,DECISION
+m009,ch-03-tokyo-family,challenge,Jia Hao,那就28号出发吧,DECISION
+m010,ch-03-tokyo-family,challenge,爸爸,预算每人六千够吗,BUDGET
+m011,ch-03-tokyo-family,challenge,Jia Hao,六千应该够，机票大概两千,DECISION
+m012,ch-03-tokyo-family,challenge,妈妈,不要太省，难得出去,PREFERENCE
+m013,ch-03-tokyo-family,challenge,爸爸,那就每人六千左右,DECISION
+m014,ch-03-tokyo-family,challenge,Xin Yi,I want to go teamLab Planets!!,ATTRACTION
+m015,ch-03-tokyo-family,challenge,爸爸,那是什么,OTHER
+m016,ch-03-tokyo-family,challenge,Xin Yi,"digital art museum, very nice for photos",ATTRACTION
+m017,ch-03-tokyo-family,challenge,妈妈,年轻人去就好，我们去浅草寺,DECISION
+m018,ch-03-tokyo-family,challenge,Jia Hao,浅草寺一定要去,ATTRACTION
+m019,ch-03-tokyo-family,challenge,爸爸,好,DECISION
+m020,ch-03-tokyo-family,challenge,妈妈,我膝盖不好，不要走太多路,PREFERENCE
+m021,ch-03-tokyo-family,challenge,Jia Hao,那我们多坐的士，少走路,TRANSPORT
+m022,ch-03-tokyo-family,challenge,爸爸,东京的士很贵,DECISION
+m023,ch-03-tokyo-family,challenge,Xin Yi,地铁很方便啦，买Suica卡就好,TRANSPORT
+m024,ch-03-tokyo-family,challenge,Jia Hao,ok地铁为主，远的才坐的士,DECISION
+m025,ch-03-tokyo-family,challenge,妈妈,住的地方要近地铁站,PREFERENCE
+m026,ch-03-tokyo-family,challenge,Jia Hao,新宿的Hilton一晚RM900，有点贵,ACCOMMODATION
+m027,ch-03-tokyo-family,challenge,Xin Yi,上野的APA便宜很多，RM350,ACCOMMODATION
+m028,ch-03-tokyo-family,challenge,爸爸,再看看,DECISION
+m001,ch-04-bangkok,challenge,Ryan,ok serious now. Bangkok trip after finals. who's in,DESTINATION
+m002,ch-04-bangkok,challenge,Zara,meee,DECISION
+m003,ch-04-bangkok,challenge,Bryan,in,DECISION
+m004,ch-04-bangkok,challenge,Elaine,in but I'm broke ah,DECISION
+m005,ch-04-bangkok,challenge,Darren,lol same,OTHER
+m006,ch-04-bangkok,challenge,Ryan,budget RM1500 each max? airasia is cheap now,BUDGET
+m007,ch-04-bangkok,challenge,Elaine,1500 can,DECISION
+m008,ch-04-bangkok,challenge,Darren,ok,DECISION
+m009,ch-04-bangkok,challenge,Zara,ok,DECISION
+m010,ch-04-bangkok,challenge,Bryan,anyone watched the match last night,OTHER
+m011,ch-04-bangkok,challenge,Darren,don't remind me 😭,OTHER
+m012,ch-04-bangkok,challenge,Zara,Chatuchak weekend market!!!,ATTRACTION
+m013,ch-04-bangkok,challenge,Elaine,yes shopping 🛍️,DECISION
+m014,ch-04-bangkok,challenge,Ryan,sure,DECISION
+m015,ch-04-bangkok,challenge,Bryan,what about Safari World,ATTRACTION
+m016,ch-04-bangkok,challenge,Darren,Safari World so far from city leh,DECISION
+m017,ch-04-bangkok,challenge,Zara,not keen on animal shows also,DECISION
+m018,ch-04-bangkok,challenge,Bryan,ok nvm then,DECISION
+m019,ch-04-bangkok,challenge,Elaine,rooftop bar one night? Sky bar at lebua,ATTRACTION
+m020,ch-04-bangkok,challenge,Ryan,expensive af but once in a lifetime ok,DECISION
+m021,ch-04-bangkok,challenge,Darren,"not bad, I'm in",DECISION
+m022,ch-04-bangkok,challenge,Bryan,我不喝酒，but can go see view,DECISION
+m023,ch-04-bangkok,challenge,Zara,hostel or hotel?,ACCOMMODATION
+m024,ch-04-bangkok,challenge,Ryan,"Lub d Siam hostel, RM60 per night per person",ACCOMMODATION
+m025,ch-04-bangkok,challenge,Elaine,hostel ok for me,DECISION
+m026,ch-04-bangkok,challenge,Zara,"I need my own room tho, cannot sleep with noise",PREFERENCE
+m027,ch-04-bangkok,challenge,Darren,then we take private room at Lub d? got 4 bed room,ACCOMMODATION
+m028,ch-04-bangkok,challenge,Zara,ok that works,DECISION
+m029,ch-04-bangkok,challenge,Ryan,yeah private room better,DECISION
+m030,ch-04-bangkok,challenge,Bryan,ok,DECISION
+m031,ch-04-bangkok,challenge,Ryan,BTS + grab to get around,TRANSPORT
+m032,ch-04-bangkok,challenge,Elaine,tuk tuk once for the experience!!,TRANSPORT
+m033,ch-04-bangkok,challenge,Darren,tuk tuk scam one la,DECISION
+m001,ch-05-hanoi,challenge,Priya,so Hanoi or Da Nang?,DESTINATION
+m002,ch-05-hanoi,challenge,Marcus,"Hanoi, then Ha Long Bay cruise",DESTINATION
+m003,ch-05-hanoi,challenge,Lisa,Hanoi +1,DECISION
+m004,ch-05-hanoi,challenge,Priya,ok Hanoi it is 🇻🇳,DECISION
+m005,ch-05-hanoi,challenge,Marcus,how many days ah,DATE
+m006,ch-05-hanoi,challenge,Lisa,5D4N enough,DATE
+m007,ch-05-hanoi,challenge,Priya,"5D4N ok, maybe early Oct?",DATE
+m008,ch-05-hanoi,challenge,Marcus,"early oct I can, need to apply leave early",DECISION
+m009,ch-05-hanoi,challenge,Lisa,I'll confirm my leave next week,DECISION
+m010,ch-05-hanoi,challenge,Marcus,Ha Long overnight cruise around RM600 per person,ATTRACTION
+m011,ch-05-hanoi,challenge,Lisa,worth it!!,DECISION
+m012,ch-05-hanoi,challenge,Priya,ok but only if the cabin got window 😂,DECISION
+m013,ch-05-hanoi,challenge,Marcus,lol all got window,OTHER
+m014,ch-05-hanoi,challenge,Lisa,old quarter walking food tour one night?,ATTRACTION
+m015,ch-05-hanoi,challenge,Priya,yesss egg coffee,DECISION
+m016,ch-05-hanoi,challenge,Marcus,"I'm vegetarian, can find veg food?",PREFERENCE
+m017,ch-05-hanoi,challenge,Lisa,"got, I check for you",OTHER
+m018,ch-05-hanoi,challenge,Priya,rent motorbike to go around?,TRANSPORT
+m019,ch-05-hanoi,challenge,Marcus,"no way, the traffic there crazy",DECISION
+m020,ch-05-hanoi,challenge,Lisa,grab bike cheaper and safer,TRANSPORT
+m021,ch-05-hanoi,challenge,Priya,ok grab then,DECISION
+m022,ch-05-hanoi,challenge,Marcus,budget for whole trip? I'm thinking RM2500 each,BUDGET
+m023,ch-05-hanoi,challenge,Priya,hmm let's see after flight price,DECISION
+m001,ch-06-bali,challenge,Natasha,Bali for our anniversary trip with you two? 🥂,DESTINATION
+m002,ch-06-bali,challenge,Grace,omg yes,DECISION
+m003,ch-06-bali,challenge,Oscar,"ok, can",DECISION
+m004,ch-06-bali,challenge,Kelvin,sure,DECISION
+m005,ch-06-bali,challenge,Grace,"villa with private pool in Seminyak, RM900 a night for 2 bedrooms",ACCOMMODATION
+m006,ch-06-bali,challenge,Kelvin,ok if we split 4 ways,DECISION
+m007,ch-06-bali,challenge,Oscar,can lah,DECISION
+m008,ch-06-bali,challenge,Natasha,Ubud also? 2 nights there for rice terrace,ATTRACTION
+m009,ch-06-bali,challenge,Grace,"Ubud yes, Tegallalang rice terrace in the morning",DECISION
+m010,ch-06-bali,challenge,Kelvin,I'm fine either way,DECISION
+m011,ch-06-bali,challenge,Oscar,swing photo thing at Ubud 😂,ATTRACTION
+m012,ch-06-bali,challenge,Natasha,hahaha,OTHER
+m013,ch-06-bali,challenge,Kelvin,can we hire a driver for the days we move around,TRANSPORT
+m014,ch-06-bali,challenge,Grace,"yes driver better, around RM200 per day",DECISION
+m015,ch-06-bali,challenge,Natasha,agree,DECISION
+m016,ch-06-bali,challenge,Oscar,👍,DECISION
+m017,ch-06-bali,challenge,Natasha,"I prefer chill beach days, not too packed",PREFERENCE
+m018,ch-06-bali,challenge,Grace,dates still 20-25 Aug right?,DATE
+m019,ch-06-bali,challenge,Oscar,20-25 Aug confirmed on my side,DECISION
+m020,ch-06-bali,challenge,Kelvin,I need to check with my boss first,DECISION
+m021,ch-06-bali,challenge,Natasha,I'm ok,DECISION
+m022,ch-06-bali,challenge,Grace,Uluwatu temple sunset + kecak dance?,ATTRACTION
+m023,ch-06-bali,challenge,Kelvin,heard the monkeys steal stuff there 😅,ATTRACTION

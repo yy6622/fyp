@@ -8,7 +8,6 @@ import '../detail/detail_page_attraction.dart';
 import '../detail/detail_page_flight.dart';
 import '../detail/detail_page_hotel.dart';
 import '../detail/detail_page_restaurant.dart';
-import '../shared/translated_text.dart';
 
 enum _SavedTab { flights, hotels, attractions, restaurants }
 
@@ -224,7 +223,7 @@ class _SavedItemsPageState extends State<SavedItemsPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                TranslatedText(hotel.name, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold, color: AppColors.navy)),
+                Text(hotel.name, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold, color: AppColors.navy)),
                 const SizedBox(height: 4),
                 Text(hotel.location, style: const TextStyle(fontSize: 11, color: AppColors.textGrey)),
                 const SizedBox(height: 4),
@@ -261,7 +260,7 @@ class _SavedItemsPageState extends State<SavedItemsPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                TranslatedText(attraction.name, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold, color: AppColors.navy)),
+                Text(attraction.name, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold, color: AppColors.navy)),
                 const SizedBox(height: 4),
                 Text(attraction.category, style: const TextStyle(fontSize: 11, color: AppColors.textGrey)),
                 const SizedBox(height: 4),
@@ -298,7 +297,7 @@ class _SavedItemsPageState extends State<SavedItemsPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                TranslatedText(restaurant.name, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold, color: AppColors.navy)),
+                Text(restaurant.name, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold, color: AppColors.navy)),
                 const SizedBox(height: 4),
                 Text(restaurant.cuisineLabel, style: const TextStyle(fontSize: 11, color: AppColors.textGrey)),
                 const SizedBox(height: 4),

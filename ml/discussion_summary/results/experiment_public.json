@@ -1,0 +1,84 @@
+{
+ "model": "LogReg + char, C=3, sqrt class weights",
+ "rows": [
+  {
+   "variant": "No public data (before)",
+   "train_messages": 7876,
+   "cv_hand": 63.228854736075725,
+   "cv_public": 20.94634058744954,
+   "select_score": 42.08759766176263,
+   "test_challenge": 77.93825061780863,
+   "test_challenge2": 55.39733213831886,
+   "test_smalltalk": 72.22222222222221,
+   "public_acc": 15.22491349480969,
+   "public_f1": 25.51851713272777,
+   "test_offtopic": 7.524752475247524
+  },
+  {
+   "variant": "+ all public, weight 1",
+   "train_messages": 16892,
+   "cv_hand": 60.615416919314704,
+   "cv_public": 91.71319004378726,
+   "select_score": 76.16430348155099,
+   "test_challenge": 74.8960427188345,
+   "test_challenge2": 55.90213879687563,
+   "test_smalltalk": 81.74603174603175,
+   "public_acc": 92.51730103806229,
+   "public_f1": 92.37236053524144,
+   "test_offtopic": 97.62376237623762
+  },
+  {
+   "variant": "+ all public, weight 0.5",
+   "train_messages": 16892,
+   "cv_hand": 60.37570035882533,
+   "cv_public": 91.01524966873443,
+   "select_score": 75.69547501377988,
+   "test_challenge": 75.00531632110578,
+   "test_challenge2": 57.36319565192031,
+   "test_smalltalk": 76.98412698412699,
+   "public_acc": 91.95501730103807,
+   "public_f1": 91.85488177855656,
+   "test_offtopic": 96.03960396039604
+  },
+  {
+   "variant": "+ all public, weight 0.3",
+   "train_messages": 16892,
+   "cv_hand": 61.53142300962027,
+   "cv_public": 89.95974859207861,
+   "select_score": 75.74558580084944,
+   "test_challenge": 75.87940403681414,
+   "test_challenge2": 58.19228362239115,
+   "test_smalltalk": 76.98412698412699,
+   "public_acc": 90.7871972318339,
+   "public_f1": 90.77477014754425,
+   "test_offtopic": 95.04950495049505
+  },
+  {
+   "variant": "+ DialogSum only (chit-chat), weight 1",
+   "train_messages": 10882,
+   "cv_hand": 61.449734665546664,
+   "cv_public": 27.376205374191613,
+   "select_score": 44.412970019869135,
+   "test_challenge": 76.23938347255019,
+   "test_challenge2": 57.438925787739,
+   "test_smalltalk": 78.57142857142857,
+   "public_acc": 14.662629757785467,
+   "public_f1": 17.615067790947496,
+   "test_offtopic": 98.21782178217822
+  },
+  {
+   "variant": "+ MultiWOZ + CrossWOZ only, weight 1",
+   "train_messages": 13886,
+   "cv_hand": 61.73249819041038,
+   "cv_public": 69.23867429414747,
+   "select_score": 65.48558624227893,
+   "test_challenge": 75.85476868810201,
+   "test_challenge2": 57.23628223628224,
+   "test_smalltalk": 73.80952380952381,
+   "public_acc": 93.33910034602077,
+   "public_f1": 93.59137289808834,
+   "test_offtopic": 17.425742574257423
+  }
+ ],
+ "selected": "+ all public, weight 1"
+}

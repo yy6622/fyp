@@ -7,7 +7,6 @@ import '../../services/auth_service.dart';
 import '../../services/format_utils.dart';
 import '../../theme.dart';
 import '../shared/nice_dialog.dart';
-import '../shared/translated_text.dart';
 import 'all_reviews_page.dart';
 import 'booking_payment_page.dart';
 import 'flight_passenger_details_page.dart';
@@ -27,13 +26,7 @@ class DetailHeader extends StatelessWidget {
   /// logo (SVG), so flight detail pages pass this instead of [imageUrl].
   /// Takes priority over [imageUrl] when both are somehow set.
   final String? logoUrl;
-  /// True for a real-world place name (attraction/hotel/restaurant) that
-  /// should show translated into the person's chosen language (see
-  /// TranslatedText) — false (default) for a flight's airline name or
-  /// anything else [title] might hold that isn't a place name worth
-  /// running through a translator.
-  final bool translate;
-  const DetailHeader({super.key, required this.title, this.imageUrl, this.logoUrl, this.translate = false});
+  const DetailHeader({super.key, required this.title, this.imageUrl, this.logoUrl});
 
   @override
   Widget build(BuildContext context) {
@@ -55,19 +48,13 @@ class DetailHeader extends StatelessWidget {
                 onPressed: () => Navigator.of(context).maybePop(),
               ),
               Expanded(
-                child: translate
-                    ? TranslatedText(
-                        title,
-                        textAlign: TextAlign.center,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.navy),
-                      )
-                    : Text(
-                        title,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.navy),
-                      ),
+                child: Text(
+                  title,
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.navy),
+                ),
               ),
               const SizedBox(width: 48),
             ],
@@ -205,6 +192,12 @@ class BookingBar extends StatelessWidget {
   // does that add — built by the caller (DetailPageFlight/DetailPageHotel)
   // since only they have the full flight/hotel data a trip record needs.
   final String tripId;
+  // Hotel stay dates already chosen on DetailPageHotel's own preview row
+  // (before this bar's button was even tapped) — forwarded into
+  // HotelGuestDetailsPage so an edit made there isn't silently discarded
+  // once checkout actually starts. Unused for a 'flight' booking.
+  final DateTime? checkIn;
+  final DateTime? checkOut;
   final Future<void> Function(BookingConfirmation confirmation)? onPaid;
   const BookingBar({
     super.key,
@@ -216,6 +209,8 @@ class BookingBar extends StatelessWidget {
     required this.bookingSubtitle,
     this.refId = '',
     this.tripId = '',
+    this.checkIn,
+    this.checkOut,
     this.onPaid,
   });
 
@@ -278,6 +273,8 @@ class BookingBar extends StatelessWidget {
                         bookingSubtitle: bookingSubtitle,
                         refId: refId,
                         tripId: tripId,
+                        initialCheckIn: checkIn,
+                        initialCheckOut: checkOut,
                         onPaid: onPaid,
                       ),
               ));
@@ -336,6 +333,12 @@ class ReviewData {
   final int rating;
   final String comment;
   final String timeAgo;
+  // See PlaceReview.autoFlagged's doc comment — only ever true for a
+  // review the viewer is also the author of (watchReviewsFor already
+  // filters out anyone else's flagged review before it ever reaches
+  // reviewDataFromPlace), so [ReviewCard] uses this purely to show that
+  // viewer their own "pending review" state.
+  final bool autoFlagged;
   const ReviewData({
     required this.name,
     this.flag = '',
@@ -343,6 +346,7 @@ class ReviewData {
     required this.rating,
     required this.comment,
     this.timeAgo = '',
+    this.autoFlagged = false,
   });
 }
 
@@ -353,6 +357,7 @@ ReviewData reviewDataFromPlace(PlaceReview r) => ReviewData(
       rating: r.rating,
       comment: r.comment,
       timeAgo: r.createdAt == null ? 'Just now' : formatTimeAgo(r.createdAt!),
+      autoFlagged: r.autoFlagged,
     );
 
 class ReviewCard extends StatelessWidget {
@@ -408,6 +413,18 @@ class ReviewCard extends StatelessWidget {
             const SizedBox(height: 8),
             Text(data.comment, style: const TextStyle(fontSize: 12, color: Colors.black87)),
           ],
+          if (data.autoFlagged) ...[
+            const SizedBox(height: 8),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: const [
+                Icon(Icons.hourglass_top, size: 12, color: AppColors.orange),
+                SizedBox(width: 5),
+                Text('Pending review — only visible to you until an admin checks it',
+                    style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600, color: AppColors.orange)),
+              ],
+            ),
+          ],
         ],
       ),
     );
@@ -425,10 +442,16 @@ class ReviewCard extends StatelessWidget {
 /// to 5) and leaves the comment blank; [ReviewCard] only shows a comment
 /// line when there actually is one. A tap on "Submit" always counts, same
 /// as the star picker on its own used to.
+///
+/// [onSubmit] returns true when content moderation flagged the comment
+/// (see `review_helpers.dart`'s `addReviewFor`) — shown here as a one-off
+/// SnackBar, since otherwise the only feedback is the review quietly
+/// disappearing from view (held back until an admin reviews it) instead
+/// of the usual "it just appears in the list" confirmation.
 Future<void> showWriteReviewDialog(
   BuildContext context, {
   required String title,
-  required Future<void> Function({required String authorId, required String authorName, required int rating, required String comment}) onSubmit,
+  required Future<bool> Function({required String authorId, required String authorName, required int rating, required String comment}) onSubmit,
 }) async {
   final uid = AuthService.instance.currentUser?.uid;
   if (uid == null) return;
@@ -448,7 +471,12 @@ Future<void> showWriteReviewDialog(
   final comment = commentController.text.trim();
   final profile = await UserRepository.instance.fetchProfile(uid);
   final name = (profile != null && profile.name.isNotEmpty) ? profile.name : 'Traveller';
-  await onSubmit(authorId: uid, authorName: name, rating: rating, comment: comment);
+  final flagged = await onSubmit(authorId: uid, authorName: name, rating: rating, comment: comment);
+  if (flagged) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Your review was submitted and is pending moderation review.')),
+    );
+  }
 }
 
 /// The shared "Reviews" section used by every real detail page (Hotel,
@@ -460,7 +488,7 @@ class ReviewsSection extends StatelessWidget {
   final String title;
   final String ratingSummary;
   final Stream<List<ReviewData>> reviewsStream;
-  final Future<void> Function({required String authorId, required String authorName, required int rating, required String comment}) onSubmitReview;
+  final Future<bool> Function({required String authorId, required String authorName, required int rating, required String comment}) onSubmitReview;
   // Hotel reviews can only be written from History (after a real stay),
   // not from the Hotel detail page itself — a hotel stay is a real paid
   // transaction, so its reviews should read like genuine guest feedback,

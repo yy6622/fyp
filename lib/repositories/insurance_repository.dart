@@ -12,11 +12,9 @@ import '../models/insurance_models.dart';
 /// Unlike [CatalogRepository]'s Explore catalogue, there is deliberately
 /// no client-side seeding here: firestore.rules restricts `insurance_plans`
 /// writes to a signed-in admin or the owning partner, so a rider's app
-/// could never write one anyway. The console already ships its own demo
-/// seeder for this (admin_web/js/seed.js's seedPartnerDemoData /
-/// seedAdminDemoData, wired to a button on the partner dashboard and admin
-/// insurance page) — that's the intended way to populate sample plans,
-/// not a second copy of the same seed baked into the mobile app.
+/// could never write one anyway. A partner populates real plans through
+/// admin_web/partner/plans.html's own form — there is no demo seeder any
+/// more (the console used to ship one; it was removed).
 class InsuranceRepository {
   InsuranceRepository._();
   static final InsuranceRepository instance = InsuranceRepository._();
@@ -40,24 +38,45 @@ class InsuranceRepository {
         : 'Insurance Partner';
     final coverage = (data['coverage'] as num?)?.toInt() ?? 0;
     final premium = (data['premium'] as num?)?.toDouble() ?? 0;
+    final logoUrl = (data['providerLogoUrl'] as String?)?.trim();
+    // Partner-authored on plans.html's "Key coverage" / "Highlights"
+    // fields — a plan saved before those existed just has neither array
+    // in Firestore at all, which the ?? const [] below treats the same
+    // as a partner leaving them blank: hidden on the detail page, not
+    // padded out with the old fixed 5-item list.
+    final coverageItems = ((data['coverageItems'] as List?) ?? const [])
+        .whereType<Map>()
+        .map((m) => InsuranceCoverageItem(
+              label: ((m['label'] as String?) ?? '').trim(),
+              amount: (m['amount'] as num?)?.toDouble() ?? 0,
+            ))
+        .where((c) => c.label.isNotEmpty)
+        .toList();
+    final highlights = ((data['highlights'] as List?) ?? const [])
+        .map((e) => e.toString().trim())
+        .where((s) => s.isNotEmpty)
+        .toList();
     return InsurancePlan(
       id: d.id,
       partnerId: (data['partnerId'] as String?) ?? '',
       provider: providerName,
       logoText: _logoTextFor(providerName),
       logoColor: _logoColorFor(providerName),
+      logoUrl: (logoUrl != null && logoUrl.isNotEmpty) ? logoUrl : null,
       name: (data['name'] as String?)?.trim().isNotEmpty == true ? (data['name'] as String).trim() : providerName,
       coverage: 'Medical Coverage up to RM ${_formatThousands(coverage)}',
       price: 'RM ${premium % 1 == 0 ? premium.toStringAsFixed(0) : premium.toStringAsFixed(2)}',
       category: insuranceCategoryFromTripType((data['tripType'] as String?) ?? 'Single Trip'),
+      coverageItems: coverageItems,
+      highlights: highlights,
     );
   }
 
-  /// The console doesn't store a logo glyph/color for a plan — the round
-  /// badge on [InsurancePlanCard]/[InsurancePlanTile] needs *something*
-  /// per plan, so both are derived deterministically from the provider's
-  /// name, so the same provider always gets the same badge without a
-  /// whole logo-upload feature.
+  /// Fallback for when a partner hasn't uploaded a real logo (or a plan
+  /// was saved before `providerLogoUrl` existed): the round badge on
+  /// [InsurancePlanCard]/[InsurancePlanTile] still needs *something* per
+  /// plan, so these are derived deterministically from the provider's
+  /// name, so the same provider always gets the same badge.
   String _logoTextFor(String providerName) {
     final words = providerName.trim().split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
     if (words.isEmpty) return '?';

@@ -11,6 +11,7 @@ import '../../services/format_utils.dart';
 import '../../services/weather_service.dart';
 import '../../theme.dart';
 import '../community/community_page.dart';
+import '../create_plan/create_plan_wizard.dart';
 import '../community/community_post_detail_page.dart';
 import '../group/group_trip_page.dart';
 import '../insurance/insurance_list_page.dart';
@@ -32,7 +33,7 @@ class HomePage extends StatelessWidget {
             const SizedBox(height: 16),
             _buildAdventureCard(),
             const SizedBox(height: 14),
-            _buildAiBanner(),
+            _buildAiBanner(context),
             const SizedBox(height: 20),
             _buildRecommendedHeader(context),
             const SizedBox(height: 12),
@@ -319,8 +320,10 @@ class HomePage extends StatelessWidget {
   }
 
   // ---------------- AI banner ----------------
-  Widget _buildAiBanner() {
-    return Padding(
+  Widget _buildAiBanner(BuildContext context) {
+    return GestureDetector(
+      onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const CreatePlanWizard())),
+      child: Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -365,6 +368,7 @@ class HomePage extends StatelessWidget {
             ),
           ],
         ),
+      ),
       ),
     );
   }

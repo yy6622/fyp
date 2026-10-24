@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Notifications — Voya Insurance Partner</title>
+<link rel="stylesheet" href="../css/tokens.css?v=20261021" />
+<link rel="stylesheet" href="../css/base.css?v=20261021" />
+<link rel="stylesheet" href="../css/layout.css?v=20261021" />
+<link rel="stylesheet" href="../css/components.css?v=20261021c" />
+</head>
+<body>
+<div class="shell">
+  <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+  <aside class="sidebar" id="sidebar">
+    <img class="sidebar-brand" src="../img/voya-logo-white.png" alt="Voya" />
+    <div class="sidebar-user">
+      <div class="name" id="sbUserName">Loading…</div>
+      <div class="role" id="sbUserRole">Partner workspace</div>
+    </div>
+    <nav class="nav" id="sidebarNav"></nav>
+    <button class="sidebar-logout" id="logoutBtn"><span data-icon="log-out"></span>Log out</button>
+  </aside>
+
+  <main class="content">
+    <div class="topbar">
+      <div>
+        <button class="menu-toggle" id="menuToggle"><span data-icon="menu"></span></button>
+        <a href="dashboard.html" class="inline-flex" id="backToDashboard" style="display:none;gap:4px;font-size:12.5px;color:var(--text-500);text-decoration:none;margin-bottom:4px;"><span data-icon="chevron-left" data-icon-size="12"></span>Back to Dashboard</a>
+        <h1 class="h1">Notifications</h1>
+        <p class="subtitle">Updates about your organization's account status</p>
+      </div>
+    </div>
+
+    <div id="statusCard" class="card card-pad">
+      <div class="skeleton" style="height:90px;"></div>
+    </div>
+  </main>
+</div>
+
+<script type="module">
+import { requireRole, logout } from "../js/auth-guard.js?v=20261021";
+import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261021";
+import { mountIcons } from "../js/icons.js?v=20261021";
+import { fullDate, timeAgo, escapeHtml } from "../js/ui.js?v=20261021";
+
+// skipStatusGate: true — without it, requireRole() would redirect a
+// rejected/blocked partner back to THIS page in a loop (that redirect is
+// what sends them here in the first place for every OTHER partner page).
+// An approved/pending/suspended partner reaches this page normally too —
+// not via a permanent "Notifications" nav tab (removed; see
+// js/sidebar.js), but via the "View details" button on the Dashboard's
+// own status banner, same pattern as the admin side.
+mountSidebarNav({ role: "partner", active: "dashboard" });
+const session = await requireRole("partner", "login.html", { skipStatusGate: true });
+
+if (session) {
+  setSidebarUser({ displayName: session.profile.companyName || "Partner", roleLabel: `${session.profile.companyName || "Insurance"} · Insurance Partner` });
+  // A rejected/blocked partner can't reach the Dashboard at all (they'd
+  // just get redirected straight back here) — only show the link back
+  // for a status that can actually view it.
+  if (session.profile.status === "approved" || session.profile.status === "pending" || session.profile.status === "suspended" || !session.profile.status) {
+    document.getElementById("backToDashboard").style.display = "";
+  }
+  render(session.profile);
+}
+
+function render(profile) {
+  const { status, companyName, rejectionReason, rejectedAt, approvedAt, blockedAt, createdAt } = profile;
+  const card = document.getElementById("statusCard");
+  const org = companyName ? escapeHtml(companyName) : "Your organization";
+
+  if (status === "approved") {
+    card.innerHTML = notice("check-circle", "green", "You're all set", `
+      <p class="muted" style="line-height:1.6;">${org} is an approved Voya insurance partner${approvedAt ? ` since ${fullDate(approvedAt)}` : ""}. You have full access to publish plans and handle claims — no new notifications right now.</p>`);
+  } else if (status === "suspended") {
+    card.innerHTML = notice("alert-triangle", "amber", "Account suspended", `
+      <p class="muted" style="line-height:1.6;">${org}'s account has been suspended by an admin. You won't be able to publish new plans or handle claims until an admin re-approves your account. Please contact Voya support if you have questions about why.</p>`);
+  } else if (status === "rejected") {
+    const blockDate = rejectedAt?.toDate ? new Date(rejectedAt.toDate().getTime() + 30 * 24 * 60 * 60 * 1000) : null;
+    card.innerHTML = notice("x-circle", "red", "Application rejected", `
+      <p class="muted" style="line-height:1.6;margin-bottom:12px;">${org}'s application to become a Voya insurance partner was not approved.</p>
+      ${rejectionReason
+        ? `<div class="auth-error show" style="background:var(--red-bg);color:var(--red-text);">${escapeHtml(rejectionReason)}</div>`
+        : `<p class="muted small" style="margin-bottom:12px;">No specific reason was given.</p>`}
+      <p class="small muted" style="line-height:1.6;margin-top:12px;">
+        ${rejectedAt ? `Rejected ${fullDate(rejectedAt)} (${timeAgo(rejectedAt)}). ` : ""}
+        ${blockDate ? `If this isn't resolved, your account will be automatically blocked on <strong>${fullDate(blockDate)}</strong>.` : ""}
+      </p>
+      <p class="small muted" style="line-height:1.6;margin-top:10px;">If you believe this was a mistake or can address the reason above, please contact Voya support to have your application reconsidered.</p>`);
+  } else if (status === "blocked") {
+    card.innerHTML = notice("x-circle", "red", "Account blocked", `
+      <p class="muted" style="line-height:1.6;">${org}'s partner account has been blocked. This happened automatically because your application's rejection was never resolved within 30 days${blockedAt ? ` (blocked ${fullDate(blockedAt)})` : ""}. You no longer have access to the Insurance Partner Console.</p>
+      <p class="small muted" style="line-height:1.6;margin-top:10px;">Please contact Voya support if you'd like to appeal this and have your account reinstated.</p>`);
+  } else {
+    // pending, or no status at all (shouldn't happen post-registration,
+    // but treated the same as pending defensively)
+    card.innerHTML = notice("clock", "amber", "Application under review", `
+      <p class="muted" style="line-height:1.6;">${org}'s application${createdAt ? ` (submitted ${fullDate(createdAt)})` : ""} is waiting for an admin to review it. You can still explore the console, but publishing plans or handling claims needs approval first.</p>`);
+  }
+  mountIcons(card);
+}
+
+function notice(icon, tone, title, bodyHtml) {
+  const toneColor = { green: "var(--teal-600)", amber: "#b8860b", red: "var(--red-text)" }[tone] || "var(--text-700)";
+  return `
+    <div style="display:flex;gap:16px;align-items:flex-start;">
+      <div style="width:44px;height:44px;border-radius:12px;background:${tone === "red" ? "var(--red-bg)" : tone === "amber" ? "#FFF6E0" : "var(--teal-100)"};display:flex;align-items:center;justify-content:center;flex:none;">
+        <span data-icon="${icon}" style="color:${toneColor};" data-icon-size="20"></span>
+      </div>
+      <div style="flex:1;">
+        <h3 class="h3" style="margin-bottom:8px;">${title}</h3>
+        ${bodyHtml}
+      </div>
+    </div>`;
+}
+
+document.getElementById("logoutBtn").addEventListener("click", () => logout("login.html"));
+</script>
+</body>
+</html>

@@ -15,13 +15,10 @@ class FilterController extends ChangeNotifier {
   final Set<String> airlines = {};
 
   final Set<String> starRatings = {};
-  final Set<String> propertyTypes = {};
-  final Set<String> amenities = {};
   String guestRating = 'Any';
 
   final Set<String> attractionCategories = {};
   String attractionPrice = 'Any';
-  String attractionDuration = 'Any';
 
   final Set<String> restaurantCuisines = {};
   String restaurantPrice = 'Any';
@@ -32,8 +29,6 @@ class FilterController extends ChangeNotifier {
   final Set<String> tripTypes = {};
   final Set<String> seasons = {};
   String pace = 'Balanced';
-
-  int ratingStars = 0;
 
   void setPriceRange(RangeValues v) {
     priceRange = v;
@@ -70,11 +65,6 @@ class FilterController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void setAttractionDuration(String v) {
-    attractionDuration = v;
-    notifyListeners();
-  }
-
   void setRestaurantPrice(String v) {
     restaurantPrice = v;
     notifyListeners();
@@ -87,11 +77,6 @@ class FilterController extends ChangeNotifier {
 
   void setPace(String v) {
     pace = v;
-    notifyListeners();
-  }
-
-  void setRatingStars(int v) {
-    ratingStars = v;
     notifyListeners();
   }
 
@@ -124,12 +109,9 @@ class FilterController extends ChangeNotifier {
       ..add('Direct');
     airlines.clear();
     starRatings.clear();
-    propertyTypes.clear();
-    amenities.clear();
     guestRating = 'Any';
     attractionCategories.clear();
     attractionPrice = 'Any';
-    attractionDuration = 'Any';
     restaurantCuisines.clear();
     restaurantPrice = 'Any';
     nearbyCategories.clear();

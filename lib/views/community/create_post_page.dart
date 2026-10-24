@@ -30,7 +30,14 @@ class _CreatePostPageState extends State<CreatePostPage> {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
       return;
     }
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Your post has been published!')));
+    // Content moderation (see CommunityRepository.createPost) may have
+    // auto-flagged this post for review instead of publishing it live —
+    // controller.lastPublishWasFlagged tells us which message is true.
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(controller.lastPublishWasFlagged
+          ? "Your post was submitted and is pending review before it appears publicly."
+          : 'Your post has been published!'),
+    ));
     Navigator.of(context).pop();
   }
 
@@ -75,6 +82,14 @@ class _CreatePostPageState extends State<CreatePostPage> {
                   _label('Description'),
                   const SizedBox(height: 8),
                   _textField(controller.descController, maxLength: 500, lines: 4),
+                  const SizedBox(height: 16),
+                  _label('Tags'),
+                  const SizedBox(height: 8),
+                  _tagInput(),
+                  if (controller.tags.isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    _tagChips(),
+                  ],
                   const SizedBox(height: 16),
                   _label('Upload Media'),
                   const SizedBox(height: 8),
@@ -149,6 +164,67 @@ class _CreatePostPageState extends State<CreatePostPage> {
         enabledBorder: border,
         focusedBorder: border.copyWith(borderSide: const BorderSide(color: AppColors.primary)),
       ),
+    );
+  }
+
+  /// A plain hashtag text field with an inline "Add" button — pressing it
+  /// or hitting enter on the keyboard both call [CreatePostController.
+  /// addTagFromInput], which does the trimming/dedup and clears the field
+  /// for the next tag.
+  Widget _tagInput() {
+    final border = OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFFECECEC)));
+    return Row(
+      children: [
+        Expanded(
+          child: TextField(
+            controller: controller.tagInputController,
+            onSubmitted: (_) => controller.addTagFromInput(),
+            decoration: InputDecoration(
+              hintText: 'e.g. foodie, budget, solo',
+              border: border,
+              enabledBorder: border,
+              focusedBorder: border.copyWith(borderSide: const BorderSide(color: AppColors.primary)),
+            ),
+          ),
+        ),
+        const SizedBox(width: 10),
+        OutlinedButton(
+          onPressed: controller.addTagFromInput,
+          style: OutlinedButton.styleFrom(
+            foregroundColor: AppColors.primary,
+            side: const BorderSide(color: AppColors.primary),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+          child: const Text('Add'),
+        ),
+      ],
+    );
+  }
+
+  /// The author's own added-so-far tag chips, each with a tiny "✕" to
+  /// remove it before publishing.
+  Widget _tagChips() {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: controller.tags
+          .map((tag) => Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(color: AppColors.chipGrey, borderRadius: BorderRadius.circular(16)),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('#$tag', style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: AppColors.navy)),
+                    const SizedBox(width: 6),
+                    GestureDetector(
+                      onTap: () => controller.removeTag(tag),
+                      child: const Icon(Icons.close, size: 14, color: AppColors.textGrey),
+                    ),
+                  ],
+                ),
+              ))
+          .toList(),
     );
   }
 

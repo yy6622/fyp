@@ -603,7 +603,7 @@ class _CreatePlanWizardState extends State<CreatePlanWizard> {
           }
 
           final query = searchController.text.trim().toLowerCase();
-          final results = query.isEmpty ? kCountries : kCountries.where((c) => c.name.toLowerCase().contains(query)).toList();
+          final results = query.isEmpty ? kDestinationCountries : kDestinationCountries.where((c) => c.name.toLowerCase().contains(query)).toList();
           return SafeArea(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),

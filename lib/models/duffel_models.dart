@@ -16,11 +16,39 @@ class DuffelFlightOffer {
   final String flightNumber;
   final String originCode;
   final String destinationCode;
+  // Real city name for the origin/destination place Duffel returned
+  // (`city_name`, falling back to the place's own `name` when Duffel
+  // didn't send a separate city name) — null whenever neither was
+  // present, same "don't fabricate" rule as the fields below; the
+  // detail page falls back to the bare IATA code rather than ever
+  // showing a fixed placeholder city.
+  final String? originCityName;
+  final String? destinationCityName;
   final DateTime departureAt;
   final DateTime arrivalAt;
   final int stops;
   final double totalAmount;
   final String totalCurrency;
+  // Real per-offer detail from Duffel's first segment/`conditions` block —
+  // null/empty whenever Duffel's own response didn't have it, same
+  // "don't fabricate" rule as DuffelStayResult.amenities. Detail page
+  // hides each row rather than ever showing a fixed placeholder value.
+  final String? aircraftName;
+  final String? cabinClass;
+  final String? originTerminal;
+  final String? destinationTerminal;
+  final int? checkedBagQuantity;
+  final int? carryOnBagQuantity;
+  // Duffel's conditions.change_before_departure / refund_before_departure
+  // — `allowed` is nullable because Duffel itself sometimes doesn't know
+  // (airline didn't return fare-rule data for this offer), which is a
+  // real third state, not the same as "not allowed".
+  final bool? changeAllowed;
+  final String? changePenaltyAmount;
+  final String? changePenaltyCurrency;
+  final bool? refundAllowed;
+  final String? refundPenaltyAmount;
+  final String? refundPenaltyCurrency;
 
   const DuffelFlightOffer({
     required this.id,
@@ -29,11 +57,25 @@ class DuffelFlightOffer {
     required this.flightNumber,
     required this.originCode,
     required this.destinationCode,
+    this.originCityName,
+    this.destinationCityName,
     required this.departureAt,
     required this.arrivalAt,
     required this.stops,
     required this.totalAmount,
     required this.totalCurrency,
+    this.aircraftName,
+    this.cabinClass,
+    this.originTerminal,
+    this.destinationTerminal,
+    this.checkedBagQuantity,
+    this.carryOnBagQuantity,
+    this.changeAllowed,
+    this.changePenaltyAmount,
+    this.changePenaltyCurrency,
+    this.refundAllowed,
+    this.refundPenaltyAmount,
+    this.refundPenaltyCurrency,
   });
 
   Duration get flightDuration => arrivalAt.difference(departureAt);
@@ -65,6 +107,47 @@ class DuffelFlightOffer {
       return null;
     }
 
+    // Same place object, but its human-readable city name — Duffel
+    // sends `city_name` directly on airport places; `name` is the
+    // fallback for place shapes that only carry a plain name. A bare
+    // IATA-code string (no nested object) has no name to read, so this
+    // returns null rather than inventing one.
+    String? cityNameOf(dynamic place) {
+      if (place is! Map) return null;
+      final city = place['city_name'] as String?;
+      if (city != null && city.isNotEmpty) return city;
+      final name = place['name'] as String?;
+      if (name != null && name.isNotEmpty) return name;
+      return null;
+    }
+
+    // Duffel puts per-passenger fare detail (cabin, baggage allowance) on
+    // the segment under `passengers`, keyed by passenger id — the first
+    // entry is enough for a single-traveller display; a real seatmap/
+    // multi-passenger breakdown is out of scope here.
+    final segPassengers = (firstSeg['passengers'] as List?) ?? const [];
+    final segPassenger = segPassengers.isNotEmpty ? segPassengers.first as Map<String, dynamic> : <String, dynamic>{};
+    final baggages = (segPassenger['baggages'] as List?) ?? const [];
+    int? baggageQtyOf(String type) {
+      for (final b in baggages) {
+        if (b is Map && b['type'] == type) return (b['quantity'] as num?)?.toInt();
+      }
+      return null;
+    }
+
+    final aircraft = (firstSeg['aircraft'] as Map?)?.cast<String, dynamic>();
+    final conditions = (json['conditions'] as Map?)?.cast<String, dynamic>() ?? const {};
+    final changeCond = (conditions['change_before_departure'] as Map?)?.cast<String, dynamic>();
+    final refundCond = (conditions['refund_before_departure'] as Map?)?.cast<String, dynamic>();
+
+    String? cabinLabel() {
+      final marketing = segPassenger['cabin_class_marketing_name'] as String?;
+      if (marketing != null && marketing.isNotEmpty) return marketing;
+      final raw = segPassenger['cabin_class'] as String?;
+      if (raw == null || raw.isEmpty) return null;
+      return raw[0].toUpperCase() + raw.substring(1).replaceAll('_', ' ');
+    }
+
     return DuffelFlightOffer(
       id: (json['id'] as String?) ?? '',
       airlineName: (carrier['name'] as String?) ?? 'Unknown Airline',
@@ -72,11 +155,25 @@ class DuffelFlightOffer {
       flightNumber: (firstSeg['marketing_carrier_flight_number'] as String?) ?? '',
       originCode: iataOf(firstSlice['origin']) ?? iataOf(firstSeg['origin']) ?? '',
       destinationCode: iataOf(firstSlice['destination']) ?? iataOf(lastSeg['destination']) ?? '',
+      originCityName: cityNameOf(firstSlice['origin']) ?? cityNameOf(firstSeg['origin']),
+      destinationCityName: cityNameOf(firstSlice['destination']) ?? cityNameOf(lastSeg['destination']),
       departureAt: parseDt(firstSeg['departing_at']),
       arrivalAt: parseDt(lastSeg['arriving_at']),
       stops: segments.isEmpty ? 0 : segments.length - 1,
       totalAmount: double.tryParse((json['total_amount'] as String?) ?? '') ?? 0,
       totalCurrency: (json['total_currency'] as String?) ?? '',
+      aircraftName: aircraft?['name'] as String?,
+      cabinClass: cabinLabel(),
+      originTerminal: firstSeg['origin_terminal'] as String?,
+      destinationTerminal: lastSeg['destination_terminal'] as String?,
+      checkedBagQuantity: baggageQtyOf('checked'),
+      carryOnBagQuantity: baggageQtyOf('carry_on'),
+      changeAllowed: changeCond?['allowed'] as bool?,
+      changePenaltyAmount: changeCond?['penalty_amount'] as String?,
+      changePenaltyCurrency: changeCond?['penalty_currency'] as String?,
+      refundAllowed: refundCond?['allowed'] as bool?,
+      refundPenaltyAmount: refundCond?['penalty_amount'] as String?,
+      refundPenaltyCurrency: refundCond?['penalty_currency'] as String?,
     );
   }
 
@@ -91,11 +188,25 @@ class DuffelFlightOffer {
         'flightNumber': flightNumber,
         'originCode': originCode,
         'destinationCode': destinationCode,
+        'originCityName': originCityName,
+        'destinationCityName': destinationCityName,
         'departureAt': departureAt.toIso8601String(),
         'arrivalAt': arrivalAt.toIso8601String(),
         'stops': stops,
         'totalAmount': totalAmount,
         'totalCurrency': totalCurrency,
+        'aircraftName': aircraftName,
+        'cabinClass': cabinClass,
+        'originTerminal': originTerminal,
+        'destinationTerminal': destinationTerminal,
+        'checkedBagQuantity': checkedBagQuantity,
+        'carryOnBagQuantity': carryOnBagQuantity,
+        'changeAllowed': changeAllowed,
+        'changePenaltyAmount': changePenaltyAmount,
+        'changePenaltyCurrency': changePenaltyCurrency,
+        'refundAllowed': refundAllowed,
+        'refundPenaltyAmount': refundPenaltyAmount,
+        'refundPenaltyCurrency': refundPenaltyCurrency,
       };
 
   factory DuffelFlightOffer.fromCacheMap(Map<String, dynamic> m) => DuffelFlightOffer(
@@ -105,11 +216,25 @@ class DuffelFlightOffer {
         flightNumber: (m['flightNumber'] as String?) ?? '',
         originCode: (m['originCode'] as String?) ?? '',
         destinationCode: (m['destinationCode'] as String?) ?? '',
+        originCityName: m['originCityName'] as String?,
+        destinationCityName: m['destinationCityName'] as String?,
         departureAt: DateTime.tryParse((m['departureAt'] as String?) ?? '') ?? DateTime.now(),
         arrivalAt: DateTime.tryParse((m['arrivalAt'] as String?) ?? '') ?? DateTime.now(),
         stops: (m['stops'] as num?)?.toInt() ?? 0,
         totalAmount: (m['totalAmount'] as num?)?.toDouble() ?? 0,
         totalCurrency: (m['totalCurrency'] as String?) ?? '',
+        aircraftName: m['aircraftName'] as String?,
+        cabinClass: m['cabinClass'] as String?,
+        originTerminal: m['originTerminal'] as String?,
+        destinationTerminal: m['destinationTerminal'] as String?,
+        checkedBagQuantity: (m['checkedBagQuantity'] as num?)?.toInt(),
+        carryOnBagQuantity: (m['carryOnBagQuantity'] as num?)?.toInt(),
+        changeAllowed: m['changeAllowed'] as bool?,
+        changePenaltyAmount: m['changePenaltyAmount'] as String?,
+        changePenaltyCurrency: m['changePenaltyCurrency'] as String?,
+        refundAllowed: m['refundAllowed'] as bool?,
+        refundPenaltyAmount: m['refundPenaltyAmount'] as String?,
+        refundPenaltyCurrency: m['refundPenaltyCurrency'] as String?,
       );
 }
 
@@ -134,6 +259,22 @@ class DuffelStayResult {
   /// result just didn't have any, same "don't fabricate" rule as
   /// [reviewScore]/[reviewCount].
   final List<String> amenities;
+  // The accommodation's own check-in/check-out policy times (e.g.
+  // "3:00 PM") — Duffel's `accommodation.check_in_information` block,
+  // read defensively across a few plausible key names since Duffel's
+  // public docs don't pin the exact shape down (same caveat as this
+  // file's other nested-field parsing). Not the stay's own dates
+  // ([checkInDate]/[checkOutDate] above) — this is the hotel's
+  // standing policy, the same for every booking. Null whenever Duffel
+  // didn't send it, or for a RollingGo result (no equivalent field in
+  // its documented response) — the detail page hides that row rather
+  // than ever showing a fixed placeholder time. There is no real
+  // cancellation-policy data available from either source at the
+  // search stage (Duffel only returns that once you fetch a specific
+  // rate/quote, which this app doesn't currently call), so there's no
+  // field for it here — the detail page simply has no cancellation row.
+  final String? checkInPolicyTime;
+  final String? checkOutPolicyTime;
 
   const DuffelStayResult({
     required this.searchResultId,
@@ -149,6 +290,8 @@ class DuffelStayResult {
     required this.checkInDate,
     required this.checkOutDate,
     this.amenities = const [],
+    this.checkInPolicyTime,
+    this.checkOutPolicyTime,
   });
 
   factory DuffelStayResult.fromJson(Map<String, dynamic> json) {
@@ -173,6 +316,32 @@ class DuffelStayResult {
     }
 
     DateTime parseDate(dynamic v) => DateTime.tryParse(v as String? ?? '') ?? DateTime.now();
+
+    // Duffel's check-in/check-out policy time, read defensively: the
+    // nested block's own key name isn't confirmed against a live
+    // response, so a few plausible candidates are tried, and a raw
+    // "HH:mm[:ss]" value is reformatted to "3:00 PM"-style; anything
+    // that doesn't parse as a time is shown exactly as Duffel sent it
+    // rather than dropped.
+    final checkInInfo = (accommodation['check_in_information'] as Map?)?.cast<String, dynamic>() ?? const {};
+    String? formatPolicyTime(dynamic raw) {
+      if (raw is! String || raw.isEmpty) return null;
+      final match = RegExp(r'^(\d{1,2}):(\d{2})').firstMatch(raw);
+      if (match == null) return raw;
+      final hour24 = int.parse(match.group(1)!);
+      final minute = match.group(2)!;
+      final period = hour24 >= 12 ? 'PM' : 'AM';
+      final hour12 = hour24 % 12 == 0 ? 12 : hour24 % 12;
+      return '$hour12:$minute $period';
+    }
+
+    final checkInPolicyTime = formatPolicyTime(checkInInfo['check_in_after_time'] ??
+        checkInInfo['check_in_from_time'] ??
+        checkInInfo['check_in_time'] ??
+        accommodation['check_in_time']);
+    final checkOutPolicyTime = formatPolicyTime(checkInInfo['check_out_before_time'] ??
+        checkInInfo['check_out_time'] ??
+        accommodation['check_out_time']);
 
     // Duffel's accommodation.amenities is a list of {type, description}
     // objects (e.g. {"type": "wifi", "description": "WiFi"}) — prefer the
@@ -207,6 +376,8 @@ class DuffelStayResult {
       checkInDate: parseDate(json['check_in_date']),
       checkOutDate: parseDate(json['check_out_date']),
       amenities: amenities,
+      checkInPolicyTime: checkInPolicyTime,
+      checkOutPolicyTime: checkOutPolicyTime,
     );
   }
 
@@ -226,6 +397,8 @@ class DuffelStayResult {
         'checkInDate': checkInDate.toIso8601String(),
         'checkOutDate': checkOutDate.toIso8601String(),
         'amenities': amenities,
+        'checkInPolicyTime': checkInPolicyTime,
+        'checkOutPolicyTime': checkOutPolicyTime,
       };
 
   factory DuffelStayResult.fromCacheMap(Map<String, dynamic> m) => DuffelStayResult(
@@ -242,6 +415,8 @@ class DuffelStayResult {
         checkInDate: DateTime.tryParse((m['checkInDate'] as String?) ?? '') ?? DateTime.now(),
         checkOutDate: DateTime.tryParse((m['checkOutDate'] as String?) ?? '') ?? DateTime.now(),
         amenities: List<String>.from(m['amenities'] as List? ?? const []),
+        checkInPolicyTime: m['checkInPolicyTime'] as String?,
+        checkOutPolicyTime: m['checkOutPolicyTime'] as String?,
       );
 
   /// Same shape, sourced from [RollingGoApiService.searchStays]'s
@@ -306,6 +481,11 @@ class DuffelStayResult {
       checkInDate: checkIn,
       checkOutDate: checkOut,
       amenities: amenities,
+      // RollingGo's documented searchHotels response has no check-in/
+      // check-out policy time field — left null, same "don't fabricate"
+      // rule as [reviewScore] above; the detail page hides those rows.
+      checkInPolicyTime: null,
+      checkOutPolicyTime: null,
     );
   }
 

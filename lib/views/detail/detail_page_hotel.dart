@@ -4,7 +4,7 @@ import '../../repositories/trip_repository.dart';
 import '../../services/auth_service.dart';
 import '../../services/format_utils.dart';
 import '../../theme.dart';
-import '../shared/translated_text.dart';
+import '../shared/nice_pickers.dart';
 import 'detail_widgets.dart';
 
 // ---------------------------------------------------------------------
@@ -29,11 +29,13 @@ class DetailPageHotel extends StatefulWidget {
   final String image;
   // The trip this stay should be added to once payment succeeds (see
   // BookingBar's onPaid) — blank when there's no trip context. checkIn/
-  // checkOut are the dates actually searched for (when known) so the
-  // trip's own hotel-stay record reflects real dates instead of blanks.
+  // checkOut are the dates actually searched for (when known), so the
+  // preview row below starts from them instead of a fixed placeholder —
+  // still editable from there (see _pickDates), with whatever the person
+  // lands on carried into the real booking instead of being discarded.
   final String tripId;
-  final String checkIn;
-  final String checkOut;
+  final DateTime? checkIn;
+  final DateTime? checkOut;
   // Real per-hotel amenity names from Duffel/RollingGo (see
   // DuffelStayResult.amenities / CatalogHotel.amenities) — empty for a
   // manually-typed trip stay or any source result that just didn't have
@@ -41,6 +43,18 @@ class DetailPageHotel extends StatefulWidget {
   // rather than ever showing a fixed list that isn't actually about this
   // hotel.
   final List<String> amenities;
+  // The accommodation's real check-in/check-out policy time (see
+  // DuffelStayResult.checkInPolicyTime/checkOutPolicyTime) — null for a
+  // manually-typed trip stay, a RollingGo-sourced result (no such field
+  // in its response), or whenever Duffel just didn't send it. Each row
+  // in the Hotel Policies card only renders when its value is non-null,
+  // and the whole card is hidden when both are null, rather than ever
+  // showing a fixed time that isn't actually this hotel's policy. There
+  // is no cancellation-policy field at all — Duffel only returns that
+  // once a specific rate/quote is fetched, which this app doesn't
+  // currently call — so there's no cancellation row here any more.
+  final String? checkInPolicyTime;
+  final String? checkOutPolicyTime;
 
   const DetailPageHotel({
     super.key,
@@ -51,9 +65,11 @@ class DetailPageHotel extends StatefulWidget {
     this.pricePerNight = 'RM 320',
     this.image = '',
     this.tripId = '',
-    this.checkIn = '',
-    this.checkOut = '',
+    this.checkIn,
+    this.checkOut,
     this.amenities = const [],
+    this.checkInPolicyTime,
+    this.checkOutPolicyTime,
   });
 
   @override
@@ -61,6 +77,31 @@ class DetailPageHotel extends StatefulWidget {
 }
 
 class _DetailPageHotelState extends State<DetailPageHotel> {
+  // Local, editable copy of the stay dates — seeded from whatever this
+  // page was opened with (a real search's dates, a trip's existing stay,
+  // or nothing) and changed in place by [_pickDates], so the preview row
+  // reflects an edit immediately without waiting on whoever opened this
+  // page to pass new props back down.
+  late DateTime? _checkIn = widget.checkIn;
+  late DateTime? _checkOut = widget.checkOut;
+
+  Future<void> _pickDates() async {
+    final now = DateTime.now();
+    final range = await showVoyaDateRangePicker(
+      context: context,
+      initialStart: _checkIn,
+      initialEnd: _checkOut,
+      firstDate: now,
+      lastDate: DateTime(now.year + 3),
+      title: 'Check-in & Check-out',
+    );
+    if (range == null) return;
+    setState(() {
+      _checkIn = range.start;
+      _checkOut = range.end;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -72,7 +113,7 @@ class _DetailPageHotelState extends State<DetailPageHotel> {
                 child: SingleChildScrollView(
                   child: Column(
                     children: [
-                      DetailHeader(title: widget.name, imageUrl: widget.image, translate: true),
+                      DetailHeader(title: widget.name, imageUrl: widget.image),
                       Padding(
                         padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
                         child: Column(
@@ -83,7 +124,7 @@ class _DetailPageHotelState extends State<DetailPageHotel> {
                           // inconsistent with the others' left-aligned layout.
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                    TranslatedText(widget.name, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.navy)),
+                    Text(widget.name, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.navy)),
                     const SizedBox(height: 8),
                     Row(
                       children: [
@@ -137,6 +178,8 @@ class _DetailPageHotelState extends State<DetailPageHotel> {
                 bookingSubtitle: widget.location,
                 refId: widget.hotelId,
                 tripId: widget.tripId,
+                checkIn: _checkIn,
+                checkOut: _checkOut,
                 onPaid: widget.tripId.isEmpty
                     ? null
                     : (confirmation) => TripRepository.instance.addHotelStay(
@@ -146,10 +189,14 @@ class _DetailPageHotelState extends State<DetailPageHotel> {
                             name: widget.name,
                             location: widget.location,
                             // The dates actually confirmed at checkout —
-                            // real, not whatever (possibly blank) dates
-                            // this page happened to be opened with.
-                            checkIn: confirmation.checkIn != null ? formatLongDate(confirmation.checkIn!) : widget.checkIn,
-                            checkOut: confirmation.checkOut != null ? formatLongDate(confirmation.checkOut!) : widget.checkOut,
+                            // real, not whatever (possibly since-edited)
+                            // dates this page happened to show.
+                            checkIn: confirmation.checkIn != null
+                                ? formatLongDate(confirmation.checkIn!)
+                                : (_checkIn != null ? formatLongDate(_checkIn!) : ''),
+                            checkOut: confirmation.checkOut != null
+                                ? formatLongDate(confirmation.checkOut!)
+                                : (_checkOut != null ? formatLongDate(_checkOut!) : ''),
                             guestName: confirmation.guestName,
                             guestEmail: confirmation.guestEmail,
                             guestPhone: confirmation.guestPhone,
@@ -178,35 +225,50 @@ class _DetailPageHotelState extends State<DetailPageHotel> {
 
   List<Widget> _detailsContent() {
     return [
-      _bookingRow('Check-in', '12 Jun 2026', 'Check-out', '15 Jun 2026'),
+      _bookingRow(
+        'Check-in',
+        _checkIn != null ? formatLongDate(_checkIn!) : 'Select date',
+        'Check-out',
+        _checkOut != null ? formatLongDate(_checkOut!) : 'Select date',
+        onTap: _pickDates,
+      ),
       const SizedBox(height: 10),
+      // Fixed, not editable here — room/guest count is only ever decided
+      // one step later, on the real Rooms stepper in HotelGuestDetailsPage
+      // (guest count itself isn't an adjustable field anywhere in the
+      // app, just the default double-occupancy assumption shown before
+      // that), so this row carries no arrow implying it can be tapped.
       _bookingRowSingle('2 Guests / 1 Room'),
       const SizedBox(height: 20),
-      const Text('Hotel Policies', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.navy)),
-      const SizedBox(height: 12),
-      Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: const Color(0xFFECECEC)),
+      // Real policy times only (see DetailPageHotel's doc comment) — the
+      // whole card is left out entirely when neither is available,
+      // rather than showing a fixed placeholder policy for a hotel that
+      // has no real policy data behind it.
+      if (widget.checkInPolicyTime != null || widget.checkOutPolicyTime != null) ...[
+        const Text('Hotel Policies', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.navy)),
+        const SizedBox(height: 12),
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: const Color(0xFFECECEC)),
+          ),
+          child: Column(
+            children: [
+              if (widget.checkInPolicyTime != null) FareRuleRow(icon: Icons.login, text: 'Check-in from ${widget.checkInPolicyTime}'),
+              if (widget.checkInPolicyTime != null && widget.checkOutPolicyTime != null) const SizedBox(height: 12),
+              if (widget.checkOutPolicyTime != null) FareRuleRow(icon: Icons.logout, text: 'Check-out until ${widget.checkOutPolicyTime}'),
+            ],
+          ),
         ),
-        child: const Column(
-          children: [
-            FareRuleRow(icon: Icons.login, text: 'Check-in from 3:00 PM'),
-            SizedBox(height: 12),
-            FareRuleRow(icon: Icons.logout, text: 'Check-out until 12:00 PM'),
-            SizedBox(height: 12),
-            FareRuleRow(icon: Icons.event_available_outlined, text: 'Free cancellation up to 24 hours before check-in'),
-          ],
-        ),
-      ),
-      const SizedBox(height: 20),
+        const SizedBox(height: 20),
+      ],
     ];
   }
 
-  Widget _bookingRow(String label1, String value1, String label2, String value2) {
-    return Container(
+  Widget _bookingRow(String label1, String value1, String label2, String value2, {VoidCallback? onTap}) {
+    final row = Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(color: AppColors.chipGrey, borderRadius: BorderRadius.circular(12)),
       child: Row(
@@ -215,10 +277,12 @@ class _DetailPageHotelState extends State<DetailPageHotel> {
           Container(height: 30, width: 1, color: const Color(0xFFDDDDDD)),
           const SizedBox(width: 16),
           Expanded(child: InfoField(label: label2, value: value2)),
-          const Icon(Icons.chevron_right, color: AppColors.textGrey),
+          if (onTap != null) const Icon(Icons.chevron_right, color: AppColors.textGrey),
         ],
       ),
     );
+    if (onTap == null) return row;
+    return InkWell(borderRadius: BorderRadius.circular(12), onTap: onTap, child: row);
   }
 
   /// Maps a real amenity name (Duffel's `description`/`type`, or
@@ -249,15 +313,15 @@ class _DetailPageHotelState extends State<DetailPageHotel> {
     return Icons.check_circle_outline;
   }
 
+  /// Always non-interactive — no chevron, no onTap — unlike [_bookingRow]
+  /// above it, since this value isn't something this page lets you change.
   Widget _bookingRowSingle(String label) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(color: AppColors.chipGrey, borderRadius: BorderRadius.circular(12)),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(label, style: const TextStyle(fontSize: 13, color: Colors.black)),
-          const Icon(Icons.chevron_right, color: AppColors.textGrey),
         ],
       ),
     );

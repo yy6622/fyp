@@ -177,8 +177,15 @@ class _CreateVotePageState extends State<CreateVotePage> {
         ? TimeOfDay(hour: controller.deadline!.hour, minute: controller.deadline!.minute)
         : const TimeOfDay(hour: 23, minute: 59);
     final time = await showVoyaTimePicker(context: context, initialTime: initialTime, title: 'Deadline Time');
-    if (time == null) return;
-    controller.setDeadline(DateTime(date.year, date.month, date.day, time.hour, time.minute));
+    if (time == null || !mounted) return;
+    final picked = DateTime(date.year, date.month, date.day, time.hour, time.minute);
+    if (picked.isBefore(DateTime.now())) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Deadline must be in the future')),
+      );
+      return;
+    }
+    controller.setDeadline(picked);
   }
 
   Widget _boxField(TextEditingController textController, {required String hint}) {
@@ -210,11 +217,10 @@ class _CreateVotePageState extends State<CreateVotePage> {
               style: const TextStyle(fontSize: 12.5, color: Colors.black),
             ),
           ),
-          if (controller.optionDrafts.length > 2)
-            IconButton(
-              icon: const Icon(Icons.cancel_outlined, size: 20, color: AppColors.textGrey),
-              onPressed: () => controller.removeOptionAt(index),
-            ),
+          IconButton(
+            icon: const Icon(Icons.cancel_outlined, size: 20, color: AppColors.textGrey),
+            onPressed: () => controller.removeOptionAt(index),
+          ),
         ],
       ),
     );
@@ -275,11 +281,10 @@ class _CreateVotePageState extends State<CreateVotePage> {
               ],
             ),
           ),
-          if (controller.optionDrafts.length > 2)
-            IconButton(
-              icon: const Icon(Icons.cancel_outlined, size: 20, color: AppColors.textGrey),
-              onPressed: () => controller.removeOptionAt(index),
-            ),
+          IconButton(
+            icon: const Icon(Icons.cancel_outlined, size: 20, color: AppColors.textGrey),
+            onPressed: () => controller.removeOptionAt(index),
+          ),
         ],
       ),
     );

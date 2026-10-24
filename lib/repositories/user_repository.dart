@@ -10,12 +10,6 @@ class AppUser {
   final String country;
   final String currencyCode;
 
-  /// Account Setting > Language (see LanguageService/TranslationService)
-  /// — drives which language attraction/restaurant/hotel names are shown
-  /// translated into. '' means "never explicitly chosen", treated the
-  /// same as English (no translation shown) everywhere this is read.
-  final String languageCode;
-
   /// IATA code of the person's chosen departure airport (e.g. "PEN"),
   /// set from Account Setting's Home Airport picker — see
   /// `location_service.dart`. Empty means "never set"; callers fall
@@ -60,7 +54,6 @@ class AppUser {
     this.avatarUrl = '',
     this.country = '',
     this.currencyCode = '',
-    this.languageCode = '',
     this.homeAirportCode = '',
     this.shareLocation = false,
     this.lastLat,
@@ -80,7 +73,6 @@ class AppUser {
       avatarUrl: (data['avatarUrl'] as String?) ?? '',
       country: (data['country'] as String?) ?? '',
       currencyCode: (data['currencyCode'] as String?) ?? '',
-      languageCode: (data['languageCode'] as String?) ?? '',
       homeAirportCode: (data['homeAirportCode'] as String?) ?? '',
       shareLocation: (data['shareLocation'] as bool?) ?? false,
       lastLat: (data['lastLat'] as num?)?.toDouble(),
@@ -107,7 +99,6 @@ class UserRepository {
       'avatarUrl': '',
       'country': '',
       'currencyCode': '',
-      'languageCode': '',
       'homeAirportCode': '',
       'shareLocation': false,
       'publicProfile': true,
@@ -131,7 +122,6 @@ class UserRepository {
       String? avatarUrl,
       String? country,
       String? currencyCode,
-      String? languageCode,
       String? homeAirportCode}) {
     final data = <String, dynamic>{};
     if (name != null) data['name'] = name;
@@ -139,7 +129,6 @@ class UserRepository {
     if (avatarUrl != null) data['avatarUrl'] = avatarUrl;
     if (country != null) data['country'] = country;
     if (currencyCode != null) data['currencyCode'] = currencyCode;
-    if (languageCode != null) data['languageCode'] = languageCode;
     if (homeAirportCode != null) data['homeAirportCode'] = homeAirportCode;
     if (data.isEmpty) return Future.value();
     return _users.doc(uid).update(data);

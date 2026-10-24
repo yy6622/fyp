@@ -1,0 +1,3719 @@
+{
+"cities": [
+{
+"city": "Penang, Malaysia",
+"aliases": [
+"penang",
+"pulau pinang",
+"槟城"
+]
+},
+{
+"city": "Kuala Lumpur, Malaysia",
+"aliases": [
+"kl",
+"kuala lumpur",
+"吉隆坡"
+]
+},
+{
+"city": "Melaka, Malaysia",
+"aliases": [
+"melaka",
+"马六甲"
+]
+},
+{
+"city": "Langkawi, Malaysia",
+"aliases": [
+"langkawi",
+"兰卡威"
+]
+},
+{
+"city": "Singapore",
+"aliases": [
+"singapore",
+"singapura",
+"新加坡"
+]
+},
+{
+"city": "Bangkok, Thailand",
+"aliases": [
+"bangkok",
+"曼谷"
+]
+},
+{
+"city": "Bali, Indonesia",
+"aliases": [
+"bali",
+"巴厘岛"
+]
+},
+{
+"city": "Tokyo, Japan",
+"aliases": [
+"tokyo",
+"东京"
+]
+},
+{
+"city": "Seoul, South Korea",
+"aliases": [
+"seoul",
+"首尔"
+]
+},
+{
+"city": "Taipei, Taiwan",
+"aliases": [
+"taipei",
+"台北"
+]
+},
+{
+"city": "Hong Kong",
+"aliases": [
+"hong kong",
+"香港"
+]
+},
+{
+"city": "Ho Chi Minh City, Vietnam",
+"aliases": [
+"hcmc",
+"ho chi minh",
+"ho chi minh city",
+"胡志明市"
+]
+},
+{
+"city": "Osaka, Japan",
+"aliases": [
+"osaka",
+"大阪"
+]
+},
+{
+"city": "Kota Kinabalu, Malaysia",
+"aliases": [
+"kk",
+"kota kinabalu",
+"亚庇"
+]
+},
+{
+"city": "Shanghai, China",
+"aliases": [
+"shanghai",
+"上海"
+]
+}
+],
+"places": [
+{
+"name": "Kek Lok Si Temple",
+"city": "Penang, Malaysia",
+"district": "Air Itam",
+"area": "Air Itam",
+"icon": "place",
+"slots": "MA",
+"hours": 2.0,
+"aliases": [
+"kek lok si",
+"kek lok si temple",
+"极乐寺"
+]
+},
+{
+"name": "Penang Hill",
+"city": "Penang, Malaysia",
+"district": "Air Itam",
+"area": "Air Itam",
+"icon": "place",
+"slots": "MAE",
+"hours": 2.0,
+"aliases": [
+"bukit bendera",
+"penang hill",
+"升旗山"
+]
+},
+{
+"name": "Chew Jetty",
+"city": "Penang, Malaysia",
+"district": "Weld Quay, George Town",
+"area": "Weld Quay, George Town",
+"icon": "place",
+"slots": "MAE",
+"hours": 2.0,
+"aliases": [
+"chew jetty",
+"clan jetty",
+"姓周桥"
+]
+},
+{
+"name": "George Town Street Art",
+"city": "Penang, Malaysia",
+"district": "Armenian Street",
+"area": "Armenian Street",
+"icon": "place",
+"slots": "MA",
+"hours": 2.0,
+"aliases": [
+"armenian street murals",
+"george town street art",
+"street art",
+"壁画街"
+]
+},
+{
+"name": "Cheong Fatt Tze Mansion",
+"city": "Penang, Malaysia",
+"district": "Leith Street",
+"area": "Leith Street",
+"icon": "place",
+"slots": "MA",
+"hours": 2.0,
+"aliases": [
+"blue mansion",
+"cheong fatt tze mansion",
+"蓝屋"
+]
+},
+{
+"name": "Gurney Drive Hawker Centre",
+"city": "Penang, Malaysia",
+"district": "Gurney Drive",
+"area": "Gurney Drive",
+"icon": "food",
+"slots": "DN",
+"hours": 1.0,
+"aliases": [
+"gurney drive",
+"gurney drive hawker centre",
+"gurney hawker",
+"新关仔角"
+]
+},
+{
+"name": "Penang Road Famous Teochew Chendul",
+"city": "Penang, Malaysia",
+"district": "Jalan Penang",
+"area": "Jalan Penang",
+"icon": "food",
+"slots": "A",
+"hours": 1.0,
+"aliases": [
+"penang road cendol",
+"penang road famous teochew chendul",
+"the famous chendul",
+"槟榔律煎蕊"
+]
+},
+{
+"name": "Toh Soon Cafe",
+"city": "Penang, Malaysia",
+"district": "Campbell Street",
+"area": "Campbell Street",
+"icon": "food",
+"slots": "B",
+"hours": 1.0,
+"aliases": [
+"toh soon",
+"toh soon cafe",
+"多春茶座"
+]
+},
+{
+"name": "Nasi Kandar Line Clear",
+"city": "Penang, Malaysia",
+"district": "Jalan Penang",
+"area": "Jalan Penang",
+"icon": "food",
+"slots": "LDN",
+"hours": 1.0,
+"aliases": [
+"line clear",
+"nasi kandar line clear"
+]
+},
+{
+"name": "Batu Ferringhi Night Market",
+"city": "Penang, Malaysia",
+"district": "Batu Ferringhi",
+"area": "Batu Ferringhi",
+"icon": "shopping",
+"slots": "N",
+"hours": 2.0,
+"aliases": [
+"batu ferringhi night market",
+"batu ferringhi pasar malam",
+"ferringhi night market",
+"峇都丁宜夜市"
+]
+},
+{
+"name": "Gurney Plaza",
+"city": "Penang, Malaysia",
+"district": "Gurney Drive",
+"area": "Gurney Drive",
+"icon": "shopping",
+"slots": "AE",
+"hours": 2.0,
+"aliases": [
+"gurney plaza",
+"合您广场"
+]
+},
+{
+"name": "Entopia Butterfly Farm",
+"city": "Penang, Malaysia",
+"district": "Teluk Bahang",
+"area": "Teluk Bahang",
+"icon": "activity",
+"slots": "MA",
+"hours": 3.0,
+"aliases": [
+"butterfly farm",
+"entopia",
+"entopia butterfly farm",
+"蝴蝶公园"
+]
+},
+{
+"name": "ESCAPE Penang",
+"city": "Penang, Malaysia",
+"district": "Teluk Bahang",
+"area": "Teluk Bahang",
+"icon": "activity",
+"slots": "MA",
+"hours": 3.0,
+"aliases": [
+"escape",
+"escape penang",
+"escape theme park"
+]
+},
+{
+"name": "Siam Road Char Koay Teow",
+"city": "Penang, Malaysia",
+"district": "Siam Road",
+"area": "Siam Road",
+"icon": "food",
+"slots": "LD",
+"hours": 1.0,
+"aliases": [
+"siam road char koay teow",
+"siam road ckt",
+"暹罗路炒粿条"
+]
+},
+{
+"name": "Kimberley Street Food Night Market",
+"city": "Penang, Malaysia",
+"district": "Lebuh Kimberley",
+"area": "Lebuh Kimberley",
+"icon": "food",
+"slots": "DN",
+"hours": 1.0,
+"aliases": [
+"kimberley street",
+"kimberley street food night market",
+"汕头街"
+]
+},
+{
+"name": "Petronas Twin Towers",
+"city": "Kuala Lumpur, Malaysia",
+"district": "KLCC",
+"area": "KLCC",
+"icon": "place",
+"slots": "MAEN",
+"hours": 2.0,
+"aliases": [
+"klcc",
+"menara berkembar",
+"petronas twin towers",
+"twin towers",
+"双子塔",
+"双峰塔",
+"吉隆坡双子塔"
+]
+},
+{
+"name": "Batu Caves",
+"city": "Kuala Lumpur, Malaysia",
+"district": "Gombak",
+"area": "Gombak",
+"icon": "place",
+"slots": "M",
+"hours": 2.0,
+"aliases": [
+"batu caves",
+"黑风洞"
+]
+},
+{
+"name": "Jalan Alor Food Street",
+"city": "Kuala Lumpur, Malaysia",
+"district": "Bukit Bintang",
+"area": "Bukit Bintang",
+"icon": "food",
+"slots": "DN",
+"hours": 1.0,
+"aliases": [
+"jalan alor",
+"jalan alor food street",
+"阿罗街"
+]
+},
+{
+"name": "Pavilion Kuala Lumpur",
+"city": "Kuala Lumpur, Malaysia",
+"district": "Bukit Bintang",
+"area": "Bukit Bintang",
+"icon": "shopping",
+"slots": "AE",
+"hours": 2.0,
+"aliases": [
+"pavilion",
+"pavilion kuala lumpur",
+"柏威年"
+],
+"tags": [
+"mall"
+]
+},
+{
+"name": "Central Market",
+"city": "Kuala Lumpur, Malaysia",
+"district": "Jalan Hang Kasturi",
+"area": "Jalan Hang Kasturi",
+"icon": "shopping",
+"slots": "MA",
+"hours": 2.0,
+"aliases": [
+"central market",
+"pasar seni",
+"中央艺术坊"
+]
+},
+{
+"name": "Petaling Street",
+"city": "Kuala Lumpur, Malaysia",
+"district": "Chinatown",
+"area": "Chinatown",
+"icon": "shopping",
+"slots": "AEN",
+"hours": 2.0,
+"aliases": [
+"chinatown",
+"petaling street",
+"茨厂街"
+]
+},
+{
+"name": "KL Tower",
+"city": "Kuala Lumpur, Malaysia",
+"district": "Bukit Nanas",
+"area": "Bukit Nanas",
+"icon": "place",
+"slots": "AEN",
+"hours": 2.0,
+"aliases": [
+"kl tower",
+"menara kl",
+"吉隆坡塔"
+]
+},
+{
+"name": "Thean Hou Temple",
+"city": "Kuala Lumpur, Malaysia",
+"district": "Robson Heights",
+"area": "Robson Heights",
+"icon": "place",
+"slots": "MAE",
+"hours": 2.0,
+"aliases": [
+"thean hou",
+"thean hou temple",
+"天后宫"
+]
+},
+{
+"name": "Village Park Restaurant",
+"city": "Kuala Lumpur, Malaysia",
+"district": "Damansara Uptown",
+"area": "Damansara Uptown",
+"icon": "food",
+"slots": "BL",
+"hours": 1.0,
+"aliases": [
+"village park",
+"village park nasi lemak",
+"village park restaurant"
+]
+},
+{
+"name": "Aquaria KLCC",
+"city": "Kuala Lumpur, Malaysia",
+"district": "KLCC",
+"area": "KLCC",
+"icon": "activity",
+"slots": "MA",
+"hours": 3.0,
+"aliases": [
+"aquaria",
+"aquaria klcc",
+"水族馆"
+]
+},
+{
+"name": "Merdeka Square",
+"city": "Kuala Lumpur, Malaysia",
+"district": "Jalan Raja",
+"area": "Jalan Raja",
+"icon": "place",
+"slots": "ME",
+"hours": 2.0,
+"aliases": [
+"dataran merdeka",
+"merdeka square",
+"独立广场"
+]
+},
+{
+"name": "Sunway Lagoon",
+"city": "Kuala Lumpur, Malaysia",
+"district": "Bandar Sunway",
+"area": "Bandar Sunway",
+"icon": "activity",
+"slots": "MA",
+"hours": 3.0,
+"aliases": [
+"sunway lagoon"
+]
+},
+{
+"name": "Lot 10 Hutong Food Court",
+"city": "Kuala Lumpur, Malaysia",
+"district": "Bukit Bintang",
+"area": "Bukit Bintang",
+"icon": "food",
+"slots": "LD",
+"hours": 1.0,
+"aliases": [
+"hutong",
+"lot 10 hutong",
+"lot 10 hutong food court",
+"十号胡同"
+]
+},
+{
+"name": "Islamic Arts Museum Malaysia",
+"city": "Kuala Lumpur, Malaysia",
+"district": "Jalan Lembah Perdana",
+"area": "Jalan Lembah Perdana",
+"icon": "place",
+"slots": "MA",
+"hours": 2.0,
+"aliases": [
+"islamic arts museum",
+"islamic arts museum malaysia"
+]
+},
+{
+"name": "Kwai Chai Hong",
+"city": "Kuala Lumpur, Malaysia",
+"district": "Lorong Panggung",
+"area": "Lorong Panggung",
+"icon": "place",
+"slots": "MAE",
+"hours": 2.0,
+"aliases": [
+"kwai chai hong",
+"鬼仔巷"
+]
+},
+{
+"name": "Taman Connaught Night Market",
+"city": "Kuala Lumpur, Malaysia",
+"district": "Cheras",
+"area": "Cheras",
+"icon": "shopping",
+"slots": "N",
+"hours": 2.0,
+"aliases": [
+"connaught night market",
+"pasar malam connaught",
+"taman connaught night market",
+"康乐夜市"
+]
+},
+{
+"name": "Pavilion Kuala Lumpur",
+"city": "Kuala Lumpur, Malaysia",
+"district": "Bukit Bintang",
+"area": "Bukit Bintang",
+"icon": "shopping",
+"slots": "AE",
+"hours": 2.0,
+"aliases": [
+"pavilion",
+"pavilion kl",
+"pavilion kuala lumpur",
+"柏威年"
+],
+"tags": [
+"mall"
+]
+},
+{
+"name": "Jonker Street Night Market",
+"city": "Melaka, Malaysia",
+"district": "Jonker Walk",
+"area": "Jonker Walk",
+"icon": "shopping",
+"slots": "N",
+"hours": 2.0,
+"aliases": [
+"jonker street",
+"jonker street night market",
+"jonker walk",
+"鸡场街"
+]
+},
+{
+"name": "A Famosa",
+"city": "Melaka, Malaysia",
+"district": "Bandar Hilir",
+"area": "Bandar Hilir",
+"icon": "place",
+"slots": "MAE",
+"hours": 2.0,
+"aliases": [
+"a famosa",
+"porta de santiago"
+]
+},
+{
+"name": "St. Paul's Hill",
+"city": "Melaka, Malaysia",
+"district": "Bandar Hilir",
+"area": "Bandar Hilir",
+"icon": "place",
+"slots": "MAE",
+"hours": 2.0,
+"aliases": [
+"st paul hill",
+"st paul's church",
+"st. paul's hill",
+"圣保罗山"
+]
+},
+{
+"name": "The Stadthuys",
+"city": "Melaka, Malaysia",
+"district": "Dutch Square",
+"area": "Dutch Square",
+"icon": "place",
+"slots": "MA",
+"hours": 2.0,
+"aliases": [
+"dutch square",
+"red house",
+"stadthuys",
+"the stadthuys",
+"红屋"
+]
+},
+{
+"name": "Melaka River Cruise",
+"city": "Melaka, Malaysia",
+"district": "Melaka River",
+"area": "Melaka River",
+"icon": "activity",
+"slots": "EN",
+"hours": 3.0,
+"aliases": [
+"melaka river cruise",
+"river cruise",
+"马六甲河游船"
+]
+},
+{
+"name": "Chung Wah Chicken Rice Ball",
+"city": "Melaka, Malaysia",
+"district": "Jonker Walk",
+"area": "Jonker Walk",
+"icon": "food",
+"slots": "L",
+"hours": 1.0,
+"aliases": [
+"chicken rice ball",
+"chung wah",
+"chung wah chicken rice ball",
+"中华茶室"
+]
+},
+{
+"name": "Jonker 88",
+"city": "Melaka, Malaysia",
+"district": "Jonker Walk",
+"area": "Jonker Walk",
+"icon": "food",
+"slots": "A",
+"hours": 1.0,
+"aliases": [
+"jonker 88",
+"jonker 88 cendol"
+]
+},
+{
+"name": "Melaka Straits Mosque",
+"city": "Melaka, Malaysia",
+"district": "Pulau Melaka",
+"area": "Pulau Melaka",
+"icon": "place",
+"slots": "E",
+"hours": 2.0,
+"aliases": [
+"floating mosque",
+"masjid selat",
+"melaka straits mosque",
+"海上清真寺"
+]
+},
+{
+"name": "Baba & Nyonya Heritage Museum",
+"city": "Melaka, Malaysia",
+"district": "Jalan Tun Tan Cheng Lock",
+"area": "Jalan Tun Tan Cheng Lock",
+"icon": "place",
+"slots": "MA",
+"hours": 2.0,
+"aliases": [
+"baba & nyonya heritage museum",
+"baba nyonya museum",
+"峇峇娘惹博物馆"
+]
+},
+{
+"name": "Klebang Original Coconut Shake",
+"city": "Melaka, Malaysia",
+"district": "Klebang",
+"area": "Klebang",
+"icon": "food",
+"slots": "A",
+"hours": 1.0,
+"aliases": [
+"coconut shake",
+"klebang coconut shake",
+"klebang original coconut shake",
+"椰子雪"
+]
+},
+{
+"name": "Menara Taming Sari",
+"city": "Melaka, Malaysia",
+"district": "Bandar Hilir",
+"area": "Bandar Hilir",
+"icon": "activity",
+"slots": "AEN",
+"hours": 3.0,
+"aliases": [
+"menara taming sari",
+"taming sari tower"
+]
+},
+{
+"name": "Capitol Satay Celup",
+"city": "Melaka, Malaysia",
+"district": "Lorong Bukit Cina",
+"area": "Lorong Bukit Cina",
+"icon": "food",
+"slots": "D",
+"hours": 1.0,
+"aliases": [
+"capitol satay celup",
+"satay celup",
+"沙爹朱律"
+]
+},
+{
+"name": "The Shore Sky Tower",
+"city": "Melaka, Malaysia",
+"district": "Jalan Persisiran Bunga Raya",
+"area": "Jalan Persisiran Bunga Raya",
+"icon": "place",
+"slots": "EN",
+"hours": 2.0,
+"aliases": [
+"sky tower",
+"the shore",
+"the shore sky tower"
+]
+},
+{
+"name": "Langkawi Sky Bridge",
+"city": "Langkawi, Malaysia",
+"district": "Gunung Mat Cincang",
+"area": "Gunung Mat Cincang",
+"icon": "place",
+"slots": "MA",
+"hours": 2.0,
+"aliases": [
+"langkawi sky bridge",
+"sky bridge",
+"天空之桥"
+]
+},
+{
+"name": "Langkawi Cable Car (SkyCab)",
+"city": "Langkawi, Malaysia",
+"district": "Oriental Village",
+"area": "Oriental Village",
+"icon": "activity",
+"slots": "MA",
+"hours": 3.0,
+"aliases": [
+"cable car",
+"langkawi cable car (skycab)",
+"skycab",
+"缆车"
+]
+},
+{
+"name": "Pantai Cenang",
+"city": "Langkawi, Malaysia",
+"district": "Pantai Cenang",
+"area": "Pantai Cenang",
+"icon": "place",
+"slots": "AE",
+"hours": 2.0,
+"aliases": [
+"cenang beach",
+"pantai cenang",
+"珍南海滩"
+]
+},
+{
+"name": "Eagle Square",
+"city": "Langkawi, Malaysia",
+"district": "Kuah",
+"area": "Kuah",
+"icon": "place",
+"slots": "ME",
+"hours": 2.0,
+"aliases": [
+"dataran lang",
+"eagle square",
+"巨鹰广场"
+]
+},
+{
+"name": "Kilim Geoforest Park Mangrove Tour",
+"city": "Langkawi, Malaysia",
+"district": "Kilim",
+"area": "Kilim",
+"icon": "activity",
+"slots": "MA",
+"hours": 3.0,
+"aliases": [
+"kilim geoforest park mangrove tour",
+"kilim mangrove tour",
+"mangrove tour",
+"红树林"
+]
+},
+{
+"name": "Island Hopping Tour",
+"city": "Langkawi, Malaysia",
+"district": "Pulau Dayang Bunting",
+"area": "Pulau Dayang Bunting",
+"icon": "activity",
+"slots": "M",
+"hours": 3.0,
+"aliases": [
+"island hopping",
+"island hopping tour",
+"跳岛游"
+]
+},
+{
+"name": "Tanjung Rhu Beach",
+"city": "Langkawi, Malaysia",
+"district": "Tanjung Rhu",
+"area": "Tanjung Rhu",
+"icon": "place",
+"slots": "AE",
+"hours": 2.0,
+"aliases": [
+"tanjung rhu",
+"tanjung rhu beach"
+]
+},
+{
+"name": "Telaga Tujuh Waterfalls",
+"city": "Langkawi, Malaysia",
+"district": "Jalan Telaga Tujuh",
+"area": "Jalan Telaga Tujuh",
+"icon": "place",
+"slots": "MA",
+"hours": 2.0,
+"aliases": [
+"seven wells waterfall",
+"telaga tujuh",
+"telaga tujuh waterfalls",
+"七仙井"
+]
+},
+{
+"name": "Underwater World Langkawi",
+"city": "Langkawi, Malaysia",
+"district": "Pantai Cenang",
+"area": "Pantai Cenang",
+"icon": "activity",
+"slots": "MA",
+"hours": 3.0,
+"aliases": [
+"underwater world",
+"underwater world langkawi",
+"海底世界"
+]
+},
+{
+"name": "Duty Free Shopping at Kuah Town",
+"city": "Langkawi, Malaysia",
+"district": "Kuah",
+"area": "Kuah",
+"icon": "shopping",
+"slots": "AE",
+"hours": 2.0,
+"aliases": [
+"duty free shopping",
+"duty free shopping at kuah town",
+"kuah duty free",
+"免税店"
+]
+},
+{
+"name": "Langkawi Sunset Cruise",
+"city": "Langkawi, Malaysia",
+"district": "Telaga Harbour",
+"area": "Telaga Harbour",
+"icon": "activity",
+"slots": "E",
+"hours": 3.0,
+"aliases": [
+"langkawi sunset cruise",
+"sunset cruise",
+"日落游船"
+]
+},
+{
+"name": "Wonderland Food Store",
+"city": "Langkawi, Malaysia",
+"district": "Kuah",
+"area": "Kuah",
+"icon": "food",
+"slots": "D",
+"hours": 1.0,
+"aliases": [
+"wonderland",
+"wonderland food store",
+"wonderland seafood"
+]
+},
+{
+"name": "Tomato Nasi Kandar",
+"city": "Langkawi, Malaysia",
+"district": "Pantai Cenang",
+"area": "Pantai Cenang",
+"icon": "food",
+"slots": "BLDN",
+"hours": 1.0,
+"aliases": [
+"tomato nasi kandar"
+]
+},
+{
+"name": "Yellow Beach Cafe",
+"city": "Langkawi, Malaysia",
+"district": "Pantai Cenang",
+"area": "Pantai Cenang",
+"icon": "food",
+"slots": "LD",
+"hours": 1.0,
+"aliases": [
+"yellow beach cafe",
+"yellow cafe"
+]
+},
+{
+"name": "Makam Mahsuri",
+"city": "Langkawi, Malaysia",
+"district": "Mawat",
+"area": "Mawat",
+"icon": "place",
+"slots": "MA",
+"hours": 2.0,
+"aliases": [
+"mahsuri tomb",
+"makam mahsuri"
+]
+},
+{
+"name": "Gardens by the Bay",
+"city": "Singapore",
+"district": "Marina Bay",
+"area": "Marina Bay",
+"icon": "place",
+"slots": "AEN",
+"hours": 2.0,
+"aliases": [
+"gardens by the bay",
+"gbtb",
+"滨海湾花园"
+]
+},
+{
+"name": "Marina Bay Sands SkyPark",
+"city": "Singapore",
+"district": "Marina Bay",
+"area": "Marina Bay",
+"icon": "place",
+"slots": "EN",
+"hours": 2.0,
+"aliases": [
+"marina bay sands",
+"marina bay sands skypark",
+"mbs",
+"金沙"
+]
+},
+{
+"name": "Merlion Park",
+"city": "Singapore",
+"district": "Marina Bay",
+"area": "Marina Bay",
+"icon": "place",
+"slots": "MAE",
+"hours": 2.0,
+"aliases": [
+"merlion",
+"merlion park",
+"鱼尾狮"
+]
+},
+{
+"name": "Universal Studios Singapore",
+"city": "Singapore",
+"district": "Sentosa",
+"area": "Sentosa",
+"icon": "activity",
+"slots": "MA",
+"hours": 8.0,
+"aliases": [
+"universal studios",
+"universal studios singapore",
+"uss",
+"环球影城"
+]
+},
+{
+"name": "Sentosa Island",
+"city": "Singapore",
+"district": "Sentosa",
+"area": "Sentosa",
+"icon": "place",
+"slots": "MAE",
+"hours": 2.0,
+"aliases": [
+"sentosa",
+"sentosa island",
+"圣淘沙"
+]
+},
+{
+"name": "Singapore Zoo",
+"city": "Singapore",
+"district": "Mandai",
+"area": "Mandai",
+"icon": "activity",
+"slots": "MA",
+"hours": 3.0,
+"aliases": [
+"singapore zoo",
+"the zoo",
+"动物园"
+]
+},
+{
+"name": "Night Safari",
+"city": "Singapore",
+"district": "Mandai",
+"area": "Mandai",
+"icon": "activity",
+"slots": "N",
+"hours": 3.0,
+"aliases": [
+"night safari",
+"夜间动物园"
+]
+},
+{
+"name": "Maxwell Food Centre",
+"city": "Singapore",
+"district": "Chinatown",
+"area": "Chinatown",
+"icon": "food",
+"slots": "LD",
+"hours": 1.0,
+"aliases": [
+"maxwell",
+"maxwell food centre",
+"麦士威"
+]
+},
+{
+"name": "Lau Pa Sat",
+"city": "Singapore",
+"district": "Raffles Quay",
+"area": "Raffles Quay",
+"icon": "food",
+"slots": "DN",
+"hours": 1.0,
+"aliases": [
+"lau pa sat",
+"satay street",
+"老巴刹"
+]
+},
+{
+"name": "Orchard Road",
+"city": "Singapore",
+"district": "Orchard",
+"area": "Orchard",
+"icon": "shopping",
+"slots": "AE",
+"hours": 2.0,
+"aliases": [
+"orchard",
+"orchard road",
+"乌节路"
+]
+},
+{
+"name": "Chinatown",
+"city": "Singapore",
+"district": "Chinatown",
+"area": "Chinatown",
+"icon": "place",
+"slots": "MAE",
+"hours": 2.0,
+"aliases": [
+"chinatown",
+"牛车水"
+]
+},
+{
+"name": "Haji Lane",
+"city": "Singapore",
+"district": "Kampong Glam",
+"area": "Kampong Glam",
+"icon": "shopping",
+"slots": "AE",
+"hours": 2.0,
+"aliases": [
+"haji lane",
+"kampong glam"
+]
+},
+{
+"name": "Jewel Changi Airport",
+"city": "Singapore",
+"district": "Changi",
+"area": "Changi",
+"icon": "shopping",
+"slots": "MAE",
+"hours": 2.0,
+"aliases": [
+"jewel",
+"jewel changi airport",
+"星耀樟宜"
+]
+},
+{
+"name": "Ya Kun Kaya Toast",
+"city": "Singapore",
+"district": "Far East Square",
+"area": "Far East Square",
+"icon": "food",
+"slots": "B",
+"hours": 1.0,
+"aliases": [
+"ya kun",
+"ya kun kaya toast",
+"亚坤"
+]
+},
+{
+"name": "Clarke Quay",
+"city": "Singapore",
+"district": "Singapore River",
+"area": "Singapore River",
+"icon": "place",
+"slots": "EN",
+"hours": 2.0,
+"aliases": [
+"clarke quay",
+"克拉码头"
+]
+},
+{
+"name": "Singapore Botanic Gardens",
+"city": "Singapore",
+"district": "Tanglin",
+"area": "Tanglin",
+"icon": "place",
+"slots": "M",
+"hours": 2.0,
+"aliases": [
+"botanic gardens",
+"singapore botanic gardens",
+"植物园"
+]
+},
+{
+"name": "Chinatown Street Market",
+"city": "Singapore",
+"district": "Outram",
+"area": "Chinatown",
+"icon": "shopping",
+"slots": "AEN",
+"hours": 1.5,
+"aliases": [
+"chinatown street market",
+"牛车水夜市"
+],
+"tags": [
+"night market"
+]
+},
+{
+"name": "The Grand Palace",
+"city": "Bangkok, Thailand",
+"district": "Phra Nakhon",
+"area": "Phra Nakhon",
+"icon": "place",
+"slots": "M",
+"hours": 2.0,
+"aliases": [
+"grand palace",
+"the grand palace",
+"大皇宫"
+]
+},
+{
+"name": "Wat Arun",
+"city": "Bangkok, Thailand",
+"district": "Bangkok Yai",
+"area": "Bangkok Yai",
+"icon": "place",
+"slots": "MAE",
+"hours": 2.0,
+"aliases": [
+"temple of dawn",
+"wat arun",
+"郑王庙"
+]
+},
+{
+"name": "Wat Pho",
+"city": "Bangkok, Thailand",
+"district": "Phra Nakhon",
+"area": "Phra Nakhon",
+"icon": "place",
+"slots": "MA",
+"hours": 2.0,
+"aliases": [
+"reclining buddha",
+"wat pho",
+"卧佛寺"
+]
+},
+{
+"name": "Chatuchak Weekend Market",
+"city": "Bangkok, Thailand",
+"district": "Chatuchak",
+"area": "Chatuchak",
+"icon": "shopping",
+"slots": "MA",
+"hours": 2.0,
+"aliases": [
+"chatuchak",
+"chatuchak weekend market",
+"jj market",
+"洽图洽"
+]
+},
+{
+"name": "Siam Paragon",
+"city": "Bangkok, Thailand",
+"district": "Siam",
+"area": "Siam",
+"icon": "shopping",
+"slots": "AE",
+"hours": 2.0,
+"aliases": [
+"siam paragon",
+"暹罗百丽宫"
+]
+},
+{
+"name": "Platinum Fashion Mall",
+"city": "Bangkok, Thailand",
+"district": "Pratunam",
+"area": "Pratunam",
+"icon": "shopping",
+"slots": "MA",
+"hours": 2.0,
+"aliases": [
+"platinum",
+"platinum fashion mall",
+"platinum mall",
+"水门市场"
+]
+},
+{
+"name": "ICONSIAM",
+"city": "Bangkok, Thailand",
+"district": "Khlong San",
+"area": "Khlong San",
+"icon": "shopping",
+"slots": "AEN",
+"hours": 2.0,
+"aliases": [
+"icon siam",
+"iconsiam"
+]
+},
+{
+"name": "Jodd Fairs Night Market",
+"city": "Bangkok, Thailand",
+"district": "Rama 9",
+"area": "Rama 9",
+"icon": "food",
+"slots": "N",
+"hours": 1.0,
+"aliases": [
+"jodd fairs",
+"jodd fairs night market",
+"乔德夜市"
+]
+},
+{
+"name": "Yaowarat Road (Chinatown)",
+"city": "Bangkok, Thailand",
+"district": "Samphanthawong",
+"area": "Samphanthawong",
+"icon": "food",
+"slots": "DN",
+"hours": 1.0,
+"aliases": [
+"chinatown",
+"yaowarat",
+"yaowarat road (chinatown)",
+"耀华力路"
+]
+},
+{
+"name": "Khao San Road",
+"city": "Bangkok, Thailand",
+"district": "Phra Nakhon",
+"area": "Phra Nakhon",
+"icon": "place",
+"slots": "N",
+"hours": 2.0,
+"aliases": [
+"khao san",
+"khao san road",
+"考山路"
+]
+},
+{
+"name": "Chao Phraya River Dinner Cruise",
+"city": "Bangkok, Thailand",
+"district": "Chao Phraya River",
+"area": "Chao Phraya River",
+"icon": "activity",
+"slots": "D",
+"hours": 3.0,
+"aliases": [
+"chao phraya cruise",
+"chao phraya river dinner cruise",
+"dinner cruise",
+"湄南河游船"
+]
+},
+{
+"name": "Thipsamai Pad Thai",
+"city": "Bangkok, Thailand",
+"district": "Maha Chai Road",
+"area": "Maha Chai Road",
+"icon": "food",
+"slots": "D",
+"hours": 1.0,
+"aliases": [
+"thipsamai",
+"thipsamai pad thai"
+]
+},
+{
+"name": "Jim Thompson House Museum",
+"city": "Bangkok, Thailand",
+"district": "Pathum Wan",
+"area": "Pathum Wan",
+"icon": "place",
+"slots": "MA",
+"hours": 2.0,
+"aliases": [
+"jim thompson house",
+"jim thompson house museum"
+]
+},
+{
+"name": "Damnoen Saduak Floating Market",
+"city": "Bangkok, Thailand",
+"district": "Ratchaburi",
+"area": "Ratchaburi",
+"icon": "activity",
+"slots": "M",
+"hours": 3.0,
+"aliases": [
+"damnoen saduak floating market",
+"floating market",
+"水上市场"
+]
+},
+{
+"name": "Mahanakhon SkyWalk",
+"city": "Bangkok, Thailand",
+"district": "Silom",
+"area": "Silom",
+"icon": "place",
+"slots": "EN",
+"hours": 2.0,
+"aliases": [
+"mahanakhon",
+"mahanakhon skywalk"
+]
+},
+{
+"name": "After You Dessert Cafe",
+"city": "Bangkok, Thailand",
+"district": "Siam Square",
+"area": "Siam Square",
+"icon": "food",
+"slots": "A",
+"hours": 1.0,
+"aliases": [
+"after you",
+"after you dessert cafe"
+]
+},
+{
+"name": "Asiatique The Riverfront",
+"city": "Bangkok, Thailand",
+"district": "Bang Kho Laem",
+"area": "Charoen Krung",
+"icon": "shopping",
+"slots": "EN",
+"hours": 2.0,
+"aliases": [
+"asiatique",
+"asiatique the riverfront",
+"河畔夜市"
+],
+"tags": [
+"night market"
+]
+},
+{
+"name": "Health Land Spa & Massage (Asoke)",
+"city": "Bangkok, Thailand",
+"district": "Watthana",
+"area": "Sukhumvit",
+"icon": "activity",
+"slots": "AE",
+"hours": 2.0,
+"aliases": [
+"health land",
+"health land spa & massage (asoke)",
+"healthland"
+],
+"tags": [
+"massage",
+"spa"
+]
+},
+{
+"name": "Tanah Lot Temple",
+"city": "Bali, Indonesia",
+"district": "Tabanan",
+"area": "Tabanan",
+"icon": "place",
+"slots": "E",
+"hours": 2.0,
+"aliases": [
+"tanah lot",
+"tanah lot temple",
+"海神庙"
+]
+},
+{
+"name": "Uluwatu Temple",
+"city": "Bali, Indonesia",
+"district": "Uluwatu",
+"area": "Uluwatu",
+"icon": "place",
+"slots": "E",
+"hours": 2.0,
+"aliases": [
+"uluwatu",
+"uluwatu temple",
+"乌鲁瓦图"
+]
+},
+{
+"name": "Tegalalang Rice Terrace",
+"city": "Bali, Indonesia",
+"district": "Ubud",
+"area": "Ubud",
+"icon": "place",
+"slots": "M",
+"hours": 2.0,
+"aliases": [
+"rice terrace",
+"tegalalang",
+"tegalalang rice terrace",
+"梯田"
+]
+},
+{
+"name": "Sacred Monkey Forest Sanctuary",
+"city": "Bali, Indonesia",
+"district": "Ubud",
+"area": "Ubud",
+"icon": "place",
+"slots": "MA",
+"hours": 2.0,
+"aliases": [
+"monkey forest",
+"sacred monkey forest sanctuary",
+"猴子森林"
+]
+},
+{
+"name": "Ubud Art Market",
+"city": "Bali, Indonesia",
+"district": "Ubud",
+"area": "Ubud",
+"icon": "shopping",
+"slots": "MA",
+"hours": 2.0,
+"aliases": [
+"ubud art market",
+"ubud market",
+"乌布市场"
+]
+},
+{
+"name": "Seminyak Beach",
+"city": "Bali, Indonesia",
+"district": "Seminyak",
+"area": "Seminyak",
+"icon": "place",
+"slots": "AE",
+"hours": 2.0,
+"aliases": [
+"seminyak",
+"seminyak beach"
+]
+},
+{
+"name": "Kuta Beach",
+"city": "Bali, Indonesia",
+"district": "Kuta",
+"area": "Kuta",
+"icon": "place",
+"slots": "AE",
+"hours": 2.0,
+"aliases": [
+"kuta",
+"kuta beach",
+"库塔海滩"
+]
+},
+{
+"name": "Jimbaran Bay Seafood Dinner",
+"city": "Bali, Indonesia",
+"district": "Jimbaran",
+"area": "Jimbaran",
+"icon": "food",
+"slots": "D",
+"hours": 1.0,
+"aliases": [
+"jimbaran",
+"jimbaran bay seafood dinner",
+"jimbaran seafood",
+"金巴兰"
+]
+},
+{
+"name": "Bali Swing",
+"city": "Bali, Indonesia",
+"district": "Ubud",
+"area": "Ubud",
+"icon": "activity",
+"slots": "MA",
+"hours": 3.0,
+"aliases": [
+"bali swing",
+"秋千"
+]
+},
+{
+"name": "Tirta Empul Temple",
+"city": "Bali, Indonesia",
+"district": "Tampaksiring",
+"area": "Tampaksiring",
+"icon": "place",
+"slots": "MA",
+"hours": 2.0,
+"aliases": [
+"tirta empul",
+"tirta empul temple",
+"圣泉寺"
+]
+},
+{
+"name": "Nusa Penida Day Trip",
+"city": "Bali, Indonesia",
+"district": "Nusa Penida",
+"area": "Nusa Penida",
+"icon": "activity",
+"slots": "M",
+"hours": 3.0,
+"aliases": [
+"nusa penida",
+"nusa penida day trip",
+"佩妮达岛"
+]
+},
+{
+"name": "Waterbom Bali",
+"city": "Bali, Indonesia",
+"district": "Kuta",
+"area": "Kuta",
+"icon": "activity",
+"slots": "MA",
+"hours": 3.0,
+"aliases": [
+"waterbom",
+"waterbom bali"
+]
+},
+{
+"name": "Potato Head Beach Club",
+"city": "Bali, Indonesia",
+"district": "Seminyak",
+"area": "Seminyak",
+"icon": "food",
+"slots": "ED",
+"hours": 1.0,
+"aliases": [
+"potato head",
+"potato head beach club"
+]
+},
+{
+"name": "Warung Babi Guling Ibu Oka",
+"city": "Bali, Indonesia",
+"district": "Ubud",
+"area": "Ubud",
+"icon": "food",
+"slots": "L",
+"hours": 1.0,
+"aliases": [
+"babi guling",
+"ibu oka",
+"warung babi guling ibu oka"
+]
+},
+{
+"name": "Lempuyang Temple (Gates of Heaven)",
+"city": "Bali, Indonesia",
+"district": "Karangasem",
+"area": "Karangasem",
+"icon": "place",
+"slots": "M",
+"hours": 2.0,
+"aliases": [
+"gates of heaven",
+"lempuyang",
+"lempuyang temple (gates of heaven)",
+"天堂之门"
+]
+},
+{
+"name": "Sisterfields Cafe",
+"city": "Bali, Indonesia",
+"district": "Seminyak",
+"area": "Seminyak",
+"icon": "food",
+"slots": "BL",
+"hours": 1.0,
+"aliases": [
+"sisterfields",
+"sisterfields cafe"
+]
+},
+{
+"name": "Bebek Tepi Sawah",
+"city": "Bali, Indonesia",
+"district": "Ubud",
+"area": "Ubud",
+"icon": "food",
+"slots": "LD",
+"hours": 1.0,
+"aliases": [
+"bebek tepi sawah",
+"脏鸭餐"
+]
+},
+{
+"name": "Gianyar Night Market",
+"city": "Bali, Indonesia",
+"district": "Gianyar",
+"area": "Gianyar",
+"icon": "food",
+"slots": "DN",
+"hours": 1.5,
+"aliases": [
+"gianyar night market",
+"pasar malam gianyar"
+]
+},
+{
+"name": "Senso-ji Temple",
+"city": "Tokyo, Japan",
+"district": "Asakusa",
+"area": "Asakusa",
+"icon": "place",
+"slots": "MA",
+"hours": 2.0,
+"aliases": [
+"asakusa temple",
+"senso-ji temple",
+"sensoji",
+"浅草寺"
+]
+},
+{
+"name": "Tokyo Skytree",
+"city": "Tokyo, Japan",
+"district": "Sumida",
+"area": "Sumida",
+"icon": "place",
+"slots": "AEN",
+"hours": 2.0,
+"aliases": [
+"skytree",
+"tokyo skytree",
+"晴空塔"
+]
+},
+{
+"name": "Shibuya Crossing",
+"city": "Tokyo, Japan",
+"district": "Shibuya",
+"area": "Shibuya",
+"icon": "place",
+"slots": "AEN",
+"hours": 2.0,
+"aliases": [
+"shibuya crossing",
+"shibuya scramble",
+"涩谷十字路口"
+]
+},
+{
+"name": "Meiji Shrine",
+"city": "Tokyo, Japan",
+"district": "Harajuku",
+"area": "Harajuku",
+"icon": "place",
+"slots": "M",
+"hours": 2.0,
+"aliases": [
+"meiji jingu",
+"meiji shrine",
+"明治神宫"
+]
+},
+{
+"name": "Takeshita Street",
+"city": "Tokyo, Japan",
+"district": "Harajuku",
+"area": "Harajuku",
+"icon": "shopping",
+"slots": "A",
+"hours": 2.0,
+"aliases": [
+"harajuku",
+"takeshita",
+"takeshita street",
+"竹下通"
+]
+},
+{
+"name": "Tsukiji Outer Market",
+"city": "Tokyo, Japan",
+"district": "Tsukiji",
+"area": "Tsukiji",
+"icon": "food",
+"slots": "BL",
+"hours": 1.0,
+"aliases": [
+"tsukiji",
+"tsukiji outer market",
+"筑地市场"
+]
+},
+{
+"name": "Tokyo Disneyland",
+"city": "Tokyo, Japan",
+"district": "Urayasu",
+"area": "Urayasu",
+"icon": "activity",
+"slots": "M",
+"hours": 8.0,
+"aliases": [
+"disney",
+"disneyland",
+"tokyo disneyland",
+"迪士尼"
+]
+},
+{
+"name": "teamLab Planets",
+"city": "Tokyo, Japan",
+"district": "Toyosu",
+"area": "Toyosu",
+"icon": "activity",
+"slots": "AE",
+"hours": 3.0,
+"aliases": [
+"teamlab",
+"teamlab planets"
+]
+},
+{
+"name": "Akihabara Electric Town",
+"city": "Tokyo, Japan",
+"district": "Akihabara",
+"area": "Akihabara",
+"icon": "shopping",
+"slots": "AE",
+"hours": 2.0,
+"aliases": [
+"akiba",
+"akihabara",
+"akihabara electric town",
+"秋叶原"
+]
+},
+{
+"name": "Shinjuku Omoide Yokocho",
+"city": "Tokyo, Japan",
+"district": "Shinjuku",
+"area": "Shinjuku",
+"icon": "food",
+"slots": "DN",
+"hours": 1.0,
+"aliases": [
+"omoide yokocho",
+"shinjuku omoide yokocho",
+"思出横丁"
+]
+},
+{
+"name": "Ichiran Ramen Shibuya",
+"city": "Tokyo, Japan",
+"district": "Shibuya",
+"area": "Shibuya",
+"icon": "food",
+"slots": "LDN",
+"hours": 1.0,
+"aliases": [
+"ichiran",
+"ichiran ramen shibuya",
+"一兰拉面"
+]
+},
+{
+"name": "Tokyo Tower",
+"city": "Tokyo, Japan",
+"district": "Minato",
+"area": "Minato",
+"icon": "place",
+"slots": "EN",
+"hours": 2.0,
+"aliases": [
+"tokyo tower",
+"东京塔"
+]
+},
+{
+"name": "Ginza",
+"city": "Tokyo, Japan",
+"district": "Chuo",
+"area": "Chuo",
+"icon": "shopping",
+"slots": "AE",
+"hours": 2.0,
+"aliases": [
+"ginza",
+"银座"
+]
+},
+{
+"name": "Ueno Park",
+"city": "Tokyo, Japan",
+"district": "Taito",
+"area": "Taito",
+"icon": "place",
+"slots": "MA",
+"hours": 2.0,
+"aliases": [
+"ueno",
+"ueno park",
+"上野公园"
+]
+},
+{
+"name": "Shibuya Sky",
+"city": "Tokyo, Japan",
+"district": "Shibuya",
+"area": "Shibuya",
+"icon": "place",
+"slots": "E",
+"hours": 2.0,
+"aliases": [
+"shibuya sky"
+]
+},
+{
+"name": "Gyeongbokgung Palace",
+"city": "Seoul, South Korea",
+"district": "Jongno",
+"area": "Jongno",
+"icon": "place",
+"slots": "MA",
+"hours": 2.0,
+"aliases": [
+"gyeongbokgung",
+"gyeongbokgung palace",
+"the palace",
+"景福宫"
+]
+},
+{
+"name": "Bukchon Hanok Village",
+"city": "Seoul, South Korea",
+"district": "Jongno",
+"area": "Jongno",
+"icon": "place",
+"slots": "MA",
+"hours": 2.0,
+"aliases": [
+"bukchon",
+"bukchon hanok village",
+"北村韩屋村"
+]
+},
+{
+"name": "N Seoul Tower",
+"city": "Seoul, South Korea",
+"district": "Namsan",
+"area": "Namsan",
+"icon": "place",
+"slots": "EN",
+"hours": 2.0,
+"aliases": [
+"n seoul tower",
+"n tower",
+"namsan tower",
+"南山塔"
+]
+},
+{
+"name": "Myeongdong Shopping Street",
+"city": "Seoul, South Korea",
+"district": "Myeongdong",
+"area": "Myeongdong",
+"icon": "shopping",
+"slots": "AEN",
+"hours": 2.0,
+"aliases": [
+"myeongdong",
+"myeongdong shopping street",
+"明洞"
+]
+},
+{
+"name": "Hongdae",
+"city": "Seoul, South Korea",
+"district": "Mapo",
+"area": "Mapo",
+"icon": "shopping",
+"slots": "AEN",
+"hours": 2.0,
+"aliases": [
+"hongdae",
+"弘大"
+]
+},
+{
+"name": "Gwangjang Market",
+"city": "Seoul, South Korea",
+"district": "Jongno",
+"area": "Jongno",
+"icon": "food",
+"slots": "LD",
+"hours": 1.0,
+"aliases": [
+"gwangjang market",
+"广藏市场"
+],
+"tags": [
+"korean",
+"street food"
+]
+},
+{
+"name": "Lotte World",
+"city": "Seoul, South Korea",
+"district": "Jamsil",
+"area": "Jamsil",
+"icon": "activity",
+"slots": "MA",
+"hours": 3.0,
+"aliases": [
+"lotte world",
+"乐天世界"
+]
+},
+{
+"name": "Nami Island",
+"city": "Seoul, South Korea",
+"district": "Chuncheon",
+"area": "Chuncheon",
+"icon": "activity",
+"slots": "M",
+"hours": 3.0,
+"aliases": [
+"nami island",
+"南怡岛"
+]
+},
+{
+"name": "Starfield COEX Mall",
+"city": "Seoul, South Korea",
+"district": "Gangnam",
+"area": "Gangnam",
+"icon": "shopping",
+"slots": "AE",
+"hours": 2.0,
+"aliases": [
+"coex",
+"starfield coex mall",
+"starfield library"
+]
+},
+{
+"name": "Insadong",
+"city": "Seoul, South Korea",
+"district": "Jongno",
+"area": "Jongno",
+"icon": "shopping",
+"slots": "MA",
+"hours": 2.0,
+"aliases": [
+"insadong",
+"仁寺洞"
+]
+},
+{
+"name": "Dongdaemun Design Plaza",
+"city": "Seoul, South Korea",
+"district": "Dongdaemun",
+"area": "Dongdaemun",
+"icon": "place",
+"slots": "EN",
+"hours": 2.0,
+"aliases": [
+"ddp",
+"dongdaemun",
+"dongdaemun design plaza",
+"东大门"
+]
+},
+{
+"name": "Cheonggyecheon Stream",
+"city": "Seoul, South Korea",
+"district": "Jongno",
+"area": "Jongno",
+"icon": "place",
+"slots": "EN",
+"hours": 2.0,
+"aliases": [
+"cheonggyecheon",
+"cheonggyecheon stream",
+"清溪川"
+]
+},
+{
+"name": "Tosokchon Samgyetang",
+"city": "Seoul, South Korea",
+"district": "Jongno",
+"area": "Jongno",
+"icon": "food",
+"slots": "LD",
+"hours": 1.0,
+"aliases": [
+"tosokchon",
+"tosokchon samgyetang",
+"土俗村"
+]
+},
+{
+"name": "Ihwa Mural Village",
+"city": "Seoul, South Korea",
+"district": "Jongno",
+"area": "Jongno",
+"icon": "place",
+"slots": "MA",
+"hours": 2.0,
+"aliases": [
+"ihwa mural village"
+]
+},
+{
+"name": "Yeouido Hangang Park",
+"city": "Seoul, South Korea",
+"district": "Yeouido",
+"area": "Yeouido",
+"icon": "place",
+"slots": "EN",
+"hours": 2.0,
+"aliases": [
+"han river",
+"hangang park",
+"yeouido hangang park",
+"汉江公园"
+]
+},
+{
+"name": "Gwangjang Market",
+"city": "Seoul, South Korea",
+"district": "Jongno",
+"area": "Jongno",
+"icon": "food",
+"slots": "LD",
+"hours": 1.5,
+"aliases": [
+"gwangjang market",
+"广藏",
+"广藏市场"
+],
+"tags": [
+"korean",
+"street food"
+]
+},
+{
+"name": "Taipei 101 Observatory",
+"city": "Taipei, Taiwan",
+"district": "Xinyi",
+"area": "Xinyi",
+"icon": "place",
+"slots": "AEN",
+"hours": 2.0,
+"aliases": [
+"101",
+"taipei 101",
+"taipei 101 observatory",
+"台北101"
+]
+},
+{
+"name": "Shilin Night Market",
+"city": "Taipei, Taiwan",
+"district": "Shilin",
+"area": "Shilin",
+"icon": "food",
+"slots": "N",
+"hours": 1.0,
+"aliases": [
+"shilin",
+"shilin night market",
+"士林夜市"
+]
+},
+{
+"name": "Raohe Street Night Market",
+"city": "Taipei, Taiwan",
+"district": "Songshan",
+"area": "Songshan",
+"icon": "food",
+"slots": "N",
+"hours": 1.0,
+"aliases": [
+"raohe",
+"raohe street night market",
+"饶河夜市"
+]
+},
+{
+"name": "Chiang Kai-shek Memorial Hall",
+"city": "Taipei, Taiwan",
+"district": "Zhongzheng",
+"area": "Zhongzheng",
+"icon": "place",
+"slots": "MA",
+"hours": 2.0,
+"aliases": [
+"chiang kai-shek memorial hall",
+"cks memorial",
+"中正纪念堂"
+]
+},
+{
+"name": "Jiufen Old Street",
+"city": "Taipei, Taiwan",
+"district": "Ruifang",
+"area": "Ruifang",
+"icon": "place",
+"slots": "AE",
+"hours": 2.0,
+"aliases": [
+"jiufen",
+"jiufen old street",
+"九份"
+]
+},
+{
+"name": "Shifen Old Street",
+"city": "Taipei, Taiwan",
+"district": "Pingxi",
+"area": "Pingxi",
+"icon": "activity",
+"slots": "MA",
+"hours": 3.0,
+"aliases": [
+"shifen",
+"shifen old street",
+"sky lantern",
+"十分"
+]
+},
+{
+"name": "Ximending",
+"city": "Taipei, Taiwan",
+"district": "Wanhua",
+"area": "Wanhua",
+"icon": "shopping",
+"slots": "AEN",
+"hours": 2.0,
+"aliases": [
+"ximen",
+"ximending",
+"西门町"
+]
+},
+{
+"name": "National Palace Museum",
+"city": "Taipei, Taiwan",
+"district": "Shilin",
+"area": "Shilin",
+"icon": "place",
+"slots": "MA",
+"hours": 2.0,
+"aliases": [
+"national palace museum",
+"palace museum",
+"故宫博物院"
+]
+},
+{
+"name": "Elephant Mountain",
+"city": "Taipei, Taiwan",
+"district": "Xinyi",
+"area": "Xinyi",
+"icon": "activity",
+"slots": "E",
+"hours": 3.0,
+"aliases": [
+"elephant mountain",
+"xiangshan",
+"象山"
+]
+},
+{
+"name": "Din Tai Fung (Xinyi Road)",
+"city": "Taipei, Taiwan",
+"district": "Da'an",
+"area": "Da'an",
+"icon": "food",
+"slots": "LD",
+"hours": 1.0,
+"aliases": [
+"din tai fung",
+"din tai fung (xinyi road)",
+"dtf",
+"鼎泰丰"
+]
+},
+{
+"name": "Yongkang Street",
+"city": "Taipei, Taiwan",
+"district": "Da'an",
+"area": "Da'an",
+"icon": "food",
+"slots": "LA",
+"hours": 1.0,
+"aliases": [
+"yongkang street",
+"永康街"
+]
+},
+{
+"name": "Beitou Hot Spring",
+"city": "Taipei, Taiwan",
+"district": "Beitou",
+"area": "Beitou",
+"icon": "activity",
+"slots": "MA",
+"hours": 3.0,
+"aliases": [
+"beitou",
+"beitou hot spring",
+"北投温泉"
+]
+},
+{
+"name": "Longshan Temple",
+"city": "Taipei, Taiwan",
+"district": "Wanhua",
+"area": "Wanhua",
+"icon": "place",
+"slots": "MAE",
+"hours": 2.0,
+"aliases": [
+"longshan temple",
+"龙山寺"
+]
+},
+{
+"name": "Fuhang Soy Milk",
+"city": "Taipei, Taiwan",
+"district": "Zhongzheng",
+"area": "Zhongzheng",
+"icon": "food",
+"slots": "B",
+"hours": 1.0,
+"aliases": [
+"fu hang dou jiang",
+"fuhang",
+"fuhang soy milk",
+"阜杭豆浆"
+]
+},
+{
+"name": "Tamsui Old Street",
+"city": "Taipei, Taiwan",
+"district": "Tamsui",
+"area": "Tamsui",
+"icon": "place",
+"slots": "AE",
+"hours": 2.0,
+"aliases": [
+"danshui",
+"tamsui",
+"tamsui old street",
+"淡水老街"
+]
+},
+{
+"name": "Yehliu Geopark",
+"city": "Taipei, Taiwan",
+"district": "Wanli",
+"area": "Wanli",
+"icon": "place",
+"slots": "M",
+"hours": 2.0,
+"aliases": [
+"yehliu",
+"yehliu geopark",
+"野柳"
+]
+},
+{
+"name": "Victoria Peak",
+"city": "Hong Kong",
+"district": "The Peak",
+"area": "The Peak",
+"icon": "place",
+"slots": "AEN",
+"hours": 2.0,
+"aliases": [
+"peak tram",
+"the peak",
+"victoria peak",
+"太平山"
+]
+},
+{
+"name": "Hong Kong Disneyland",
+"city": "Hong Kong",
+"district": "Lantau Island",
+"area": "Lantau Island",
+"icon": "activity",
+"slots": "M",
+"hours": 8.0,
+"aliases": [
+"disney",
+"disneyland",
+"hong kong disneyland",
+"迪士尼"
+]
+},
+{
+"name": "Ngong Ping 360 & Tian Tan Buddha",
+"city": "Hong Kong",
+"district": "Lantau Island",
+"area": "Lantau Island",
+"icon": "activity",
+"slots": "MA",
+"hours": 3.0,
+"aliases": [
+"big buddha",
+"ngong ping",
+"ngong ping 360 & tian tan buddha",
+"天坛大佛"
+]
+},
+{
+"name": "Star Ferry",
+"city": "Hong Kong",
+"district": "Tsim Sha Tsui",
+"area": "Tsim Sha Tsui",
+"icon": "activity",
+"slots": "AEN",
+"hours": 3.0,
+"aliases": [
+"star ferry",
+"天星小轮"
+]
+},
+{
+"name": "Avenue of Stars",
+"city": "Hong Kong",
+"district": "Tsim Sha Tsui",
+"area": "Tsim Sha Tsui",
+"icon": "place",
+"slots": "EN",
+"hours": 2.0,
+"aliases": [
+"avenue of stars",
+"symphony of lights",
+"星光大道"
+]
+},
+{
+"name": "Temple Street Night Market",
+"city": "Hong Kong",
+"district": "Jordan",
+"area": "Jordan",
+"icon": "shopping",
+"slots": "N",
+"hours": 2.0,
+"aliases": [
+"temple street",
+"temple street night market",
+"庙街"
+]
+},
+{
+"name": "Ladies' Market",
+"city": "Hong Kong",
+"district": "Mong Kok",
+"area": "Mong Kok",
+"icon": "shopping",
+"slots": "AEN",
+"hours": 2.0,
+"aliases": [
+"ladies market",
+"ladies' market",
+"mong kok",
+"女人街"
+]
+},
+{
+"name": "Tim Ho Wan (Sham Shui Po)",
+"city": "Hong Kong",
+"district": "Sham Shui Po",
+"area": "Sham Shui Po",
+"icon": "food",
+"slots": "BL",
+"hours": 1.0,
+"aliases": [
+"tim ho wan",
+"tim ho wan (sham shui po)",
+"添好运"
+]
+},
+{
+"name": "Australia Dairy Company",
+"city": "Hong Kong",
+"district": "Jordan",
+"area": "Jordan",
+"icon": "food",
+"slots": "B",
+"hours": 1.0,
+"aliases": [
+"australia dairy",
+"australia dairy company",
+"澳洲牛奶公司"
+]
+},
+{
+"name": "Ocean Park",
+"city": "Hong Kong",
+"district": "Wong Chuk Hang",
+"area": "Wong Chuk Hang",
+"icon": "activity",
+"slots": "MA",
+"hours": 3.0,
+"aliases": [
+"ocean park",
+"海洋公园"
+]
+},
+{
+"name": "Lan Kwai Fong",
+"city": "Hong Kong",
+"district": "Central",
+"area": "Central",
+"icon": "place",
+"slots": "N",
+"hours": 2.0,
+"aliases": [
+"lan kwai fong",
+"lkf",
+"兰桂坊"
+]
+},
+{
+"name": "Mak's Noodle",
+"city": "Hong Kong",
+"district": "Central",
+"area": "Central",
+"icon": "food",
+"slots": "LD",
+"hours": 1.0,
+"aliases": [
+"mak's noodle",
+"maks wonton noodle",
+"麦奀云吞面"
+]
+},
+{
+"name": "Wong Tai Sin Temple",
+"city": "Hong Kong",
+"district": "Wong Tai Sin",
+"area": "Wong Tai Sin",
+"icon": "place",
+"slots": "MA",
+"hours": 2.0,
+"aliases": [
+"wong tai sin",
+"wong tai sin temple",
+"黄大仙"
+]
+},
+{
+"name": "Kam's Roast Goose",
+"city": "Hong Kong",
+"district": "Wan Chai",
+"area": "Wan Chai",
+"icon": "food",
+"slots": "LD",
+"hours": 1.0,
+"aliases": [
+"kam's roast goose",
+"kams",
+"甘牌烧鹅"
+]
+},
+{
+"name": "Tai Kwun",
+"city": "Hong Kong",
+"district": "Central",
+"area": "Central",
+"icon": "place",
+"slots": "AE",
+"hours": 2.0,
+"aliases": [
+"tai kwun",
+"大馆"
+]
+},
+{
+"name": "Harbour City",
+"city": "Hong Kong",
+"district": "Tsim Sha Tsui",
+"area": "Tsim Sha Tsui",
+"icon": "shopping",
+"slots": "AE",
+"hours": 2.0,
+"aliases": [
+"harbour city",
+"海港城"
+]
+},
+{
+"name": "Ben Thanh Market",
+"city": "Ho Chi Minh City, Vietnam",
+"district": "District 1",
+"area": "District 1",
+"icon": "shopping",
+"slots": "MAE",
+"hours": 2.0,
+"aliases": [
+"ben thanh",
+"ben thanh market",
+"滨城市场"
+]
+},
+{
+"name": "War Remnants Museum",
+"city": "Ho Chi Minh City, Vietnam",
+"district": "District 3",
+"area": "District 3",
+"icon": "place",
+"slots": "MA",
+"hours": 2.0,
+"aliases": [
+"war museum",
+"war remnants museum",
+"战争遗迹博物馆"
+]
+},
+{
+"name": "Cu Chi Tunnels",
+"city": "Ho Chi Minh City, Vietnam",
+"district": "Cu Chi",
+"area": "Cu Chi",
+"icon": "activity",
+"slots": "M",
+"hours": 3.0,
+"aliases": [
+"cu chi",
+"cu chi tunnels",
+"古芝地道"
+]
+},
+{
+"name": "Notre-Dame Cathedral Basilica of Saigon",
+"city": "Ho Chi Minh City, Vietnam",
+"district": "District 1",
+"area": "District 1",
+"icon": "place",
+"slots": "MA",
+"hours": 2.0,
+"aliases": [
+"notre dame",
+"notre-dame cathedral basilica of saigon",
+"红教堂"
+]
+},
+{
+"name": "Saigon Central Post Office",
+"city": "Ho Chi Minh City, Vietnam",
+"district": "District 1",
+"area": "District 1",
+"icon": "place",
+"slots": "MA",
+"hours": 2.0,
+"aliases": [
+"central post office",
+"post office",
+"saigon central post office",
+"中央邮局"
+]
+},
+{
+"name": "Bui Vien Walking Street",
+"city": "Ho Chi Minh City, Vietnam",
+"district": "District 1",
+"area": "District 1",
+"icon": "place",
+"slots": "N",
+"hours": 2.0,
+"aliases": [
+"bui vien",
+"bui vien walking street"
+]
+},
+{
+"name": "Independence Palace",
+"city": "Ho Chi Minh City, Vietnam",
+"district": "District 1",
+"area": "District 1",
+"icon": "place",
+"slots": "MA",
+"hours": 2.0,
+"aliases": [
+"independence palace",
+"reunification palace",
+"独立宫"
+]
+},
+{
+"name": "Mekong Delta Day Tour",
+"city": "Ho Chi Minh City, Vietnam",
+"district": "My Tho",
+"area": "My Tho",
+"icon": "activity",
+"slots": "M",
+"hours": 3.0,
+"aliases": [
+"mekong delta",
+"mekong delta day tour",
+"mekong tour",
+"湄公河"
+]
+},
+{
+"name": "Pho Hoa Pasteur",
+"city": "Ho Chi Minh City, Vietnam",
+"district": "District 3",
+"area": "District 3",
+"icon": "food",
+"slots": "BL",
+"hours": 1.0,
+"aliases": [
+"pho hoa",
+"pho hoa pasteur"
+]
+},
+{
+"name": "Banh Mi Huynh Hoa",
+"city": "Ho Chi Minh City, Vietnam",
+"district": "District 1",
+"area": "District 1",
+"icon": "food",
+"slots": "LA",
+"hours": 1.0,
+"aliases": [
+"banh mi huynh hoa",
+"huynh hoa"
+]
+},
+{
+"name": "Saigon Skydeck (Bitexco Tower)",
+"city": "Ho Chi Minh City, Vietnam",
+"district": "District 1",
+"area": "District 1",
+"icon": "place",
+"slots": "EN",
+"hours": 2.0,
+"aliases": [
+"bitexco",
+"saigon skydeck (bitexco tower)",
+"skydeck"
+]
+},
+{
+"name": "The Cafe Apartments",
+"city": "Ho Chi Minh City, Vietnam",
+"district": "District 1",
+"area": "District 1",
+"icon": "food",
+"slots": "AE",
+"hours": 1.0,
+"aliases": [
+"42 nguyen hue",
+"cafe apartment",
+"the cafe apartments",
+"咖啡公寓"
+]
+},
+{
+"name": "Nguyen Hue Walking Street",
+"city": "Ho Chi Minh City, Vietnam",
+"district": "District 1",
+"area": "District 1",
+"icon": "place",
+"slots": "EN",
+"hours": 2.0,
+"aliases": [
+"nguyen hue",
+"nguyen hue walking street"
+]
+},
+{
+"name": "Ben Nghe Street Food Market",
+"city": "Ho Chi Minh City, Vietnam",
+"district": "District 1",
+"area": "District 1",
+"icon": "food",
+"slots": "DN",
+"hours": 1.0,
+"aliases": [
+"ben nghe street food",
+"ben nghe street food market",
+"street food market"
+]
+},
+{
+"name": "Saigon Square",
+"city": "Ho Chi Minh City, Vietnam",
+"district": "District 1",
+"area": "District 1",
+"icon": "shopping",
+"slots": "AE",
+"hours": 2.0,
+"aliases": [
+"saigon square"
+]
+},
+{
+"name": "Ben Thanh Street Food Market",
+"city": "Ho Chi Minh City, Vietnam",
+"district": "District 1",
+"area": "District 1",
+"icon": "food",
+"slots": "DN",
+"hours": 1.5,
+"aliases": [
+"ben thanh night market",
+"ben thanh street food",
+"ben thanh street food market",
+"滨城夜市"
+]
+},
+{
+"name": "Osaka Castle",
+"city": "Osaka, Japan",
+"district": "Chuo",
+"area": "Chuo",
+"icon": "place",
+"slots": "MA",
+"hours": 2.0,
+"aliases": [
+"osaka castle",
+"大阪城"
+]
+},
+{
+"name": "Dotonbori",
+"city": "Osaka, Japan",
+"district": "Namba",
+"area": "Namba",
+"icon": "food",
+"slots": "DN",
+"hours": 1.0,
+"aliases": [
+"dotonbori",
+"glico sign",
+"道顿堀"
+]
+},
+{
+"name": "Universal Studios Japan",
+"city": "Osaka, Japan",
+"district": "Konohana",
+"area": "Konohana",
+"icon": "activity",
+"slots": "M",
+"hours": 8.0,
+"aliases": [
+"universal studios japan",
+"usj",
+"环球影城"
+]
+},
+{
+"name": "Shinsaibashi-suji Shopping Street",
+"city": "Osaka, Japan",
+"district": "Chuo",
+"area": "Chuo",
+"icon": "shopping",
+"slots": "AE",
+"hours": 2.0,
+"aliases": [
+"shinsaibashi",
+"shinsaibashi-suji shopping street",
+"心斋桥"
+]
+},
+{
+"name": "Kuromon Ichiba Market",
+"city": "Osaka, Japan",
+"district": "Nippombashi",
+"area": "Nippombashi",
+"icon": "food",
+"slots": "BL",
+"hours": 1.0,
+"aliases": [
+"kuromon",
+"kuromon ichiba market",
+"kuromon market",
+"黑门市场"
+]
+},
+{
+"name": "Umeda Sky Building",
+"city": "Osaka, Japan",
+"district": "Kita",
+"area": "Kita",
+"icon": "place",
+"slots": "EN",
+"hours": 2.0,
+"aliases": [
+"umeda sky",
+"umeda sky building",
+"梅田蓝天大厦"
+]
+},
+{
+"name": "Shinsekai & Tsutenkaku Tower",
+"city": "Osaka, Japan",
+"district": "Naniwa",
+"area": "Naniwa",
+"icon": "place",
+"slots": "AEN",
+"hours": 2.0,
+"aliases": [
+"shinsekai",
+"shinsekai & tsutenkaku tower",
+"tsutenkaku",
+"通天阁"
+]
+},
+{
+"name": "Osaka Aquarium Kaiyukan",
+"city": "Osaka, Japan",
+"district": "Minato",
+"area": "Minato",
+"icon": "activity",
+"slots": "MA",
+"hours": 3.0,
+"aliases": [
+"kaiyukan",
+"osaka aquarium kaiyukan",
+"the aquarium",
+"海游馆"
+]
+},
+{
+"name": "Nara Park Day Trip",
+"city": "Osaka, Japan",
+"district": "Nara",
+"area": "Nara",
+"icon": "activity",
+"slots": "M",
+"hours": 3.0,
+"aliases": [
+"deer park",
+"nara",
+"nara park day trip",
+"奈良"
+]
+},
+{
+"name": "Sumiyoshi Taisha",
+"city": "Osaka, Japan",
+"district": "Sumiyoshi",
+"area": "Sumiyoshi",
+"icon": "place",
+"slots": "MA",
+"hours": 2.0,
+"aliases": [
+"sumiyoshi shrine",
+"sumiyoshi taisha",
+"住吉大社"
+]
+},
+{
+"name": "Ichiran Ramen Dotonbori",
+"city": "Osaka, Japan",
+"district": "Namba",
+"area": "Namba",
+"icon": "food",
+"slots": "LDN",
+"hours": 1.0,
+"aliases": [
+"ichiran",
+"ichiran ramen dotonbori",
+"一兰拉面"
+]
+},
+{
+"name": "Rinku Premium Outlets",
+"city": "Osaka, Japan",
+"district": "Izumisano",
+"area": "Izumisano",
+"icon": "shopping",
+"slots": "MA",
+"hours": 2.0,
+"aliases": [
+"rinku outlet",
+"rinku premium outlets",
+"临空城outlet"
+]
+},
+{
+"name": "Harukas 300 Observatory",
+"city": "Osaka, Japan",
+"district": "Abeno",
+"area": "Abeno",
+"icon": "place",
+"slots": "EN",
+"hours": 2.0,
+"aliases": [
+"harukas",
+"harukas 300 observatory"
+]
+},
+{
+"name": "Kani Doraku Dotonbori",
+"city": "Osaka, Japan",
+"district": "Namba",
+"area": "Namba",
+"icon": "food",
+"slots": "LD",
+"hours": 1.0,
+"aliases": [
+"kani doraku",
+"kani doraku dotonbori",
+"the crab restaurant",
+"蟹道乐"
+]
+},
+{
+"name": "Kinabalu Park",
+"city": "Kota Kinabalu, Malaysia",
+"district": "Kundasang",
+"area": "Kundasang",
+"icon": "place",
+"slots": "M",
+"hours": 2.0,
+"aliases": [
+"kinabalu park",
+"神山公园"
+]
+},
+{
+"name": "Desa Dairy Farm",
+"city": "Kota Kinabalu, Malaysia",
+"district": "Kundasang",
+"area": "Kundasang",
+"icon": "place",
+"slots": "MA",
+"hours": 2.0,
+"aliases": [
+"desa cattle farm",
+"desa dairy farm",
+"desa farm",
+"牧场"
+]
+},
+{
+"name": "Tunku Abdul Rahman Marine Park Island Hopping",
+"city": "Kota Kinabalu, Malaysia",
+"district": "Jesselton Point",
+"area": "Jesselton Point",
+"icon": "activity",
+"slots": "M",
+"hours": 3.0,
+"aliases": [
+"island hopping",
+"manukan sapi",
+"tunku abdul rahman marine park island hopping",
+"跳岛"
+]
+},
+{
+"name": "Tanjung Aru Beach Sunset",
+"city": "Kota Kinabalu, Malaysia",
+"district": "Tanjung Aru",
+"area": "Tanjung Aru",
+"icon": "place",
+"slots": "E",
+"hours": 2.0,
+"aliases": [
+"tanjung aru",
+"tanjung aru beach sunset",
+"丹绒亚路"
+]
+},
+{
+"name": "Gaya Street Sunday Market",
+"city": "Kota Kinabalu, Malaysia",
+"district": "Gaya Street",
+"area": "Gaya Street",
+"icon": "shopping",
+"slots": "M",
+"hours": 2.0,
+"aliases": [
+"gaya street",
+"gaya street sunday market",
+"加雅街"
+]
+},
+{
+"name": "Kota Kinabalu City Mosque",
+"city": "Kota Kinabalu, Malaysia",
+"district": "Likas Bay",
+"area": "Likas Bay",
+"icon": "place",
+"slots": "MAE",
+"hours": 2.0,
+"aliases": [
+"floating mosque",
+"kota kinabalu city mosque",
+"masjid bandaraya",
+"水上清真寺"
+]
+},
+{
+"name": "Filipino Market",
+"city": "Kota Kinabalu, Malaysia",
+"district": "Jalan Tun Fuad Stephens",
+"area": "Jalan Tun Fuad Stephens",
+"icon": "shopping",
+"slots": "EN",
+"hours": 2.0,
+"aliases": [
+"filipino market",
+"handicraft market",
+"菲律宾市场"
+]
+},
+{
+"name": "Welcome Seafood Restaurant",
+"city": "Kota Kinabalu, Malaysia",
+"district": "Asia City",
+"area": "Asia City",
+"icon": "food",
+"slots": "D",
+"hours": 1.0,
+"aliases": [
+"welcome seafood",
+"welcome seafood restaurant",
+"大茄来"
+]
+},
+{
+"name": "Yee Fung Laksa",
+"city": "Kota Kinabalu, Malaysia",
+"district": "Gaya Street",
+"area": "Gaya Street",
+"icon": "food",
+"slots": "BL",
+"hours": 1.0,
+"aliases": [
+"yee fung",
+"yee fung laksa",
+"怡丰叻沙"
+]
+},
+{
+"name": "Mari Mari Cultural Village",
+"city": "Kota Kinabalu, Malaysia",
+"district": "Inanam",
+"area": "Inanam",
+"icon": "activity",
+"slots": "MA",
+"hours": 3.0,
+"aliases": [
+"mari mari",
+"mari mari cultural village"
+]
+},
+{
+"name": "Klias River Firefly Cruise",
+"city": "Kota Kinabalu, Malaysia",
+"district": "Beaufort",
+"area": "Beaufort",
+"icon": "activity",
+"slots": "EN",
+"hours": 3.0,
+"aliases": [
+"firefly tour",
+"klias",
+"klias river firefly cruise",
+"萤火虫"
+]
+},
+{
+"name": "Signal Hill Observatory",
+"city": "Kota Kinabalu, Malaysia",
+"district": "Signal Hill",
+"area": "Signal Hill",
+"icon": "place",
+"slots": "E",
+"hours": 2.0,
+"aliases": [
+"signal hill",
+"signal hill observatory"
+]
+},
+{
+"name": "Imago Shopping Mall",
+"city": "Kota Kinabalu, Malaysia",
+"district": "KK Times Square",
+"area": "KK Times Square",
+"icon": "shopping",
+"slots": "AE",
+"hours": 2.0,
+"aliases": [
+"imago",
+"imago shopping mall"
+]
+},
+{
+"name": "Fook Yuen Cafe",
+"city": "Kota Kinabalu, Malaysia",
+"district": "Gaya Street",
+"area": "Gaya Street",
+"icon": "food",
+"slots": "B",
+"hours": 1.0,
+"aliases": [
+"fook yuen",
+"fook yuen cafe",
+"富源"
+]
+},
+{
+"name": "KK Night Market (Filipino Market)",
+"city": "Kota Kinabalu, Malaysia",
+"district": "Kota Kinabalu City",
+"area": "Kota Kinabalu City",
+"icon": "food",
+"slots": "DN",
+"hours": 1.5,
+"aliases": [
+"filipino market",
+"kk night market",
+"kk night market (filipino market)",
+"pasar malam kk",
+"亚庇夜市"
+]
+},
+{
+"name": "The Bund",
+"city": "Shanghai, China",
+"district": "Huangpu",
+"area": "Zhongshan East 1st Road",
+"icon": "place",
+"slots": "EN",
+"hours": 2.0,
+"aliases": [
+"bund",
+"the bund",
+"外滩"
+]
+},
+{
+"name": "Yu Garden",
+"city": "Shanghai, China",
+"district": "Huangpu",
+"area": "Huangpu",
+"icon": "place",
+"slots": "MA",
+"hours": 2.0,
+"aliases": [
+"yu garden",
+"yu yuan",
+"yuyuan",
+"yuyuan garden",
+"豫园"
+]
+},
+{
+"name": "Nanjing Road",
+"city": "Shanghai, China",
+"district": "Huangpu",
+"area": "Huangpu",
+"icon": "shopping",
+"slots": "AEN",
+"hours": 2.0,
+"aliases": [
+"nanjing east road",
+"nanjing lu",
+"nanjing road",
+"南京东路",
+"南京路",
+"南京路步行街"
+]
+},
+{
+"name": "Shanghai Disneyland",
+"city": "Shanghai, China",
+"district": "Disneyland",
+"area": "Pudong",
+"icon": "activity",
+"slots": "MA",
+"hours": 8.0,
+"aliases": [
+"disney",
+"disney land",
+"disneyland",
+"shanghai disneyland",
+"上海迪士尼",
+"迪士尼",
+"迪士尼乐园",
+"迪斯尼"
+]
+},
+{
+"name": "Oriental Pearl Tower",
+"city": "Shanghai, China",
+"district": "Pudong",
+"area": "Lujiazui",
+"icon": "place",
+"slots": "AEN",
+"hours": 2.0,
+"aliases": [
+"oriental pearl",
+"oriental pearl tower",
+"pearl tower",
+"东方明珠",
+"东方明珠塔"
+]
+},
+{
+"name": "Tianzifang",
+"city": "Shanghai, China",
+"district": "Xuhui",
+"area": "Taikang Road",
+"icon": "shopping",
+"slots": "AE",
+"hours": 2.0,
+"aliases": [
+"tian zi fang",
+"tianzifang",
+"田子坊"
+]
+},
+{
+"name": "Zhujiajiao Water Town",
+"city": "Shanghai, China",
+"district": "Qingpu",
+"area": "Qingpu",
+"icon": "place",
+"slots": "M",
+"hours": 2.0,
+"aliases": [
+"water town",
+"zhu jia jiao",
+"zhujiajiao",
+"zhujiajiao water town",
+"朱家角",
+"朱家角古镇"
+]
+},
+{
+"name": "Xintiandi",
+"city": "Shanghai, China",
+"district": "Huangpu",
+"area": "Huangpu",
+"icon": "place",
+"slots": "AEN",
+"hours": 2.0,
+"aliases": [
+"xintiandi",
+"新天地"
+]
+},
+{
+"name": "Shanghai Tower Observation Deck",
+"city": "Shanghai, China",
+"district": "Pudong",
+"area": "Lujiazui",
+"icon": "place",
+"slots": "AE",
+"hours": 2.0,
+"aliases": [
+"shanghai tower",
+"shanghai tower observation deck",
+"上海中心",
+"上海中心大厦",
+"上海中心观光厅"
+]
+},
+{
+"name": "Jade Buddha Temple",
+"city": "Shanghai, China",
+"district": "Putuo",
+"area": "Putuo",
+"icon": "place",
+"slots": "M",
+"hours": 2.0,
+"aliases": [
+"jade buddha temple",
+"玉佛寺"
+]
+},
+{
+"name": "Jia Jia Tang Bao",
+"city": "Shanghai, China",
+"district": "Huangpu",
+"area": "Huanghe Road",
+"icon": "food",
+"slots": "BL",
+"hours": 1.0,
+"aliases": [
+"jia jia tang bao",
+"jiajia soup dumplings",
+"佳家汤包"
+]
+},
+{
+"name": "Wukang Road",
+"city": "Shanghai, China",
+"district": "Xuhui",
+"area": "Former French Concession",
+"icon": "place",
+"slots": "MA",
+"hours": 2.0,
+"aliases": [
+"french concession",
+"wukang mansion",
+"wukang road",
+"武康大楼",
+"武康路"
+]
+},
+{
+"name": "Yang's Fried Dumplings",
+"city": "Shanghai, China",
+"district": "Huangpu",
+"area": "Huanghe Road",
+"icon": "food",
+"slots": "BL",
+"hours": 1.0,
+"aliases": [
+"shengjian",
+"yang's dumplings",
+"yang's fried dumplings",
+"小杨生煎"
+]
+},
+{
+"name": "Shanghai Museum",
+"city": "Shanghai, China",
+"district": "Huangpu",
+"area": "People's Square",
+"icon": "place",
+"slots": "MA",
+"hours": 2.0,
+"aliases": [
+"shanghai museum",
+"上博",
+"上海博物馆"
+]
+},
+{
+"name": "Huangpu River Cruise",
+"city": "Shanghai, China",
+"district": "Huangpu",
+"area": "The Bund / Lujiazui",
+"icon": "activity",
+"slots": "EN",
+"hours": 1.0,
+"aliases": [
+"huangpu ferry",
+"huangpu river cruise",
+"river cruise",
+"浦江游览",
+"轮渡",
+"黄浦江",
+"黄浦江游船",
+"黄浦江轮渡"
+]
+},
+{
+"name": "Nanxiang Steamed Bun Restaurant",
+"city": "Shanghai, China",
+"district": "Huangpu",
+"area": "Yu Garden",
+"icon": "food",
+"slots": "BLD",
+"hours": 1.0,
+"aliases": [
+"nanxiang",
+"nanxiang steamed bun restaurant",
+"南翔",
+"南翔小笼",
+"南翔馒头店"
+]
+},
+{
+"name": "Lujiazui",
+"city": "Shanghai, China",
+"district": "Pudong",
+"area": "Pudong",
+"icon": "place",
+"slots": "AEN",
+"hours": 1.5,
+"aliases": [
+"lujiazui",
+"陆家嘴"
+]
+},
+{
+"name": "City God Temple",
+"city": "Shanghai, China",
+"district": "Huangpu",
+"area": "Yu Garden",
+"icon": "place",
+"slots": "MA",
+"hours": 1.0,
+"aliases": [
+"city god temple",
+"城隍庙"
+]
+},
+{
+"name": "Jing'an Temple",
+"city": "Shanghai, China",
+"district": "Jing'an",
+"area": "Jing'an",
+"icon": "place",
+"slots": "MA",
+"hours": 1.0,
+"aliases": [
+"jing'an temple",
+"jingan temple",
+"静安寺"
+]
+},
+{
+"name": "Shanghai Zoo",
+"city": "Shanghai, China",
+"district": "Changning",
+"area": "Changning",
+"icon": "activity",
+"slots": "MA",
+"hours": 3.0,
+"aliases": [
+"shanghai zoo",
+"上海动物园"
+]
+},
+{
+"name": "Shanghai Natural History Museum",
+"city": "Shanghai, China",
+"district": "Jing'an",
+"area": "Jing'an",
+"icon": "place",
+"slots": "MA",
+"hours": 2.5,
+"aliases": [
+"natural history museum",
+"shanghai natural history museum",
+"自然博物馆"
+]
+},
+{
+"name": "Qibao Ancient Town",
+"city": "Shanghai, China",
+"district": "Minhang",
+"area": "Minhang",
+"icon": "place",
+"slots": "MA",
+"hours": 2.5,
+"aliases": [
+"qibao",
+"qibao ancient town",
+"七宝",
+"七宝古镇"
+]
+},
+{
+"name": "Shanghai Ocean Aquarium",
+"city": "Shanghai, China",
+"district": "Pudong",
+"area": "Lujiazui",
+"icon": "activity",
+"slots": "MA",
+"hours": 2.0,
+"aliases": [
+"ocean aquarium",
+"shanghai ocean aquarium",
+"水族馆",
+"海洋水族馆"
+]
+},
+{
+"name": "Shouning Road Food Street",
+"city": "Shanghai, China",
+"district": "Huangpu",
+"area": "Huangpu",
+"icon": "food",
+"slots": "DN",
+"hours": 1.5,
+"aliases": [
+"shouning road",
+"shouning road food street",
+"寿宁路",
+"寿宁路美食街"
+],
+"tags": [
+"street food"
+]
+},
+{
+"name": "Seesaw Coffee",
+"city": "Shanghai, China",
+"district": "Huangpu",
+"area": "Xintiandi",
+"icon": "food",
+"slots": "BA",
+"hours": 1.0,
+"aliases": [
+"seesaw",
+"seesaw coffee"
+],
+"tags": [
+"cafe",
+"coffee",
+"brunch"
+]
+},
+{
+"name": "Lady M Shanghai",
+"city": "Shanghai, China",
+"district": "Huangpu",
+"area": "Huangpu",
+"icon": "food",
+"slots": "A",
+"hours": 1.0,
+"aliases": [
+"lady m",
+"lady m shanghai"
+],
+"tags": [
+"dessert",
+"cake"
+]
+},
+{
+"name": "Raffles City Shanghai",
+"city": "Shanghai, China",
+"district": "Huangpu",
+"area": "People's Square",
+"icon": "shopping",
+"slots": "AE",
+"hours": 2.0,
+"aliases": [
+"raffles city",
+"raffles city shanghai",
+"来福士"
+],
+"tags": [
+"mall"
+]
+},
+{
+"name": "Dragon Fly Spa",
+"city": "Shanghai, China",
+"district": "Huangpu",
+"area": "Xintiandi",
+"icon": "activity",
+"slots": "AE",
+"hours": 1.5,
+"aliases": [
+"dragon fly spa",
+"悠庭",
+"悠庭保健会所"
+],
+"tags": [
+"massage",
+"spa"
+]
+},
+{
+"name": "Lao Zheng Xing",
+"city": "Shanghai, China",
+"district": "Huangpu",
+"area": "People's Square",
+"icon": "food",
+"slots": "LD",
+"hours": 1.0,
+"aliases": [
+"lao zheng xing",
+"老正兴"
+],
+"tags": [
+"shanghainese",
+"本帮菜"
+]
+}
+],
+"areas": [
+{
+"city": "Shanghai, China",
+"name": "People's Square",
+"aliases": [
+"人民广场",
+"people's square",
+"peoples square"
+]
+},
+{
+"city": "Shanghai, China",
+"name": "Jing'an",
+"aliases": [
+"静安"
+]
+},
+{
+"city": "Shanghai, China",
+"name": "Pudong",
+"aliases": [
+"浦东"
+]
+},
+{
+"city": "Shanghai, China",
+"name": "Puxi",
+"aliases": [
+"浦西"
+]
+}
+]
+}

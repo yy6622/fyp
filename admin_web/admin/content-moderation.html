@@ -6,8 +6,8 @@
 <title>Content Moderation — Voya Admin</title>
 <link rel="stylesheet" href="../css/tokens.css?v=20261006b" />
 <link rel="stylesheet" href="../css/base.css?v=20261006b" />
-<link rel="stylesheet" href="../css/layout.css?v=20261006b" />
-<link rel="stylesheet" href="../css/components.css?v=20261006b" />
+<link rel="stylesheet" href="../css/layout.css?v=20261021" />
+<link rel="stylesheet" href="../css/components.css?v=20261021c" />
 </head>
 <body>
 <div class="shell">
@@ -31,17 +31,39 @@
       </div>
     </div>
 
-    <div class="stat-grid" id="statGrid"><div class="skeleton" style="height:90px;grid-column:1/-1;"></div></div>
-
-    <div class="filter-bar">
-      <div class="search-input-wrap"><span data-icon="search"></span><input class="input" id="searchInput" placeholder="Search reported content…" /></div>
+    <div class="tabs" id="modTabs">
+      <button class="tab-btn active" data-tab="posts">Reported Posts</button>
+      <button class="tab-btn" data-tab="reviews">Reported Reviews</button>
     </div>
 
-    <div id="list"><div class="card" style="padding:20px;"><div class="skeleton" style="height:80px;"></div></div></div>
-    <div class="empty-state" id="emptyState" style="display:none;">
-      <span data-icon="flag" class="icon-lg"></span>
-      <div class="h3">Nothing to review</div>
-      <p class="small">Reported posts will show up here.</p>
+    <div id="postsPanel">
+      <div class="stat-grid" id="statGrid"><div class="skeleton" style="height:90px;grid-column:1/-1;"></div></div>
+
+      <div class="filter-bar">
+        <div class="search-input-wrap"><span data-icon="search"></span><input class="input" id="searchInput" placeholder="Search reported content…" /></div>
+      </div>
+
+      <div id="list"><div class="card" style="padding:20px;"><div class="skeleton" style="height:80px;"></div></div></div>
+      <div class="empty-state" id="emptyState" style="display:none;">
+        <span data-icon="flag" class="icon-lg"></span>
+        <div class="h3">Nothing to review</div>
+        <p class="small">Reported posts will show up here.</p>
+      </div>
+    </div>
+
+    <div id="reviewsPanel" style="display:none;">
+      <div class="stat-grid" id="reviewStatGrid"><div class="skeleton" style="height:90px;grid-column:1/-1;"></div></div>
+
+      <div class="filter-bar">
+        <div class="search-input-wrap"><span data-icon="search"></span><input class="input" id="reviewSearchInput" placeholder="Search reported reviews…" /></div>
+      </div>
+
+      <div id="reviewList"><div class="card" style="padding:20px;"><div class="skeleton" style="height:80px;"></div></div></div>
+      <div class="empty-state" id="reviewEmptyState" style="display:none;">
+        <span data-icon="flag" class="icon-lg"></span>
+        <div class="h3">Nothing to review</div>
+        <p class="small">Reported reviews (left on hotels, restaurants, attractions or community posts) will show up here.</p>
+      </div>
     </div>
   </main>
 </div>
@@ -53,21 +75,65 @@
   </div>
 </div>
 
+<div class="modal-backdrop" id="reviewDetailModal">
+  <div class="modal" style="max-width:600px;">
+    <div class="modal-head"><h3 class="h2">Reported review</h3><button class="modal-close" data-close><span data-icon="x"></span></button></div>
+    <div id="reviewDetailBody"></div>
+  </div>
+</div>
+
 <script type="module">
-import { requireRole } from "../js/auth-guard.js?v=20261007e";
-import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261007e";
-import { mountIcons } from "../js/icons.js?v=20261007e";
-import { listReportedPosts, approvePostReport, rejectPost, logModerationAction, countModerationToday, countModerationYesterday } from "../js/data.js?v=20261007e";
-import { number, timeAgo, escapeHtml, toast, setBusy, confirmDialog, openModal, closeModal, wireModalDismiss, statCard, plainCard, trendDelta } from "../js/ui.js?v=20261007e";
+import { requireRole } from "../js/auth-guard.js?v=20261021";
+import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261021";
+import { mountIcons } from "../js/icons.js?v=20261021";
+import {
+  listReportedPosts, approvePostReport, rejectPost, logModerationAction, countModerationToday, countModerationYesterday,
+  listFlaggedReviews, approveReview, rejectReview,
+} from "../js/data.js?v=20261021";
+import {
+  number, timeAgo, escapeHtml, toast, setBusy, confirmDialog, openModal, closeModal, wireModalDismiss,
+  statCard, plainCard, trendDelta, reporterLabel,
+} from "../js/ui.js?v=20261021";
 
 mountSidebarNav({ role: "admin", active: "moderation" });
 const session = await requireRole("admin", "login.html");
 let reports = [];
+let flaggedReviews = [];
+
+// Deep-link support: admin/notifications.html links straight into a
+// specific reported post or review (?tab=posts|reviews&focus=<id>) so
+// clicking a notification lands the admin right on that item, already
+// open for review, instead of making them find it again in the list.
+const deepLink = new URLSearchParams(location.search);
 
 if (session) {
   setSidebarUser({ displayName: session.profile.name || "Admin", roleLabel: "Administrator" });
   wireModalDismiss();
+  wireTabs();
   await load();
+  await loadReviews();
+  applyDeepLink();
+}
+
+function wireTabs() {
+  document.querySelectorAll("#modTabs [data-tab]").forEach((btn) => btn.addEventListener("click", () => {
+    document.querySelectorAll("#modTabs [data-tab]").forEach((b) => b.classList.toggle("active", b === btn));
+    document.getElementById("postsPanel").style.display = btn.dataset.tab === "posts" ? "" : "none";
+    document.getElementById("reviewsPanel").style.display = btn.dataset.tab === "reviews" ? "" : "none";
+  }));
+}
+
+function applyDeepLink() {
+  const tab = deepLink.get("tab");
+  const focus = deepLink.get("focus");
+  if (tab === "reviews") {
+    document.querySelectorAll("#modTabs [data-tab]").forEach((b) => b.classList.toggle("active", b.dataset.tab === "reviews"));
+    document.getElementById("postsPanel").style.display = "none";
+    document.getElementById("reviewsPanel").style.display = "";
+  }
+  if (!focus) return;
+  if (tab === "reviews") openFlaggedReview(focus);
+  else review(focus);
 }
 
 async function load() {
@@ -108,7 +174,7 @@ function renderList() {
       <div class="report-thumb" style="${p.images?.[0] ? `background-image:url('${p.images[0]}');background-size:cover;background-position:center;` : ""}"></div>
       <div class="report-body">
         <div class="report-title">${escapeHtml(p.title || "Untitled post")}</div>
-        <div class="report-meta">Reported by ${escapeHtml(p.reportedBy || "a traveller")} · ${timeAgo(p.reportedAt)} · ${escapeHtml(p.reportReason || "No reason given")}</div>
+        <div class="report-meta">Reported by ${escapeHtml(reporterLabel(p))} · ${timeAgo(p.reportedAt)} · ${escapeHtml(p.reportReason || "No reason given")}</div>
         <div class="report-desc">Review the reported content and choose the appropriate action.</div>
       </div>
       <div class="report-actions">
@@ -140,7 +206,7 @@ function review(postId) {
     <p style="font-size:14px;line-height:1.6;color:var(--text-700);margin-bottom:18px;">${escapeHtml(p.description || "No description.")}</p>
     <div class="card-pad" style="background:var(--amber-bg);border-radius:12px;">
       <p class="small" style="color:var(--amber-text);font-weight:700;">Reported: ${escapeHtml(p.reportReason || "No reason given")}</p>
-      <p class="small" style="color:var(--amber-text);">By ${escapeHtml(p.reportedBy || "a traveller")}</p>
+      <p class="small" style="color:var(--amber-text);">By ${escapeHtml(reporterLabel(p))}</p>
     </div>
     <div class="form-actions">
       <button class="btn btn-danger-outline" data-modal-reject="${p.id}"><span data-icon="x" data-icon-size="14"></span>Reject</button>
@@ -176,6 +242,131 @@ async function act(kind, postId, btn) {
 }
 
 document.getElementById("searchInput").addEventListener("input", renderList);
+
+// ==================== Reported Reviews tab ====================
+// Parallel to the Reported Posts logic above, but a review isn't a
+// top-level doc — it's one entry from listFlaggedReviews() (a
+// collectionGroup query across every catalog_hotels/catalog_restaurants/
+// catalog_attractions/posts' "reviews" subcollection), carrying its own
+// Firestore ref plus its parent's ref/collection/name for display and for
+// approveReview/rejectReview to act on.
+function parentTypeLabel(collection) {
+  return { catalog_hotels: "Hotel", catalog_restaurants: "Restaurant", catalog_attractions: "Attraction", posts: "Community post" }[collection] || "Item";
+}
+function stars(rating) {
+  const n = Math.max(0, Math.min(5, rating || 0));
+  return "★".repeat(n) + "☆".repeat(5 - n);
+}
+
+async function loadReviews() {
+  let items, approvedToday, rejectedToday, approvedYesterday, rejectedYesterday;
+  try {
+    [items, approvedToday, rejectedToday, approvedYesterday, rejectedYesterday] = await Promise.all([
+      listFlaggedReviews(), countModerationToday("review_approved"), countModerationToday("review_rejected"),
+      countModerationYesterday("review_approved"), countModerationYesterday("review_rejected"),
+    ]);
+  } catch (err) {
+    document.getElementById("reviewStatGrid").innerHTML = "";
+    document.getElementById("reviewList").innerHTML = `<p class="muted small" style="padding:20px 0;">Couldn't load this report — ${escapeHtml(err.message || "missing or insufficient permissions")}.</p>`;
+    return;
+  }
+  flaggedReviews = items;
+  document.getElementById("reviewStatGrid").innerHTML = [
+    plainCard("Pending review", number(flaggedReviews.length)),
+    statCard("Approved today", number(approvedToday), "file-check", trendDelta(approvedToday, approvedYesterday, "yesterday")),
+    statCard("Rejected today", number(rejectedToday), "file-x", trendDelta(rejectedToday, rejectedYesterday, "yesterday")),
+  ].join("");
+  renderReviewList();
+  mountIcons(document);
+}
+
+function renderReviewList() {
+  const q = document.getElementById("reviewSearchInput").value.trim().toLowerCase();
+  const filtered = flaggedReviews.filter((r) =>
+    !q || (r.comment || "").toLowerCase().includes(q) || (r.authorName || "").toLowerCase().includes(q) || (r.parentName || "").toLowerCase().includes(q));
+  const list = document.getElementById("reviewList");
+  const empty = document.getElementById("reviewEmptyState");
+  if (!filtered.length) {
+    list.innerHTML = "";
+    empty.style.display = "block";
+    return;
+  }
+  empty.style.display = "none";
+  list.innerHTML = filtered.map((r) => `
+    <div class="card report-card" style="margin-bottom:16px;cursor:pointer;" data-open-review="${r.id}">
+      <div class="report-body">
+        <div class="report-title">${stars(r.rating)} <span class="muted small" style="font-weight:400;">on ${escapeHtml(parentTypeLabel(r.parentCollection))}: ${escapeHtml(r.parentName || "Unknown")}</span></div>
+        <div class="report-meta">By ${escapeHtml(r.authorName || "Traveller")} · Reported by ${escapeHtml(reporterLabel(r))} · ${timeAgo(r.reportedAt)} · ${escapeHtml(r.reportReason || "No reason given")}</div>
+        <div class="report-desc">${escapeHtml(r.comment || "(no comment)")}</div>
+      </div>
+      <div class="report-actions">
+        <button class="btn btn-outline btn-sm" data-review-detail="${r.id}"><span data-icon="eye" data-icon-size="14"></span>Review</button>
+        <button class="btn btn-danger-outline btn-sm" data-reject-review="${r.id}"><span data-icon="x" data-icon-size="14"></span>Reject</button>
+        <button class="btn btn-primary btn-sm" data-approve-review="${r.id}"><span data-icon="check-circle" data-icon-size="14"></span>Approve</button>
+      </div>
+    </div>`).join("");
+  mountIcons(document);
+  list.querySelectorAll("[data-open-review]").forEach((card) => card.addEventListener("click", (e) => {
+    if (e.target.closest(".report-actions")) return;
+    openFlaggedReview(card.dataset.openReview);
+  }));
+  list.querySelectorAll("[data-review-detail]").forEach((b) => b.addEventListener("click", () => openFlaggedReview(b.dataset.reviewDetail)));
+  list.querySelectorAll("[data-reject-review]").forEach((b) => b.addEventListener("click", () => actOnReview("reject", b.dataset.rejectReview, b)));
+  list.querySelectorAll("[data-approve-review]").forEach((b) => b.addEventListener("click", () => actOnReview("approve", b.dataset.approveReview, b)));
+}
+
+function openFlaggedReview(reviewId) {
+  const r = flaggedReviews.find((x) => x.id === reviewId);
+  if (!r) return;
+  document.getElementById("reviewDetailBody").innerHTML = `
+    <p class="h3" style="margin-bottom:6px;">${stars(r.rating)}</p>
+    <p class="muted small" style="margin-bottom:14px;">By ${escapeHtml(r.authorName || "Traveller")} · on ${escapeHtml(parentTypeLabel(r.parentCollection))}: ${escapeHtml(r.parentName || "Unknown")}</p>
+    <p style="font-size:14px;line-height:1.6;color:var(--text-700);margin-bottom:18px;">${escapeHtml(r.comment || "(no comment)")}</p>
+    <div class="card-pad" style="background:var(--amber-bg);border-radius:12px;">
+      <p class="small" style="color:var(--amber-text);font-weight:700;">Reported: ${escapeHtml(r.reportReason || "No reason given")}</p>
+      <p class="small" style="color:var(--amber-text);">By ${escapeHtml(reporterLabel(r))}</p>
+    </div>
+    <div class="form-actions">
+      <button class="btn btn-danger-outline" data-modal-reject-review="${r.id}"><span data-icon="x" data-icon-size="14"></span>Reject</button>
+      <button class="btn btn-primary" data-modal-approve-review="${r.id}"><span data-icon="check-circle" data-icon-size="14"></span>Approve</button>
+    </div>`;
+  mountIcons(document.getElementById("reviewDetailBody"));
+  document.getElementById("reviewDetailBody").querySelector("[data-modal-reject-review]").onclick = (e) => { closeModal("reviewDetailModal"); actOnReview("reject", reviewId, e.target); };
+  document.getElementById("reviewDetailBody").querySelector("[data-modal-approve-review]").onclick = (e) => { closeModal("reviewDetailModal"); actOnReview("approve", reviewId, e.target); };
+  openModal("reviewDetailModal");
+}
+
+async function actOnReview(kind, reviewId, btn) {
+  const r = flaggedReviews.find((x) => x.id === reviewId);
+  if (!r) return;
+  if (kind === "reject") {
+    const ok = await confirmDialog({
+      title: "Reject and remove this review?",
+      body: "This permanently deletes the review from Voya. This can't be undone.",
+      confirmText: "Reject & remove", danger: true,
+    });
+    if (!ok) return;
+  }
+  setBusy(btn, true, "Working…");
+  try {
+    if (kind === "approve") await approveReview(r);
+    else await rejectReview(r);
+    // logModerationAction's 2nd param is just a generic "which thing"
+    // audit id (named postId from when only posts existed) — a review id
+    // fits the same field fine, and "review_approved"/"review_rejected"
+    // keep these counted separately from the Reported Posts tab's own
+    // "Approved today"/"Rejected today" numbers.
+    await logModerationAction(kind === "approve" ? "review_approved" : "review_rejected", reviewId, session.uid);
+    flaggedReviews = flaggedReviews.filter((x) => x.id !== reviewId);
+    toast(kind === "approve" ? "Review approved — now visible to everyone." : "Review removed.", "success");
+    await loadReviews();
+  } catch (err) {
+    toast(err.message || "Something went wrong.", "error");
+    setBusy(btn, false);
+  }
+}
+
+document.getElementById("reviewSearchInput").addEventListener("input", renderReviewList);
 </script>
 </body>
 </html>

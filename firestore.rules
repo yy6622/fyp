@@ -15,6 +15,17 @@ service cloud.firestore {
     function isInsurancePartner() {
       return isSignedIn() && exists(/databases/$(database)/documents/insurance_partners/$(request.auth.uid));
     }
+    // A partner can self-register (insurance_partners/{uid} with
+    // status: 'pending') and sign in right away, but shouldn't be able to
+    // publish plans, log transactions, or file/update claims & refunds
+    // until an admin approves them — see admin_web/admin/insurance-
+    // partners.html's Approve action. Used anywhere isInsurancePartner()
+    // used to gate a *write*; reads stay open to any partner (e.g. so a
+    // pending partner can still see their own pending status).
+    function isApprovedInsurancePartner() {
+      return isInsurancePartner() &&
+        get(/databases/$(database)/documents/insurance_partners/$(request.auth.uid)).data.status == 'approved';
+    }
 
     match /users/{uid} {
       // Any signed-in user can look someone up (Add Friend searches by
@@ -181,10 +192,16 @@ service cloud.firestore {
       // rating above (that's the 'ratings' map on the post doc itself).
       // No aggregate to bump here since a post's star average already
       // comes from 'ratings', not from these.
+      // Admin bypass on update/delete: admin/content-moderation.html's
+      // Reported Reviews tab needs it (approveReview/rejectReview in
+      // admin_web/js/data.js) for a review content moderation
+      // auto-flagged (see review_helpers.dart's addReviewFor) — same
+      // reasoning as the admin bypass on the post doc itself above.
+      // A review's own author still can't edit/delete it afterwards.
       match /reviews/{reviewId} {
         allow read: if isSignedIn();
         allow create: if isSignedIn() && request.resource.data.authorId == request.auth.uid;
-        allow update, delete: if false;
+        allow update, delete: if isAdmin();
       }
 
       // One marker doc per uid who has ever opened this post — exists
@@ -244,7 +261,12 @@ service cloud.firestore {
         allow delete: if false;
       }
       match /expenses/{expenseId} {
-        allow read, create, update: if isTripMember(tripId);
+        allow read, create: if isTripMember(tripId);
+        // The person who paid may edit their expense (title, amount, category, note, receipt,
+        // shares). Everyone else in the trip may only change `participants` (marking a share paid).
+        allow update: if isTripMember(tripId) && (
+          request.auth.uid == resource.data.paidBy ||
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['participants']));
         allow delete: if false;
       }
       match /messages/{messageId} {
@@ -280,10 +302,14 @@ service cloud.firestore {
       // only be created by its own author and is immutable afterwards
       // (no update/delete) — same "write once" simplicity as a
       // Community post's like/save, kept small on purpose for a review.
+      // Admin bypass on update/delete for admin/content-moderation.html's
+      // Reported Reviews tab (approveReview/rejectReview) — see the same
+      // bypass on the posts' `reviews` subcollection above for the full
+      // reasoning. A review's own author still can't edit/delete it.
       match /reviews/{reviewId} {
         allow read: if isSignedIn();
         allow create: if isSignedIn() && request.resource.data.authorId == request.auth.uid;
-        allow update, delete: if false;
+        allow update, delete: if isAdmin();
       }
     }
     // Content fields (name/category/openingHours/address/...) are written
@@ -301,21 +327,33 @@ service cloud.firestore {
       allow create, update: if isSignedIn();
       allow delete: if false;
 
+      // Admin bypass on update/delete for admin/content-moderation.html's
+      // Reported Reviews tab (approveReview/rejectReview) — see the same
+      // bypass on the posts' `reviews` subcollection above for the full
+      // reasoning. A review's own author still can't edit/delete it.
       match /reviews/{reviewId} {
         allow read: if isSignedIn();
         allow create: if isSignedIn() && request.resource.data.authorId == request.auth.uid;
-        allow update, delete: if false;
+        allow update, delete: if isAdmin();
       }
     }
     match /catalog_restaurants/{id} {
       allow read: if isSignedIn();
       allow create, update: if isSignedIn();
-      allow delete: if false;
+      // Was `if false` for everyone — admin-only delete added so
+      // admin/catalog-fix.html can remove the 5 leftover hardcoded-seed
+      // rows (see FAKE_SEED_RESTAURANT_IDS in js/data.js). A non-admin
+      // still can't delete a real, user-favorited restaurant row.
+      allow delete: if isAdmin();
 
+      // Admin bypass on update/delete for admin/content-moderation.html's
+      // Reported Reviews tab (approveReview/rejectReview) — see the same
+      // bypass on the posts' `reviews` subcollection above for the full
+      // reasoning. A review's own author still can't edit/delete it.
       match /reviews/{reviewId} {
         allow read: if isSignedIn();
         allow create: if isSignedIn() && request.resource.data.authorId == request.auth.uid;
-        allow update, delete: if false;
+        allow update, delete: if isAdmin();
       }
     }
 
@@ -351,6 +389,29 @@ service cloud.firestore {
       allow update: if false;
     }
 
+    // Country emergency info (Group > Emergency tab's Emergency Contact
+    // and Embassy pages) — admin-curated reference data (emergency
+    // numbers + nearest Malaysian mission contact details + an optional
+    // embassy photo), entered via admin/country-emergency.html and read
+    // by every signed-in trip member via
+    // CountryEmergencyRepository.forDestination(). Not trip-scoped: it's
+    // a lookup by destination country, same level of openness as
+    // catalog_attractions/catalog_places above.
+    match /country_emergency_info/{countryKey} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isAdmin();
+
+      // One embassy per home country for this destination — the app
+      // isn't Malaysia-only, so EmbassyPage looks up the SIGNED-IN
+      // USER'S OWN country (users/{uid}.country, Account Setting's
+      // "Country/Region") here rather than always assuming Malaysia.
+      // Same openness/admin-only-write level as the parent doc.
+      match /embassies/{homeCountryKey} {
+        allow read: if isSignedIn();
+        allow create, update, delete: if isAdmin();
+      }
+    }
+
     // ---------------- Insurance (admin_web partner console + Flutter app) --
     // Plans are authored in the admin/partner web console (admin_web/); the
     // Flutter app only ever reads them. admins/{uid} and
@@ -381,17 +442,20 @@ service cloud.firestore {
 
     match /insurance_plans/{id} {
       // Any signed-in user (Flutter app riders, or the console) can read
-      // plans; only the owning partner or an admin may write one.
+      // plans; only the owning, *approved* partner or an admin may write
+      // one — a pending or suspended partner's console hides the
+      // Add/Edit/Delete actions for this same reason (plans.html), this
+      // is the rule that actually enforces it.
       allow read: if isSignedIn();
       allow create: if isAdmin() ||
-        (isInsurancePartner() && request.resource.data.partnerId == request.auth.uid);
+        (isApprovedInsurancePartner() && request.resource.data.partnerId == request.auth.uid);
       // update also pins request.resource.data.partnerId to the existing
       // owner, so an owning partner can't reassign a plan to someone else
       // by editing its partnerId field mid-update.
       allow update: if isAdmin() ||
-        (isInsurancePartner() && resource.data.partnerId == request.auth.uid &&
+        (isApprovedInsurancePartner() && resource.data.partnerId == request.auth.uid &&
           request.resource.data.partnerId == request.auth.uid);
-      allow delete: if isAdmin() || (isInsurancePartner() && resource.data.partnerId == request.auth.uid);
+      allow delete: if isAdmin() || (isApprovedInsurancePartner() && resource.data.partnerId == request.auth.uid);
     }
 
     match /insurance_transactions/{id} {
@@ -407,10 +471,10 @@ service cloud.firestore {
         (isInsurancePartner() && resource.data.partnerId == request.auth.uid)
       );
       allow create: if isSignedIn() && (
-        request.resource.data.buyerId == request.auth.uid || isAdmin() || isInsurancePartner()
+        request.resource.data.buyerId == request.auth.uid || isAdmin() || isApprovedInsurancePartner()
       );
       allow update: if isAdmin() ||
-        (isInsurancePartner() && resource.data.partnerId == request.auth.uid);
+        (isApprovedInsurancePartner() && resource.data.partnerId == request.auth.uid);
       allow delete: if false;
     }
 
@@ -422,10 +486,10 @@ service cloud.firestore {
         (isInsurancePartner() && resource.data.partnerId == request.auth.uid)
       );
       allow create: if isSignedIn() && (
-        request.resource.data.buyerId == request.auth.uid || isAdmin() || isInsurancePartner()
+        request.resource.data.buyerId == request.auth.uid || isAdmin() || isApprovedInsurancePartner()
       );
       allow update: if isAdmin() ||
-        (isInsurancePartner() && resource.data.partnerId == request.auth.uid);
+        (isApprovedInsurancePartner() && resource.data.partnerId == request.auth.uid);
       allow delete: if false;
     }
 
@@ -439,10 +503,10 @@ service cloud.firestore {
         (isInsurancePartner() && resource.data.partnerId == request.auth.uid)
       );
       allow create: if isSignedIn() && (
-        request.resource.data.buyerId == request.auth.uid || isAdmin() || isInsurancePartner()
+        request.resource.data.buyerId == request.auth.uid || isAdmin() || isApprovedInsurancePartner()
       );
       allow update: if isAdmin() ||
-        (isInsurancePartner() && resource.data.partnerId == request.auth.uid);
+        (isApprovedInsurancePartner() && resource.data.partnerId == request.auth.uid);
       allow delete: if false;
     }
   }

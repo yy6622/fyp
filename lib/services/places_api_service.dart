@@ -74,7 +74,7 @@ class PlacesApiService {
   /// OSM) or the request failed (offline, endpoint down); callers treat
   /// that as "couldn't look this destination up right now", not an
   /// error to surface loudly.
-  Future<({double lat, double lon, String? countryCode})?> geocode(String query) async {
+  Future<({double lat, double lon, String? countryCode, String? label})?> geocode(String query) async {
     final trimmed = query.trim();
     if (trimmed.isEmpty) return null;
     try {
@@ -95,7 +95,26 @@ class PlacesApiService {
       final address = hit['address'] as Map<String, dynamic>?;
       final rawCountryCode = address?['country_code'] as String?;
       final countryCode = (rawCountryCode != null && rawCountryCode.trim().isNotEmpty) ? rawCountryCode.trim().toUpperCase() : null;
-      return (lat: lat, lon: lon, countryCode: countryCode);
+      // A proper "City, Country" label built from the SAME address
+      // breakdown Nominatim already sent back for [countryCode] above —
+      // no extra request. This is what [refreshAttractions]/
+      // [refreshRestaurants] now store as `location` instead of echoing
+      // the raw search text (see their call sites): a free-text search
+      // like "kek lok di" or "迪士尼" used to get written to Firestore
+      // verbatim, which is honest about what was searched but not a
+      // real place name — callers only need a human-readable place
+      // label, and this is the one Nominatim itself resolved the query
+      // to. city/town/village/municipality/county covers both a city
+      // search ("Tokyo" -> city) and a rural POI (no city tag, only a
+      // county) without silently going blank for the latter.
+      final city = (address?['city'] ?? address?['town'] ?? address?['village'] ?? address?['municipality'] ?? address?['county']) as String?;
+      final country = address?['country'] as String?;
+      final labelParts = [
+        if (city != null && city.trim().isNotEmpty) city.trim(),
+        if (country != null && country.trim().isNotEmpty) country.trim(),
+      ];
+      final label = labelParts.isEmpty ? null : labelParts.join(', ');
+      return (lat: lat, lon: lon, countryCode: countryCode, label: label);
     } catch (_) {
       return null;
     }

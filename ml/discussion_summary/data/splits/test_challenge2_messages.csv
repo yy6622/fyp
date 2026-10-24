@@ -1,0 +1,141 @@
+﻿message_id,conv_id,source,speaker,message,label
+m001,ch2-01-danang,challenge,Kelly,"ok team, Da Nang in March? flights super cheap now",DESTINATION
+m002,ch2-01-danang,challenge,Irfan,"Da Nang + Hoi An, I'm game",DECISION
+m003,ch2-01-danang,challenge,Bao,my hometown 😎 I can be your guide,DECISION
+m004,ch2-01-danang,challenge,Shirley,count me in!!,DECISION
+m005,ch2-01-danang,challenge,Bao,12 to 16 March got a festival in Hoi An,DATE
+m006,ch2-01-danang,challenge,Shirley,12-16 Mar perfect,DECISION
+m007,ch2-01-danang,challenge,Irfan,"can, apply leave already",DECISION
+m008,ch2-01-danang,challenge,Kelly,budget per pax RM2200?,BUDGET
+m009,ch2-01-danang,challenge,Irfan,"should be ok, Vietnam cheap",DECISION
+m010,ch2-01-danang,challenge,Shirley,yup,DECISION
+m011,ch2-01-danang,challenge,Bao,Ba Na Hills with the golden bridge,ATTRACTION
+m012,ch2-01-danang,challenge,Kelly,"ticket quite expensive leh, around RM400",ATTRACTION
+m013,ch2-01-danang,challenge,Shirley,but the golden bridge 😍 must take photo,DECISION
+m014,ch2-01-danang,challenge,Irfan,I'm fine with it,DECISION
+m015,ch2-01-danang,challenge,Bao,"Hoi An old town at night, lanterns",ATTRACTION
+m016,ch2-01-danang,challenge,Kelly,yes yes,DECISION
+m017,ch2-01-danang,challenge,Irfan,"I need halal food ya, can find?",PREFERENCE
+m018,ch2-01-danang,challenge,Bao,got a few halal places near My Khe beach,OTHER
+m019,ch2-01-danang,challenge,Shirley,hotel near My Khe beach then?,ACCOMMODATION
+m020,ch2-01-danang,challenge,Kelly,beach hotel 👍,DECISION
+m021,ch2-01-danang,challenge,Irfan,ok,DECISION
+m022,ch2-01-danang,challenge,Bao,Grab bike is the cheapest way around,TRANSPORT
+m023,ch2-01-danang,challenge,Shirley,"I scared of bikes, Grab car can?",TRANSPORT
+m024,ch2-01-danang,challenge,Kelly,"Grab car la, 4 of us share also cheap",DECISION
+m025,ch2-01-danang,challenge,Irfan,agree car,DECISION
+m001,ch2-02-chiangmai,challenge,Yen,清迈怎么样？我想去大象保护区,DESTINATION
+m002,ch2-02-chiangmai,challenge,Hui Ling,好啊，我也一直想去,DECISION
+m003,ch2-02-chiangmai,challenge,Dennis,"Chiang Mai can, but not elephant riding ya, ethical one only",DECISION
+m004,ch2-02-chiangmai,challenge,Yen,当然，是那种只喂食洗澡的,ATTRACTION
+m005,ch2-02-chiangmai,challenge,Dennis,ok then I'm in for elephant nature park,DECISION
+m006,ch2-02-chiangmai,challenge,Hui Ling,我们几时去？,DATE
+m007,ch2-02-chiangmai,challenge,Yen,十一月初，天气比较凉,DATE
+m008,ch2-02-chiangmai,challenge,Dennis,"early Nov I have a work trip, end Nov?",DATE
+m009,ch2-02-chiangmai,challenge,Hui Ling,11月底我可以,DECISION
+m010,ch2-02-chiangmai,challenge,Yen,ok 月底,DECISION
+m011,ch2-02-chiangmai,challenge,Dennis,Doi Suthep temple on the mountain,ATTRACTION
+m012,ch2-02-chiangmai,challenge,Hui Ling,素贴山的庙对吗？好,DECISION
+m013,ch2-02-chiangmai,challenge,Yen,Sunday walking street market 一定要,ATTRACTION
+m014,ch2-02-chiangmai,challenge,Dennis,"only on Sunday ya, need plan the dates around it",ATTRACTION
+m015,ch2-02-chiangmai,challenge,Hui Ling,我不能吃太辣,PREFERENCE
+m016,ch2-02-chiangmai,challenge,Dennis,Thai food all spicy one 😂,OTHER
+m017,ch2-02-chiangmai,challenge,Yen,住古城里面的民宿，一晚大概RM150,ACCOMMODATION
+m018,ch2-02-chiangmai,challenge,Hui Ling,古城方便，可以,DECISION
+m019,ch2-02-chiangmai,challenge,Dennis,whatever you guys decide,DECISION
+m020,ch2-02-chiangmai,challenge,Yen,租摩托车？,TRANSPORT
+m021,ch2-02-chiangmai,challenge,Hui Ling,我不会骑,DECISION
+m022,ch2-02-chiangmai,challenge,Dennis,"songthaew red truck everywhere, cheap",TRANSPORT
+m001,ch2-03-cameron,challenge,Rashid,weekend escape to Cameron? need cold air 🥶,DESTINATION
+m002,ch2-03-cameron,challenge,Pei Shan,yes pls KL so hot,DECISION
+m003,ch2-03-cameron,challenge,Victor,can,DECISION
+m004,ch2-03-cameron,challenge,Liyana,on,DECISION
+m005,ch2-03-cameron,challenge,Gary,"I might have to work Saturday, see first",DECISION
+m006,ch2-03-cameron,challenge,Rashid,22-23 Nov,DATE
+m007,ch2-03-cameron,challenge,Pei Shan,ok,DECISION
+m008,ch2-03-cameron,challenge,Liyana,ok,DECISION
+m009,ch2-03-cameron,challenge,Victor,22-23 can,DECISION
+m010,ch2-03-cameron,challenge,Victor,"I drive my MPV, 7 seater",TRANSPORT
+m011,ch2-03-cameron,challenge,Liyana,wah thanks Victor,DECISION
+m012,ch2-03-cameron,challenge,Pei Shan,I get carsick on the winding road 😵,PREFERENCE
+m013,ch2-03-cameron,challenge,Rashid,sit in front la,OTHER
+m014,ch2-03-cameron,challenge,Liyana,BOH tea plantation for sure,ATTRACTION
+m015,ch2-03-cameron,challenge,Pei Shan,the scones there 🤤,DECISION
+m016,ch2-03-cameron,challenge,Rashid,Mossy forest also,ATTRACTION
+m017,ch2-03-cameron,challenge,Victor,"mossy forest road bad, need 4x4 tour, RM70 each",ATTRACTION
+m018,ch2-03-cameron,challenge,Liyana,hmm expensive for half day,DECISION
+m019,ch2-03-cameron,challenge,Rashid,ok drop mossy forest,DECISION
+m020,ch2-03-cameron,challenge,Pei Shan,strawberry farm!,ATTRACTION
+m021,ch2-03-cameron,challenge,Victor,very touristy but ok la,DECISION
+m022,ch2-03-cameron,challenge,Liyana,"apartment in Brinchang, RM380 one night, 3 rooms",ACCOMMODATION
+m023,ch2-03-cameron,challenge,Victor,"Brinchang near night market, good",DECISION
+m024,ch2-03-cameron,challenge,Rashid,fine,DECISION
+m025,ch2-03-cameron,challenge,Pei Shan,ok I'm in,DECISION
+m026,ch2-03-cameron,challenge,Gary,"ok boss let me off, I'm joining!!",DECISION
+m001,ch2-04-kuching,challenge,Alvin,Kuching for Rainforest Music Festival? July,DESTINATION
+m002,ch2-04-kuching,challenge,Nora,omg yes I always wanted to go RWMF,DECISION
+m003,ch2-04-kuching,challenge,Syafiq,festival ticket how much ah,ATTRACTION
+m004,ch2-04-kuching,challenge,Alvin,3 day pass around RM400,ATTRACTION
+m005,ch2-04-kuching,challenge,Syafiq,ok worth it for 3 days,DECISION
+m006,ch2-04-kuching,challenge,Nora,buy early bird!,DECISION
+m007,ch2-04-kuching,challenge,Alvin,"festival is 11-13 July, we go 10 to 14 July",DATE
+m008,ch2-04-kuching,challenge,Nora,10-14 Jul ok,DECISION
+m009,ch2-04-kuching,challenge,Syafiq,ok,DECISION
+m010,ch2-04-kuching,challenge,Syafiq,total budget RM1800 per person cukup?,BUDGET
+m011,ch2-04-kuching,challenge,Nora,should be enough,DECISION
+m012,ch2-04-kuching,challenge,Alvin,ok RM1800,DECISION
+m013,ch2-04-kuching,challenge,Nora,Bako national park to see proboscis monkeys,ATTRACTION
+m014,ch2-04-kuching,challenge,Syafiq,"need boat to get there, weather dependent",ATTRACTION
+m015,ch2-04-kuching,challenge,Alvin,if weather ok we go,DECISION
+m016,ch2-04-kuching,challenge,Nora,Sarawak laksa every morning 😋,PREFERENCE
+m017,ch2-04-kuching,challenge,Syafiq,homestay at Damai near the festival,ACCOMMODATION
+m018,ch2-04-kuching,challenge,Alvin,Damai all fully booked already 😭,ACCOMMODATION
+m019,ch2-04-kuching,challenge,Nora,then stay in Kuching city and take the shuttle,ACCOMMODATION
+m020,ch2-04-kuching,challenge,Syafiq,ok city hotel + shuttle,DECISION
+m021,ch2-04-kuching,challenge,Alvin,agree,DECISION
+m001,ch2-05-perth,challenge,Esther,Perth road trip next year? or Melbourne?,DESTINATION
+m002,ch2-05-perth,challenge,Wai Kit,Perth! Melbourne went already,DECISION
+m003,ch2-05-perth,challenge,Jo,"Perth la, can see quokka 🐹",DECISION
+m004,ch2-05-perth,challenge,Hamid,either ok for me,DECISION
+m005,ch2-05-perth,challenge,Esther,ok Perth it is,DECISION
+m006,ch2-05-perth,challenge,Wai Kit,rent a campervan?,TRANSPORT
+m007,ch2-05-perth,challenge,Jo,campervan sounds fun but I need proper bed and shower 😅,DECISION
+m008,ch2-05-perth,challenge,Hamid,campervan got shower one also,TRANSPORT
+m009,ch2-05-perth,challenge,Esther,normal car + motels easier,TRANSPORT
+m010,ch2-05-perth,challenge,Jo,car + motel yes,DECISION
+m011,ch2-05-perth,challenge,Hamid,ok car,DECISION
+m012,ch2-05-perth,challenge,Wai Kit,ok lah car,DECISION
+m013,ch2-05-perth,challenge,Jo,Rottnest island for quokka selfie,ATTRACTION
+m014,ch2-05-perth,challenge,Esther,yesss,DECISION
+m015,ch2-05-perth,challenge,Hamid,ferry around AUD80 return,ATTRACTION
+m016,ch2-05-perth,challenge,Wai Kit,Pinnacles desert drive up north,ATTRACTION
+m017,ch2-05-perth,challenge,Hamid,2.5 hours drive each way hmm,DECISION
+m018,ch2-05-perth,challenge,Esther,budget around RM6000 each? AUD exchange rate bad now,BUDGET
+m019,ch2-05-perth,challenge,Wai Kit,6k ok,DECISION
+m020,ch2-05-perth,challenge,Jo,"6k a bit much, 5k?",BUDGET
+m021,ch2-05-perth,challenge,Hamid,5k can if we cook some meals,DECISION
+m022,ch2-05-perth,challenge,Esther,let's see after we check flight prices,DECISION
+m023,ch2-05-perth,challenge,Jo,"I don't drive on the highway, too scared",PREFERENCE
+m001,ch2-06-hokkaido,challenge,Wei Ming,爸妈，过年去北海道看雪好不好？,DESTINATION
+m002,ch2-06-hokkaido,challenge,爸爸,很冷吧？,OTHER
+m003,ch2-06-hokkaido,challenge,Jasmine,冷才好玩啦，爸你没看过雪,DECISION
+m004,ch2-06-hokkaido,challenge,妈妈,我想去！,DECISION
+m005,ch2-06-hokkaido,challenge,爸爸,好啦好啦,DECISION
+m006,ch2-06-hokkaido,challenge,Wei Ming,2月1号到7号，7天,DATE
+m007,ch2-06-hokkaido,challenge,Jasmine,可以,DECISION
+m008,ch2-06-hokkaido,challenge,妈妈,我们都退休了随便,DECISION
+m009,ch2-06-hokkaido,challenge,Wei Ming,札幌雪祭刚好2月初,ATTRACTION
+m010,ch2-06-hokkaido,challenge,Jasmine,Sapporo snow festival 👍👍,DECISION
+m011,ch2-06-hokkaido,challenge,妈妈,小樽运河也要去,ATTRACTION
+m012,ch2-06-hokkaido,challenge,爸爸,好,DECISION
+m013,ch2-06-hokkaido,challenge,Jasmine,滑雪？,ATTRACTION
+m014,ch2-06-hokkaido,challenge,爸爸,我这把老骨头不要了,DECISION
+m015,ch2-06-hokkaido,challenge,妈妈,我也不要,DECISION
+m016,ch2-06-hokkaido,challenge,Wei Ming,坐JR火车，买JR Pass,TRANSPORT
+m017,ch2-06-hokkaido,challenge,Jasmine,JR pass 现在涨价了，算一下再说,DECISION
+m018,ch2-06-hokkaido,challenge,妈妈,酒店要有温泉的,PREFERENCE
+m019,ch2-06-hokkaido,challenge,Wei Ming,定山溪温泉酒店，一晚RM900,ACCOMMODATION
+m020,ch2-06-hokkaido,challenge,爸爸,太贵了,DECISION
+m021,ch2-06-hokkaido,challenge,Jasmine,住两晚温泉就好，其他住札幌便宜的,ACCOMMODATION
+m022,ch2-06-hokkaido,challenge,妈妈,这个好,DECISION
+m023,ch2-06-hokkaido,challenge,爸爸,可以,DECISION
