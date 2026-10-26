@@ -40,7 +40,6 @@ class PdfReportService {
   // --navy-800:#0e3a52, --teal-600:#1c7d8c), deliberately NOT this app's
   // single-navy AppColors — see the class doc comment above.
   static const _navy = PdfColor.fromInt(0xFF0E3A52);
-  static const _navyLight = PdfColor.fromInt(0xFF5C7080);
   static const _teal = PdfColor.fromInt(0xFF1C7D8C);
   static const _gray = PdfColor.fromInt(0xFF6E6E6E);
   static const _zebraBg = PdfColor.fromInt(0xFFF5F8F9);

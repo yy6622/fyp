@@ -82,6 +82,8 @@
       </div>
       <div class="field" style="grid-column:1/-1;">
         <label>Key coverage (shown on the plan's detail page in the app — label + the real RM amount covered)</label>
+        <p class="small muted" style="margin:0 0 6px;">Quick add a common coverage type, then just fill in the RM amount:</p>
+        <div id="coveragePresetsList" style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px;"></div>
         <div id="coverageItemsList"></div>
         <button type="button" class="btn btn-outline btn-sm" id="addCoverageItemBtn" style="margin-top:4px;">+ Add coverage item</button>
       </div>
@@ -114,6 +116,24 @@ const PAGE_SIZE = 8;
 // saved doc's `coverageItems` array on Save. Not kept on `items`/`p`
 // directly since a half-typed row shouldn't show up anywhere until saved.
 let coverageItemsDraft = [];
+// A handful of coverage types almost every travel-insurance plan
+// includes — tapping one in renderCoveragePresets() below just adds
+// that label to coverageItemsDraft so the partner only has to type the
+// RM amount, instead of hand-typing every label from scratch. The
+// "+ Add coverage item" button below still works as before for
+// anything not in this list.
+const COVERAGE_PRESETS = [
+  "Medical Expenses (Overseas)",
+  "Medical Expenses (Malaysia)",
+  "Emergency Medical Evacuation & Repatriation",
+  "Trip Cancellation",
+  "Trip Curtailment",
+  "Travel Delay Compensation",
+  "Baggage Loss or Damage",
+  "Personal Accident (Death & Disablement)",
+  "Loss of Personal Money/Documents",
+  "Personal Liability",
+];
 // Same pattern as coverageItemsDraft, for the repeatable "Highlights" rows
 // — each one is its own badge on the app's plan detail page
 // (InsurancePlan.highlights is a List<String>), so the input is a
@@ -159,6 +179,22 @@ function renderCoverageItems() {
   list.querySelectorAll("[data-cov-remove]").forEach((el) =>
     el.addEventListener("click", () => { coverageItemsDraft.splice(Number(el.dataset.covRemove), 1); renderCoverageItems(); }));
   mountIcons(list);
+  renderCoveragePresets();
+}
+
+function renderCoveragePresets() {
+  const list = document.getElementById("coveragePresetsList");
+  list.innerHTML = COVERAGE_PRESETS.map((label, i) => {
+    const already = coverageItemsDraft.some((it) => (it.label || "").trim().toLowerCase() === label.toLowerCase());
+    return `<button type="button" class="btn btn-outline btn-sm" data-preset="${i}" ${already ? "disabled" : ""} style="${already ? "opacity:.45;" : ""}">+ ${escapeHtml(label)}</button>`;
+  }).join("");
+  list.querySelectorAll("[data-preset]").forEach((el) =>
+    el.addEventListener("click", () => {
+      const label = COVERAGE_PRESETS[Number(el.dataset.preset)];
+      if (coverageItemsDraft.some((it) => (it.label || "").trim().toLowerCase() === label.toLowerCase())) return;
+      coverageItemsDraft.push({ label, amount: "" });
+      renderCoverageItems();
+    }));
 }
 
 document.getElementById("addCoverageItemBtn").addEventListener("click", () => {

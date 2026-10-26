@@ -101,8 +101,29 @@ class CountryEmergencyRepository {
   final CollectionReference<Map<String, dynamic>> _col =
       FirebaseFirestore.instance.collection('country_emergency_info');
 
+  /// `country_emergency_info` is keyed by COUNTRY ONLY — an embassy, and
+  /// a country's police/ambulance/fire numbers, are a national thing,
+  /// not tied to one city. But a trip's own [Trip.destination] can be
+  /// either a bare country ("Thailand") or an area within one
+  /// ("Bangkok, Thailand" — see CreatePlanWizard's destination picker,
+  /// which writes `'$area, $country'` when the person picks a specific
+  /// city/area rather than "Just use $country"). Looking the raw
+  /// destination string up directly against this collection silently
+  /// missed every area-level destination even when the admin had real,
+  /// fully verified data on file for that country (all admin-entered
+  /// keys — see country-emergency-defaults.js — are plain country names
+  /// like "thailand", never a city) — this strips the area part down to
+  /// just the country before building the Firestore key.
+  String _countryKeyFor(String destination) {
+    final trimmed = destination.trim();
+    if (trimmed.isEmpty) return '';
+    final lastComma = trimmed.lastIndexOf(',');
+    final country = lastComma == -1 ? trimmed : trimmed.substring(lastComma + 1);
+    return country.trim().toLowerCase();
+  }
+
   Future<CountryEmergencyInfo> forDestination(String destination) async {
-    final key = destination.trim().toLowerCase();
+    final key = _countryKeyFor(destination);
     if (key.isEmpty) return CountryEmergencyInfo.fromStatic(key);
     try {
       final snap = await _col.doc(key).get();
@@ -126,7 +147,7 @@ class CountryEmergencyRepository {
   /// with. Any other pair with nothing on file in Firestore gets null,
   /// never a guessed answer — see [EmbassyPage]'s "not available" state.
   Future<EmbassyRecord?> embassyFor(String destination, String homeCountry) async {
-    final destKey = destination.trim().toLowerCase();
+    final destKey = _countryKeyFor(destination);
     final homeKey = homeCountry.trim().toLowerCase();
     if (destKey.isEmpty || homeKey.isEmpty) return null;
     try {

@@ -4,6 +4,7 @@ import '../../controllers/notifications_controller.dart';
 import '../../repositories/notifications_repository.dart';
 import '../../services/format_utils.dart';
 import '../../theme.dart';
+import '../shared/nice_dialog.dart';
 
 // ---------------------------------------------------------------------
 // Notifications — real inbox behind the Home bell icon (previously just
@@ -28,6 +29,25 @@ class _NotificationsPageState extends State<NotificationsPage> {
   void dispose() {
     controller.dispose();
     super.dispose();
+  }
+
+  /// "Remove All" — asks first (irreversible, deletes every
+  /// notification, not just the unread ones).
+  Future<void> _removeAll() async {
+    final confirmed = await showNiceConfirmDialog(
+      context: context,
+      title: 'Remove All Notifications',
+      message: 'All of your notifications will be permanently removed. This cannot be undone.',
+      confirmLabel: 'Remove All',
+      icon: Icons.delete_sweep_outlined,
+      destructive: true,
+    );
+    if (!confirmed) return;
+    final error = await controller.removeAll();
+    if (!mounted) return;
+    if (error != null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
+    }
   }
 
   Future<void> _respond(AppNotification n, {required bool accept}) async {
@@ -77,8 +97,23 @@ class _NotificationsPageState extends State<NotificationsPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
-      appBar: const VoyaAppBar(
-        title: Text('Notifications', style: TextStyle(color: AppColors.navy, fontWeight: FontWeight.bold, fontSize: 19)),
+      appBar: VoyaAppBar(
+        title: const Text('Notifications', style: TextStyle(color: AppColors.navy, fontWeight: FontWeight.bold, fontSize: 19)),
+        // Only worth offering once there's actually something to clear —
+        // an empty inbox has nothing for "Remove All" to do.
+        actions: controller.items.isEmpty
+            ? null
+            : [
+                controller.clearingAll
+                    ? const Padding(
+                        padding: EdgeInsets.all(16),
+                        child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
+                      )
+                    : TextButton(
+                        onPressed: _removeAll,
+                        child: const Text('Remove All', style: TextStyle(color: AppColors.textGrey, fontWeight: FontWeight.w600, fontSize: 12.5)),
+                      ),
+              ],
       ),
       body: ListenableBuilder(
         listenable: controller,

@@ -12,7 +12,20 @@
           "package_name": "my.fyp.voya"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "1020854066179-0f8d67g26n915t2l8oac83mjrub1ra71.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "my.fyp.voya",
+            "certificate_hash": "8a72147d0ca72a2af8bf69ff2af7028fc6710e71"
+          }
+        },
+        {
+          "client_id": "1020854066179-6gn9qbtbmhcnkqfgq42c4qd6uj2maq5p.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyCvXPu-JELI5GnC_xcfZx4uKLc8sR9FD9A"
@@ -20,7 +33,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1020854066179-6gn9qbtbmhcnkqfgq42c4qd6uj2maq5p.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "1020854066179-c62eic9jel86pfqldaqqq28nhoo7d4oi.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "my.fyp.voya"
+              }
+            }
+          ]
         }
       }
     }

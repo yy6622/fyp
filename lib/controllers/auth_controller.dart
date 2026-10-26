@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import '../repositories/user_repository.dart';
 import '../services/auth_service.dart';
 
-/// What came back from a Google/Facebook sign-in attempt — a plain result
+/// What came back from a Google sign-in attempt — a plain result
 /// instead of a bare nullable string, because the caller needs to tell
 /// three outcomes apart: closing the account picker (do nothing), a real
 /// failure (show it), and success, which itself needs to know whether to
@@ -18,12 +18,12 @@ class SocialLoginOutcome {
   const SocialLoginOutcome({required this.result, this.isNewUser = false, this.errorMessage});
 }
 
-/// Shared by [LoginController] and [SignupController]'s Google/Facebook
-/// buttons — "login with Google" and "sign up with Google" are the same
+/// Shared by [LoginController] and [SignupController]'s Google
+/// button — "login with Google" and "sign up with Google" are the same
 /// Firebase call either way (it creates the account the first time,
 /// signs in to it every time after), so there's one real implementation.
 /// Creates the Firestore profile doc the first time this account signs
-/// in — Google/Facebook skip the normal Sign Up form that would
+/// in — Google skips the normal Sign Up form that would
 /// otherwise do that (see SignupController.signUp) — using whatever
 /// name/email the provider handed back.
 Future<SocialLoginOutcome> _runSocialLogin(Future<UserCredential?> Function() signIn) async {
@@ -61,9 +61,6 @@ class LoginController extends ChangeNotifier {
   bool _googleLoading = false;
   bool get googleLoading => _googleLoading;
 
-  bool _facebookLoading = false;
-  bool get facebookLoading => _facebookLoading;
-
   void toggleObscurePassword() {
     _obscurePassword = !_obscurePassword;
     notifyListeners();
@@ -98,15 +95,6 @@ class LoginController extends ChangeNotifier {
     return outcome;
   }
 
-  Future<SocialLoginOutcome> loginWithFacebook() async {
-    _facebookLoading = true;
-    notifyListeners();
-    final outcome = await _runSocialLogin(AuthService.instance.signInWithFacebook);
-    _facebookLoading = false;
-    notifyListeners();
-    return outcome;
-  }
-
   @override
   void dispose() {
     emailController.dispose();
@@ -131,9 +119,6 @@ class SignupController extends ChangeNotifier {
 
   bool _googleLoading = false;
   bool get googleLoading => _googleLoading;
-
-  bool _facebookLoading = false;
-  bool get facebookLoading => _facebookLoading;
 
   final TextEditingController usernameController = TextEditingController();
   final TextEditingController emailController = TextEditingController();
@@ -203,15 +188,6 @@ class SignupController extends ChangeNotifier {
     notifyListeners();
     final outcome = await _runSocialLogin(AuthService.instance.signInWithGoogle);
     _googleLoading = false;
-    notifyListeners();
-    return outcome;
-  }
-
-  Future<SocialLoginOutcome> signUpWithFacebook() async {
-    _facebookLoading = true;
-    notifyListeners();
-    final outcome = await _runSocialLogin(AuthService.instance.signInWithFacebook);
-    _facebookLoading = false;
     notifyListeners();
     return outcome;
   }

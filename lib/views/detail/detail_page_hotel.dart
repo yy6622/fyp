@@ -232,13 +232,6 @@ class _DetailPageHotelState extends State<DetailPageHotel> {
         _checkOut != null ? formatLongDate(_checkOut!) : 'Select date',
         onTap: _pickDates,
       ),
-      const SizedBox(height: 10),
-      // Fixed, not editable here — room/guest count is only ever decided
-      // one step later, on the real Rooms stepper in HotelGuestDetailsPage
-      // (guest count itself isn't an adjustable field anywhere in the
-      // app, just the default double-occupancy assumption shown before
-      // that), so this row carries no arrow implying it can be tapped.
-      _bookingRowSingle('2 Guests / 1 Room'),
       const SizedBox(height: 20),
       // Real policy times only (see DetailPageHotel's doc comment) — the
       // whole card is left out entirely when neither is available,
@@ -311,20 +304,6 @@ class _DetailPageHotelState extends State<DetailPageHotel> {
     if (a.contains('elevator') || a.contains('lift')) return Icons.elevator_outlined;
     if (a.contains('smok')) return Icons.smoking_rooms_outlined;
     return Icons.check_circle_outline;
-  }
-
-  /// Always non-interactive — no chevron, no onTap — unlike [_bookingRow]
-  /// above it, since this value isn't something this page lets you change.
-  Widget _bookingRowSingle(String label) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: BoxDecoration(color: AppColors.chipGrey, borderRadius: BorderRadius.circular(12)),
-      child: Row(
-        children: [
-          Text(label, style: const TextStyle(fontSize: 13, color: Colors.black)),
-        ],
-      ),
-    );
   }
 
 }

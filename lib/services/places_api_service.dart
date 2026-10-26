@@ -120,6 +120,44 @@ class PlacesApiService {
     }
   }
 
+  /// Reverse-geocodes a device position (lat/lng, e.g. from
+  /// [LocationService.getCurrentPosition]) to a human-readable address
+  /// via Nominatim's `/reverse` endpoint — used by "Report New
+  /// Attraction"'s location field so a rider standing at the spot can
+  /// just tap the location icon instead of typing the address by hand.
+  /// Prefers Nominatim's own `display_name` (already a full, readable
+  /// address string built for exactly this purpose); falls back to the
+  /// same city/country label [geocode] builds if a `display_name` is
+  /// ever missing but address fields aren't. Returns null on any
+  /// failure (offline, no match, request error) — callers treat that as
+  /// "couldn't resolve this position right now", same as [geocode].
+  Future<String?> reverseGeocode(double lat, double lon) async {
+    try {
+      final uri = Uri.https('nominatim.openstreetmap.org', '/reverse', {
+        'lat': '$lat',
+        'lon': '$lon',
+        'format': 'json',
+        'zoom': '18',
+        'addressdetails': '1',
+      });
+      final res = await http.get(uri, headers: {'User-Agent': _userAgent}).timeout(const Duration(seconds: 12));
+      if (res.statusCode != 200) return null;
+      final hit = jsonDecode(res.body) as Map<String, dynamic>;
+      final displayName = hit['display_name'] as String?;
+      if (displayName != null && displayName.trim().isNotEmpty) return displayName.trim();
+      final address = hit['address'] as Map<String, dynamic>?;
+      final city = (address?['city'] ?? address?['town'] ?? address?['village'] ?? address?['municipality'] ?? address?['county']) as String?;
+      final country = address?['country'] as String?;
+      final labelParts = [
+        if (city != null && city.trim().isNotEmpty) city.trim(),
+        if (country != null && country.trim().isNotEmpty) country.trim(),
+      ];
+      return labelParts.isEmpty ? null : labelParts.join(', ');
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// The Overpass QL element filter for each Near By / Explore category
   /// chip — shared by both callers so "Attractions" means the same OSM
   /// tags whether it's Near By's chip row or Explore's category.

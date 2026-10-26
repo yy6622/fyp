@@ -296,11 +296,16 @@ class _NearByPageState extends State<NearByPage> {
         decoration: BoxDecoration(border: Border.all(color: const Color(0xFFECECEC)), borderRadius: BorderRadius.circular(14)),
         child: Row(
           children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: _placeImage(place),
-            ),
-            const SizedBox(width: 14),
+            // Restaurants never show image-shaped UI here at all (not even
+            // the usual placeholder icon box) — see explore_page.dart's
+            // restaurant cards for why. Every other category keeps its photo.
+            if (place.category != 'Restaurants') ...[
+              ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: _placeImage(place),
+              ),
+              const SizedBox(width: 14),
+            ],
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,

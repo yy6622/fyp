@@ -60,6 +60,9 @@ function fromCatalog(list, source) {
       // the app's catalog document behind it (an activity with this exact name shows as a card)
       catalogName: source === "catalog" || source === "osm" ? String(p.name).trim() : undefined,
       lat: p.lat, lng: p.lng,
+      // Optimised Itinerary Generation Algorithm's utility formula (optimise_engine.js):
+      // recommendationScoreOf/costPenaltyOf read these straight off the matched place.
+      rating: p.rating, price: p.price,
       source,
     };
   });

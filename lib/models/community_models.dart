@@ -21,7 +21,30 @@ enum CommunityPostTab { itinerary, review }
 class CommunityItineraryDay {
   final int day;
   final List<String> items;
-  const CommunityItineraryDay({required this.day, required this.items});
+
+  /// The same day's activities again, but structured (time/label/
+  /// location/icon) rather than flattened into display strings — carries
+  /// what's actually needed to import this day into someone else's own
+  /// trip (FR31/FR68's "Add to My Plan", see CommunityPostDetailPage).
+  /// Empty for a post made before this field existed, or for a day with
+  /// no activities — [items] (plain display text) still always has
+  /// whatever was shown at the time, so older posts keep rendering
+  /// exactly as before; they just can't be imported.
+  final List<ImportableActivity> activities;
+
+  const CommunityItineraryDay({required this.day, required this.items, this.activities = const []});
+}
+
+/// One real scheduled activity from an attached itinerary day, carried
+/// alongside [CommunityItineraryDay.items]'s display text — see that
+/// field's doc comment for why both exist. Mirrors exactly what
+/// [TripRepository.addActivity] needs to recreate it on another trip.
+class ImportableActivity {
+  final String time;
+  final String label;
+  final String location;
+  final String iconKey;
+  const ImportableActivity({required this.time, required this.label, this.location = '', required this.iconKey});
 }
 
 /// A social post in the Community feed. Mutable — likes/comments/liked/
@@ -46,6 +69,15 @@ class CommunityPost {
   final String flagEmoji;
   final String description;
   final List<String> images;
+
+  /// Set when the author attached a video instead of a photo when
+  /// composing (FR61) — a post has at most one media item today (same
+  /// single-"Upload Media" slot the compose form has always offered),
+  /// never both a video and photos. Empty for a photo-only or media-less
+  /// post.
+  final String videoUrl;
+  bool get hasVideo => videoUrl.isNotEmpty;
+
   final String location;
   final List<CommunityItineraryDay> itinerary;
   final double avgRating;
@@ -105,6 +137,7 @@ class CommunityPost {
     required this.flagEmoji,
     required this.description,
     required this.images,
+    this.videoUrl = '',
     required this.location,
     this.itinerary = const [],
     required this.avgRating,
@@ -123,33 +156,3 @@ class CommunityPost {
   });
 }
 
-/// One of the current user's own itineraries, offered when composing an
-/// "Itinerary Post". [days] holds one entry per day of the trip — an empty
-/// list for a day with no activities planned yet.
-class SelectableItinerary {
-  final String title;
-  final String image;
-  final List<List<String>> days;
-  const SelectableItinerary({required this.title, required this.image, required this.days});
-}
-
-const List<SelectableItinerary> myItineraries = [
-  SelectableItinerary(
-    title: 'Japan Trips',
-    image: 'https://images.unsplash.com/photo-1503899036084-c55cdd92da26?w=200',
-    days: [
-      ['10:30  Arrive to Narita Airport (NRT)', '14:30  Check-in L Hotel', '16:30  Shibaya Shopping Mall', '19:30  Dinner at Uobei Shibuya'],
-      [],
-      [],
-      [],
-    ],
-  ),
-  SelectableItinerary(
-    title: 'Korea Trips',
-    image: 'https://images.unsplash.com/photo-1517154421773-0529f29ea451?w=200',
-    days: [
-      ['09:00  Arrive Incheon Airport (ICN)', '13:00  Check-in Myeongdong Hotel', '15:30  Namsan Tower', '19:00  Dinner at Myeongdong Street'],
-      [],
-    ],
-  ),
-];

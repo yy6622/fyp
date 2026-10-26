@@ -40,14 +40,13 @@ dependencies:
   firebase_auth: ^6.6.1
   cloud_firestore: ^6.9.0
 
-  # Google/Facebook sign-in (login_page.dart / signup_page.dart's social
-  # row — previously two decorative circles with no onTap at all). Both
-  # end at FirebaseAuth.signInWithCredential in auth_service.dart, same
-  # as email/password. Needs real console setup beyond just enabling the
-  # providers in the Firebase console — see README.md in this project
+  # Google sign-in (login_page.dart / signup_page.dart's social row —
+  # previously a decorative circle with no onTap at all). Ends at
+  # FirebaseAuth.signInWithCredential in auth_service.dart, same as
+  # email/password. Needs real console setup beyond just enabling the
+  # provider in the Firebase console — see README.md in this project
   # root for exactly what and where.
   google_sign_in: ^6.2.2
-  flutter_facebook_auth: ^7.1.1
   image_picker: ^1.2.3
   firebase_storage: ^13.5.0
   # Calls the `createPaymentIntent` Cloud Function (see functions/index.js)
@@ -58,6 +57,14 @@ dependencies:
   # pub.dev before pinning, same discipline as flutter_svg's version
   # below.)
   cloud_functions: ^6.3.5
+  # Video playback for a Community post's attached video (FR61) — plays
+  # the file straight from its Firebase Storage download URL, same as
+  # Image.network does for photos. 2.12.0 (the pub.dev latest at the
+  # time this was added) turned out to need Dart >=3.12.0, same gap
+  # `pub get` on the real machine caught for google_mlkit_text_
+  # recognition above — pub's own error suggested downgrading to
+  # 2.11.1, which is pinned here instead.
+  video_player: ^2.11.1
 
   # Real Stripe payment sheet (sandbox/test mode) for Flight/Hotel
   # checkout — lib/views/detail/booking_payment_page.dart. Needs the
@@ -141,6 +148,22 @@ dependencies:
   # to whatever `flutter pub get` suggests.
   pdf: ^3.11.1
   printing: ^5.13.4
+
+  # On-device OCR for "Upload Receipt" (FR56) — reads the photographed
+  # receipt's text locally (no network call, no cloud OCR billing) so
+  # AddExpenseController.scanReceipt can prefill line items/total instead
+  # of leaving every field to be typed by hand. Confirmed against pub.dev
+  # from this session (minSdkVersion 21, already satisfied by this
+  # project's android/app/build.gradle.kts, which needs API 23+ for
+  # firebase_auth/cloud_firestore). Pinned at 0.16.0 rather than the
+  # newer 0.17.x line — `flutter pub get` on the real machine reported
+  # "google_mlkit_text_recognition >=0.17.0 requires SDK version
+  # >=3.12.0 <4.0.0", which this project's Dart 3.10.7 (environment.sdk
+  # above) doesn't satisfy; there's no Flutter/Dart toolchain in this
+  # session to have caught that before it reached `pub get` on the real
+  # machine. If 0.16.0 also turns out to need a newer SDK than what's
+  # installed, drop to 0.15.x next.
+  google_mlkit_text_recognition: ^0.16.0
 
 dev_dependencies:
   flutter_test:

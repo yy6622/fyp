@@ -9,6 +9,7 @@ import '../../repositories/catalog_repository.dart';
 import '../../services/auth_service.dart';
 import '../../services/currency_service.dart';
 import '../../services/format_utils.dart';
+import '../../services/recommendation_service.dart';
 import '../../theme.dart';
 import '../detail/detail_page_attraction.dart';
 import '../detail/detail_page_flight.dart';
@@ -310,16 +311,26 @@ class _ExplorePageState extends State<ExplorePage> {
     }).toList();
   }
 
+  // AI-Based Attraction Recommendation Algorithm (FYP documentation):
+  // category is a person-chosen hard filter (unchanged from before this
+  // existed), then budget/accessibility/operating-hours are the
+  // algorithm's own mandatory constraints, then whatever survives both
+  // is ranked by the weighted Score(a) formula rather than left in
+  // whatever order Firestore/the plain affinity sort returned it in.
   List<CatalogAttraction> get _visibleAttractions {
     final f = filterController;
-    return controller.attractions.where((item) {
-      if (f.attractionCategories.isNotEmpty) {
-        final tags = item.categories.isNotEmpty ? item.categories : [item.category];
-        if (!f.attractionCategories.any(tags.contains)) return false;
-      }
-      if (f.attractionPrice != 'Any' && !_priceTextMatchesBucket(item.price, f.attractionPrice)) return false;
-      return true;
+    final categoryFiltered = controller.attractions.where((item) {
+      if (f.attractionCategories.isEmpty) return true;
+      final tags = item.categories.isNotEmpty ? item.categories : [item.category];
+      return f.attractionCategories.any(tags.contains);
     }).toList();
+    final ctx = RecommendationContext(
+      withinBudget: (a) => f.attractionPrice == 'Any' || _priceTextMatchesBucket(a.price, f.attractionPrice),
+      affinity: controller.attractionAffinity,
+      requireOpenNow: f.openNow,
+      requireAccessible: f.accessibleOnly,
+    );
+    return AttractionRecommendation.rank(categoryFiltered, ctx);
   }
 
   List<CatalogRestaurant> get _visibleRestaurants {
@@ -725,13 +736,18 @@ class _ExplorePageState extends State<ExplorePage> {
         _buildExploreBanner(),
         SizedBox(key: _belowBannerKey, height: 22),
         if (showFlights) ...[
-          KeyedSubtree(key: _bestFlightsKey, child: _buildSectionHeader(Icons.flight_takeoff, 'Best Flight Deals', ExploreCategory.flights)),
+          KeyedSubtree(
+            key: _bestFlightsKey,
+            child: _buildSectionHeader(Icons.flight_takeoff, 'Best Flight Deals', ExploreCategory.flights,
+                subtitle: controller.flightResultsLabel == 'Popular destinations' ? null : controller.flightResultsLabel),
+          ),
           const SizedBox(height: 12),
           _buildFlightHorizontalList(),
           const SizedBox(height: 22),
         ],
         if (showHotels) ...[
-          _buildSectionHeader(Icons.hotel_outlined, 'Recommended Hotels', ExploreCategory.accommodation),
+          _buildSectionHeader(Icons.hotel_outlined, 'Recommended Hotels', ExploreCategory.accommodation,
+              subtitle: controller.hotelResultsLabel == 'Popular destinations' ? null : controller.hotelResultsLabel),
           const SizedBox(height: 12),
           _buildHotelHorizontalList(),
           const SizedBox(height: 22),
@@ -866,23 +882,40 @@ class _ExplorePageState extends State<ExplorePage> {
     );
   }
 
-  Widget _buildSectionHeader(IconData icon, String title, ExploreCategory jumpTo) {
+  // [subtitle] surfaces ExploreController.flightResultsLabel/hotelResultsLabel —
+  // that controller already tracks "what's backing this list and why" (the
+  // trip's destination, or the person's own manual search) with a doc
+  // comment saying it's "shown as a small label above the list", but
+  // nothing here ever actually read it until now; the header always said
+  // the same generic "Best Flight Deals"/"Recommended Hotels" regardless
+  // of whether the group had a trip with a destination or had just run a
+  // search. null (the default "Popular destinations" case) shows nothing
+  // extra, same as before this existed.
+  Widget _buildSectionHeader(IconData icon, String title, ExploreCategory jumpTo, {String? subtitle}) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Icon(icon, size: 18, color: AppColors.navy),
               const SizedBox(width: 8),
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 15.5,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.navy,
-                ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 15.5,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.navy,
+                    ),
+                  ),
+                  if (subtitle != null && subtitle.isNotEmpty)
+                    Text(subtitle, style: const TextStyle(fontSize: 11, color: AppColors.textGrey)),
+                ],
               ),
             ],
           ),
@@ -1360,13 +1393,13 @@ class _ExplorePageState extends State<ExplorePage> {
   // ================= ATTRACTIONS =================
   Widget _buildAttractionHorizontalList() {
     if (controller.loadingPlaces && _visibleAttractions.isEmpty) {
-      return const SizedBox(height: 190, child: Center(child: CircularProgressIndicator(color: AppColors.primary)));
+      return const SizedBox(height: 198, child: Center(child: CircularProgressIndicator(color: AppColors.primary)));
     }
     // _buildAllView only calls this once there's actually something to
     // show, so this is just a safety fallback.
     if (_visibleAttractions.isEmpty) return const SizedBox.shrink();
     return SizedBox(
-      height: 190,
+      height: 198,
       child: ListView.separated(
         padding: const EdgeInsets.symmetric(horizontal: 20),
         scrollDirection: Axis.horizontal,
@@ -1427,11 +1460,23 @@ class _ExplorePageState extends State<ExplorePage> {
                   children: [
                     const Icon(Icons.star, size: 12, color: AppColors.orange),
                     const SizedBox(width: 4),
-                    Text('${item.rating} (${item.reviews})', style: const TextStyle(fontSize: 10, color: AppColors.textGrey)),
+                    Expanded(
+                      child: Text(
+                        '${item.rating} (${item.reviews})',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 10, color: AppColors.textGrey),
+                      ),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 6),
-                Text(item.price, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.primary)),
+                Text(
+                  item.price,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.primary),
+                ),
               ],
             ),
           ),
@@ -1528,14 +1573,17 @@ class _ExplorePageState extends State<ExplorePage> {
 
   // ================= RESTAURANTS =================
   Widget _buildRestaurantHorizontalList() {
+    // No cover image on these cards (see _buildRestaurantCompactCard) —
+    // shorter than the attraction list's 198, which still reserves room
+    // for a photo.
     if (controller.loadingPlaces && _visibleRestaurants.isEmpty) {
-      return const SizedBox(height: 190, child: Center(child: CircularProgressIndicator(color: AppColors.primary)));
+      return const SizedBox(height: 108, child: Center(child: CircularProgressIndicator(color: AppColors.primary)));
     }
     // _buildAllView only calls this once there's actually something to
     // show, so this is just a safety fallback.
     if (_visibleRestaurants.isEmpty) return const SizedBox.shrink();
     return SizedBox(
-      height: 190,
+      height: 108,
       child: ListView.separated(
         padding: const EdgeInsets.symmetric(horizontal: 20),
         scrollDirection: Axis.horizontal,
@@ -1557,6 +1605,13 @@ class _ExplorePageState extends State<ExplorePage> {
     ));
   }
 
+  // Restaurants never show a photo on this card (not even the usual
+  // category-icon placeholder box) — the catalog's restaurant photos are
+  // bulk-import stock images shared across many unrelated restaurants, so
+  // *any* image-shaped UI here (a real photo or a generic placeholder box)
+  // misleadingly implied a per-restaurant picture that doesn't exist. The
+  // favorite heart moves next to the name since there's no photo to float
+  // it over anymore.
   Widget _buildRestaurantCompactCard(CatalogRestaurant item) {
     final favorited = item.isSavedForTrip(AuthService.instance.currentUser?.uid ?? '', controller.selectedTrip?.id);
     return GestureDetector(
@@ -1568,54 +1623,53 @@ class _ExplorePageState extends State<ExplorePage> {
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: const Color(0xFFECECEC)),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Stack(
-            children: [
-              ClipRRect(
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-                child: _placeCardImage(item.image, height: 95, width: double.infinity, icon: Icons.restaurant_outlined),
-              ),
-              Positioned(
-                top: 8,
-                right: 8,
-                child: GestureDetector(
-                  onTap: () => controller.toggleRestaurantFavorite(item),
-                  child: Container(
-                    padding: const EdgeInsets.all(5),
-                    decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-                    child: Icon(favorited ? Icons.favorite : Icons.favorite_border, size: 12, color: favorited ? Colors.redAccent : AppColors.textGrey),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          Padding(
-            padding: const EdgeInsets.all(10),
-            child: Column(
+      child: Padding(
+        padding: const EdgeInsets.all(10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  item.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.navy),
+                Expanded(
+                  child: Text(
+                    item.name,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.navy),
+                  ),
                 ),
-                const SizedBox(height: 6),
-                Row(
-                  children: [
-                    const Icon(Icons.star, size: 12, color: AppColors.orange),
-                    const SizedBox(width: 4),
-                    Text('${item.rating} (${item.reviews})', style: const TextStyle(fontSize: 10, color: AppColors.textGrey)),
-                  ],
+                const SizedBox(width: 4),
+                GestureDetector(
+                  onTap: () => controller.toggleRestaurantFavorite(item),
+                  child: Icon(favorited ? Icons.favorite : Icons.favorite_border, size: 14, color: favorited ? Colors.redAccent : AppColors.textGrey),
                 ),
-                const SizedBox(height: 6),
-                Text(item.priceRange, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.primary)),
               ],
             ),
-          ),
-        ],
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                const Icon(Icons.star, size: 12, color: AppColors.orange),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    '${item.rating} (${item.reviews})',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 10, color: AppColors.textGrey),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              item.priceRange,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.primary),
+            ),
+          ],
+        ),
       ),
       ),
     );
@@ -1650,11 +1704,9 @@ class _ExplorePageState extends State<ExplorePage> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(12),
-            child: _placeCardImage(item.image, width: 80, height: 80, icon: Icons.restaurant_outlined),
-          ),
-          const SizedBox(width: 14),
+          // No thumbnail here on purpose — see _buildRestaurantCompactCard's
+          // comment: restaurants never show image-shaped UI, placeholder
+          // box included, since the catalog has no real per-restaurant photo.
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,

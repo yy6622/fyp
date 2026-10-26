@@ -40,7 +40,7 @@ Future<void> showOptimiseModeSheet(
             subtitle: const Text('Reorder and re-time just this day\'s activities', style: TextStyle(fontSize: 11.5)),
             onTap: () {
               Navigator.of(sheetContext).pop();
-              _startAndShow(context, controller, OptimiseMode.day, dayIndex: dayIndex, dayNumber: dayNumber);
+              startAndShowOptimise(context, controller, OptimiseMode.day, dayIndex: dayIndex, dayNumber: dayNumber);
             },
           ),
           ListTile(
@@ -49,7 +49,7 @@ Future<void> showOptimiseModeSheet(
             subtitle: const Text('Rework the schedule across every day', style: TextStyle(fontSize: 11.5)),
             onTap: () {
               Navigator.of(sheetContext).pop();
-              _startAndShow(context, controller, OptimiseMode.whole);
+              startAndShowOptimise(context, controller, OptimiseMode.whole);
             },
           ),
           const SizedBox(height: 8),
@@ -59,7 +59,12 @@ Future<void> showOptimiseModeSheet(
   );
 }
 
-void _startAndShow(
+/// Starts (or reopens) an Optimise run and shows its progress/result
+/// sheet — exported (not just used inside this file) so other widgets
+/// that want to trigger Optimise directly, such as the weather/traffic
+/// nudge in live_conditions_card.dart, can reuse the exact same
+/// start-then-show flow instead of duplicating it.
+void startAndShowOptimise(
   BuildContext context,
   GroupTripController controller,
   OptimiseMode mode, {
@@ -88,7 +93,7 @@ void _startAndShow(
 void _reopenOptimiseSheet(BuildContext context, GroupTripController controller) {
   final scope = ItineraryOptimiseService.instance.scopeFor(controller.tripId);
   if (scope == null) return;
-  _startAndShow(context, controller, scope.mode, dayIndex: scope.dayIndex, dayNumber: scope.dayNumber);
+  startAndShowOptimise(context, controller, scope.mode, dayIndex: scope.dayIndex, dayNumber: scope.dayNumber);
 }
 
 /// Persistent bar shown whenever a trip has an Optimise run in progress or

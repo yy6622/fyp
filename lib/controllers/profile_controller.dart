@@ -1,12 +1,17 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../repositories/booking_repository.dart';
+import '../repositories/catalog_repository.dart';
 import '../repositories/friends_repository.dart';
 import '../repositories/user_repository.dart';
+import '../services/attraction_report_service.dart';
 import '../services/auth_service.dart';
 import '../services/location_service.dart';
+import '../services/places_api_service.dart';
 
 /// Controller for [ProfilePage] — loads/streams the signed-in user's
 /// Firestore profile doc.
@@ -90,6 +95,12 @@ class FriendsController extends ChangeNotifier {
   bool isBlocked(String uid) => _blockedIds.contains(uid);
 
   void refreshSearch() => notifyListeners();
+
+  /// FR07: removes the mutual friendship entirely (both sides), unlike
+  /// [toggleBlock] which only hides/mutes without undoing the friendship.
+  Future<void> removeFriend(FriendEntry friend) {
+    return FriendsRepository.instance.removeFriend(uid: _uid, friendUid: friend.uid);
+  }
 
   /// Returns true if [friend] is now blocked (false if just unblocked).
   Future<bool> toggleBlock(FriendEntry friend) async {
@@ -189,18 +200,32 @@ class HistoryController extends ChangeNotifier {
   HistoryTab _tab = HistoryTab.flight;
   HistoryTab get tab => _tab;
 
+  // Real "Filter" behaviour for the History list (was previously an
+  // unwired icon next to a hardcoded "March" label that had nothing to
+  // do with the bookings actually shown). watchBookings already orders
+  // newest-first from Firestore, so oldest-first is just the reverse of
+  // that same list client-side — no extra query needed.
+  bool _oldestFirst = false;
+  bool get oldestFirst => _oldestFirst;
+  void setOldestFirst(bool v) {
+    _oldestFirst = v;
+    notifyListeners();
+  }
+
+  List<BookingEntry> _sorted(List<BookingEntry> list) => _oldestFirst ? list.reversed.toList() : list;
+
   List<BookingEntry> _flightBookings = [];
-  List<BookingEntry> get flightBookings => _flightBookings;
+  List<BookingEntry> get flightBookings => _sorted(_flightBookings);
   bool _loadingFlight = true;
   bool get loadingFlight => _loadingFlight;
 
   List<BookingEntry> _hotelBookings = [];
-  List<BookingEntry> get hotelBookings => _hotelBookings;
+  List<BookingEntry> get hotelBookings => _sorted(_hotelBookings);
   bool _loadingHotel = true;
   bool get loadingHotel => _loadingHotel;
 
   List<BookingEntry> _insuranceBookings = [];
-  List<BookingEntry> get insuranceBookings => _insuranceBookings;
+  List<BookingEntry> get insuranceBookings => _sorted(_insuranceBookings);
   bool _loadingInsurance = true;
   bool get loadingInsurance => _loadingInsurance;
 
@@ -247,21 +272,120 @@ class HistoryController extends ChangeNotifier {
   }
 }
 
-/// Controller for [ReportAttractionPage].
+/// Controller for [ReportAttractionPage]. Real Firestore-backed submission
+/// (CatalogRepository.submitAttractionReport writes to
+/// `attraction_reports/{id}`) with a real Storage-uploaded photo
+/// (AttractionReportService) — previously `mediaAdded` was just a bool
+/// toggle with no actual image picker/upload behind it, and the page's
+/// own `_submit()` never wrote anything at all: tapping Submit just
+/// showed a SnackBar and popped the page.
 class ReportAttractionController extends ChangeNotifier {
-  bool _mediaAdded = false;
-  bool get mediaAdded => _mediaAdded;
-
+  final TextEditingController nameController = TextEditingController();
   final TextEditingController locationController = TextEditingController();
+  final TextEditingController descriptionController = TextEditingController();
 
-  void toggleMediaAdded() {
-    _mediaAdded = !_mediaAdded;
+  File? _photo;
+  File? get photo => _photo;
+  bool get mediaAdded => _photo != null;
+
+  bool _submitting = false;
+  bool get submitting => _submitting;
+
+  Future<void> pickPhoto(ImageSource source) async {
+    final file = await AttractionReportService.instance.pick(source);
+    if (file == null) return;
+    _photo = file;
     notifyListeners();
+  }
+
+  bool _locating = false;
+  bool get locating => _locating;
+
+  /// Fills [locationController] from the device's current GPS position
+  /// — the tappable location icon next to the Location field, so a
+  /// rider standing at the spot doesn't have to type the address by
+  /// hand. Gets a real position via [LocationService.getCurrentPosition]
+  /// (same permission dance used elsewhere in the app, e.g. Privacy and
+  /// Security's "Share Location" toggle) then reverse-geocodes it via
+  /// [PlacesApiService.reverseGeocode]; falls back to raw coordinates if
+  /// reverse geocoding itself fails but the position was found, so a
+  /// flaky Nominatim request doesn't throw away a real GPS fix. Returns
+  /// null on success (the field is already updated) or an error message
+  /// for the page to show in a SnackBar; never throws.
+  Future<String?> useCurrentLocation() async {
+    _locating = true;
+    notifyListeners();
+    try {
+      final position = await LocationService.instance.getCurrentPosition();
+      if (position == null) {
+        return "Couldn't get your current location. Check that location services and permission are enabled.";
+      }
+      final label = await PlacesApiService.instance.reverseGeocode(position.latitude, position.longitude);
+      locationController.text =
+          label ?? '${position.latitude.toStringAsFixed(5)}, ${position.longitude.toStringAsFixed(5)}';
+      return null;
+    } finally {
+      _locating = false;
+      notifyListeners();
+    }
+  }
+
+  void removePhoto() {
+    _photo = null;
+    notifyListeners();
+  }
+
+  /// The first validation problem found, or null once the report has
+  /// everything it needs to submit.
+  String? validate() {
+    if (nameController.text.trim().isEmpty) return 'Please enter the attraction name.';
+    if (locationController.text.trim().isEmpty) return 'Please add a location.';
+    return null;
+  }
+
+  /// Uploads the photo (if any) and writes the real report doc. Returns
+  /// null on success, or an error message on failure — the page decides
+  /// how to show it rather than this controller holding UI state like a
+  /// SnackBar.
+  Future<String?> submit() async {
+    final error = validate();
+    if (error != null) return error;
+    final user = AuthService.instance.currentUser;
+    final uid = user?.uid;
+    if (uid == null) return 'You need to be signed in to submit a report.';
+
+    _submitting = true;
+    notifyListeners();
+    try {
+      String photoUrl = '';
+      final photo = _photo;
+      if (photo != null) {
+        photoUrl = await AttractionReportService.instance.upload(uid, photo);
+      }
+      final authorName =
+          user?.displayName?.trim().isNotEmpty == true ? user!.displayName!.trim() : (user?.email ?? 'Voya user');
+      await CatalogRepository.instance.submitAttractionReport(
+        authorId: uid,
+        authorName: authorName,
+        name: nameController.text.trim(),
+        location: locationController.text.trim(),
+        description: descriptionController.text.trim(),
+        photoUrl: photoUrl,
+      );
+      return null;
+    } catch (e) {
+      return 'Could not submit your report: $e';
+    } finally {
+      _submitting = false;
+      notifyListeners();
+    }
   }
 
   @override
   void dispose() {
+    nameController.dispose();
     locationController.dispose();
+    descriptionController.dispose();
     super.dispose();
   }
 }

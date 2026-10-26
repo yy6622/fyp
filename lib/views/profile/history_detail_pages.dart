@@ -6,14 +6,15 @@ import '../../repositories/booking_repository.dart';
 import '../../services/auth_service.dart';
 import '../../services/booking_document_service.dart';
 import '../../theme.dart';
+import '../insurance/claim_refund_page.dart';
 
 // ---------------------------------------------------------------------
 // Past-booking detail pages opened from History's Hotel / Insurance tabs.
 //
-// These mirror PlanFlightDetailPage's look exactly (VoyaAppBar + "Set to
-// private / Shift to Plans" menu + tab row + plain bordered info card) so
-// all three History tabs feel like one consistent "view a past booking"
-// experience. They are deliberately NOT the live shopping/purchase pages
+// These mirror PlanFlightDetailPage's look exactly (VoyaAppBar + tab row +
+// plain bordered info card) so all three History tabs feel like one
+// consistent "view a past booking" experience. They are deliberately NOT
+// the live shopping/purchase pages
 // (DetailPageHotel / InsurancePlanDetailPage) that History used to reuse —
 // those have a "Select Hotel" / "Enter Traveller" purchase action at the
 // bottom, which would let a past booking be re-purchased by accident.
@@ -55,18 +56,15 @@ class _HistoryDetailShellState extends State<_HistoryDetailShell> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
+      // The "⋮" menu here used to offer "Set to private"/"Shift to
+      // Plans" with `onSelected: (_) {}` — neither option did anything,
+      // and neither one maps onto a real field this app actually has
+      // (there's no privacy flag on a booking, and a completed/past
+      // booking has no defined way to "shift" into an active Plan).
+      // Removed rather than left as a menu that looks actionable and
+      // isn't; PillTabBar + info card below are all real.
       appBar: VoyaAppBar(
         title: Text(widget.title, style: const TextStyle(color: AppColors.navy, fontWeight: FontWeight.bold, fontSize: 18)),
-        actions: [
-          PopupMenuButton<String>(
-            icon: const Icon(Icons.more_vert, color: AppColors.navy),
-            onSelected: (_) {},
-            itemBuilder: (context) => const [
-              PopupMenuItem(value: 'private', child: Text('Set to private')),
-              PopupMenuItem(value: 'shift', child: Text('Shift to Plans')),
-            ],
-          ),
-        ],
       ),
       body: Column(
         children: [
@@ -487,6 +485,11 @@ class HistoryInsuranceDetailPage extends StatefulWidget {
   final String travellerName;
   final String bookingId;
   final Map<String, String> documents;
+  // The real `insurance_transactions` doc id this booking links back to
+  // (see InsuranceRepository.recordPurchase) — empty for a policy bought
+  // before this field existed, in which case the Claim/Refund buttons
+  // below are replaced with an explanation instead of a broken link.
+  final String transactionId;
 
   const HistoryInsuranceDetailPage({
     super.key,
@@ -498,6 +501,7 @@ class HistoryInsuranceDetailPage extends StatefulWidget {
     this.travellerName = '',
     this.bookingId = '',
     this.documents = const {},
+    this.transactionId = '',
   });
 
   static const _docs = [
@@ -529,13 +533,69 @@ class _HistoryInsuranceDetailPageState extends State<HistoryInsuranceDetailPage>
         PillTab('Documents', Icons.description_outlined),
       ],
       builders: [
-        (_) => _infoCard('INSURANCE INFORMATION', [
-              _field('Plan Name', widget.planName),
-              _field('Coverage', widget.coverage),
-              _field('Policy Number', widget.policyNumber),
-              _field('Amount Paid', widget.amountPaid),
-              _field('Status', widget.status, last: true),
-            ]),
+        (context) => ListView(
+              padding: const EdgeInsets.all(20),
+              children: [
+                Container(
+                  clipBehavior: Clip.antiAlias,
+                  decoration: BoxDecoration(
+                      color: Colors.white, borderRadius: BorderRadius.circular(14), border: Border.all(color: const Color(0xFFECECEC))),
+                  child: Column(
+                    children: [
+                      _field('Plan Name', widget.planName),
+                      _field('Coverage', widget.coverage),
+                      _field('Policy Number', widget.policyNumber),
+                      _field('Amount Paid', widget.amountPaid),
+                      _field('Status', widget.status, last: true),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 20),
+                if (widget.transactionId.isEmpty)
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(color: AppColors.chipGrey, borderRadius: BorderRadius.circular(12)),
+                    child: const Text(
+                      "Filing a claim or refund isn't available for this policy — it was purchased before this feature existed.",
+                      style: TextStyle(fontSize: 12, color: AppColors.textGrey),
+                    ),
+                  )
+                else
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            side: const BorderSide(color: AppColors.primary),
+                            padding: const EdgeInsets.symmetric(vertical: 13),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          onPressed: () => Navigator.of(context)
+                              .push(MaterialPageRoute(builder: (_) => FileClaimPage(transactionId: widget.transactionId))),
+                          icon: const Icon(Icons.assignment_outlined, size: 16, color: AppColors.primary),
+                          label: const Text('File a Claim',
+                              style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.w600, fontSize: 12.5)),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            side: const BorderSide(color: AppColors.primary),
+                            padding: const EdgeInsets.symmetric(vertical: 13),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          onPressed: () => Navigator.of(context)
+                              .push(MaterialPageRoute(builder: (_) => RequestRefundPage(transactionId: widget.transactionId))),
+                          icon: const Icon(Icons.payments_outlined, size: 16, color: AppColors.primary),
+                          label: const Text('Request Refund',
+                              style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.w600, fontSize: 12.5)),
+                        ),
+                      ),
+                    ],
+                  ),
+              ],
+            ),
         (_) => _peopleList('Traveller', name: widget.travellerName),
         (_) => _documentsList(
               docs: HistoryInsuranceDetailPage._docs,

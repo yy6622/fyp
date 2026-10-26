@@ -51,7 +51,11 @@ class _PlanPageState extends State<PlanPage> {
               if (controller.planGroups.isEmpty) _buildEmptyState(),
               if (controller.planGroups.isNotEmpty) ...[
               if (controller.showVoting && controller.activeVotingItems.isNotEmpty) ...[
-                _buildSectionHeader('Current Voting', showIcon: Icons.how_to_vote_outlined),
+                _buildSectionHeader(
+                  'Current Voting',
+                  showIcon: Icons.how_to_vote_outlined,
+                  onViewAll: () => controller.setSelectedTab(PlanTab.voting),
+                ),
                 const SizedBox(height: 12),
                 controller.selectedTab == PlanTab.voting ? _buildVotingDetailedList() : _buildVotingList(),
                 const SizedBox(height: 18),
@@ -67,6 +71,9 @@ class _PlanPageState extends State<PlanPage> {
                   showIcon: controller.selectedTab == PlanTab.expenses
                       ? Icons.account_balance_wallet_outlined
                       : Icons.sync_alt,
+                  onViewAll: () => controller.setSelectedTab(
+                    controller.selectedTab == PlanTab.expenses ? PlanTab.expenses : PlanTab.plan,
+                  ),
                 ),
                 const SizedBox(height: 12),
                 if (controller.selectedTab == PlanTab.expenses)
@@ -257,7 +264,12 @@ class _PlanPageState extends State<PlanPage> {
   }
 
   // ---------------- Section header ----------------
-  Widget _buildSectionHeader(String title, {IconData? showIcon}) {
+  // "View All" used to render as plain, unwrapped Text here — styled
+  // exactly like a tappable link (blue, bold) but with no GestureDetector
+  // at all, so every section header on this page looked actionable and
+  // wasn't. [onViewAll] is now required precisely so a future call site
+  // can't reintroduce the same dead-looking link by accident.
+  Widget _buildSectionHeader(String title, {IconData? showIcon, required VoidCallback onViewAll}) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Row(
@@ -275,9 +287,12 @@ class _PlanPageState extends State<PlanPage> {
               ),
             ],
           ),
-          const Text(
-            'View All',
-            style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: Colors.blue),
+          GestureDetector(
+            onTap: onViewAll,
+            child: const Text(
+              'View All',
+              style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: Colors.blue),
+            ),
           ),
         ],
       ),
@@ -487,10 +502,20 @@ class _PlanPageState extends State<PlanPage> {
                   ),
                   const SizedBox(height: 6),
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(item.votes, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.navy)),
-                      Text(item.leadingOption, style: const TextStyle(fontSize: 10.5, color: AppColors.textGrey)),
+                      const SizedBox(width: 6),
+                      // leadingOption is a full sentence built from the
+                      // leading option's own label (e.g. a saved place's
+                      // name), which can run long — Expanded + ellipsis so
+                      // it never overflows the card's right edge.
+                      Expanded(
+                        child: Text(item.leadingOption,
+                            textAlign: TextAlign.right,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 10.5, color: AppColors.textGrey)),
+                      ),
                     ],
                   ),
                 ],
@@ -544,10 +569,13 @@ class _PlanPageState extends State<PlanPage> {
                 ],
               ),
             ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
-              decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(20)),
-              child: const Text('View', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
+            GestureDetector(
+              onTap: () => controller.setSelectedTab(PlanTab.expenses),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+                decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(20)),
+                child: const Text('View', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
+              ),
             ),
           ],
         ),
@@ -581,14 +609,28 @@ class _PlanPageState extends State<PlanPage> {
                 ],
               ),
             ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
-              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)),
-              child: const Text('Settle Up', style: TextStyle(color: AppColors.navy, fontSize: 12, fontWeight: FontWeight.w600)),
+            GestureDetector(
+              onTap: () => _settleUp(context),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)),
+                child: const Text('Settle Up', style: TextStyle(color: AppColors.navy, fontSize: 12, fontWeight: FontWeight.w600)),
+              ),
             ),
           ],
         ),
       ),
+    );
+  }
+
+  void _settleUp(BuildContext context) {
+    final withBalance = controller.planGroups.where((g) => g.yourShare > 0).toList();
+    if (withBalance.length == 1) {
+      _openGroup(context, withBalance.first.tripId, tab: GroupTab.expenses);
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('You owe more than one group — tap a group below to settle it.')),
     );
   }
 
@@ -620,7 +662,15 @@ class _PlanPageState extends State<PlanPage> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(group.title, style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.bold, color: AppColors.navy)),
+                        Row(
+                          children: [
+                            if (group.pinned) ...[
+                              const Icon(Icons.push_pin, size: 12, color: AppColors.primary),
+                              const SizedBox(width: 4),
+                            ],
+                            Text(group.title, style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.bold, color: AppColors.navy)),
+                          ],
+                        ),
                         Text(group.timeAgo, style: const TextStyle(fontSize: 10, color: AppColors.textGrey)),
                       ],
                     ),

@@ -78,6 +78,11 @@ class PlanGroup {
   /// trip with no cover set yet; the card falls back to a placeholder
   /// icon rather than a broken image either way.
   final String coverImage;
+  /// This member's own "Pin Chat" preference (Trip.pinChatFor(uid)) —
+  /// pinned groups sort to the top of the Plan list (see
+  /// PlanPageController.planGroups). Per-member, not global — see
+  /// Trip.pinChat's doc comment for why.
+  final bool pinned;
   const PlanGroup({
     required this.title,
     required this.members,
@@ -91,5 +96,6 @@ class PlanGroup {
     this.lastExpenseAmount = 0,
     this.tripId = '',
     this.coverImage = '',
+    this.pinned = false,
   });
 }

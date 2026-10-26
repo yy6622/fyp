@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 
 import '../../controllers/profile_controller.dart';
 import '../../repositories/booking_repository.dart';
+import '../../repositories/notifications_repository.dart';
+import '../../services/auth_service.dart';
 import '../../theme.dart';
+import '../notifications/notifications_page.dart';
 import 'history_detail_pages.dart';
 
 // ---------------------------------------------------------------------
@@ -30,14 +33,7 @@ class _HistoryPageState extends State<HistoryPage> {
       backgroundColor: Colors.white,
       appBar: VoyaAppBar(
         title: const Text('History', style: TextStyle(color: AppColors.navy, fontWeight: FontWeight.bold, fontSize: 19)),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.mail_outline, color: AppColors.navy),
-            onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('No new booking updates')),
-            ),
-          ),
-        ],
+        actions: [_notificationsBell(context)],
       ),
       body: ListenableBuilder(
         listenable: controller,
@@ -57,13 +53,21 @@ class _HistoryPageState extends State<HistoryPage> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text('March', style: TextStyle(fontSize: 12.5, color: AppColors.textGrey)),
-                  Row(
-                    children: const [
-                      Text('Filter', style: TextStyle(fontSize: 12.5, color: AppColors.navy)),
-                      SizedBox(width: 4),
-                      Icon(Icons.filter_list, size: 16, color: AppColors.navy),
-                    ],
+                  Text(
+                    _currentBookings.isEmpty
+                        ? ''
+                        : '${_currentBookings.length} ${_currentBookings.length == 1 ? 'booking' : 'bookings'}',
+                    style: const TextStyle(fontSize: 12.5, color: AppColors.textGrey),
+                  ),
+                  InkWell(
+                    onTap: () => _openSortSheet(context),
+                    child: Row(
+                      children: [
+                        Text('Filter', style: TextStyle(fontSize: 12.5, color: controller.oldestFirst ? AppColors.primary : AppColors.navy)),
+                        const SizedBox(width: 4),
+                        Icon(Icons.filter_list, size: 16, color: controller.oldestFirst ? AppColors.primary : AppColors.navy),
+                      ],
+                    ),
                   ),
                 ],
               ),
@@ -73,6 +77,101 @@ class _HistoryPageState extends State<HistoryPage> {
         ),
       ),
     );
+  }
+
+  List<BookingEntry> get _currentBookings {
+    switch (controller.tab) {
+      case HistoryTab.flight:
+        return controller.flightBookings;
+      case HistoryTab.hotel:
+        return controller.hotelBookings;
+      case HistoryTab.insurance:
+        return controller.insuranceBookings;
+    }
+  }
+
+  // Real inbox behind the mail icon — used to be a dead icon that always
+  // showed "No new booking updates" with nothing behind it. Same
+  // unread-badge pattern as HomePage's bell (NotificationsRepository
+  // .watchUnreadCount), just opening straight into the same shared
+  // NotificationsPage rather than duplicating a second inbox.
+  Widget _notificationsBell(BuildContext context) {
+    final uid = AuthService.instance.currentUser?.uid;
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        IconButton(
+          icon: const Icon(Icons.mail_outline, color: AppColors.navy),
+          onPressed: () => Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const NotificationsPage()),
+          ),
+        ),
+        if (uid != null)
+          StreamBuilder<int>(
+            stream: NotificationsRepository.instance.watchUnreadCount(uid),
+            builder: (context, snapshot) {
+              final count = snapshot.data ?? 0;
+              if (count == 0) return const SizedBox.shrink();
+              return Positioned(
+                right: 4,
+                top: 4,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                  decoration: BoxDecoration(
+                    color: Colors.redAccent,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.white, width: 1.5),
+                  ),
+                  constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                  child: Text(
+                    count > 9 ? '9+' : '$count',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              );
+            },
+          ),
+      ],
+    );
+  }
+
+  // Real sort order for the current tab's list — "Newest first" (the
+  // order Firestore already returns) or "Oldest first" (the same list
+  // reversed client-side, see HistoryController._sorted).
+  Future<void> _openSortSheet(BuildContext context) async {
+    final choice = await showModalBottomSheet<bool>(
+      context: context,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(20, 18, 20, 4),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text('Sort by', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.black)),
+              ),
+            ),
+            RadioListTile<bool>(
+              value: false,
+              groupValue: controller.oldestFirst,
+              title: const Text('Newest first'),
+              onChanged: (v) => Navigator.of(sheetContext).pop(v),
+            ),
+            RadioListTile<bool>(
+              value: true,
+              groupValue: controller.oldestFirst,
+              title: const Text('Oldest first'),
+              onChanged: (v) => Navigator.of(sheetContext).pop(v),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+    if (choice != null) controller.setOldestFirst(choice);
   }
 
   // All three tabs read real purchases from Firestore (`users/{uid}/bookings`
@@ -230,6 +329,8 @@ class _HistoryPageState extends State<HistoryPage> {
             travellerName: b.guestName,
             bookingId: b.id,
             documents: b.documents,
+            coverage: b.coverage,
+            transactionId: b.transactionId,
           ),
         ));
         break;

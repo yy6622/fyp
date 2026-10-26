@@ -183,7 +183,7 @@ class PlanPageController extends ChangeNotifier {
         members: '${trip.memberIds.length} member${trip.memberIds.length == 1 ? '' : 's'}',
         timeAgo: trip.createdAt == null ? 'Just now' : formatTimeAgo(trip.createdAt!),
         lastMessage: '${trip.destination} · ${trip.dateRangeLabel}',
-        unread: 0,
+        unread: trip.unreadCounts[_uid] ?? 0,
         tags: tags,
         totalExpenses: totalExpenses,
         yourShare: yourShare,
@@ -191,8 +191,14 @@ class PlanPageController extends ChangeNotifier {
         lastExpenseAmount: expenses.isEmpty ? 0 : expenses.first.amount,
         tripId: trip.id,
         coverImage: trip.coverImage,
+        pinned: trip.pinChatFor(_uid),
       );
-    }).toList();
+    }).toList()
+      // Pinned groups (this member's own Group Setting > Pin Chat) float
+      // to the top — `sort` is stable in Dart, so within "pinned" and
+      // "not pinned" the original order (most-recent-activity first,
+      // from _trips) is kept exactly as before.
+      ..sort((a, b) => (b.pinned ? 1 : 0).compareTo(a.pinned ? 1 : 0));
   }
 
   @override

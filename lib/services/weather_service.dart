@@ -61,6 +61,17 @@ class DestinationWeather {
     if (tempMinC != null && tempMaxC != null) return '${tempMinC!.round()}°-${tempMaxC!.round()}°C';
     return '${tempC.round()}°C';
   }
+
+  /// True for forecast codes that would actually disrupt outdoor plans
+  /// (meaningful rain, snow, showers, or a storm) — the threshold a
+  /// weather nudge (see live_conditions_card.dart) uses to decide whether
+  /// to suggest re-optimising today's order, rather than flagging
+  /// ordinary cloud or a light drizzle that wouldn't change anyone's plans.
+  bool get isDisruptive =>
+      (weatherCode >= 61 && weatherCode <= 67) || // Rain
+      (weatherCode >= 71 && weatherCode <= 77) || // Snow
+      (weatherCode >= 80 && weatherCode <= 82) || // Showers
+      weatherCode >= 95; // Storm
 }
 
 class WeatherService {
@@ -124,7 +135,7 @@ class WeatherService {
       return DestinationWeather(tempC: temp, weatherCode: code);
     }
 
-    final daysAhead = forDate!.difference(todayMidnight).inDays;
+    final daysAhead = forDate.difference(todayMidnight).inDays;
     if (daysAhead > _forecastHorizonDays) return null;
     final uri = Uri.https('api.open-meteo.com', '/v1/forecast', {
       'latitude': '$lat',

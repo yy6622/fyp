@@ -162,8 +162,11 @@ class _SavedItemsPageState extends State<SavedItemsPage> {
     return _card(
       onTap: () => Navigator.of(context).push(MaterialPageRoute(
         builder: (_) => DetailPageFlight(
+          airline: flight.airline,
           fromCode: flight.from,
           toCode: flight.to,
+          flightNo: flight.flightNo,
+          date: flight.date,
           depTime: flight.depTime,
           arrTime: flight.arrTime,
           duration: flight.duration,
@@ -288,11 +291,8 @@ class _SavedItemsPageState extends State<SavedItemsPage> {
       )),
       child: Row(
         children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(10),
-            child: _cardImage(restaurant.image, Icons.restaurant_outlined),
-          ),
-          const SizedBox(width: 12),
+          // No thumbnail for restaurants — see explore_page.dart's restaurant
+          // cards for why (no image-shaped UI at all, not even a placeholder).
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,

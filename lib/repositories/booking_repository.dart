@@ -36,6 +36,19 @@ class BookingEntry {
   final String specialRequests;
   final String checkIn;
   final String checkOut;
+  // Real coverage text for an insurance booking (InsurancePlan.coverage at
+  // the moment of purchase) — empty for a flight/hotel booking, or an
+  // insurance one bought before this field existed, in which case
+  // HistoryInsuranceDetailPage falls back to its own generic default
+  // rather than this ever being filled with something invented.
+  final String coverage;
+  // Links an insurance booking back to its real `insurance_transactions`
+  // doc (the id InsuranceRepository.recordPurchase returns) so History's
+  // insurance detail page can file a real claim/refund against the
+  // actual purchase instead of guessing which transaction it was. Empty
+  // for a flight/hotel booking, or an insurance one bought before this
+  // field existed.
+  final String transactionId;
   const BookingEntry({
     required this.id,
     required this.type,
@@ -53,6 +66,8 @@ class BookingEntry {
     this.specialRequests = '',
     this.checkIn = '',
     this.checkOut = '',
+    this.coverage = '',
+    this.transactionId = '',
   });
 }
 
@@ -85,6 +100,8 @@ class BookingRepository {
               specialRequests: (d.data()['specialRequests'] as String?) ?? '',
               checkIn: (d.data()['checkIn'] as String?) ?? '',
               checkOut: (d.data()['checkOut'] as String?) ?? '',
+              coverage: (d.data()['coverage'] as String?) ?? '',
+              transactionId: (d.data()['transactionId'] as String?) ?? '',
             ))
         .where((b) => type == null || b.type == type)
         .toList());
@@ -113,6 +130,8 @@ class BookingRepository {
     String specialRequests = '',
     String checkIn = '',
     String checkOut = '',
+    String coverage = '',
+    String transactionId = '',
   }) {
     return _bookingsOf(uid).add({
       'type': type,
@@ -129,6 +148,8 @@ class BookingRepository {
       if (specialRequests.isNotEmpty) 'specialRequests': specialRequests,
       if (checkIn.isNotEmpty) 'checkIn': checkIn,
       if (checkOut.isNotEmpty) 'checkOut': checkOut,
+      if (coverage.isNotEmpty) 'coverage': coverage,
+      if (transactionId.isNotEmpty) 'transactionId': transactionId,
       'createdAt': FieldValue.serverTimestamp(),
     });
   }

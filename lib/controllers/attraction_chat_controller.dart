@@ -119,16 +119,17 @@ class AttractionChatController extends ChangeNotifier {
   /// Saves/favorites [attraction] for the current trip — the exact same
   /// write [ExploreController.toggleAttractionFavorite] uses, so "Add"
   /// here and the heart icon elsewhere in Explore are the same real
-  /// action, not a parallel concept. A no-op (but still marked added in
-  /// the UI) when there's no selected trip to save it against, since
-  /// there's nowhere real to persist the favorite — same as the heart
-  /// icon being hidden/disabled with no trip selected elsewhere.
+  /// action, not a parallel concept. With no selected trip there's
+  /// nowhere real to persist the favorite — same as the heart icon
+  /// being disabled with no trip selected elsewhere (see
+  /// AttractionChatPage's "Add" button, disabled whenever [tripId] is
+  /// null) — so this used to still flip the button to a permanent
+  /// "Added" state with nothing behind it; it no longer does.
   Future<void> addToTrip(CatalogAttraction attraction) async {
-    if (addedIds.contains(attraction.id)) return;
+    final trip = tripId;
+    if (trip == null || addedIds.contains(attraction.id)) return;
     addedIds.add(attraction.id);
     notifyListeners();
-    final trip = tripId;
-    if (trip == null) return;
     await CatalogRepository.instance.toggleAttractionFavorite(attraction.id, uid, trip, true, categories: attraction.categoryTags);
   }
 }

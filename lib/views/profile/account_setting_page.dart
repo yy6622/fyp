@@ -10,6 +10,7 @@ import '../../services/auth_service.dart';
 import '../../services/avatar_service.dart';
 import '../../services/location_service.dart';
 import '../../theme.dart';
+import '../auth/login_page.dart';
 import '../shared/nice_dialog.dart';
 import '../shared/phone_input_field.dart';
 import 'sub_page_scaffold.dart';
@@ -61,7 +62,7 @@ class _AccountSettingPageState extends State<AccountSettingPage> {
     final uid = AuthService.instance.currentUser?.uid;
     if (uid == null) return;
     final file = await AvatarService.instance.pick(source);
-    if (file == null) return;
+    if (file == null || !mounted) return;
     setState(() => _uploadingAvatar = true);
     try {
       final url = await AvatarService.instance.upload(uid, file);
@@ -157,6 +158,121 @@ class _AccountSettingPageState extends State<AccountSettingPage> {
     await UserRepository.instance.updateProfile(uid, name: field == 'name' ? value : null, phone: field == 'phone' ? value : null);
   }
 
+  /// Both Password and Email rows used to look exactly like the real
+  /// editable rows above/below them (same chevron, same tappable style)
+  /// but had no `onTap` at all — tapping either did nothing. Firebase
+  /// requires the current password for both (and for account deletion
+  /// below), so each of these asks for it up front rather than failing
+  /// confusingly after the fact.
+  Future<void> _changePassword() async {
+    final currentCtrl = TextEditingController();
+    final newCtrl = TextEditingController();
+    final confirmCtrl = TextEditingController();
+    final result = await showNiceFormDialog(
+      context: context,
+      title: 'Change Password',
+      headerIcon: Icons.lock_outline,
+      confirmLabel: 'Save',
+      fieldsBuilder: (ctx, setState) => [
+        niceDialogField(currentCtrl, 'Current Password', obscureText: true, autofocus: true),
+        niceDialogField(newCtrl, 'New Password', obscureText: true),
+        niceDialogField(confirmCtrl, 'Confirm New Password', obscureText: true),
+      ],
+    );
+    if (result != true || !mounted) return;
+    if (newCtrl.text.isEmpty || newCtrl.text.length < 6) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('New password must be at least 6 characters.')));
+      return;
+    }
+    if (newCtrl.text != confirmCtrl.text) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Passwords don\'t match.')));
+      return;
+    }
+    try {
+      await AuthService.instance.changePassword(currentPassword: currentCtrl.text, newPassword: newCtrl.text);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Password changed.')));
+    } on AuthFailure catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
+
+  Future<void> _changeEmail(String currentEmail) async {
+    final currentCtrl = TextEditingController();
+    final newEmailCtrl = TextEditingController();
+    final result = await showNiceFormDialog(
+      context: context,
+      title: 'Change Email',
+      headerIcon: Icons.email_outlined,
+      confirmLabel: 'Send Verification',
+      fieldsBuilder: (ctx, setState) => [
+        niceDialogField(newEmailCtrl, 'New Email', keyboardType: TextInputType.emailAddress, autofocus: true),
+        niceDialogField(currentCtrl, 'Current Password', obscureText: true),
+      ],
+    );
+    if (result != true || !mounted) return;
+    final newEmail = newEmailCtrl.text.trim();
+    if (newEmail.isEmpty || !newEmail.contains('@')) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Enter a valid email address.')));
+      return;
+    }
+    try {
+      await AuthService.instance.changeEmail(currentPassword: currentCtrl.text, newEmail: newEmail);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Check $newEmail for a verification link — your sign-in email changes once you confirm it.')),
+      );
+    } on AuthFailure catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
+
+  /// Previously asked for confirmation and then discarded the answer —
+  /// neither "Delete" nor the cancel button did anything different.
+  Future<void> _deleteAccount() async {
+    final confirmed = await showNiceConfirmDialog(
+      context: context,
+      title: 'Delete Account',
+      message: 'This permanently deletes your account. This cannot be undone. Are you sure?',
+      confirmLabel: 'Delete',
+      icon: Icons.warning_amber_rounded,
+      destructive: true,
+    );
+    if (!confirmed || !mounted) return;
+    final passwordCtrl = TextEditingController();
+    final verified = await showNiceFormDialog(
+      context: context,
+      title: 'Confirm Your Password',
+      headerIcon: Icons.lock_outline,
+      confirmLabel: 'Delete Account',
+      fieldsBuilder: (ctx, setState) => [
+        niceDialogField(passwordCtrl, 'Current Password', obscureText: true, autofocus: true),
+      ],
+    );
+    if (verified != true || !mounted) return;
+    final uid = AuthService.instance.currentUser?.uid;
+    try {
+      // Delete the person's own profile doc first — unambiguously
+      // theirs alone (see AuthService.deleteAccount's doc comment on why
+      // it doesn't also try to cascade-delete shared data like trips or
+      // posts) — then the Firebase Auth account itself.
+      if (uid != null) {
+        await UserRepository.instance.deleteProfile(uid);
+      }
+      await AuthService.instance.deleteAccount(passwordCtrl.text);
+      if (!mounted) return;
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const LoginPage()),
+        (route) => false,
+      );
+    } on AuthFailure catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
+
   Future<void> _editPhone(String current) async {
     String value = current == 'Not set' ? '' : current;
     final result = await showNiceFormDialog(
@@ -218,8 +334,8 @@ class _AccountSettingPageState extends State<AccountSettingPage> {
                   ),
                 ),
               ),
-              profileNavRow('Password', '••••••••'),
-              profileNavRow('Email', email),
+              profileNavRow('Password', '••••••••', onTap: _changePassword),
+              profileNavRow('Email', email, onTap: () => _changeEmail(email)),
               profileNavRow('Phone Number', phone, onTap: () => _editPhone(phone)),
               profileNavRow('Country / Region', country, onTap: _changeCountry),
               profileNavRow('Currency', currency, onTap: _changeCurrency),
@@ -235,14 +351,7 @@ class _AccountSettingPageState extends State<AccountSettingPage> {
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                     ),
-                    onPressed: () => showNiceConfirmDialog(
-                      context: context,
-                      title: 'Delete Account',
-                      message: 'This permanently deletes your account and all your trips. This cannot be undone. Are you sure?',
-                      confirmLabel: 'Delete',
-                      icon: Icons.warning_amber_rounded,
-                      destructive: true,
-                    ),
+                    onPressed: _deleteAccount,
                     child: const Text('Delete Account', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
                   ),
                 ),

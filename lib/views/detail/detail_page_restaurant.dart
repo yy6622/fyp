@@ -66,7 +66,10 @@ class _DetailPageRestaurantState extends State<DetailPageRestaurant> {
               child: SingleChildScrollView(
                 child: Column(
                   children: [
-                    DetailHeader(title: r.name, imageUrl: r.image),
+                    // Restaurants never show a photo here at all — not even
+                    // DetailHeader's usual fallback icon box — see
+                    // explore_page.dart's restaurant cards for why.
+                    DetailHeader(title: r.name, showHero: false),
                     Padding(
                       padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
                       child: Column(

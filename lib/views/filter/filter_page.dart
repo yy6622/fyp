@@ -128,10 +128,6 @@ class _FilterPageState extends State<FilterPage> {
         return _attractionFilters();
       case FilterType.restaurant:
         return _restaurantFilters();
-      case FilterType.nearby:
-        return _nearbyFilters();
-      case FilterType.plan:
-        return _planFilters();
     }
   }
 
@@ -223,6 +219,15 @@ class _FilterPageState extends State<FilterPage> {
         controller.attractionPrice,
         controller.setAttractionPrice,
       ),
+      const SizedBox(height: 20),
+      _sectionTitle('Availability'),
+      // AI-Based Attraction Recommendation Algorithm (FYP documentation)
+      // — these two map straight onto its mandatory constraints: a place
+      // that fails either is dropped from the list entirely, never just
+      // ranked lower (see RecommendationEngine.passesMandatoryConstraints).
+      _switchTile('Open now', controller.openNow, controller.setOpenNow),
+      const SizedBox(height: 8),
+      _switchTile('Wheelchair accessible', controller.accessibleOnly, controller.setAccessibleOnly),
     ];
   }
 
@@ -253,114 +258,6 @@ class _FilterPageState extends State<FilterPage> {
     ];
   }
 
-  // ---------------- NEARBY ----------------
-  List<Widget> _nearbyFilters() {
-    return [
-      _sectionTitle('Distance (km)'),
-      Row(
-        children: [
-          Expanded(
-            child: Slider(
-              value: controller.distanceKm,
-              min: 1,
-              max: 50,
-              divisions: 49,
-              activeColor: AppColors.primary,
-              inactiveColor: AppColors.chipGrey,
-              label: '${controller.distanceKm.round()} km',
-              onChanged: controller.setDistanceKm,
-            ),
-          ),
-          SizedBox(
-            width: 56,
-            child: Text(
-              '${controller.distanceKm.round()} km',
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: AppColors.navy,
-              ),
-            ),
-          ),
-        ],
-      ),
-      const SizedBox(height: 12),
-      _sectionTitle('Category'),
-      _chipsGroup(
-        ['Restaurants', 'Cafes', 'Attractions', 'Shopping', 'ATM', 'Pharmacy'],
-        controller.nearbyCategories,
-        icons: const [
-          Icons.restaurant_outlined,
-          Icons.local_cafe_outlined,
-          Icons.attractions_outlined,
-          Icons.shopping_bag_outlined,
-          Icons.local_atm_outlined,
-          Icons.local_pharmacy_outlined,
-        ],
-      ),
-      const SizedBox(height: 20),
-      _sectionTitle('Rating'),
-      _singleChoiceRow(['Any', '3.5+', '4.0+', '4.5+'], controller.nearbyRating, controller.setNearbyRating),
-      const SizedBox(height: 12),
-      _switchTile('Open Now', controller.openNow, controller.setOpenNow),
-    ];
-  }
-
-  // ---------------- PLAN (itinerary) ----------------
-  List<Widget> _planFilters() {
-    return [
-      _sectionTitle('Trip Duration (days)'),
-      Row(
-        children: [
-          Expanded(
-            child: Slider(
-              value: controller.tripDays,
-              min: 1,
-              max: 30,
-              divisions: 29,
-              activeColor: AppColors.primary,
-              inactiveColor: AppColors.chipGrey,
-              label: '${controller.tripDays.round()} days',
-              onChanged: controller.setTripDays,
-            ),
-          ),
-          SizedBox(
-            width: 60,
-            child: Text(
-              '${controller.tripDays.round()} days',
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: AppColors.navy,
-              ),
-            ),
-          ),
-        ],
-      ),
-      const SizedBox(height: 12),
-      _sectionTitle('Budget Range'),
-      _priceRangeSlider(controller.priceRange, 0, 10000, controller.setPriceRange),
-      const SizedBox(height: 20),
-      _sectionTitle('Trip Type'),
-      _chipsGroup(
-        ['Solo', 'Couple', 'Family', 'Friends', 'Business'],
-        controller.tripTypes,
-        icons: const [
-          Icons.person_outline,
-          Icons.favorite_border,
-          Icons.family_restroom_outlined,
-          Icons.groups_outlined,
-          Icons.work_outline,
-        ],
-      ),
-      const SizedBox(height: 20),
-      _sectionTitle('Travel Season'),
-      _chipsGroup(['Spring', 'Summer', 'Autumn', 'Winter'], controller.seasons),
-      const SizedBox(height: 20),
-      _sectionTitle('Pace'),
-      _singleChoiceRow(['Relaxed', 'Balanced', 'Packed'], controller.pace, controller.setPace),
-    ];
-  }
 
   // ---------------------------------------------------------------
   // Reusable filter building blocks

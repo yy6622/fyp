@@ -111,6 +111,8 @@ class GroupTripController extends ChangeNotifier {
       TripRepository.instance.markPlanSeen(tripId, uid);
     } else if (t == GroupTab.expenses) {
       TripRepository.instance.markExpensesSeen(tripId, uid);
+    } else if (t == GroupTab.chat) {
+      TripRepository.instance.markChatSeen(tripId, uid);
     }
   }
 
@@ -213,8 +215,27 @@ class GroupTripController extends ChangeNotifier {
     final text = messageController.text.trim();
     if (text.isEmpty) return;
     messageController.clear();
-    await TripRepository.instance.sendMessage(tripId, senderId: _uid, senderName: _myName, text: text);
+    await TripRepository.instance.sendMessage(tripId, senderId: _uid, senderName: _myName, memberIds: _trip?.memberIds ?? const [], text: text);
   }
+
+  /// FR15 — edits one of your own text messages. The call site (the
+  /// message bubble's long-press menu) only ever offers this for a
+  /// message whose senderId is this controller's own [_uid], and the
+  /// server-side rule double-checks that too.
+  Future<void> editMessage(String messageId, String newText) {
+    final trimmed = newText.trim();
+    if (trimmed.isEmpty) return Future.value();
+    return TripRepository.instance.editMessage(tripId, messageId, trimmed);
+  }
+
+  /// FR17 — deletes one of your own messages.
+  Future<void> deleteMessage(String messageId) {
+    return TripRepository.instance.deleteMessage(tripId, messageId);
+  }
+
+  /// Whether [message] is one the signed-in person sent, i.e. whether the
+  /// edit/delete menu should even be offered for it.
+  bool isOwnMessage(TripMessage message) => message.senderId == _uid;
 
   bool _sendingAttachment = false;
   bool get sendingAttachment => _sendingAttachment;
@@ -238,7 +259,7 @@ class GroupTripController extends ChangeNotifier {
     notifyListeners();
     try {
       final url = await ChatAttachmentService.instance.upload(tripId, _uid, file);
-      await TripRepository.instance.sendMessage(tripId, senderId: _uid, senderName: _myName, type: 'image', imageUrl: url);
+      await TripRepository.instance.sendMessage(tripId, senderId: _uid, senderName: _myName, memberIds: _trip?.memberIds ?? const [], type: 'image', imageUrl: url);
       return null;
     } catch (e) {
       return 'Could not send photo: $e';
@@ -265,6 +286,7 @@ class GroupTripController extends ChangeNotifier {
       tripId,
       senderId: _uid,
       senderName: _myName,
+      memberIds: _trip?.memberIds ?? const [],
       type: 'location',
       lat: position.latitude,
       lng: position.longitude,

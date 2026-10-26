@@ -213,6 +213,18 @@ class FriendsRepository {
         ? ref.set({'name': friendName, 'blockedAt': FieldValue.serverTimestamp()})
         : ref.delete();
   }
+
+  /// Unfriends [friendUid] — removes both halves of the mutual friendship
+  /// (your `friends/{friendUid}` entry and their `friends/{uid}` entry) in
+  /// one batch, same as [respondToFriendRequest]'s accept path writes both
+  /// halves together. Does not touch `blocked`: removing a friend and
+  /// blocking them are separate actions (FR07 only calls for the former).
+  Future<void> removeFriend({required String uid, required String friendUid}) {
+    final batch = FirebaseFirestore.instance.batch();
+    batch.delete(_friendsOf(uid).doc(friendUid));
+    batch.delete(_friendsOf(friendUid).doc(uid));
+    return batch.commit();
+  }
 }
 
 /// A pending `friendRequests` doc, from the recipient's point of view.

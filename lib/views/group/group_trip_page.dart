@@ -14,6 +14,7 @@ import '../../repositories/trip_repository.dart';
 import '../../services/auth_service.dart';
 import '../../services/currency_service.dart';
 import '../../services/format_utils.dart';
+import '../../services/maps_service.dart';
 import '../../theme.dart';
 import '../detail/detail_page_attraction.dart';
 import '../detail/detail_page_hotel.dart';
@@ -30,6 +31,7 @@ import '../vote/vote_tab.dart';
 import 'ai_itinerary_sheet.dart';
 import 'day_timeline_view.dart';
 import 'group_info_page.dart';
+import 'live_conditions_card.dart';
 import 'optimise_sheet.dart';
 import 'plan_flight_detail_page.dart';
 import 'plan_hotel_detail_page.dart';
@@ -285,12 +287,18 @@ class _GroupTripPageState extends State<GroupTripPage> {
                 children: [
                   AppAvatar(imageUrl: trip.coverImage, radius: 18, backgroundColor: const Color(0xFFD9D9D9), fallbackIcon: Icons.map_outlined),
                   const SizedBox(width: 10),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(trip.name, style: const TextStyle(color: AppColors.navy, fontWeight: FontWeight.bold, fontSize: 16)),
-                      Text('${trip.memberIds.length} members', style: const TextStyle(color: AppColors.textGrey, fontSize: 11)),
-                    ],
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(trip.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(color: AppColors.navy, fontWeight: FontWeight.bold, fontSize: 16)),
+                        Text('${trip.memberIds.length} members', style: const TextStyle(color: AppColors.textGrey, fontSize: 11)),
+                      ],
+                    ),
                   ),
                 ],
               ),
@@ -533,6 +541,7 @@ class _GroupTripPageState extends State<GroupTripPage> {
           policyNumber: insurance.policyNumber,
           amountPaid: insurance.price,
           coverage: insurance.coverage,
+          transactionId: insurance.transactionId,
         ),
       )),
     );
@@ -1339,6 +1348,19 @@ class _GroupTripPageState extends State<GroupTripPage> {
             ],
           ),
           const SizedBox(height: 14),
+          // Real weather + live traffic for this day's destination (and a
+          // traffic-aware travel-time estimate between its first two
+          // located activities) — fetched once per day shown; see
+          // live_conditions_card.dart.
+          LiveConditionsCard(
+            key: ValueKey('live-conditions-${day.day}'),
+            destination: trip.destination,
+            forDate: trip.dateForDay(day.day),
+            activities: day.items,
+            controller: controller,
+            dayIndex: dayIndex,
+            dayNumber: day.day,
+          ),
           if (day.items.isEmpty)
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 40),
@@ -1437,7 +1459,6 @@ class _GroupTripPageState extends State<GroupTripPage> {
   /// phone) with a full-width bottom sheet — the same pattern already
   /// used for Add Travellers/Edit Destination elsewhere on this page.
   Future<void> _addActivityDialog(Trip trip, int dayIndex) async {
-    final time = TextEditingController();
     final label = TextEditingController();
     final location = TextEditingController();
     String iconKey = 'activity';
@@ -1805,11 +1826,14 @@ class _GroupTripPageState extends State<GroupTripPage> {
     );
   }
 
-  /// Interleaves a small "Get directions" row between consecutive activity
-  /// cards on a day, one per gap between two different locations — tapping
-  /// it opens Google Maps with directions from the earlier stop to the
-  /// next one. No row is added when either side has no usable location
-  /// (a manually-typed activity with no address) or both stops are the
+  /// Interleaves a small transportation-suggestion row between
+  /// consecutive activity cards on a day, one per gap between two
+  /// different locations — it suggests how to get there (Walk / Drive,
+  /// with an estimated time, when both stops resolve to a real
+  /// coordinate — see [_effectivePointFor]/[MapsService]), and tapping
+  /// it opens Google Maps with directions already set to that same
+  /// mode. No row is added when either side has no usable location (a
+  /// manually-typed activity with no address) or both stops are the
   /// same place.
   List<Widget> _dayItemsWithTransport(List<ActivityItem> items, Trip trip) {
     final widgets = <Widget>[];
@@ -1819,7 +1843,10 @@ class _GroupTripPageState extends State<GroupTripPage> {
       final from = _effectiveLocationFor(items[i]);
       final to = _effectiveLocationFor(items[i + 1]);
       if (from.isNotEmpty && to.isNotEmpty && from.toLowerCase() != to.toLowerCase()) {
-        widgets.add(_transportRow(from, to));
+        final fromPoint = _effectivePointFor(items[i]);
+        final toPoint = _effectivePointFor(items[i + 1]);
+        final km = (fromPoint != null && toPoint != null) ? MapsService.kmBetween(fromPoint, toPoint) : null;
+        widgets.add(_transportRow(from, to, MapsService.suggest(km)));
       }
     }
     return widgets;
@@ -1841,11 +1868,33 @@ class _GroupTripPageState extends State<GroupTripPage> {
     return item.location;
   }
 
-  /// The row shown in the gap between two activity cards — tapping it opens
-  /// Google Maps' Directions with [from] and [to] as plain-text addresses
-  /// (Maps geocodes them itself, same as typing them into the app), so no
-  /// coordinates are needed on either side.
-  Widget _transportRow(String from, String to) {
+
+  LatLng? _effectivePointFor(ActivityItem item) {
+    final attraction = controller.attractionForActivity(item);
+    if (attraction?.lat != null && attraction?.lng != null) return LatLng(attraction!.lat!, attraction.lng!);
+    final restaurant = controller.restaurantForActivity(item);
+    if (restaurant?.lat != null && restaurant?.lng != null) return LatLng(restaurant!.lat!, restaurant.lng!);
+    return null;
+  }
+
+  /// The row shown in the gap between two activity cards — shows the
+  /// suggested way to get there (see [MapsService.suggest]: Walk / Drive
+  /// with an estimated time when both stops have a real coordinate, an
+  /// honest unmeasured "Get directions" otherwise) and, tapping it, opens
+  /// Google Maps' Directions already set to that same travel mode. [from]
+  /// and [to] are plain-text addresses (Maps geocodes them itself, same
+  /// as typing them into the app), so no coordinates are needed on either
+  /// side just to open the link — they're only used, when available, to
+  /// decide what to suggest in the first place.
+  Widget _transportRow(String from, String to, TransportSuggestion suggestion) {
+    final icon = switch (suggestion.mode) {
+      SuggestedTravelMode.walk => Icons.directions_walk,
+      SuggestedTravelMode.drive => Icons.directions_car_outlined,
+      SuggestedTravelMode.unknown => Icons.directions_outlined,
+    };
+    final label = suggestion.etaMinutes != null
+        ? '${suggestion.label} · ${suggestion.etaMinutes} min to $to'
+        : '${suggestion.label} to $to';
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
       child: Row(
@@ -1854,7 +1903,7 @@ class _GroupTripPageState extends State<GroupTripPage> {
           const SizedBox(width: 66),
           Expanded(
             child: GestureDetector(
-              onTap: () => _openDirectionsInMaps(from, to),
+              onTap: () => _openDirectionsInMaps(from, to, suggestion.googleMapsTravelMode),
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 decoration: BoxDecoration(
@@ -1864,11 +1913,11 @@ class _GroupTripPageState extends State<GroupTripPage> {
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.directions_outlined, size: 16, color: AppColors.primary),
+                    Icon(icon, size: 16, color: AppColors.primary),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'Get directions to $to',
+                        label,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.primary),
@@ -1889,13 +1938,15 @@ class _GroupTripPageState extends State<GroupTripPage> {
   /// Opens Google Maps' turn-by-turn Directions from [from] to [to] (both
   /// plain-text addresses/place names) in the Maps app if installed,
   /// otherwise the browser — same external-app launch already used by
-  /// [_openLocationInMaps] for a shared chat location.
-  Future<void> _openDirectionsInMaps(String from, String to) async {
+  /// [_openLocationInMaps] for a shared chat location. [travelMode] is
+  /// Google Maps' own query value ("walking"/"driving"), already decided
+  /// by [MapsService.suggest] before this is called.
+  Future<void> _openDirectionsInMaps(String from, String to, String travelMode) async {
     final uri = Uri.parse(
       'https://www.google.com/maps/dir/?api=1'
       '&origin=${Uri.encodeComponent(from)}'
       '&destination=${Uri.encodeComponent(to)}'
-      '&travelmode=driving',
+      '&travelmode=$travelMode',
     );
     await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
@@ -1996,8 +2047,8 @@ class _GroupTripPageState extends State<GroupTripPage> {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _activityThumb(restaurant.image, Icons.restaurant_outlined),
-        const SizedBox(width: 12),
+        // No thumbnail for restaurants — see explore_page.dart's restaurant
+        // cards for why (no image-shaped UI at all, not even a placeholder).
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -2276,9 +2327,18 @@ class _GroupTripPageState extends State<GroupTripPage> {
               ? const Center(child: Text('No messages yet — say hi!', style: TextStyle(color: AppColors.textGrey, fontSize: 12.5)))
               : ListView.builder(
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                  // Chat should open already showing the latest message,
+                  // not force a manual scroll-to-bottom every time —
+                  // reverse:true pins the list's start (scroll offset 0)
+                  // to the bottom of the screen, so index 0 needs to be
+                  // the newest message. [controller.messages] itself stays
+                  // oldest-first (TripRepository.watchMessages orders
+                  // that way, and other things may still rely on that
+                  // order), so just the index lookup here is flipped.
+                  reverse: true,
                   itemCount: controller.messages.length,
                   itemBuilder: (context, i) {
-                    final m = controller.messages[i];
+                    final m = controller.messages[controller.messages.length - 1 - i];
                     final mine = m.senderId == myUid;
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 10),
@@ -2295,6 +2355,7 @@ class _GroupTripPageState extends State<GroupTripPage> {
                             if (m.isImage)
                               GestureDetector(
                                 onTap: () => _openFullScreenImage(context, m.imageUrl),
+                                onLongPress: mine ? () => _showMessageOptions(m) : null,
                                 child: ClipRRect(
                                   borderRadius: BorderRadius.circular(14),
                                   child: Image.network(
@@ -2324,6 +2385,7 @@ class _GroupTripPageState extends State<GroupTripPage> {
                             else if (m.isLocation)
                               GestureDetector(
                                 onTap: () => _openLocationInMaps(m.lat!, m.lng!),
+                                onLongPress: mine ? () => _showMessageOptions(m) : null,
                                 child: Container(
                                   constraints: const BoxConstraints(maxWidth: 260),
                                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -2343,14 +2405,17 @@ class _GroupTripPageState extends State<GroupTripPage> {
                                 ),
                               )
                             else
-                              Container(
-                                constraints: const BoxConstraints(maxWidth: 260),
-                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                                decoration: BoxDecoration(
-                                  color: mine ? AppColors.primary : const Color(0xFFDCEFFF),
-                                  borderRadius: BorderRadius.circular(14),
+                              GestureDetector(
+                                onLongPress: mine ? () => _showMessageOptions(m) : null,
+                                child: Container(
+                                  constraints: const BoxConstraints(maxWidth: 260),
+                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                  decoration: BoxDecoration(
+                                    color: mine ? AppColors.primary : const Color(0xFFDCEFFF),
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                  child: Text(m.text, style: TextStyle(fontSize: 13, color: mine ? Colors.white : Colors.black)),
                                 ),
-                                child: Text(m.text, style: TextStyle(fontSize: 13, color: mine ? Colors.white : Colors.black)),
                               ),
                           ],
                         ),
@@ -2440,6 +2505,69 @@ class _GroupTripPageState extends State<GroupTripPage> {
         body: Center(child: InteractiveViewer(child: Image.network(imageUrl))),
       ),
     ));
+  }
+
+  /// FR15/FR17 — long-press menu on your own chat message. A plain text
+  /// message offers Edit + Delete; a photo or shared-location message
+  /// only offers Delete (there's nothing sensible to "edit" about either).
+  void _showMessageOptions(TripMessage m) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (!m.isImage && !m.isLocation)
+              ListTile(
+                leading: const Icon(Icons.edit_outlined, color: AppColors.navy),
+                title: const Text('Edit Message'),
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  _editMessageDialog(m);
+                },
+              ),
+            ListTile(
+              leading: const Icon(Icons.delete_outline, color: Colors.redAccent),
+              title: const Text('Delete Message', style: TextStyle(color: Colors.redAccent)),
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                _deleteMessage(m);
+              },
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _editMessageDialog(TripMessage m) async {
+    final textController = TextEditingController(text: m.text);
+    final result = await showNiceFormDialog(
+      context: context,
+      title: 'Edit Message',
+      headerIcon: Icons.edit_outlined,
+      confirmLabel: 'Save',
+      fieldsBuilder: (ctx, setState) => [niceDialogField(textController, 'Message', autofocus: true, maxLines: 4)],
+    );
+    if (result == true) {
+      await controller.editMessage(m.id, textController.text);
+    }
+  }
+
+  Future<void> _deleteMessage(TripMessage m) async {
+    final confirmed = await showNiceConfirmDialog(
+      context: context,
+      title: 'Delete Message',
+      message: 'This message will be removed for everyone in the group.',
+      confirmLabel: 'Delete',
+      icon: Icons.delete_forever,
+      destructive: true,
+    );
+    if (!confirmed) return;
+    await controller.deleteMessage(m.id);
   }
 
   Widget _attachmentOption(IconData icon, String label, {VoidCallback? onTap}) {

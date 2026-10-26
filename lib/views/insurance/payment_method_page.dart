@@ -22,7 +22,20 @@ class PaymentMethodPage extends StatefulWidget {
   // tab immediately reflects a real bought plan instead of staying stuck
   // on "no insurance yet".
   final String? tripId;
-  const PaymentMethodPage({super.key, required this.plan, required this.travellerCount, this.tripId});
+  // The real travel period captured on TravellerDetailsPage — required so
+  // InsuranceRepository.recordPurchase can store it, which is what later
+  // lets a refund request be checked against the real trip dates instead
+  // of trusting whatever the rider claims at refund time.
+  final DateTime travelStart;
+  final DateTime travelEnd;
+  const PaymentMethodPage({
+    super.key,
+    required this.plan,
+    required this.travellerCount,
+    this.tripId,
+    required this.travelStart,
+    required this.travelEnd,
+  });
 
   @override
   State<PaymentMethodPage> createState() => _PaymentMethodPageState();
@@ -168,15 +181,6 @@ class _PaymentMethodPageState extends State<PaymentMethodPage> {
 
     try {
       final policyNumber = 'INS-$paymentRef';
-      await BookingRepository.instance.addBooking(
-        uid: uid,
-        type: 'insurance',
-        title: widget.plan.name,
-        subtitle: 'Policy #$policyNumber',
-        trailing: 'RM ${controller.subtotal.toStringAsFixed(2)}',
-        bookingRef: paymentRef,
-        status: 'Confirmed',
-      );
       // A purchase made from inside a trip (widget.tripId set) carries that
       // trip's real destination into the transaction record, so reports
       // like the admin/partner console's "Top Destinations" reflect where
@@ -193,14 +197,29 @@ class _PaymentMethodPageState extends State<PaymentMethodPage> {
       // Also lands in the partner console's Transactions list (see
       // InsuranceRepository.recordPurchase) so a purchase made here is
       // visible on the business side too, not just the rider's own
-      // booking history.
-      await InsuranceRepository.instance.recordPurchase(
+      // booking history. The returned id is what links this booking's
+      // History row (and, inside a trip, the trip's own insurance card)
+      // back to the real transaction for a later Claim/Refund.
+      final transactionId = await InsuranceRepository.instance.recordPurchase(
         plan: widget.plan,
         buyerId: uid,
         customerName: user?.displayName?.trim().isNotEmpty == true ? user!.displayName!.trim() : (user?.email ?? 'Voya user'),
         customerEmail: user?.email ?? '',
         premium: controller.subtotal,
+        travelStart: widget.travelStart,
+        travelEnd: widget.travelEnd,
         destination: purchaseDestination,
+      );
+      await BookingRepository.instance.addBooking(
+        uid: uid,
+        type: 'insurance',
+        title: widget.plan.name,
+        subtitle: 'Policy #$policyNumber',
+        trailing: 'RM ${controller.subtotal.toStringAsFixed(2)}',
+        bookingRef: paymentRef,
+        status: 'Confirmed',
+        coverage: widget.plan.coverage,
+        transactionId: transactionId,
       );
       if (widget.tripId != null && widget.tripId!.isNotEmpty) {
         await TripRepository.instance.setInsurance(
@@ -210,6 +229,7 @@ class _PaymentMethodPageState extends State<PaymentMethodPage> {
             coverage: widget.plan.coverage,
             price: 'RM ${controller.subtotal.toStringAsFixed(2)}',
             policyNumber: policyNumber,
+            transactionId: transactionId,
           ),
           actorUid: uid,
         );

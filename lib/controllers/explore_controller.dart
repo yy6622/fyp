@@ -269,6 +269,13 @@ class ExploreController extends ChangeNotifier {
   StreamSubscription<Map<String, int>>? _attractionAffinitySub;
   StreamSubscription<Map<String, int>>? _restaurantAffinitySub;
 
+  /// Read-only access to the live category-affinity map for the AI-Based
+  /// Attraction Recommendation Algorithm's P(a) factor (see
+  /// RecommendationEngine / ExplorePage._visibleAttractions) — the same
+  /// map [_reorderByAffinity] above already uses for its own simpler,
+  /// single-factor sort.
+  Map<String, int> get attractionAffinity => _attractionAffinity;
+
   /// Re-sorts [items] in place, highest affinity score first — a stable
   /// sort (ties keep their original relative order) so that reordering
   /// doesn't visibly shuffle a list of items the person has no measured

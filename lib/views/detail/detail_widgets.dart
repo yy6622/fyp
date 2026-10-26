@@ -26,7 +26,12 @@ class DetailHeader extends StatelessWidget {
   /// logo (SVG), so flight detail pages pass this instead of [imageUrl].
   /// Takes priority over [imageUrl] when both are somehow set.
   final String? logoUrl;
-  const DetailHeader({super.key, required this.title, this.imageUrl, this.logoUrl});
+  /// False hides the hero area entirely (no image, no fallback icon box)
+  /// instead of degrading to [_fallbackBox] — used by restaurants, which
+  /// have no real per-restaurant photo, so even the placeholder box would
+  /// be image-shaped UI implying a picture that doesn't exist.
+  final bool showHero;
+  const DetailHeader({super.key, required this.title, this.imageUrl, this.logoUrl, this.showHero = true});
 
   @override
   Widget build(BuildContext context) {
@@ -60,7 +65,7 @@ class DetailHeader extends StatelessWidget {
             ],
           ),
         ),
-        _buildHero(),
+        if (showHero) _buildHero(),
       ],
     );
   }
@@ -472,7 +477,7 @@ Future<void> showWriteReviewDialog(
   final profile = await UserRepository.instance.fetchProfile(uid);
   final name = (profile != null && profile.name.isNotEmpty) ? profile.name : 'Traveller';
   final flagged = await onSubmit(authorId: uid, authorName: name, rating: rating, comment: comment);
-  if (flagged) {
+  if (flagged && context.mounted) {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Your review was submitted and is pending moderation review.')),
     );

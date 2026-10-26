@@ -95,8 +95,21 @@ class _ItemizedSplitPageState extends State<ItemizedSplitPage> {
           Row(
             children: [
               Expanded(
-                child: Text('${item.label} — RM ${item.price.toStringAsFixed(2)}',
-                    style: const TextStyle(fontSize: 12.5, color: Colors.black)),
+                child: GestureDetector(
+                  onTap: () => _editItemDialog(index, item),
+                  child: Text('${item.label} — RM ${item.price.toStringAsFixed(2)}',
+                      style: const TextStyle(fontSize: 12.5, color: Colors.black)),
+                ),
+              ),
+              // Mainly for fixing/discarding a misread OCR line (FR56) —
+              // tap the text above to correct it, or this to drop it
+              // entirely, same as any item added by hand.
+              GestureDetector(
+                onTap: () => widget.controller.removeItem(index),
+                child: const Padding(
+                  padding: EdgeInsets.only(left: 8),
+                  child: Icon(Icons.close, size: 16, color: AppColors.textGrey),
+                ),
               ),
             ],
           ),
@@ -120,6 +133,20 @@ class _ItemizedSplitPageState extends State<ItemizedSplitPage> {
     );
   }
 
+  /// The shared label/price validation behind both [_addItemDialog] and
+  /// [_editItemDialog] — returns the first problem found, in plain words,
+  /// or null once both fields are ready to save.
+  String? _itemProblem(String labelText, String priceText) {
+    final priceValue = double.tryParse(priceText);
+    if (labelText.trim().isEmpty) return 'Give the item a name';
+    if (priceValue == null || !RegExp(r'^\d+(\.\d{1,2})?$').hasMatch(priceText)) {
+      return 'Price: numbers only, up to 2 decimal places';
+    }
+    if (priceValue <= 0) return 'Price must be more than RM 0';
+    if (priceValue > 1000000) return 'Price can\'t be more than RM 1,000,000';
+    return null;
+  }
+
   Future<void> _addItemDialog() async {
     final label = TextEditingController();
     final price = TextEditingController();
@@ -133,23 +160,38 @@ class _ItemizedSplitPageState extends State<ItemizedSplitPage> {
       ],
     );
     if (result != true) return;
-    final p = price.text.trim();
-    final priceValue = double.tryParse(p);
-    // say what is wrong instead of silently dropping the item
-    final problem = label.text.trim().isEmpty
-        ? 'Give the item a name'
-        : priceValue == null || !RegExp(r'^\d+(\.\d{1,2})?$').hasMatch(p)
-            ? 'Price: numbers only, up to 2 decimal places'
-            : priceValue <= 0
-                ? 'Price must be more than RM 0'
-                : priceValue > 1000000
-                    ? 'Price can\'t be more than RM 1,000,000'
-                    : null;
+    final problem = _itemProblem(label.text, price.text.trim());
     if (problem != null) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(problem)));
       return;
     }
-    widget.controller.addItem(label.text.trim(), priceValue!);
+    widget.controller.addItem(label.text.trim(), double.parse(price.text.trim()));
+  }
+
+  /// Corrects an existing line in place — mainly for fixing an OCR
+  /// misread (FR56: a wrong price, or a label that picked up stray
+  /// characters) without having to delete it and re-add it from scratch,
+  /// which would also lose any assignees already picked for it.
+  Future<void> _editItemDialog(int index, ReceiptItem item) async {
+    final label = TextEditingController(text: item.label);
+    final price = TextEditingController(text: item.price.toStringAsFixed(2));
+    final result = await showNiceFormDialog(
+      context: context,
+      title: 'Edit Item',
+      headerIcon: Icons.edit_outlined,
+      confirmLabel: 'Save',
+      fieldsBuilder: (ctx, setState) => [
+        niceDialogField(label, 'Item', icon: Icons.label_outline, autofocus: true),
+        niceDialogField(price, 'Price (RM)', icon: Icons.payments_outlined, keyboardType: const TextInputType.numberWithOptions(decimal: true)),
+      ],
+    );
+    if (result != true) return;
+    final problem = _itemProblem(label.text, price.text.trim());
+    if (problem != null) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(problem)));
+      return;
+    }
+    widget.controller.editItem(index, label.text.trim(), double.parse(price.text.trim()));
   }
 
   void _openFriendPicker(int index, ReceiptItem item) {

@@ -101,6 +101,7 @@ Widget niceDialogField(
   bool autofocus = false,
   int maxLines = 1,
   bool readOnly = false,
+  bool obscureText = false,
   VoidCallback? onTap,
 }) {
   return Padding(
@@ -111,6 +112,7 @@ Widget niceDialogField(
       keyboardType: keyboardType,
       maxLines: maxLines,
       readOnly: readOnly,
+      obscureText: obscureText,
       onTap: onTap,
       style: const TextStyle(fontSize: 13.5, color: AppColors.navy, fontWeight: FontWeight.w500),
       decoration: InputDecoration(

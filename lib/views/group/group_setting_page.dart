@@ -46,7 +46,6 @@ class _GroupSettingPageState extends State<GroupSettingPage> {
             _navRow('Travel Preferences', '', onTap: () => Navigator.of(context)
                 .push(MaterialPageRoute(builder: (_) => TravelPreferencesPage(tripId: widget.tripId)))),
             _navRow('Notification', controller.notificationOption, onTap: () => _pickNotificationOption()),
-            _switchRow('Mute Chat', controller.muteChat, controller.setMuteChat),
             _switchRow('Pin Chat', controller.pinChat, controller.setPinChat),
             _switchRow(
               'Real-Time Location',
@@ -67,6 +66,25 @@ class _GroupSettingPageState extends State<GroupSettingPage> {
                 child: const Text('Leave Group', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
               ),
             ),
+            // FR12 — only the owner can delete the whole group; everyone
+            // else just has Leave Group above. Deleting removes it for
+            // every member at once, so it needs its own, stronger warning
+            // rather than reusing Leave Group's confirm dialog.
+            if (controller.isOwner) ...[
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.redAccent,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  ),
+                  onPressed: () => _confirmDeleteGroup(context),
+                  child: const Text('Delete Group', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                ),
+              ),
+            ],
           ],
         ),
       ),
@@ -137,6 +155,36 @@ class _GroupSettingPageState extends State<GroupSettingPage> {
     Navigator.of(context).popUntil((route) => route.isFirst);
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('You have left the group')),
+    );
+  }
+
+  /// FR12 — irreversible for every member, not just the owner, so this
+  /// gets a stronger message than Leave Group rather than the same dialog
+  /// with a different verb.
+  Future<void> _confirmDeleteGroup(BuildContext context) async {
+    final confirmed = await showNiceConfirmDialog(
+      context: context,
+      title: 'Delete Group',
+      message:
+          'This permanently deletes the group for everyone — its plan, chat and expenses. This cannot be undone.',
+      confirmLabel: 'Delete',
+      icon: Icons.delete_forever,
+      destructive: true,
+    );
+    if (!confirmed) return;
+    try {
+      await controller.deleteGroup();
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not delete the group: $e')),
+      );
+      return;
+    }
+    if (!context.mounted) return;
+    Navigator.of(context).popUntil((route) => route.isFirst);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('The group has been deleted')),
     );
   }
 

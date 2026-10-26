@@ -39,6 +39,8 @@ const SAME_AREA_GAP = 15;
 const OTHER_AREA_GAP = 30;
 const MAX_SIGHTS = 3;           // a day with more sights than this is split even if they share a district
 
+const { estimateTravelMinutes } = require("./maps_service");
+
 const has = (text, words) => words.some((w) => text.includes(w));
 const lower = (s) => String(s || "").toLowerCase();
 
@@ -138,6 +140,154 @@ function profile(item, known) {
   return p;
 }
 
+// ---------------------------------------------------------------------
+// Utility formula (FYP documentation's Optimised Itinerary Generation
+// Algorithm): utility = recommendationScore - travelTimePenalty -
+// waitingTimePenalty - costPenalty. Every term is normalised to
+// roughly [0, 1] so the subtraction means something regardless of the
+// raw rating/minutes/price scale it came from.
+//
+// recommendationScore and costPenalty are a property of the PLACE
+// itself, not of the order it's visited in — so between two orderings
+// of the very same set of places, both terms add up to the same total
+// either way and cancel out of the comparison. Only travelTimePenalty
+// and waitingTimePenalty, which genuinely depend on sequence, actually
+// decide which ordering the two-opt pass below prefers. That's the
+// correct, intended behaviour of a utility-based objective (constant
+// terms don't change an argmax), not a shortcut around the formula —
+// and the moment a factor varies by position (a time-of-day price
+// change, say), the formula is already there to react to it.
+// ---------------------------------------------------------------------
+function recommendationScoreOf(inf) {
+  const r = inf.place && inf.place.rating != null ? parseFloat(inf.place.rating) : NaN;
+  if (!Number.isFinite(r)) return 0.5; // unrated / unknown place - neutral, not punished
+  return Math.max(0, Math.min(1, r / 5));
+}
+function costPenaltyOf(inf) {
+  const price = inf.place && inf.place.price != null ? String(inf.place.price) : "";
+  if (!price || /free/i.test(price)) return 0;
+  const n = parseFloat(price.replace(/[^0-9.]/g, ""));
+  if (!Number.isFinite(n)) return 0.2; // priced but unparseable - a small default, not free
+  return Math.max(0, Math.min(1, n / 200));
+}
+function travelTimePenaltyOf(minutes) {
+  if (minutes == null) return 0.3; // transition this run couldn't estimate at all
+  return Math.max(0, Math.min(1, minutes / 60));
+}
+function waitingTimePenaltyOf(minutes) {
+  return Math.max(0, Math.min(1, Math.max(0, minutes) / 120));
+}
+
+/** The {lat, lng, district} point for a block (see toBlocks below) — the first member that
+ * actually has coordinates, falling back to the block's own group name as a district. */
+function pointOf(block, info) {
+  for (const it of block) {
+    const inf = info.get(it.id);
+    if (inf.place && Number.isFinite(inf.place.lat) && Number.isFinite(inf.place.lng)) {
+      return { lat: inf.place.lat, lng: inf.place.lng, district: inf.group || "" };
+    }
+  }
+  return { district: info.get(block[0].id).group || "" };
+}
+
+/** Splits `ordered` into blocks: a maximal run of consecutive items sharing one non-empty,
+ * non-time-bound, non-full-day group (the grouping loop above already keeps a group's items
+ * consecutive), or a lone item otherwise (fixed-feeling anchors: meals, sunrise/sunset, a
+ * full-day place, or anything ungrouped). */
+function toBlocks(ordered, info) {
+  const blocks = [];
+  for (const it of ordered) {
+    const inf = info.get(it.id);
+    const last = blocks[blocks.length - 1];
+    const movable = !inf.timeBound && !inf.fullDay;
+    const lastMovable = last && !info.get(last[0].id).timeBound && !info.get(last[0].id).fullDay;
+    if (last && lastMovable && movable && inf.group && info.get(last[0].id).group === inf.group) last.push(it);
+    else blocks.push([it]);
+  }
+  return blocks;
+}
+
+const isAnchorBlock = (block, info) => {
+  const inf = info.get(block[0].id);
+  return inf.timeBound || inf.fullDay;
+};
+
+/**
+ * Two-opt local-improvement pass: reorders the movable blocks between
+ * each pair of anchors (a meal/sunrise/sunset slot, or a full-day
+ * place — none of which this ever moves) to maximise the utility
+ * formula above. In practice this means minimising total estimated
+ * travel time between consecutive blocks (see that formula's own doc
+ * comment for why recommendationScore/costPenalty don't change the
+ * winner). Runs each maximal anchor-to-anchor run of movable blocks
+ * independently, bounded (200 passes) so a busy day can never make
+ * this expensive.
+ */
+function twoOptReorder(ordered, info) {
+  const blocks = toBlocks(ordered, info);
+  if (blocks.length < 3) return ordered;
+
+  const runs = [];
+  let current = [];
+  for (const b of blocks) {
+    if (isAnchorBlock(b, info)) {
+      if (current.length) runs.push(current);
+      current = [];
+    } else {
+      current.push(b);
+    }
+  }
+  if (current.length) runs.push(current);
+
+  const totalUtility = (seq) => {
+    let sum = 0;
+    for (let i = 0; i < seq.length; i++) {
+      const inf0 = info.get(seq[i][0].id);
+      sum += recommendationScoreOf(inf0) - costPenaltyOf(inf0);
+      if (i > 0) {
+        const minutes = estimateTravelMinutes(pointOf(seq[i - 1], info), pointOf(seq[i], info));
+        sum -= travelTimePenaltyOf(minutes);
+      }
+    }
+    return sum;
+  };
+
+  const optimisedRuns = runs.map((run) => {
+    if (run.length < 3) return run;
+    let order = run.slice();
+    let best = totalUtility(order);
+    let changed = true;
+    let guard = 0;
+    while (changed && guard < 200) {
+      changed = false;
+      guard++;
+      for (let i = 0; i < order.length - 1; i++) {
+        for (let j = i + 1; j < order.length; j++) {
+          const next = order.slice(0, i).concat(order.slice(i, j + 1).reverse(), order.slice(j + 1));
+          const u = totalUtility(next);
+          if (u > best + 1e-9) {
+            order = next;
+            best = u;
+            changed = true;
+          }
+        }
+      }
+    }
+    return order;
+  });
+
+  // Re-stitch: walk `blocks` again, pulling each run's (possibly
+  // reordered) blocks back out left to right; anchors are untouched.
+  const flatOptimised = optimisedRuns.flat();
+  let ri = 0;
+  const final = [];
+  for (const b of blocks) {
+    if (isAnchorBlock(b, info)) final.push(b);
+    else { final.push(flatOptimised[ri]); ri++; }
+  }
+  return final.flat();
+}
+
 /**
  * Lay out one day's items. Returns Map(id -> minute).
  * prof: Map(id -> profile)   busy: extra [start, end] minutes that must stay free (booked check-in ...)
@@ -168,6 +318,12 @@ function scheduleDay(items, { start = DAY_START, end = DAY_END, prof = null, bus
     }
   }
 
+  // Optimised Itinerary Generation Algorithm (FYP documentation) — the
+  // two-opt pass can only improve on the district-pulling order above,
+  // never move an anchor, so it's always safe to apply here before the
+  // time-placement loop below consumes `ordered`.
+  const travelOrdered = twoOptReorder(ordered, info);
+
   const busy = [...fixed.map((it) => [toMin(it.time), toMin(it.time) + (DURATION[info.get(it.id).kind] || 60)]), ...extraBusy];
   const clashes = (s, e) => busy.some(([a, b]) => s < b && a < e);
   const out = new Map(fixed.map((it) => [it.id, toMin(it.time)]));
@@ -194,7 +350,7 @@ function scheduleDay(items, { start = DAY_START, end = DAY_END, prof = null, bus
       lastGroup = inf.group || null;
     }
   };
-  const queue = [...ordered];
+  const queue = [...travelOrdered];
   while (queue.length) {
     const it = queue.shift();
     const inf = info.get(it.id);
@@ -220,12 +376,9 @@ function mealName(pref) {
  * plan, { mode, onlyDay, window, destination, saved, catalog, flights, hotelStays, days }
  * days: [{day, date}] (only needed for typed-in flights / hotel stays)
  */
-function kmBetween(a, b) {
-  const r = Math.PI / 180;
-  const x = (b.lng - a.lng) * r * Math.cos(((a.lat + b.lat) / 2) * r);
-  const y = (b.lat - a.lat) * r;
-  return Math.sqrt(x * x + y * y) * 6371;
-}
+// kmBetween now lives in maps_service.js (the "Maps service" abstraction) — re-exported
+// locally under its old name so every existing call site below needed no further changes.
+const { kmBetween } = require("./maps_service");
 
 /**
  * groupByArea: the group's choice in the app (Optimise sheet). true = keep places of one area on one day.

@@ -175,7 +175,7 @@ class GroupInfoPage extends StatelessWidget {
                         GroupMenuEntry(Icons.settings_outlined, 'Group Setting',
                             () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => GroupSettingPage(tripId: tripId)))),
                         GroupMenuEntry(Icons.ios_share_outlined, 'Export Itinerary',
-                            () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ExportItineraryPage()))),
+                            () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => ExportItineraryPage(tripId: trip.id)))),
                       ]),
                     ],
                   ),

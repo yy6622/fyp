@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../repositories/trip_repository.dart';
 import '../services/auth_service.dart';
+import '../services/receipt_ocr_service.dart';
 import '../services/receipt_service.dart';
 
 /// Controller for [ExpensesTab] (Groups / Personal toggle). Both views are
@@ -374,9 +375,76 @@ class AddExpenseController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Drops a wrongly-read or unwanted line — most useful right after
+  /// [scanReceipt] prefills [items] from a photo, since OCR occasionally
+  /// misreads a line (FR56) and there was previously no way to undo a
+  /// single item short of starting the whole expense over.
+  void removeItem(int index) {
+    items.removeAt(index);
+    notifyListeners();
+  }
+
+  /// Fixes a line's label/price in place — again mainly for correcting
+  /// an OCR misread (FR56) without losing whatever assignees were
+  /// already picked for it.
+  void editItem(int index, String label, double price) {
+    items[index].label = label;
+    items[index].price = price;
+    notifyListeners();
+  }
+
   void setItemAssignees(int index, Set<String> uids) {
     items[index].assigneeUids = uids;
     notifyListeners();
+  }
+
+  bool _scanningReceipt = false;
+  bool get scanningReceipt => _scanningReceipt;
+
+  /// FR56 — runs on-device OCR (see [ReceiptOcrService]) over whatever
+  /// photo [receiptImage] currently holds and prefills the form from
+  /// whatever it manages to read:
+  ///  - items found -> replaces [items] and switches to itemized split
+  ///    (each item still needs an assignee on the Itemized Split page —
+  ///    this never guesses who to split a line with).
+  ///  - no items but a total was found -> fills [amountController] and
+  ///    leaves the equal-split amount field for the person to confirm.
+  ///  - neither -> nothing changes; the person just fills the form by
+  ///    hand, exactly like before this feature existed.
+  /// Returns a short message describing what happened, for the caller to
+  /// show as a SnackBar; never throws.
+  Future<String> scanReceipt() async {
+    final photo = receiptImage;
+    if (photo == null) return '';
+    _scanningReceipt = true;
+    notifyListeners();
+    try {
+      final result = await ReceiptOcrService.instance.scan(photo);
+      if (result.items.isNotEmpty) {
+        items
+          ..clear()
+          ..addAll(result.items.map((i) => ReceiptItem(label: i.label, price: i.price)));
+        splitEqually = false;
+        return 'Found ${items.length} item${items.length == 1 ? '' : 's'} on your receipt — '
+            'review them and pick who\'s splitting each one.';
+      }
+      if (result.total != null) {
+        amountController.text = result.total!.toStringAsFixed(2);
+        return 'Found a total of RM ${result.total!.toStringAsFixed(2)} — review it and choose who to split with.';
+      }
+      // A thrown exception (model/Play-Services unavailable, corrupt
+      // image, ...) looked identical to "ran fine, found nothing" before
+      // ReceiptOcrResult.error existed — surfacing it here instead of
+      // the generic message is what actually lets a real failure get
+      // diagnosed instead of just looking like a blank receipt.
+      if (result.error != null) {
+        return "Couldn't scan this receipt (${result.error}) — please enter the details manually.";
+      }
+      return "Couldn't read this receipt automatically — please enter the details manually.";
+    } finally {
+      _scanningReceipt = false;
+      notifyListeners();
+    }
   }
 
   double get amount {
@@ -384,22 +452,22 @@ class AddExpenseController extends ChangeNotifier {
     return items.fold(0.0, (s, i) => s + i.price);
   }
 
+  /// Runs the Shared-Expense Distribution Algorithm (see
+  /// trip_repository.dart's splitExpenseEqual/splitExpenseItemized for the
+  /// cents-safe floor + remainder rule this uses): EQUAL when
+  /// [splitEqually], otherwise this app's itemized form of CUSTOM (each
+  /// receipt line item split among whoever it's assigned to, then summed
+  /// per member). Returns {} if the inputs aren't ready yet (nothing
+  /// selected, or an itemized item with no assignee) rather than throwing
+  /// — [submit] treats an empty map as "not ready", same as before.
   Map<String, double> _computeShares() {
     if (!splitEqually) {
-      final map = <String, double>{};
-      for (final item in items) {
-        if (item.assigneeUids.isEmpty) continue;
-        final per = item.price / item.assigneeUids.length;
-        for (final uid in item.assigneeUids) {
-          map[uid] = (map[uid] ?? 0) + per;
-        }
-      }
-      return map;
+      if (items.isEmpty || items.any((i) => i.assigneeUids.isEmpty)) return {};
+      return splitExpenseItemized([for (final i in items) (price: i.price, assigneeUids: i.assigneeUids)]);
     }
     final uids = selectedUids.isEmpty ? trip.memberIds.toSet() : selectedUids;
-    if (uids.isEmpty) return {};
-    final per = amount / uids.length;
-    return {for (final u in uids) u: per};
+    if (uids.isEmpty || amount <= 0) return {};
+    return splitExpenseEqual(amount, uids.toList());
   }
 
   Future<bool> submit() async {
@@ -444,6 +512,10 @@ class AddExpenseController extends ChangeNotifier {
         paidByName: myName,
         participants: participants,
         receiptImageUrl: receiptImageUrl,
+        // FR60 — the Details form's "Reminder" switch (default on):
+        // immediately nudges everyone else in [participants] to pay
+        // their share, instead of just sitting there as a label.
+        sendReminder: reminder,
       );
       return true;
     } finally {

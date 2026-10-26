@@ -16,9 +16,17 @@ import '../../theme.dart';
 ///
 /// The run itself lives in [ItineraryAiService], so this sheet can be
 /// minimised while it works — [AiItineraryStatusBar] brings it back.
-Future<void> showAiItinerarySheet(BuildContext context, GroupTripController controller) {
+Future<void> showAiItinerarySheet(BuildContext context, GroupTripController controller) async {
   final job = ItineraryAiService.instance.jobFor(controller.tripId);
-  if (job.value.status == AiItineraryStatus.idle) ItineraryAiService.instance.start(controller.tripId);
+  // AI-Summarised Itinerary Algorithm (FYP documentation), step 1: consent gate. Only the very
+  // first read of this group's chat for this job needs it - reopening the sheet for a run that's
+  // already going, or already has a result, is not a new read, so it skips straight to showing it.
+  if (job.value.status == AiItineraryStatus.idle) {
+    final consented = await _confirmAiSummariseConsent(context);
+    if (!consented) return;
+    ItineraryAiService.instance.start(controller.tripId);
+  }
+  if (!context.mounted) return;
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
@@ -26,6 +34,28 @@ Future<void> showAiItinerarySheet(BuildContext context, GroupTripController cont
     shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
     builder: (_) => _AiItinerarySheet(controller: controller, pageContext: context),
   );
+}
+
+/// Step 1 of the documented algorithm, in person-facing terms: explains what AI Summarise is
+/// about to read before it reads it, and only proceeds on an explicit yes. The Cloud Function
+/// (functions/itinerary.js) refuses the request outright without this - this dialog is what
+/// actually gets that consent, not just a label on it.
+Future<bool> _confirmAiSummariseConsent(BuildContext context) async {
+  final result = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('Let AI Summarise read this chat?'),
+      content: const Text(
+        "AI Summarise will read this group's chat messages, saved places and current plan to "
+        'suggest what to add, move or remove. Nothing changes until you review and apply it.',
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+        TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Continue')),
+      ],
+    ),
+  );
+  return result == true;
 }
 
 /// A thin bar for the top of the group page: shows while this trip's AI run
@@ -380,7 +410,6 @@ class _AiItinerarySheetState extends State<_AiItinerarySheet> {
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 6, 16, 16),
       children: [
-        _overview(result),
         if (_applyError != null) ...[
           const SizedBox(height: 10),
           Text(_applyError!, style: const TextStyle(fontSize: 12, color: Colors.redAccent)),
@@ -452,45 +481,6 @@ class _AiItinerarySheetState extends State<_AiItinerarySheet> {
           ),
         );
       },
-    );
-  }
-
-  /// One line of numbers: what this run found, and where it came from.
-  Widget _overview(AiItineraryResult result) {
-    final saved = result.add.where((a) => a.fromSaved).length;
-    final stops = result.add.where((a) => !a.alreadyInPlan).length;
-    return Container(
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-      decoration: BoxDecoration(color: AppColors.chipGrey, borderRadius: BorderRadius.circular(14)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: [
-              if (stops > 0) _chip('$stops new ${stops == 1 ? 'stop' : 'stops'}', Icons.add_location_alt_outlined, AppColors.navy),
-              if (saved > 0) _chip('$saved from saved list', Icons.bookmark_outline, _green),
-              if (result.update.isNotEmpty)
-                _chip('${result.update.length} ${result.update.length == 1 ? 'change' : 'changes'}', Icons.swap_horiz, AppColors.navy),
-              if (result.remove.isNotEmpty) _chip('${result.remove.length} to remove', Icons.remove_circle_outline, AppColors.textGrey),
-              // flights and hotel: shown so it is clear the plan was built around them
-              result.flightsBooked
-                  ? _chip('Around your flights', Icons.flight_outlined, _green)
-                  : _chip('No flight booked', Icons.flight_outlined, AppColors.orange),
-              result.hotelsBooked
-                  ? _chip('Around your hotel', Icons.hotel_outlined, _green)
-                  : _chip('No hotel booked', Icons.hotel_outlined, AppColors.orange),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'From ${result.messageCount} chat messages, ${result.savedCount} saved '
-            '${result.savedCount == 1 ? 'place' : 'places'}, your flights and hotel, and your current plan.',
-            style: const TextStyle(fontSize: 11.5, color: AppColors.textGrey),
-          ),
-        ],
-      ),
     );
   }
 

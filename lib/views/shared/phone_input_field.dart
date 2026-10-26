@@ -70,23 +70,40 @@ class _PhoneInputFieldState extends State<PhoneInputField> {
 
   Future<void> _pickCountry() async {
     final picked = await pickCountryDialCode(context, selected: _selected);
-    if (picked == null) return;
+    if (picked == null || !mounted) return;
     setState(() => _selected = picked);
     _emit();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFFECECEC)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          InkWell(
+    // IntrinsicHeight wraps the Row so CrossAxisAlignment.stretch below
+    // has a real, well-defined height to stretch its children to. Without
+    // it, this Row sits inside a Container with no explicit height,
+    // itself inside a plain Column (mainAxisSize.max) that in turn sits
+    // inside a ListView — i.e. an unbounded-height ancestor chain. That
+    // combination (loose/unbounded height feeding into a stretched Row)
+    // reproducibly rendered this entire field, and everything after it
+    // in the same Column, as fully blank on at least one real test
+    // device — no exception, no red screen, nothing in the debug
+    // console, just nothing painted. Confirmed by A/B testing: removing
+    // this widget from HotelGuestDetailsPage made the rest of that
+    // page's content (which was *also* blank) reappear immediately.
+    // IntrinsicHeight forces a standard two-pass layout (measure
+    // children's natural height first, then give the Row that height as
+    // a hard constraint) instead of leaving the Row to resolve stretch
+    // against an ambiguous/unbounded height on its own.
+    return IntrinsicHeight(
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: const Color(0xFFECECEC)),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            InkWell(
             borderRadius: const BorderRadius.horizontal(left: Radius.circular(10)),
             onTap: _pickCountry,
             child: Padding(
@@ -103,26 +120,27 @@ class _PhoneInputFieldState extends State<PhoneInputField> {
               ),
             ),
           ),
-          Container(width: 1, margin: const EdgeInsets.symmetric(vertical: 8), color: const Color(0xFFECECEC)),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 10),
-              child: TextField(
-                controller: _numberCtrl,
-                autofocus: widget.autofocus,
-                keyboardType: TextInputType.phone,
-                onChanged: (_) => _emit(),
-                decoration: InputDecoration(
-                  labelText: widget.label,
-                  labelStyle: const TextStyle(fontSize: 11.5, color: AppColors.textGrey),
-                  border: InputBorder.none,
-                  isDense: true,
+            Container(width: 1, margin: const EdgeInsets.symmetric(vertical: 8), color: const Color(0xFFECECEC)),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                child: TextField(
+                  controller: _numberCtrl,
+                  autofocus: widget.autofocus,
+                  keyboardType: TextInputType.phone,
+                  onChanged: (_) => _emit(),
+                  decoration: InputDecoration(
+                    labelText: widget.label,
+                    labelStyle: const TextStyle(fontSize: 11.5, color: AppColors.textGrey),
+                    border: InputBorder.none,
+                    isDense: true,
+                  ),
+                  style: const TextStyle(fontSize: 13.5, color: Colors.black),
                 ),
-                style: const TextStyle(fontSize: 13.5, color: Colors.black),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

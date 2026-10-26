@@ -78,6 +78,30 @@ function placeFits(place, need, city = "") {
   return need.fits.test(text);
 }
 
+// Dietary preference matching (Group Setting > Travel Preferences > Food Preference) - same
+// best-effort "a Halal place probably says so somewhere in its tags/name" approach as
+// LOCAL_CUISINE above. This is only ever a soft tie-break among SEVERAL places that already
+// satisfy placeFits() for a food need (findNeeds) - never a hard filter, so a trip whose
+// preference doesn't match any candidate still gets whatever fits the need, same as before this
+// existed. "No restrictions" (or anything with no pattern below) never prefers one place over
+// another.
+const DIETARY = {
+  Halal: /halal|muslim.?friendly|清真/i,
+  Vegetarian: /vegetarian|素食|veg\b/i,
+  Vegan: /\bvegan\b|全素/i,
+  Kosher: /\bkosher\b/i,
+  "Gluten-free": /gluten.?free|无麸质/i,
+};
+
+/** Does [place] look like it fits [foodPreference] ("Halal", "Vegetarian", ...), per its name/
+ * tags/aliases? false for "No restrictions", "" or anything with no pattern above. */
+function matchesFoodPreference(place, foodPreference) {
+  const re = DIETARY[String(foodPreference || "").trim()];
+  if (!re || !place) return false;
+  const text = [place.name, ...(place.tags || []), ...(place.aliases || [])].join(" ");
+  return re.test(text);
+}
+
 /** The time block for a wish nobody has picked a place for: placed like a place of that kind. */
 function genericPlace(need) {
   const food = need.food === true || need.icon === "food";
@@ -90,4 +114,4 @@ function genericPlace(need) {
   };
 }
 
-module.exports = { NEEDS, findNeeds, placeFits, genericPlace };
+module.exports = { NEEDS, findNeeds, placeFits, genericPlace, matchesFoodPreference };

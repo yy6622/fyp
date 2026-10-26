@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
@@ -64,11 +66,13 @@ class _AddExpenseChoicePageState extends State<AddExpenseChoicePage> {
     );
   }
 
-  /// Real photo capture/pick — not decorative. Picks (or takes) a photo,
-  /// stashes it on the shared [AddExpenseController] so the Details form
-  /// can preview it, then opens that same form (no OCR, so every field
-  /// still needs the person's own input; the photo is just kept as a real
-  /// reference/receipt of record, uploaded to Storage on submit).
+  /// Real photo capture/pick. Picks (or takes) a photo, stashes it on the
+  /// shared [AddExpenseController] so the Details form can preview it,
+  /// then runs on-device OCR over it (FR56 — see [AddExpenseController.
+  /// scanReceipt]) before opening that form, so items/amount may already
+  /// be filled in by the time the person sees it. OCR is a best effort,
+  /// not a guarantee: the photo is always kept as the real reference/
+  /// receipt of record either way, uploaded to Storage on submit.
   Future<void> _startUploadReceipt(BuildContext context, AddExpenseController controller) async {
     final source = await showModalBottomSheet<ImageSource>(
       context: context,
@@ -96,6 +100,30 @@ class _AddExpenseChoicePageState extends State<AddExpenseChoicePage> {
     final file = await ReceiptService.instance.pick(source);
     if (file == null || !context.mounted) return;
     controller.setReceiptImage(file);
+
+    // FR56 — scan before opening the form, so Details already shows
+    // whatever OCR found instead of the person watching fields fill in
+    // after the fact. A dismiss-free loading dialog: scanReceipt never
+    // throws and is a single bounded on-device call, so there's nothing
+    // useful a "Cancel" button here would do mid-scan.
+    unawaited(showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(
+        child: SizedBox(
+          width: 64,
+          height: 64,
+          child: Card(child: Padding(padding: EdgeInsets.all(16), child: CircularProgressIndicator())),
+        ),
+      ),
+    ));
+    final message = await controller.scanReceipt();
+    if (!context.mounted) return;
+    Navigator.of(context, rootNavigator: true).pop(); // close the loading dialog
+
+    if (message.isNotEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    }
     Navigator.of(context).push(MaterialPageRoute(builder: (_) => ExpenseDetailsFormPage(controller: controller)));
   }
 

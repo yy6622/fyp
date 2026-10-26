@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../controllers/insurance_controller.dart';
 import '../../models/insurance_models.dart';
+import '../../repositories/trip_repository.dart';
+import '../../services/auth_service.dart';
 import '../../theme.dart';
 import '../shared/nice_pickers.dart';
 import '../shared/phone_input_field.dart';
@@ -28,6 +30,11 @@ class TravellerDetailsPage extends StatefulWidget {
 class _TravellerDetailsPageState extends State<TravellerDetailsPage> {
   final TravellerDetailsController controller = TravellerDetailsController();
 
+  // When bought from inside a trip, the travel period is this trip's own
+  // real dates (Trip.startDate/endDate) rather than something re-typed —
+  // fetched once here and fed into the controller once it arrives.
+  bool _loadingTrip = false;
+
   // Real TextEditingControllers for the four plain-text fields per
   // traveller (Full Name, Passport Number, Email, Phone) — these used to
   // be bare TextFields with no controller at all (see
@@ -51,6 +58,34 @@ class _TravellerDetailsPageState extends State<TravellerDetailsPage> {
     _passportCtrls.add(TextEditingController());
     _emailCtrls.add(TextEditingController());
     _phoneCtrls.add(TextEditingController());
+    if (widget.tripId != null && widget.tripId!.isNotEmpty) {
+      _loadTripDates();
+    }
+  }
+
+  Future<void> _loadTripDates() async {
+    final uid = AuthService.instance.currentUser?.uid;
+    if (uid == null) return;
+    setState(() => _loadingTrip = true);
+    // A network blip, a permission hiccup, or the trip being deleted
+    // mid-flow could make this throw — without this catch that would
+    // leave _loadingTrip stuck true forever (an infinite spinner on the
+    // Travel Period card, blocking Continue with no way out). Falling
+    // back to null here degrades to the same "trip has no dates yet"
+    // path _travelPeriodField already handles: an editable date picker.
+    Trip? trip;
+    try {
+      trip = await TripRepository.instance.getTrip(widget.tripId!, uid);
+    } catch (_) {
+      trip = null;
+    }
+    if (!mounted) return;
+    setState(() {
+      _loadingTrip = false;
+      if (trip?.startDate != null && trip?.endDate != null) {
+        controller.setTravelDates(trip!.startDate!, trip.endDate!);
+      }
+    });
   }
 
   @override
@@ -97,7 +132,13 @@ class _TravellerDetailsPageState extends State<TravellerDetailsPage> {
     }
     Navigator.of(context).push(
       MaterialPageRoute(
-          builder: (_) => PaymentMethodPage(plan: widget.plan, travellerCount: controller.travellerCount, tripId: widget.tripId)),
+          builder: (_) => PaymentMethodPage(
+                plan: widget.plan,
+                travellerCount: controller.travellerCount,
+                tripId: widget.tripId,
+                travelStart: controller.travelStart!,
+                travelEnd: controller.travelEnd!,
+              )),
     );
   }
 
@@ -116,6 +157,30 @@ class _TravellerDetailsPageState extends State<TravellerDetailsPage> {
               child: ListView(
                 padding: const EdgeInsets.all(20),
                 children: [
+                  Container(
+                    padding: const EdgeInsets.all(18),
+                    decoration: BoxDecoration(color: AppColors.chipGrey, borderRadius: BorderRadius.circular(16)),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Travel Period', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.navy)),
+                        const SizedBox(height: 4),
+                        const Text(
+                          'A refund can only be requested before this period begins.',
+                          style: TextStyle(fontSize: 11.5, color: AppColors.textGrey),
+                        ),
+                        const SizedBox(height: 14),
+                        if (_loadingTrip)
+                          const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 10),
+                            child: Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))),
+                          )
+                        else
+                          _travelPeriodField(),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
                   Container(
                     padding: const EdgeInsets.all(18),
                     decoration: BoxDecoration(color: AppColors.chipGrey, borderRadius: BorderRadius.circular(16)),
@@ -292,6 +357,45 @@ class _TravellerDetailsPageState extends State<TravellerDetailsPage> {
       title: 'Date of Birth',
     );
     if (picked != null) controller.setDob(index, picked);
+  }
+
+  /// Travel-period field — a read-only row showing this trip's own real
+  /// dates when bought from inside a trip (nothing to edit: the dates
+  /// belong to the trip itself), or a tappable date-range picker for a
+  /// standalone purchase (or the rare trip with no dates set yet).
+  Widget _travelPeriodField() {
+    final hasDates = controller.travelStart != null && controller.travelEnd != null;
+    final label = hasDates
+        ? '${_formatDate(controller.travelStart!)} - ${_formatDate(controller.travelEnd!)}'
+        : 'Travel Dates';
+    final derivedFromTrip = widget.tripId != null && widget.tripId!.isNotEmpty && hasDates;
+    if (derivedFromTrip) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10)),
+        child: Row(
+          children: [
+            const Icon(Icons.calendar_today_outlined, size: 16, color: AppColors.textGrey),
+            const SizedBox(width: 10),
+            Expanded(child: Text(label, style: const TextStyle(fontSize: 13.5, color: Colors.black))),
+          ],
+        ),
+      );
+    }
+    return _pickerField(label, hasDates ? label : null, onTap: _pickTravelDates);
+  }
+
+  Future<void> _pickTravelDates() async {
+    final now = DateTime.now();
+    final picked = await showVoyaDateRangePicker(
+      context: context,
+      initialStart: controller.travelStart,
+      initialEnd: controller.travelEnd,
+      firstDate: now,
+      lastDate: DateTime(now.year + 3),
+      title: 'Travel Dates',
+    );
+    if (picked != null) controller.setTravelDates(picked.start, picked.end);
   }
 
   Future<void> _pickNationality(int index) async {

@@ -6,6 +6,7 @@ import '../../repositories/trip_repository.dart';
 import '../../services/currency_service.dart';
 import '../../theme.dart';
 import '../shared/nice_dialog.dart';
+import 'saved_item_picker_sheet.dart';
 
 // ---------------------------------------------------------------------
 // Vote tab — lives inside GroupTripPage. Shows every real poll created for
@@ -158,15 +159,46 @@ class _VoteTabState extends State<VoteTab> {
   Widget _addOptionRow(TripVote vote) {
     return Padding(
       padding: const EdgeInsets.only(top: 10),
-      child: OutlinedButton.icon(
-        style: OutlinedButton.styleFrom(
-          minimumSize: const Size.fromHeight(44),
-          side: const BorderSide(color: AppColors.border),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        ),
-        onPressed: () => _promptAddOption(vote),
-        icon: const Icon(Icons.add, color: AppColors.primary, size: 18),
-        label: const Text('Add option', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.w600)),
+      child: Row(
+        children: [
+          Expanded(
+            child: OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size.fromHeight(44),
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                side: const BorderSide(color: AppColors.border),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              onPressed: () => _promptAddOption(vote),
+              icon: const Icon(Icons.add, color: AppColors.primary, size: 16),
+              label: const Text(
+                'Type Option',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.w600, fontSize: 12),
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size.fromHeight(44),
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                side: const BorderSide(color: AppColors.border),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              onPressed: () => _addFromSaved(vote),
+              icon: const Icon(Icons.bookmark_outline, color: AppColors.primary, size: 16),
+              label: const Text(
+                'From Saved',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.w600, fontSize: 12),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -192,6 +224,43 @@ class _VoteTabState extends State<VoteTab> {
     }
   }
 
+  /// Dedupe keys ('<kind>:<id>') for whatever this vote's current options
+  /// already match back to in the trip's saved list — matched the exact
+  /// same way [VoteTab] renders each option's card (hotelFor/
+  /// attractionFor/restaurantFor/flightFor), since an option already on
+  /// the poll is stored as plain label text, not a catalog id, so there's
+  /// no dedupe key of its own to read directly. Lets the picker grey out
+  /// a saved listing that's already an option here, same as Create
+  /// Vote's own "From Saved" button does for its draft list.
+  Set<String> _alreadyAddedKeys(TripVote vote) {
+    final keys = <String>{};
+    for (final o in vote.options) {
+      final hotel = controller.hotelFor(o);
+      if (hotel != null) keys.add('hotel:${hotel.id}');
+      final attraction = controller.attractionFor(o);
+      if (attraction != null) keys.add('attraction:${attraction.id}');
+      final restaurant = controller.restaurantFor(o);
+      if (restaurant != null) keys.add('restaurant:${restaurant.id}');
+      final flight = controller.flightFor(o);
+      if (flight != null) keys.add('flight:${flight.id}');
+    }
+    return keys;
+  }
+
+  /// "From Saved" counterpart to [_promptAddOption] — same picker sheet
+  /// Create Vote uses, just adding straight onto an already-created poll
+  /// via [VoteTabController.addOption] (which only takes a label; an
+  /// existing option is matched back to its real catalog listing by name
+  /// alone, the same way a Create-Vote-time "From Saved" pick already is
+  /// — see hotelFor/attractionFor/restaurantFor/flightFor above).
+  Future<void> _addFromSaved(TripVote vote) async {
+    final picked = await showSavedItemPicker(context, tripId: widget.tripId, alreadyAdded: _alreadyAddedKeys(vote));
+    if (picked == null || picked.isEmpty || !mounted) return;
+    for (final item in picked) {
+      await controller.addOption(vote, item.label);
+    }
+  }
+
   String _deadlineLabel(TripVote vote) {
     final d = vote.deadline!;
     const months = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -199,6 +268,19 @@ class _VoteTabState extends State<VoteTab> {
     final period = d.hour < 12 ? 'AM' : 'PM';
     final when = '${d.day} ${months[d.month]}, $hour12:${d.minute.toString().padLeft(2, '0')} $period';
     return vote.isClosed ? 'Voting closed $when' : 'Closes $when';
+  }
+
+  // Casts a vote inside the Group Voting Algorithm's transaction (see
+  // TripRepository.castVote). Any rejection the transaction raises
+  // (session closed, no longer a member, option removed, or already
+  // voted) comes back as a message string here, which we surface as a
+  // SnackBar instead of silently failing.
+  Future<void> _castVote(TripVote vote, String optionId) async {
+    final error = await controller.castVote(vote, optionId);
+    if (!mounted || error == null) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(error)),
+    );
   }
 
   // ---------------- Option card ----------------
@@ -212,8 +294,13 @@ class _VoteTabState extends State<VoteTab> {
     final restaurant = hotel == null && attraction == null ? controller.restaurantFor(option) : null;
     final flight = hotel == null && attraction == null && restaurant == null ? controller.flightFor(option) : null;
 
+    final canVote = controller.canVote(vote, option);
     return GestureDetector(
-      onTap: vote.isClosed ? null : () => controller.castVote(vote, option.id),
+      // Once a member has voted, the Group Voting Algorithm no longer lets
+      // them withdraw or change it by tapping again — canVote already
+      // reflects that (and whether the poll is closed), so there's nothing
+      // left to disable separately here.
+      onTap: !canVote ? null : () => _castVote(vote, option.id),
       child: Container(
         margin: const EdgeInsets.only(top: 10),
         decoration: BoxDecoration(
@@ -312,8 +399,8 @@ class _VoteTabState extends State<VoteTab> {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _thumb(restaurant.image, Icons.restaurant_outlined),
-        const SizedBox(width: 12),
+        // No thumbnail for restaurants — see explore_page.dart's restaurant
+        // cards for why (no image-shaped UI at all, not even a placeholder).
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,

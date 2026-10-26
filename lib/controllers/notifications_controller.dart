@@ -68,6 +68,24 @@ class NotificationsController extends ChangeNotifier {
 
   Future<void> dismiss(String id) => NotificationsRepository.instance.delete(_uid, id);
 
+  bool _clearingAll = false;
+  bool get clearingAll => _clearingAll;
+
+  /// "Remove All" — returns null on success, or an error message to show.
+  Future<String?> removeAll() async {
+    _clearingAll = true;
+    notifyListeners();
+    try {
+      await NotificationsRepository.instance.deleteAll(_uid);
+      return null;
+    } catch (e) {
+      return 'Could not clear your notifications — please try again.';
+    } finally {
+      _clearingAll = false;
+      notifyListeners();
+    }
+  }
+
   /// Accepts or declines the friend request behind [n], then removes the
   /// notification either way. Returns a short message to show the person.
   Future<String> respondToFriendRequest(AppNotification n, {required bool accept}) async {

@@ -36,6 +36,10 @@ async function loadSavedPlaces(db, tripId, memberIds) {
             categories: (d.get("categories") || []).map(oneLine),
             cuisineTags: (d.get("cuisineTags") || []).map(oneLine),
             recommendedDuration: oneLine(d.get("recommendedDuration")),
+            // Optimised Itinerary Generation Algorithm's utility formula (optimise_engine.js) —
+            // recommendationScore reads this place's own rating, costPenalty its price/priceRange.
+            rating: oneLine(d.get("rating")),
+            price: oneLine(d.get("price") || d.get("priceRange")),
           }))),
       );
     }
@@ -81,7 +85,9 @@ async function loadCatalogPlaces(db, destination) {
         cuisineTags: (d.get("cuisineTags") || []).map(oneLine),
         // the area it is in, for keeping one area on one day (planner/schedule.js)
         district: oneLine(d.get("district")),
-        lat: d.get("lat") ?? (geo(d) && geo(d).latitude), lng: d.get("lng") ?? (geo(d) && geo(d).longitude) }));
+        lat: d.get("lat") ?? (geo(d) && geo(d).latitude), lng: d.get("lng") ?? (geo(d) && geo(d).longitude),
+        // Optimised Itinerary Generation Algorithm's utility formula (optimise_engine.js).
+        rating: oneLine(d.get("rating")), price: oneLine(d.get("price") || d.get("priceRange")) }));
     } catch (err) {
       return [];      // the catalog only adds names; never fail AI Summarise over it
     }
@@ -108,10 +114,57 @@ async function loadCatalogPlaces(db, destination) {
 exports.loadSavedPlaces = loadSavedPlaces;
 exports.loadCatalogPlaces = loadCatalogPlaces;
 
+// AI-Summarised Itinerary Algorithm (FYP documentation) — this function is that algorithm's
+// steps 2-9, run in order every call:
+//   2. retrieve      - the chat, the group's saved places, the app's catalog, booked flights/stays
+//   3. filter        - drop empty/deleted messages, cap how much history is read at all
+//   4. extract       - entities (places, who agreed/objected) come out of itinerary_engine.js's
+//                       own planner/decide.js + planner/places.js, driven by the structured input below
+//   5. build prompt  - assemble the structured input the AI service is asked to work from (a plain
+//                       object, not literal text — see buildPrompt's own doc comment for why)
+//   6. submit        - buildItinerary() IS the "AI service" here: Voya's own locally trained model
+//                       (functions/discussion_summary/), never an external API/key (see header comment)
+//   7. parse         - parseItineraryAnswer() (itinerary_prompt.js)
+//   8. validate      - resolveItineraryAnswer() + the logistics-window filter below
+//   9. regenerate    - on a genuine parse failure only, one retry with a trimmed prompt
+// Steps 1 (consent) and 10-12 (display, review, confirm-to-save) are below / in the Flutter client
+// (ai_itinerary_sheet.dart shows the result; nothing here is written to the trip - the person
+// applies what they want from what's returned).
+
+/** Step 5: the structured input the AI service (step 6) is asked to work from - an object, not a
+ * free-text prompt, since the "AI service" standing in here is Voya's own local model, not an LLM
+ * that takes a string. Keeping this as one explicit, named step (rather than inlining its fields
+ * into the buildItinerary(...) call) is what makes this function's steps 2-9 match the documented
+ * algorithm one for one, not just in spirit. */
+function buildPrompt({ messages, members, days, plan, saved, catalog, model, destination, window,
+  hasHotel, flights, hotelStays, savedHotels, lookupNeed, decisions, foodPreference, accommodation }) {
+  return { messages, members, days, plan, saved, catalog, model, destination, window,
+    hasHotel, flights, hotelStays, savedHotels, lookupNeed, decisions, foodPreference, accommodation };
+}
+
+/** Step 6: submits [prompt] to the AI service (Voya's local model) and step 7: parses its answer.
+ * Returns null (never throws) when the answer isn't the well-formed JSON object step 7 expects,
+ * so the caller can tell "nothing to suggest" apart from "that attempt didn't come back usable"
+ * and decide whether step 9 (regenerate) is worth trying. */
+async function submitAndParse(prompt, dayCount) {
+  const { buildItinerary } = require("./itinerary_engine");
+  const built = await buildItinerary(prompt);
+  const answer = parseItineraryAnswer(JSON.stringify(built.answer), dayCount);
+  return { built, answer };
+}
+
 exports.generateItinerary = onCall({ timeoutSeconds: 120, memory: "512MiB" }, async (request) => {
   if (!request.auth) throw new HttpsError("unauthenticated", "Sign in first.");
   const tripId = request.data && request.data.tripId;
   if (typeof tripId !== "string" || !tripId) throw new HttpsError("invalid-argument", "tripId is required.");
+  // Step 1: consent gate. The Flutter client (ai_itinerary_sheet.dart) only ever calls this
+  // function after the person explicitly confirms a dialog explaining that AI Summarise reads
+  // this group's chat; this is what actually enforces that, regardless of what called it - a
+  // request missing the flag is refused outright, same wording either way so a caller can't
+  // probe whether consent or trip membership is what's missing.
+  if (request.data.consent !== true) {
+    throw new HttpsError("failed-precondition", "AI Summarise needs your consent to read this group's chat first.");
+  }
 
   // Loaded here, not at the top of the file: the Firestore client is slow to
   // import, and `firebase deploy` gives the whole codebase only 10 seconds to load.
@@ -129,6 +182,7 @@ exports.generateItinerary = onCall({ timeoutSeconds: 120, memory: "512MiB" }, as
   const dayKeys = Object.keys(daysRaw).sort((a, b) => Number(a) - Number(b));
   if (dayKeys.length === 0) throw new HttpsError("failed-precondition", "This trip has no days yet.");
 
+  // Step 2: retrieve.
   const [msgSnap, saved, catalog, savedHotels] = await Promise.all([
     tripRef.collection("messages").orderBy("createdAt", "desc").limit(MAX_MESSAGES).get(),
     // A saved-list failure must not block the whole feature: carry on without it.
@@ -139,6 +193,8 @@ exports.generateItinerary = onCall({ timeoutSeconds: 120, memory: "512MiB" }, as
     loadCatalogPlaces(db, trip.destination),
     loadSavedHotels(db, tripId, trip.memberIds).catch(() => []),
   ]);
+  // Step 3: filter - drop anything with no real text (a deleted message, an image-only post the
+  // model can't read) out of the capped window step 2 already limited to MAX_MESSAGES.
   const messages = msgSnap.docs
     .map((d) => ({ id: d.id, ...d.data() }))
     .reverse()
@@ -166,28 +222,54 @@ exports.generateItinerary = onCall({ timeoutSeconds: 120, memory: "512MiB" }, as
 
   const days = dayKeys.map((k, i) => ({ day: i + 1, weekday: daysRaw[k].weekday || "", date: daysRaw[k].date || "" }));
   const window = computeLogisticsWindow(trip, dayKeys.length);
+  // Step 4 (extract) happens inside itinerary_engine.js's buildItinerary, driven by step 5's
+  // prompt below - findPlaces/decide there pull out the entities (which place, who agreed) this
+  // function never has to see itself.
+  const basePromptArgs = {
+    members: trip.memberIds, days, plan, saved, catalog,
+    model: require("./discussion_summary/load_model").loadModel().model,
+    destination: trip.destination || "", window,
+    hasHotel: Array.isArray(trip.hotelStays) && trip.hotelStays.length > 0,
+    // booked flights and hotel stays: the plan is built around them (planner/logistics_plan.js)
+    flights: Array.isArray(trip.flights) ? trip.flights : [],
+    hotelStays: Array.isArray(trip.hotelStays) ? trip.hotelStays : [],
+    savedHotels,
+    // a wish nobody named a place for ("夜市"): catalog_places, then OpenStreetMap (planner/osm_places.js)
+    lookupNeed: require("./planner/osm_places").makeNeedLookup({ db, destination: trip.destination || "" }),
+    decisions: trip.discussionDecisions || null,
+    // Group Setting > Travel Preferences - a soft tie-break among several equally-fitting
+    // places/hotels (see itinerary_engine.js's buildItinerary doc comment on foodPreference).
+    foodPreference: trip.foodPreference || "",
+    accommodation: trip.accommodation || "",
+  };
+
+  // Steps 5-9: build the prompt, submit it, parse the answer - and on a genuine parse failure
+  // (not "nothing to suggest", which is a valid answer, not a failure), regenerate once with a
+  // trimmed prompt (the most recent half of the discussion only) before giving up. buildItinerary
+  // is deterministic for identical input, so retrying unchanged would just fail the same way
+  // again - trimming is what makes the second attempt a genuinely different one, the same way a
+  // person re-asking would phrase it more narrowly rather than repeat themselves verbatim.
   let built;
-  try {
-    const { buildItinerary } = require("./itinerary_engine");
-    const { loadModel } = require("./discussion_summary/load_model");
-    built = await buildItinerary({
-      messages, members: trip.memberIds, days, plan, saved, catalog, model: loadModel().model,
-      destination: trip.destination || "", window,
-      hasHotel: Array.isArray(trip.hotelStays) && trip.hotelStays.length > 0,
-      // booked flights and hotel stays: the plan is built around them (planner/logistics_plan.js)
-      flights: Array.isArray(trip.flights) ? trip.flights : [],
-      hotelStays: Array.isArray(trip.hotelStays) ? trip.hotelStays : [],
-      savedHotels,
-      // a wish nobody named a place for ("夜市"): catalog_places, then OpenStreetMap (planner/osm_places.js)
-      lookupNeed: require("./planner/osm_places").makeNeedLookup({ db, destination: trip.destination || "" }),
-      decisions: trip.discussionDecisions || null,
-    });
-  } catch (err) {
-    console.error("generateItinerary failed", err);
-    throw new HttpsError("internal", "AI Summarise could not finish right now. Please try again.");
+  let answer;
+  let lastErr = null;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const messagesThisAttempt = attempt === 0 ? messages : messages.slice(Math.ceil(messages.length / 2));
+    const prompt = buildPrompt({ ...basePromptArgs, messages: messagesThisAttempt });
+    try {
+      const result = await submitAndParse(prompt, dayKeys.length);
+      built = result.built;
+      answer = result.answer;
+      lastErr = null;
+    } catch (err) {
+      lastErr = err;
+      built = null;
+      answer = null;
+    }
+    // A real result (even an empty one - "nothing to suggest" is valid) ends the loop; only a
+    // parse/throw failure, and only when a second, narrower attempt is still possible, retries.
+    if (answer !== null || attempt === 1 || messagesThisAttempt.length < 2) break;
   }
-  // Same validation as before: only well-formed entries on days that exist.
-  const answer = parseItineraryAnswer(JSON.stringify(built.answer), dayKeys.length);
+  if (lastErr) console.error("generateItinerary failed", lastErr);
   if (!answer) throw new HttpsError("internal", "AI Summarise could not finish right now. Please try again.");
 
   const resolved = resolveItineraryAnswer(answer, saved, plan);

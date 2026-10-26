@@ -43,19 +43,19 @@ class AuthTextField extends StatelessWidget {
   }
 }
 
-// [onGoogle]/[onFacebook] were previously unset — the two circles below
-// were plain decoration with no onTap at all. [googleBusy]/[facebookBusy]
-// show a small spinner in place of the icon (and disable both buttons)
-// while that provider's sign-in is in flight, the same shape the rest of
-// this app's buttons use for a loading state.
+// [onGoogle] was previously unset — the circle below was plain decoration
+// with no onTap at all. [googleBusy] shows a small spinner in place of the
+// icon while sign-in is in flight, the same shape the rest of this app's
+// buttons use for a loading state.
+//
+// Facebook Login was removed from the app (was never fully configured with
+// real native credentials, and the person decided not to pursue it) — this
+// used to show both a Google and a Facebook circle side by side.
 Widget socialLoginRow(
   String label, {
   required VoidCallback onGoogle,
-  required VoidCallback onFacebook,
   bool googleBusy = false,
-  bool facebookBusy = false,
 }) {
-  final busy = googleBusy || facebookBusy;
   return Column(
     children: [
       Row(
@@ -73,9 +73,7 @@ Widget socialLoginRow(
       Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          socialIconButton('assets/images/google_icon.png', onTap: onGoogle, busy: googleBusy, disabled: busy && !googleBusy),
-          const SizedBox(width: 16),
-          socialIconButton('assets/images/facebook_icon.png', onTap: onFacebook, busy: facebookBusy, disabled: busy && !facebookBusy),
+          socialIconButton('assets/images/google_icon.png', onTap: onGoogle, busy: googleBusy),
         ],
       ),
     ],

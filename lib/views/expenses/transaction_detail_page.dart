@@ -43,6 +43,16 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Marked as paid')));
   }
 
+  /// FR60 — the payer's follow-up nudge for whoever still hasn't marked
+  /// their share paid; see [TripRepository.sendPaymentReminder].
+  Future<void> _remindUnpaid() async {
+    final count = await TripRepository.instance.sendPaymentReminder(widget.expense.tripId, widget.expense.id);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(count == 0 ? 'Everyone has already paid their share' : 'Reminded $count ${count == 1 ? 'person' : 'people'} to pay'),
+    ));
+  }
+
   String _date(DateTime d) => '${d.day} ${_months[d.month - 1]} ${d.year}';
 
   @override
@@ -142,6 +152,25 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
                       ),
                       onPressed: () => _markPaid(myShare.first),
                       child: const Text('Mark as Paid', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+                    ),
+                  ),
+                ),
+              // FR60 — only the payer sees this, and only while someone
+              // besides them still owes their share.
+              if (isOwner && others.any((p) => !p.paid))
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: AppColors.primary),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      ),
+                      onPressed: _remindUnpaid,
+                      icon: const Icon(Icons.notifications_active_outlined, color: AppColors.primary, size: 18),
+                      label: const Text('Remind to Pay', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.w600)),
                     ),
                   ),
                 ),

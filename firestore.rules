@@ -33,7 +33,12 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow create: if isOwner(uid);
       allow update: if isOwner(uid);
-      allow delete: if false;
+      // Account deletion (AccountSettingPage._deleteAccount) deletes this
+      // doc while still signed in as its owner, right before deleting the
+      // Firebase Auth account itself — see UserRepository.deleteProfile's
+      // doc comment for why subcollections/other collections aren't also
+      // cleaned up here.
+      allow delete: if isOwner(uid);
 
       match /friends/{friendId} {
         allow read: if isOwner(uid);
@@ -223,6 +228,18 @@ service cloud.firestore {
         request.auth.uid in get(/databases/$(database)/documents/trips/$(tripId)).data.memberIds;
     }
 
+    // FR12 (delete a travel group): the owner deleting the trip doc itself
+    // doesn't cascade to its votes/expenses/messages subcollections — the
+    // client (TripRepository.deleteTrip) batch-deletes those first, while
+    // the trip doc (and this get()) still exists, then deletes the trip
+    // doc last. Used only to allow that cleanup; everyday deletes of a
+    // single vote/expense/message are still governed by their own rules
+    // below, not this.
+    function isTripOwner(tripId) {
+      return isSignedIn() &&
+        request.auth.uid == get(/databases/$(database)/documents/trips/$(tripId)).data.ownerId;
+    }
+
     // A non-member joining themselves via an invite link/QR code (see
     // TripRepository.joinByInviteCode) — the one write a stranger with a
     // valid trip id is allowed to make. Only true when the write does
@@ -257,8 +274,20 @@ service cloud.firestore {
       allow delete: if isSignedIn() && request.auth.uid == resource.data.ownerId;
 
       match /votes/{voteId} {
-        allow read, create, update: if isTripMember(tripId);
-        allow delete: if false;
+        allow read, create: if isTripMember(tripId);
+        // Group Voting Algorithm (FYP documentation): both castVote (which
+        // writes options.$id.votedBy / voteCount inside a transaction) and
+        // addVoteOption write only to the `options` map field via dot
+        // notation. Restricting update's affected top-level keys to just
+        // `options` means a member can never use a vote-cast/add-option
+        // write to change the poll's title, deadline, allowMultipleChoice,
+        // etc. — mirroring the `/expenses/{expenseId}` rule's
+        // hasOnly(['participants']) pattern below.
+        allow update: if isTripMember(tripId) &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['options']);
+        // Only ever deleted as part of TripRepository.deleteTrip's cascade
+        // cleanup (FR12) — no single-vote delete exists elsewhere.
+        allow delete: if isTripOwner(tripId);
       }
       match /expenses/{expenseId} {
         allow read, create: if isTripMember(tripId);
@@ -267,12 +296,22 @@ service cloud.firestore {
         allow update: if isTripMember(tripId) && (
           request.auth.uid == resource.data.paidBy ||
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['participants']));
-        allow delete: if false;
+        // Only ever deleted as part of TripRepository.deleteTrip's cascade
+        // cleanup (FR12) — no single-expense delete exists elsewhere.
+        allow delete: if isTripOwner(tripId);
       }
       match /messages/{messageId} {
         allow read, create: if isTripMember(tripId);
-        allow update: if false;
-        allow delete: if false;
+        // FR15/FR17: only the sender may edit/delete their own message,
+        // and an edit may only ever touch the text + an edited marker —
+        // never senderId, createdAt, type, or attachment fields, so an
+        // "edit" can't be used to rewrite a message into a different kind
+        // of message or reattribute it. The trip owner may also delete any
+        // message, but only as part of TripRepository.deleteTrip's cascade
+        // cleanup (FR12) when the whole group is being removed.
+        allow update: if isTripMember(tripId) && request.auth.uid == resource.data.senderId &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['text', 'edited', 'editedAt']);
+        allow delete: if (isTripMember(tripId) && request.auth.uid == resource.data.senderId) || isTripOwner(tripId);
       }
     }
 
@@ -355,6 +394,20 @@ service cloud.firestore {
         allow create: if isSignedIn() && request.resource.data.authorId == request.auth.uid;
         allow update, delete: if isAdmin();
       }
+    }
+
+    // "Report New Attraction" (Profile > Report New Attraction) — a rider
+    // suggesting a new place for an admin to review, as a real Firestore
+    // doc instead of the SnackBar-only placeholder this used to be (the
+    // submit button didn't write anything at all). Same openness level
+    // as posts/{postId} above: any signed-in user can read and create
+    // their own report; only the report's own author or an admin can
+    // change/withdraw it afterwards (e.g. a future moderation console
+    // marking it approved/rejected).
+    match /attraction_reports/{id} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.authorId == request.auth.uid;
+      allow update, delete: if isSignedIn() && (resource.data.authorId == request.auth.uid || isAdmin());
     }
 
     // A curated, pre-scraped OSM dataset (name/photo/translation per

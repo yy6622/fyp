@@ -82,6 +82,20 @@ class TravellerDetailsController extends ChangeNotifier {
   final List<TravellerData> travellers = [TravellerData()];
   int get travellerCount => travellers.length;
 
+  // The travel period this policy covers — required so a later refund
+  // request can be checked against it (refunds are only allowed before
+  // the trip starts; see InsuranceRepository.requestRefund). Auto-filled
+  // from the trip's own dates when bought from inside a trip (see
+  // TravellerDetailsPage), or picked manually for a standalone purchase.
+  DateTime? travelStart;
+  DateTime? travelEnd;
+
+  void setTravelDates(DateTime start, DateTime end) {
+    travelStart = start;
+    travelEnd = end;
+    notifyListeners();
+  }
+
   static const maxTravellers = 6;
 
   /// Returns false (and leaves the list unchanged) once the traveller
@@ -140,6 +154,12 @@ class TravellerDetailsController extends ChangeNotifier {
   /// there was no validation at all, so "Continue" navigated to Payment
   /// regardless of what (if anything) had been filled in.
   String? validate() {
+    if (travelStart == null || travelEnd == null) return 'Please select your travel dates.';
+    // A same-day (0-night) trip is a real, supported case — Trip itself
+    // allows startDate == endDate (see Trip.dateRangeLabel's nights
+    // calculation) and showVoyaDateRangePicker lets a rider pick the same
+    // day for both ends. Only a genuinely reversed range is invalid.
+    if (travelEnd!.isBefore(travelStart!)) return 'Travel end date must be on or after the start date.';
     for (var i = 0; i < travellers.length; i++) {
       final t = travellers[i];
       final who = travellers.length > 1 ? 'Traveller ${i + 1}' : 'The traveller';

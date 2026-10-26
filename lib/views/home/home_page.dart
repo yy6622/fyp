@@ -6,6 +6,7 @@ import '../../repositories/community_repository.dart';
 import '../../repositories/insurance_repository.dart';
 import '../../repositories/notifications_repository.dart';
 import '../../repositories/trip_repository.dart';
+import '../../repositories/user_repository.dart';
 import '../../services/auth_service.dart';
 import '../../services/format_utils.dart';
 import '../../services/weather_service.dart';
@@ -49,25 +50,48 @@ class HomePage extends StatelessWidget {
   }
 
   // ---------------- Header ----------------
+  // The greeting used to be a hardcoded "Hi, Teoh" regardless of who was
+  // signed in - this now reads the real signed-in user's own name
+  // (users/{uid}.name, the same AppUser.name every other screen with a
+  // profile already uses), live, so it updates the moment they change
+  // their name in Account Settings. Falls back to a name-less greeting
+  // for a signed-out session or before the profile has loaded, rather
+  // than showing someone else's name or a loading flicker of "Teoh".
   Widget _buildHeader(BuildContext context) {
+    final uid = AuthService.instance.currentUser?.uid;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          const Column(
+          Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                'Hi, Teoh',
-                style: TextStyle(
-                  fontSize: 26,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.navy,
-                ),
-              ),
-              SizedBox(height: 4),
-              Text(
+              (uid == null || uid.isEmpty)
+                  ? const Text(
+                      'Hi there',
+                      style: TextStyle(
+                        fontSize: 26,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.navy,
+                      ),
+                    )
+                  : StreamBuilder<AppUser?>(
+                      stream: UserRepository.instance.watchProfile(uid),
+                      builder: (context, snapshot) {
+                        final name = snapshot.data?.name.trim() ?? '';
+                        return Text(
+                          name.isEmpty ? 'Hi there' : 'Hi, $name',
+                          style: const TextStyle(
+                            fontSize: 26,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.navy,
+                          ),
+                        );
+                      },
+                    ),
+              const SizedBox(height: 4),
+              const Text(
                 'Where do you want to explore next ?',
                 style: TextStyle(fontSize: 13, color: AppColors.textGrey),
               ),

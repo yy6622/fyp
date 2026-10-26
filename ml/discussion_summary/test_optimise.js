@@ -173,4 +173,25 @@ console.log("7. catalog places by coordinates");
 for (const u of r7.update) console.log(`   ${u.label}: day ${u.from_day} -> ${u.day} ${u.time}  (${u.reason})`);
 assert.strictEqual(dayOf(a7, "Lake Gamma Park"), dayOf(a7, "Museum Delta"), "Lake Gamma Park and Museum Delta (200 m apart) share a day");
 
+// 8. two-opt local-improvement pass (Optimised Itinerary Generation Algorithm): three places in a
+// straight line, each its own area (so none of them pre-group by district/proximity) - the
+// shortest path visiting all three is A -> C -> B (the physical order along the line), not the
+// alphabetical A -> B -> C the plan lists them in.
+const catalog8 = [
+  { name: "Place A", type: "attraction", location: "Area1", lat: 1.0, lng: 101.0 },
+  { name: "Place B", type: "attraction", location: "Area2", lat: 1.0, lng: 101.2 },
+  { name: "Place C", type: "attraction", location: "Area3", lat: 1.0, lng: 101.1 },
+];
+const plan8 = {
+  1: [item("w1", "10:00", "Place A", "Area1"), item("w2", "10:05", "Place B", "Area2"), item("w3", "10:10", "Place C", "Area3")],
+  2: [],
+};
+const r8 = optimisePlan(plan8, { mode: "day", onlyDay: 1, destination: "City", days, catalog: catalog8 });
+const a8 = apply(plan8, r8.update);
+console.log("8. two-opt reorders by real distance");
+for (const u of r8.update) console.log(`   ${u.label}: ${u.time}  (${u.reason})`);
+const order8 = a8[1].slice().sort((x, y) => toMin(x.time) - toMin(y.time)).map((it) => it.label);
+assert.deepStrictEqual(order8, ["Place A", "Place C", "Place B"], "two-opt visits them in physical line order, not alphabetical plan order");
+noOverlap(a8, "two-opt");
+
 console.log("optimise test: all checks passed");

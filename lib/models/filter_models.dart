@@ -1,5 +1,5 @@
 /// Each tab in Explore (and a few other screens) has its own kind of filter.
-enum FilterType { flight, hotel, attraction, restaurant, nearby, plan }
+enum FilterType { flight, hotel, attraction, restaurant }
 
 extension FilterTypeLabel on FilterType {
   String get label {
@@ -12,10 +12,6 @@ extension FilterTypeLabel on FilterType {
         return 'Attraction Filters';
       case FilterType.restaurant:
         return 'Restaurant Filters';
-      case FilterType.nearby:
-        return 'Nearby Filters';
-      case FilterType.plan:
-        return 'Plan Filters';
     }
   }
 }

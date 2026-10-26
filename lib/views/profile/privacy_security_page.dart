@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../controllers/profile_controller.dart';
 import '../../theme.dart';
+import 'blocked_users_page.dart';
 import 'sub_page_scaffold.dart';
 
 // ---------------------------------------------------------------------
@@ -35,11 +36,14 @@ class _PrivacySecurityPageState extends State<PrivacySecurityPage> {
                 controller.setProfileVisible),
             _switchTile('Share Location with Group', 'Group members can see your live location during a trip',
                 controller.shareLocation, controller.setShareLocation),
+            profileNavRow('Blocked Users', '', onTap: () => _push(const BlockedUsersPage())),
           ],
         ),
       ),
     );
   }
+
+  void _push(Widget page) => Navigator.of(context).push(MaterialPageRoute(builder: (_) => page));
 
   Widget _switchTile(String title, String subtitle, bool value, ValueChanged<bool> onChanged) {
     return Container(

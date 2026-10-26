@@ -45,6 +45,12 @@ class CatalogRepository {
   CollectionReference<Map<String, dynamic>> get _hotels => FirebaseFirestore.instance.collection('catalog_hotels');
   CollectionReference<Map<String, dynamic>> get _attractions =>
       FirebaseFirestore.instance.collection('catalog_attractions');
+  // "Report New Attraction" (Profile > Report New Attraction) submissions
+  // — a separate collection from catalog_attractions itself, since a
+  // report is just a suggestion for an admin to review, not a live
+  // catalog entry yet. See submitAttractionReport below.
+  CollectionReference<Map<String, dynamic>> get _attractionReports =>
+      FirebaseFirestore.instance.collection('attraction_reports');
   CollectionReference<Map<String, dynamic>> get _restaurants =>
       FirebaseFirestore.instance.collection('catalog_restaurants');
   CollectionReference<Map<String, dynamic>> get _appCache => FirebaseFirestore.instance.collection('app_cache');
@@ -100,6 +106,8 @@ class CatalogRepository {
               price: (d.data()['price'] as String?) ?? '',
               fareType: (d.data()['fareType'] as String?) ?? '',
               airline: (d.data()['airline'] as String?) ?? '',
+              flightNo: (d.data()['flightNo'] as String?) ?? '',
+              date: (d.data()['date'] as String?) ?? '',
               priceAmount: (d.data()['priceAmount'] as num?)?.toDouble(),
               priceCurrency: d.data()['priceCurrency'] as String?,
               airlineLogoUrl: d.data()['airlineLogoUrl'] as String?,
@@ -136,6 +144,8 @@ class CatalogRepository {
       'priceCurrency': offer.totalCurrency,
       'fareType': 'Economy',
       'airline': offer.airlineName,
+      'flightNo': offer.flightNumber,
+      'date': formatLongDate(offer.departureAt),
       'airlineLogoUrl': offer.airlineLogoUrl,
       'favoritedBy': ['$uid#$tripId'],
     });
@@ -224,11 +234,6 @@ class CatalogRepository {
 
   Future<void> toggleHotelFavorite(String id, String uid, String tripId, bool fav) =>
       _toggleFav(_hotels, id, '$uid#$tripId', fav);
-
-  Stream<List<PlaceReview>> watchHotelReviews(String hotelId, {String myUid = ''}) => watchReviewsFor(_hotels.doc(hotelId), myUid: myUid);
-
-  Future<bool> addHotelReview(String hotelId, {required String authorId, required String authorName, required int rating, required String comment}) =>
-      addReviewFor(_hotels.doc(hotelId), authorId: authorId, authorName: authorName, rating: rating, comment: comment);
 
   /// Same idea as [saveDuffelFlight] — persists a real hotel search
   /// result the user favorited into `catalog_hotels`, tagged
@@ -380,6 +385,9 @@ class CatalogRepository {
               images: List<String>.from(d.data()['images'] as List? ?? const []),
               fees: _feesFrom(d.data()['fees'] as Map<String, dynamic>?),
               description: (d.data()['description'] as String?) ?? '',
+              distanceKm: (d.data()['distanceKm'] as num?)?.toDouble(),
+              lat: (d.data()['lat'] as num?)?.toDouble(),
+              lng: (d.data()['lng'] as num?)?.toDouble(),
             ))
         .toList());
   }
@@ -415,6 +423,32 @@ class CatalogRepository {
 
   Future<bool> addAttractionReview(String attractionId, {required String authorId, required String authorName, required int rating, required String comment}) =>
       addReviewFor(_attractions.doc(attractionId), authorId: authorId, authorName: authorName, rating: rating, comment: comment);
+
+  /// Real write for "Report New Attraction" (ReportAttractionController) —
+  /// previously that page's Submit button never wrote anything at all,
+  /// just showed a SnackBar and popped. Writes into `attraction_reports`
+  /// (see firestore.rules) rather than straight into `catalog_attractions`
+  /// — a rider's suggestion needs a human to review it first, not appear
+  /// in Explore immediately as if it were already a verified place.
+  Future<void> submitAttractionReport({
+    required String authorId,
+    required String authorName,
+    required String name,
+    required String location,
+    String description = '',
+    String photoUrl = '',
+  }) {
+    return _attractionReports.add({
+      'authorId': authorId,
+      'authorName': authorName,
+      'name': name,
+      'location': location,
+      'description': description,
+      'photoUrl': photoUrl,
+      'status': 'pending',
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+  }
 
   // ---------------- Restaurants ----------------
   //
@@ -461,6 +495,8 @@ class CatalogRepository {
               phone: (d.data()['phone'] as String?) ?? '',
               website: (d.data()['website'] as String?) ?? '',
               description: (d.data()['description'] as String?) ?? (d.data()['about'] as String?) ?? '',
+              lat: (d.data()['lat'] as num?)?.toDouble(),
+              lng: (d.data()['lng'] as num?)?.toDouble(),
             ))
         .toList());
   }
@@ -909,6 +945,11 @@ class CatalogRepository {
           'description': descriptions[i] ?? '',
           'rating': 'New',
           'reviews': '0',
+          // AI-Based Attraction Recommendation Algorithm — D(a): this
+          // batch already measured each row's distance from the
+          // destination centre to pick the nearest 20 (see `nearest`
+          // above), so reuse that instead of recomputing it.
+          'distanceKm': nearest[i].km,
         }, SetOptions(merge: true));
       } catch (_) {
         // One row failing (rules hiccup, transient Firestore error)
@@ -953,7 +994,7 @@ class CatalogRepository {
     final filled = await Future.wait([
       for (var i = 0; i < found.length; i++) _fillGaps(found[i], tagImages[i], tagDescriptions[i], allowNameLookup: true),
     ]);
-    final images = [for (final f in filled) f.image];
+    final images = _withoutSharedDuplicates([for (final f in filled) f.image]);
     final descriptions = [for (final f in filled) f.description];
     // Same existing-doc reuse as the catalog_places path above — see
     // [_resolveName]'s doc comment.
@@ -988,6 +1029,27 @@ class CatalogRepository {
           // (bumped by addAttractionReview) take over (see _ratingLabel).
           'rating': 'New',
           'reviews': '0',
+          // Optimised Itinerary Generation Algorithm's "Maps service"
+          // (functions/maps_service.js) and AI Summarise's planner
+          // (functions/planner/places.js) both read lat/lng straight off
+          // this catalog doc for real distance/travel-time estimates —
+          // this is the one write path that actually has OSM's own
+          // coordinates for the POI, so this is where they get recorded.
+          'lat': p.lat, 'lng': p.lon,
+          // AI-Based Attraction Recommendation Algorithm — D(a): straight-
+          // line distance from this POI to the destination's geocoded
+          // centre, in km (same haversine helper the Near By nearest-sort
+          // above already uses).
+          'distanceKm': _distanceKm(point.lat, point.lon, p.lat, p.lon),
+          // Mandatory-constraint pre-filter — accessibility. OSM's
+          // `wheelchair` tag is the only accessibility signal this data
+          // source has; anything else (no tag, 'no', 'limited') is left
+          // out of `facilities` rather than guessed, so the "Wheelchair
+          // accessible" filter only ever matches a place OSM explicitly
+          // confirms, never one that's simply untagged.
+          'facilities': [
+            if (p.tags['wheelchair'] == 'yes') 'Wheelchair accessible',
+          ],
         }, SetOptions(merge: true));
       } catch (_) {
         // One POI's write failing (a rules hiccup, a transient Firestore
@@ -1027,7 +1089,7 @@ class CatalogRepository {
     final filled = await Future.wait([
       for (var i = 0; i < found.length; i++) _fillGaps(found[i], tagImages[i], tagDescriptions[i], allowNameLookup: false),
     ]);
-    final images = [for (final f in filled) f.image];
+    final images = _withoutSharedDuplicates([for (final f in filled) f.image]);
     final descriptions = [for (final f in filled) f.description];
     // Same existing-doc reuse as the attractions paths above — see
     // [_resolveName]'s doc comment.
@@ -1057,6 +1119,10 @@ class CatalogRepository {
           'description': descriptions[i] ?? '',
           'rating': 'New',
           'reviews': '0',
+          // Same reason as the attraction OSM write path above — the
+          // Optimised Itinerary Generation Algorithm's "Maps service"
+          // and AI Summarise's planner both read lat/lng off this doc.
+          'lat': p.lat, 'lng': p.lon,
         }, SetOptions(merge: true));
       } catch (_) {
         // see refreshAttractions — best-effort, one failure shouldn't
@@ -1100,6 +1166,30 @@ class CatalogRepository {
       description ??= await PlacesApiService.instance.resolveDescriptionByName(p.name);
     }
     return (image: image, description: description);
+  }
+
+  /// Nulls out any image URL that two or more DIFFERENT places in this
+  /// one refresh batch resolved to. A real place's own photo essentially
+  /// never coincides with another real place's — when it does, it's
+  /// almost always because both OSM nodes were tagged with the same
+  /// third-party `website` (a shared booking/aggregator page, or a
+  /// data-entry mistake copying one place's tags onto another), and that
+  /// page's og:image is a generic platform banner, not a photo of either
+  /// specific place (see resolveFromWebsite's doc comment — it trusts
+  /// whatever og:image a tagged website has, with no way to tell a
+  /// business's own photo from a shared one). Showing the SAME photo on
+  /// two different restaurant/attraction cards reads as an obvious bug
+  /// to anyone who sees both at once (e.g. two cards side by side in the
+  /// same horizontal list) and is worse than just falling back to the
+  /// category icon, so any URL seen more than once in a batch is treated
+  /// as untrustworthy for all the places that share it.
+  List<String?> _withoutSharedDuplicates(List<String?> images) {
+    final counts = <String, int>{};
+    for (final url in images) {
+      if (url == null || url.isEmpty) continue;
+      counts[url] = (counts[url] ?? 0) + 1;
+    }
+    return [for (final url in images) (url != null && (counts[url] ?? 0) > 1) ? null : url];
   }
 
   String _titleCase(String s) => s.isEmpty ? s : s[0].toUpperCase() + s.substring(1);
@@ -1174,6 +1264,9 @@ class CatalogAttraction extends AttractionData {
     super.images,
     super.fees,
     super.description,
+    super.distanceKm,
+    super.lat,
+    super.lng,
   });
 
   bool isSavedForTrip(String uid, String? tripId) =>
@@ -1199,6 +1292,8 @@ class CatalogRestaurant extends RestaurantData {
     super.phone,
     super.website,
     super.description,
+    super.lat,
+    super.lng,
   });
 
   bool isSavedForTrip(String uid, String? tripId) =>
@@ -1231,6 +1326,8 @@ class CatalogFlight extends FlightData {
     required super.price,
     required super.fareType,
     super.airline,
+    super.flightNo,
+    super.date,
     this.priceAmount,
     this.priceCurrency,
     this.airlineLogoUrl,

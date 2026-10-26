@@ -26,6 +26,10 @@ class PickedSavedItem {
   final String imageUrl;
   final String rating;
   final IconData fallbackIcon;
+  /// False for restaurants: no image-shaped UI at all for them (not even
+  /// the usual placeholder icon box), since the catalog has no real
+  /// per-restaurant photo — see explore_page.dart's restaurant cards.
+  final bool showThumb;
   const PickedSavedItem({
     required this.kind,
     required this.id,
@@ -34,6 +38,7 @@ class PickedSavedItem {
     this.imageUrl = '',
     this.rating = '',
     required this.fallbackIcon,
+    this.showThumb = true,
   });
 
   /// Stable identity for duplicate detection — "<kind>:<id>", independent
@@ -123,6 +128,22 @@ class VoteTabController extends ChangeNotifier {
 
   bool votedByMe(VoteOption option) => option.votedBy.contains(_uid);
 
+  /// True once [_uid] has voted on at least one option of [vote] — used
+  /// by [VoteTab] to disable every option's tap target on a single-choice
+  /// poll once the member has voted (the Group Voting Algorithm no longer
+  /// allows a second vote to change or withdraw the first).
+  bool hasVotedAny(TripVote vote) => vote.options.any((o) => o.votedBy.contains(_uid));
+
+  /// Whether tapping [option] on [vote] is currently allowed: the poll
+  /// must be open, and the member must not already have a vote that this
+  /// tap would duplicate (any option, for single-choice; this exact
+  /// option, for multiple-choice).
+  bool canVote(TripVote vote, VoteOption option) {
+    if (vote.isClosed) return false;
+    if (vote.allowMultipleChoice) return !votedByMe(option);
+    return !hasVotedAny(vote);
+  }
+
   /// Matches an option's plain-text label back to the trip's saved
   /// hotel/attraction/restaurant with that exact name (case/whitespace
   /// insensitive) — best-effort only: an option typed by hand instead of
@@ -151,8 +172,19 @@ class VoteTabController extends ChangeNotifier {
     return null;
   }
 
-  Future<void> castVote(TripVote vote, String optionId) {
-    return TripRepository.instance.castVote(tripId, vote, optionId, _uid);
+  /// Returns null on success, or a short message to show the member
+  /// (e.g. "You have already voted.") when the transaction in
+  /// [TripRepository.castVote] rejects it — same "return an error, don't
+  /// throw past the UI" convention as [sendImageMessage]/[sendLocationMessage].
+  Future<String?> castVote(TripVote vote, String optionId) async {
+    try {
+      await TripRepository.instance.castVote(tripId, vote, optionId, _uid);
+      return null;
+    } on StateError catch (e) {
+      return e.message;
+    } catch (_) {
+      return "Couldn't cast your vote. Please try again.";
+    }
   }
 
   /// Returns true if [label] was added as a new option on [vote] — false

@@ -5,7 +5,6 @@ import '../../repositories/trip_repository.dart';
 import '../../services/auth_service.dart';
 import '../../services/format_utils.dart';
 import '../../theme.dart';
-import '../shared/member_select_section.dart';
 import '../shared/nice_dialog.dart';
 import '../shared/nice_pickers.dart';
 import '../shared/phone_input_field.dart';
@@ -72,7 +71,7 @@ class _HotelGuestDetailsPageState extends State<HotelGuestDetailsPage> {
   final TextEditingController _checkInCtrl = TextEditingController();
   final TextEditingController _checkOutCtrl = TextEditingController();
 
-  // Who this stay is for, within the trip — see MemberSelectSection and
+  // Who this stay is for, within the trip — kept for forMemberUids'
   // FlightPassengerDetailsPage's equivalent fields.
   Trip? _trip;
   Set<String> _forMemberUids = {};
@@ -223,16 +222,12 @@ class _HotelGuestDetailsPageState extends State<HotelGuestDetailsPage> {
                         const SizedBox(height: 12),
                         niceDialogField(_idCtrl, 'Passport / ID Number', icon: Icons.badge_outlined),
                         niceDialogField(_requestsCtrl, 'Special Requests (optional)', icon: Icons.edit_note_outlined, maxLines: 3),
-                        if (_trip != null && _trip!.memberIds.length > 1) ...[
-                          const SizedBox(height: 8),
-                          const Divider(color: Color(0xFFDDDDDD)),
-                          const SizedBox(height: 12),
-                          MemberSelectSection(
-                            memberNames: _trip!.memberNames,
-                            selected: _forMemberUids,
-                            onChanged: (v) => setState(() => _forMemberUids = v),
-                          ),
-                        ],
+                        // "Who is this for" picker removed per request — a
+                        // hotel stay booked on a group trip now always
+                        // applies to the whole trip (see _trip/_forMemberUids
+                        // above, still fetched so that default stays
+                        // correct) instead of letting the booker narrow it
+                        // down to specific members.
                       ],
                     ),
                   ),

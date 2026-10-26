@@ -1,14 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:video_player/video_player.dart';
 
 import '../../controllers/community_controller.dart';
 import '../../models/community_models.dart';
 import '../../repositories/community_repository.dart';
+import '../../repositories/trip_repository.dart';
 import '../../services/auth_service.dart';
 import '../../theme.dart';
 import '../detail/detail_widgets.dart';
 import '../shared/nice_dialog.dart';
 import 'author_profile_page.dart';
 import 'community_page.dart';
+import 'create_post_page.dart';
 
 // ---------------------------------------------------------------------
 // Community post detail — hero photo carousel, rating, and an
@@ -27,6 +30,13 @@ class _CommunityPostDetailPageState extends State<CommunityPostDetailPage> {
   final PageController _photoController = PageController();
   int _photoIndex = 0;
 
+  // FR61 — lazily created the first time the video media is shown (tapping
+  // the play overlay), rather than up front: most posts have no video at
+  // all, and even for ones that do, there's no reason to start buffering
+  // it before the viewer has asked to watch.
+  VideoPlayerController? _videoController;
+  bool _videoLoading = false;
+
   @override
   void initState() {
     super.initState();
@@ -39,7 +49,34 @@ class _CommunityPostDetailPageState extends State<CommunityPostDetailPage> {
   void dispose() {
     controller.dispose();
     _photoController.dispose();
+    _videoController?.dispose();
     super.dispose();
+  }
+
+  Future<void> _playVideo(String url) async {
+    if (_videoController != null) {
+      setState(() => _videoController!.value.isPlaying ? _videoController!.pause() : _videoController!.play());
+      return;
+    }
+    setState(() => _videoLoading = true);
+    final vc = VideoPlayerController.networkUrl(Uri.parse(url));
+    try {
+      await vc.initialize();
+      if (!mounted) {
+        vc.dispose();
+        return;
+      }
+      setState(() {
+        _videoController = vc;
+        _videoLoading = false;
+      });
+      vc.play();
+    } catch (_) {
+      vc.dispose();
+      if (!mounted) return;
+      setState(() => _videoLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('This video couldn\'t be played.')));
+    }
   }
 
   Future<void> _reportPost(CommunityPost post) async {
@@ -71,6 +108,33 @@ class _CommunityPostDetailPageState extends State<CommunityPostDetailPage> {
     );
   }
 
+  /// FR62 — opens the compose form pre-filled with [post], in edit mode.
+  Future<void> _editPost(CommunityPost post) async {
+    await Navigator.of(context).push(MaterialPageRoute(builder: (_) => CreatePostPage(editingPost: post)));
+  }
+
+  /// FR64 — asks first (irreversible), then deletes and leaves the page,
+  /// since there's nothing left here to show once the post is gone.
+  Future<void> _deletePost(CommunityPost post) async {
+    final confirmed = await showNiceConfirmDialog(
+      context: context,
+      title: 'Delete Post',
+      message: 'This post will be permanently removed. This cannot be undone.',
+      confirmLabel: 'Delete',
+      icon: Icons.delete_forever,
+      destructive: true,
+    );
+    if (!confirmed) return;
+    final error = await controller.deletePost(post);
+    if (!mounted) return;
+    if (error != null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
+      return;
+    }
+    Navigator.of(context).pop();
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Your post has been deleted.')));
+  }
+
   // Looks up the live version of this post from the controller's own
   // Firestore-backed stream (falling back to the post passed in, before
   // the first snapshot arrives) so likes/saves/ratings made here — or on
@@ -92,9 +156,25 @@ class _CommunityPostDetailPageState extends State<CommunityPostDetailPage> {
       appBar: VoyaAppBar(
         title: const Text('Community', style: TextStyle(color: AppColors.navy, fontWeight: FontWeight.bold, fontSize: 20)),
         // Reporting your own post doesn't make sense — only shown on
-        // someone else's. See _reportPost/CommunityController.reportPost.
+        // someone else's; your own gets the Edit/Delete menu (FR62/FR64)
+        // instead. See _reportPost/CommunityController.reportPost.
         actions: widget.post.authorId == _myUid
-            ? null
+            ? [
+                PopupMenuButton<String>(
+                  icon: const Icon(Icons.more_vert, color: AppColors.textGrey, size: 20),
+                  onSelected: (value) {
+                    if (value == 'edit') {
+                      _editPost(_livePost);
+                    } else if (value == 'delete') {
+                      _deletePost(_livePost);
+                    }
+                  },
+                  itemBuilder: (context) => const [
+                    PopupMenuItem(value: 'edit', child: Text('Edit Post')),
+                    PopupMenuItem(value: 'delete', child: Text('Delete Post', style: TextStyle(color: Colors.redAccent))),
+                  ],
+                ),
+              ]
             : [
                 IconButton(
                   icon: const Icon(Icons.flag_outlined, color: AppColors.textGrey, size: 20),
@@ -212,8 +292,8 @@ class _CommunityPostDetailPageState extends State<CommunityPostDetailPage> {
                 ),
               ],
               const SizedBox(height: 14),
-              _photoCarousel(post),
-              if (post.images.length > 1) ...[
+              post.hasVideo ? _videoPlayer(post) : _photoCarousel(post),
+              if (!post.hasVideo && post.images.length > 1) ...[
                 const SizedBox(height: 8),
                 _photoDots(post),
               ],
@@ -239,6 +319,51 @@ class _CommunityPostDetailPageState extends State<CommunityPostDetailPage> {
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
         decoration: BoxDecoration(color: AppColors.chipGrey, borderRadius: BorderRadius.circular(12)),
         child: Text('#$tag', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.navy)),
+      ),
+    );
+  }
+
+  /// FR61 — a post's video, in the same hero slot a photo carousel would
+  /// occupy. Shows a static play button until tapped (see initState's doc
+  /// comment on [_videoController] for why playback starts lazily), then
+  /// becomes a real inline player with its own tap-to-pause/play.
+  Widget _videoPlayer(CommunityPost post) {
+    final vc = _videoController;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(18),
+      child: SizedBox(
+        height: 220,
+        width: double.infinity,
+        child: GestureDetector(
+          onTap: () => _playVideo(post.videoUrl),
+          child: Container(
+            color: Colors.black,
+            alignment: Alignment.center,
+            child: vc != null && vc.value.isInitialized
+                ? Stack(
+                    alignment: Alignment.center,
+                    fit: StackFit.expand,
+                    children: [
+                      FittedBox(
+                        fit: BoxFit.cover,
+                        child: SizedBox(
+                          width: vc.value.size.width,
+                          height: vc.value.size.height,
+                          child: VideoPlayer(vc),
+                        ),
+                      ),
+                      if (!vc.value.isPlaying)
+                        Container(
+                          color: Colors.black.withValues(alpha: 0.25),
+                          child: const Icon(Icons.play_arrow, size: 54, color: Colors.white),
+                        ),
+                    ],
+                  )
+                : _videoLoading
+                    ? const CircularProgressIndicator(color: Colors.white)
+                    : const Icon(Icons.play_circle_fill, size: 54, color: Colors.white),
+          ),
+        ),
       ),
     );
   }
@@ -320,7 +445,105 @@ class _CommunityPostDetailPageState extends State<CommunityPostDetailPage> {
     if (post.itinerary.isEmpty) {
       return const Text('No itinerary attached yet.', style: TextStyle(fontSize: 12, color: AppColors.textGrey));
     }
-    return Column(children: post.itinerary.map((day) => _dayRow(post, day)).toList());
+    // Only ever true for a post shared after FR31/FR68 started carrying
+    // structured activities alongside the display strings — see
+    // CommunityItineraryDay.activities' doc comment.
+    final importable = post.itinerary.any((d) => d.activities.isNotEmpty);
+    return Column(
+      children: [
+        if (importable)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () => _importItinerary(post),
+                icon: const Icon(Icons.playlist_add, size: 18),
+                label: const Text('Add to My Plan'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.primary,
+                  side: const BorderSide(color: AppColors.primary),
+                  padding: const EdgeInsets.symmetric(vertical: 11),
+                ),
+              ),
+            ),
+          ),
+        ...post.itinerary.map((day) => _dayRow(post, day)),
+      ],
+    );
+  }
+
+  /// FR31/FR68 — copies this post's itinerary into one of the viewer's OWN
+  /// trips, day-index-aligned (this post's "Day N" -> the target trip's
+  /// day N). A target trip shorter than this itinerary just skips the
+  /// days that don't exist on it rather than failing outright — the days
+  /// that do fit still get added.
+  Future<void> _importItinerary(CommunityPost post) async {
+    final myUid = _myUid;
+    if (myUid.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Sign in to add this to your own plan.')));
+      return;
+    }
+    final trips = await TripRepository.instance.watchMyTrips(myUid).first;
+    if (!mounted) return;
+    if (trips.isEmpty) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('You don\'t have a trip to add this to yet — create one first.')));
+      return;
+    }
+    final selected = await showModalBottomSheet<Trip>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(18))),
+      builder: (sheetCtx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(20, 18, 20, 6),
+              child: Text('Add to which trip?', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.navy)),
+            ),
+            ...trips.map((t) => ListTile(
+                  leading: const Icon(Icons.card_travel, color: AppColors.primary),
+                  title: Text(t.name, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600)),
+                  subtitle: Text(t.destination, style: const TextStyle(fontSize: 11.5, color: AppColors.textGrey)),
+                  onTap: () => Navigator.of(sheetCtx).pop(t),
+                )),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+    if (selected == null || !mounted) return;
+
+    var added = 0;
+    var skippedDays = 0;
+    for (final day in post.itinerary) {
+      if (day.activities.isEmpty) continue;
+      final dayIndex = day.day - 1;
+      if (dayIndex < 0 || dayIndex >= selected.days.length) {
+        skippedDays++;
+        continue;
+      }
+      for (final activity in day.activities) {
+        await TripRepository.instance.addActivity(
+          selected.id,
+          dayIndex,
+          time: activity.time,
+          label: activity.label,
+          iconKey: activity.iconKey,
+          location: activity.location,
+          actorUid: myUid,
+        );
+        added++;
+      }
+    }
+    if (!mounted) return;
+    final message = skippedDays > 0
+        ? 'Added $added ${added == 1 ? "activity" : "activities"} to "${selected.name}" ($skippedDays day${skippedDays == 1 ? "" : "s"} skipped — that trip is shorter than this itinerary).'
+        : 'Added $added ${added == 1 ? "activity" : "activities"} to "${selected.name}".';
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 
   Widget _dayRow(CommunityPost post, CommunityItineraryDay day) {

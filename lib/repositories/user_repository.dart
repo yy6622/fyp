@@ -116,6 +116,17 @@ class UserRepository {
     return doc.exists ? AppUser.fromDoc(doc) : null;
   }
 
+  /// Deletes the person's own `users/{uid}` profile doc — called right
+  /// before [AuthService.deleteAccount] (see AccountSettingPage.
+  /// _deleteAccount), while they're still authenticated as themselves
+  /// (firestore.rules only allows this while `isOwner(uid)` still holds,
+  /// i.e. before the Firebase Auth account itself is gone). Does not
+  /// touch this user's `friends`/`blocked`/`notifications` subcollections
+  /// or any other collection referencing this uid (trips, posts,
+  /// reviews, ...) — see AuthService.deleteAccount's doc comment for why
+  /// a full cascade is out of scope here.
+  Future<void> deleteProfile(String uid) => _users.doc(uid).delete();
+
   Future<void> updateProfile(String uid,
       {String? name,
       String? phone,

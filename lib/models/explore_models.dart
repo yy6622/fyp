@@ -65,6 +65,14 @@ class FlightData {
   // FlightData construction (tests, future call sites) compiling without
   // having to know about airline.
   final String airline;
+  // Real flight number (e.g. "AK71") and departure date label — same
+  // "defaults to '' for anything that predates this field" reasoning as
+  // [airline] above. A saved flight with this still empty just means it
+  // was favorited before CatalogRepository.saveDuffelFlight() started
+  // persisting these; the detail page shows nothing rather than a fixed
+  // placeholder in that case (see DetailPageFlight's own doc comment).
+  final String flightNo;
+  final String date;
   const FlightData({
     required this.depTime,
     required this.arrTime,
@@ -75,6 +83,8 @@ class FlightData {
     required this.price,
     required this.fareType,
     this.airline = '',
+    this.flightNo = '',
+    this.date = '',
   });
 }
 
@@ -145,6 +155,25 @@ class AttractionData {
   // the same templated text for every place in a category.
   final String description;
 
+  // AI-Based Attraction Recommendation Algorithm (FYP documentation) —
+  // D(a), the distance factor. Straight-line km from this attraction to
+  // the destination's geocoded centre at the moment it was scraped/
+  // refreshed (see CatalogRepository._distanceKm's call sites) — null
+  // for anything written before this existed, or sourced from a path
+  // that has no coordinates to measure from. A null here makes D(a)
+  // fall back to a neutral score rather than zero (see
+  // AttractionRecommendation.distanceScore), so older rows aren't
+  // punished for data they were never given.
+  final double? distanceKm;
+
+  // The Plan page's transportation-suggestion row (group_trip_page.dart)
+  // and the Optimised Itinerary Generation Algorithm's "Maps service"
+  // both want real coordinates, not just a pre-computed distance — see
+  // lib/services/maps_service.dart. Same null-means-not-measured-yet
+  // story as [distanceKm].
+  final double? lat;
+  final double? lng;
+
   const AttractionData({
     required this.name,
     required this.category,
@@ -165,6 +194,9 @@ class AttractionData {
     this.description = '',
     this.images = const [],
     this.fees = const AttractionFees(),
+    this.distanceKm,
+    this.lat,
+    this.lng,
   });
 
   /// Every category tag to show as its own chip — falls back to the single
@@ -193,6 +225,9 @@ class RestaurantData {
   // Same idea as AttractionData.description — a real, place-specific
   // summary when OSM or Wikipedia has one, '' otherwise.
   final String description;
+  // Same as AttractionData.lat/lng — see that field's doc comment.
+  final double? lat;
+  final double? lng;
   const RestaurantData({
     required this.name,
     required this.cuisineTags,
@@ -206,6 +241,8 @@ class RestaurantData {
     this.phone = '',
     this.website = '',
     this.description = '',
+    this.lat,
+    this.lng,
   });
 
   /// One plain string for places that just want a short description

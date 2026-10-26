@@ -33,7 +33,7 @@ class _JoinTripPageState extends State<JoinTripPage> {
   Future<void> _paste() async {
     final data = await Clipboard.getData('text/plain');
     final text = data?.text?.trim();
-    if (text == null || text.isEmpty) return;
+    if (text == null || text.isEmpty || !mounted) return;
     setState(() {
       _controller.text = text;
       _error = null;

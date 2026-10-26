@@ -75,6 +75,14 @@ class CommunityRepository {
     String flagEmoji = '📍',
     List<Map<String, dynamic>> itinerary = const [],
     List<String> tags = const [],
+    // FR61 — a real photo or video attached at compose time (see
+    // CreatePostController.publish, which uploads whichever one the
+    // person picked via CommunityMediaService before calling this).
+    // Previously always hardcoded to images: [] regardless of what the
+    // "Upload Media" toggle showed, since that toggle never actually
+    // picked or uploaded anything.
+    List<String> images = const [],
+    String videoUrl = '',
   }) async {
     final moderation = await ContentModerationService.instance.check('$title\n$description');
     await _posts.add({
@@ -86,7 +94,8 @@ class CommunityRepository {
       'description': description,
       'location': location.isEmpty ? 'Unknown' : location,
       'flagEmoji': flagEmoji,
-      'images': <String>[],
+      'images': images,
+      'videoUrl': videoUrl,
       'itinerary': itinerary,
       'tags': normalizeTags(tags),
       'likedBy': <String>[],
@@ -102,6 +111,32 @@ class CommunityRepository {
       },
     });
     return moderation.flagged;
+  }
+
+  /// FR62 — edits an existing post's own title/description/tags. Only
+  /// ever called by the post's own author (firestore.rules' `posts/
+  /// {postId}` update rule — "the author can change anything" — double-
+  /// checks that server-side); doesn't touch likedBy/ratings/comments/
+  /// moderation fields, so a passing re-run through content moderation
+  /// isn't needed here the way it is for a brand-new [createPost] — this
+  /// only lets the author fix their own wording, not post fresh content
+  /// that was never checked.
+  Future<void> updatePost(
+    String postId, {
+    required String title,
+    required String description,
+    List<String> tags = const [],
+  }) {
+    return _posts.doc(postId).update({
+      'title': title,
+      'description': description,
+      'tags': normalizeTags(tags),
+    });
+  }
+
+  /// FR64 — permanently deletes one of your own posts.
+  Future<void> deletePost(String postId) {
+    return _posts.doc(postId).delete();
   }
 
   Future<void> toggleLike(String postId, String uid, bool liked) {
@@ -284,11 +319,23 @@ class CommunityRepository {
       flagEmoji: (data['flagEmoji'] as String?) ?? '📍',
       description: (data['description'] as String?) ?? '',
       images: List<String>.from(data['images'] as List? ?? const []),
+      videoUrl: (data['videoUrl'] as String?) ?? '',
       location: (data['location'] as String?) ?? '',
       itinerary: itineraryRaw
           .map((d) => CommunityItineraryDay(
                 day: (d['day'] as num).toInt(),
                 items: List<String>.from(d['items'] as List? ?? const []),
+                // Absent on any post made before FR31/FR68 — those just
+                // can't be imported, same as a day with no activities.
+                activities: (d['activities'] as List? ?? const [])
+                    .map((a) => Map<String, dynamic>.from(a as Map))
+                    .map((a) => ImportableActivity(
+                          time: (a['time'] as String?) ?? '',
+                          label: (a['label'] as String?) ?? '',
+                          location: (a['location'] as String?) ?? '',
+                          iconKey: (a['icon'] as String?) ?? '',
+                        ))
+                    .toList(),
               ))
           .toList(),
       avgRating: ratingValues.isEmpty ? 0 : ratingValues.reduce((a, b) => a + b) / ratingValues.length,

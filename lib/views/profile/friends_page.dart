@@ -41,6 +41,32 @@ class _FriendsPageState extends State<FriendsPage> {
     );
   }
 
+  /// FR07 — asks before unfriending (this can't be undone from the app),
+  /// matching the same confirm-first pattern used for other destructive
+  /// actions in this app (e.g. group_settings_controller's leaveGroup).
+  Future<void> _removeFriend(FriendEntry friend) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Remove Friend?'),
+        content: Text('${friend.name} will be removed from your friends list, and you from theirs.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Remove', style: TextStyle(color: Colors.redAccent)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await controller.removeFriend(friend);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('${friend.name} has been removed from your friends')),
+    );
+  }
+
   Future<void> _resend(SentFriendRequest request) async {
     setState(() => _resending.add(request.toUid));
     await controller.resendRequest(request);
@@ -272,6 +298,20 @@ class _FriendsPageState extends State<FriendsPage> {
                                 Expanded(
                                   child: Text(friend.name, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.black)),
                                 ),
+                                PopupMenuButton<String>(
+                                  icon: const Icon(Icons.more_vert, size: 20, color: AppColors.textGrey),
+                                  padding: EdgeInsets.zero,
+                                  onSelected: (value) {
+                                    if (value == 'remove') _removeFriend(friend);
+                                  },
+                                  itemBuilder: (context) => const [
+                                    PopupMenuItem(
+                                      value: 'remove',
+                                      child: Text('Remove Friend', style: TextStyle(color: Colors.redAccent)),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(width: 4),
                                 GestureDetector(
                                   onTap: () => _toggleBlock(friend),
                                   child: Container(

@@ -246,7 +246,13 @@ class _AttractionChatPageState extends State<AttractionChatPage> {
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               minimumSize: Size.zero,
             ),
-            onPressed: added ? null : () => controller.addToTrip(a),
+            // Disabled with no real trip to save against — same guard
+            // Explore's own save/heart toggle uses (see explore_page.dart's
+            // `onToggleSave: tripId == null ? null : ...`). Used to still
+            // flip to a permanent "Added" state here with nothing actually
+            // persisted whenever this chat was opened with no trip
+            // selected (e.g. a brand-new account with no trips yet).
+            onPressed: (added || controller.tripId == null) ? null : () => controller.addToTrip(a),
             child: Text(
               added ? 'Added' : 'Add',
               style: TextStyle(fontSize: 12, color: added ? AppColors.textGrey : AppColors.primary, fontWeight: FontWeight.w600),

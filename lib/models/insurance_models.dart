@@ -82,3 +82,57 @@ class InsuranceCoverageItem {
   final double amount;
   const InsuranceCoverageItem({required this.label, required this.amount});
 }
+
+/// A real purchase record from `insurance_transactions/{id}` — same
+/// collection the partner console's Transactions list reads (see
+/// InsuranceRepository.recordPurchase). Used by the rider-facing Claim/
+/// Refund flow so every value on those forms (provider, plan, amount,
+/// travel dates) comes from the real stored purchase instead of being
+/// re-typed or guessed.
+class InsuranceTransaction {
+  final String id;
+  final String buyerId;
+  final String partnerId;
+  final String providerName;
+  final String planName;
+  final String customerName;
+  final String customerEmail;
+  final double premium;
+  final String status;
+  final String destination;
+  // Null for a transaction recorded before travel-period capture existed
+  // (see TravellerDetailsController) — InsuranceRepository.requestRefund
+  // treats that legacy case as still eligible, since there is no stored
+  // date to check against and the partner reviews every request by hand
+  // regardless.
+  final DateTime? travelStart;
+  final DateTime? travelEnd;
+  const InsuranceTransaction({
+    required this.id,
+    required this.buyerId,
+    required this.partnerId,
+    required this.providerName,
+    required this.planName,
+    required this.customerName,
+    required this.customerEmail,
+    required this.premium,
+    required this.status,
+    this.destination = '',
+    this.travelStart,
+    this.travelEnd,
+  });
+}
+
+/// Categories the rider picks from when filing a claim or requesting a
+/// refund — exactly the dropdown values the partner console itself uses
+/// (admin_web/partner/claims.html's CLAIM_CATEGORIES/REFUND_CATEGORIES),
+/// so a rider-submitted document's `category` is always one the partner
+/// console already knows how to display/filter by.
+const List<String> insuranceClaimCategories = ['Medical', 'Trip Cancellation', 'Baggage Loss', 'Flight Delay'];
+const List<String> insuranceRefundCategories = [
+  'Policy Cancellation',
+  'Duplicate Payment',
+  'Overpayment',
+  'Premium Refund',
+  'Service Not Rendered',
+];

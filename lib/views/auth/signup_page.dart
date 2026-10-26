@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 import '../../controllers/auth_controller.dart';
@@ -26,6 +27,36 @@ class _SignupPageState extends State<SignupPage> {
     super.dispose();
   }
 
+  /// "Terms of Use"/"Privacy Policy" below used to be plain TextSpans
+  /// styled exactly like links (blue, italic) with no TapGestureRecognizer
+  /// at all — tapping either did nothing. There's no real legal document
+  /// behind either one yet (this is a student FYP project, not a
+  /// registered business), so rather than silently doing nothing OR
+  /// pretending to open a real document, this shows an honest, clearly
+  /// labelled placeholder — same "say so honestly" pattern this app uses
+  /// elsewhere for a feature that genuinely isn't built yet (see
+  /// EmbassyPage's "not available yet" state for a country with no data).
+  void _showLegalPlaceholder(String title) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.navy)),
+        content: Text(
+          'Voya is a student final-year project, not a registered business — there is no real $title document yet. '
+          'This screen exists so the checkbox above isn\'t agreeing to nothing.',
+          style: const TextStyle(fontSize: 13, color: AppColors.textGrey),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('OK', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.w600)),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _submit() async {
     final error = await controller.signUp();
     if (!mounted) return;
@@ -38,8 +69,24 @@ class _SignupPageState extends State<SignupPage> {
     );
   }
 
-  // "Sign up with Google/Facebook" and "Login with Google/Facebook" are
-  // the same Firebase call either way (see _runSocialLogin in
+  // The "Register" button below is disabled until Agree to Terms is
+  // checked (see its onPressed) — Google sign-up used to skip that
+  // requirement entirely, since it called straight into _handleSocial
+  // with no gate of its own, letting someone create a
+  // full account without ever agreeing to the Terms of Use/Privacy
+  // Policy. This is the same gate, applied before the social call runs.
+  void _requireAgreement(VoidCallback thenRun) {
+    if (!controller.agreeToTerms) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please agree to the Terms of Use and Privacy Policy first.')),
+      );
+      return;
+    }
+    thenRun();
+  }
+
+  // "Sign up with Google" and "Login with Google" are the same Firebase
+  // call either way (see _runSocialLogin in
   // auth_controller.dart) — same handling as LoginPage's.
   Future<void> _handleSocial(Future<SocialLoginOutcome> Function() signIn) async {
     final outcome = await signIn();
@@ -128,13 +175,21 @@ class _SignupPageState extends State<SignupPage> {
                       child: Padding(
                         padding: const EdgeInsets.only(top: 14),
                         child: RichText(
-                          text: const TextSpan(
-                            style: TextStyle(fontSize: 15, color: Colors.black),
+                          text: TextSpan(
+                            style: const TextStyle(fontSize: 15, color: Colors.black),
                             children: [
-                              TextSpan(text: 'I agree to the '),
-                              TextSpan(text: 'Terms of Use', style: TextStyle(color: Color(0xFF0088FF), fontStyle: FontStyle.italic)),
-                              TextSpan(text: ' and '),
-                              TextSpan(text: 'Privacy Policy', style: TextStyle(color: Color(0xFF0088FF), fontStyle: FontStyle.italic)),
+                              const TextSpan(text: 'I agree to the '),
+                              TextSpan(
+                                text: 'Terms of Use',
+                                style: const TextStyle(color: Color(0xFF0088FF), fontStyle: FontStyle.italic),
+                                recognizer: TapGestureRecognizer()..onTap = () => _showLegalPlaceholder('Terms of Use'),
+                              ),
+                              const TextSpan(text: ' and '),
+                              TextSpan(
+                                text: 'Privacy Policy',
+                                style: const TextStyle(color: Color(0xFF0088FF), fontStyle: FontStyle.italic),
+                                recognizer: TapGestureRecognizer()..onTap = () => _showLegalPlaceholder('Privacy Policy'),
+                              ),
                             ],
                           ),
                         ),
@@ -167,10 +222,8 @@ class _SignupPageState extends State<SignupPage> {
                 const SizedBox(height: 24),
                 socialLoginRow(
                   'Or Sign up with',
-                  onGoogle: () => _handleSocial(controller.signUpWithGoogle),
-                  onFacebook: () => _handleSocial(controller.signUpWithFacebook),
+                  onGoogle: () => _requireAgreement(() => _handleSocial(controller.signUpWithGoogle)),
                   googleBusy: controller.googleLoading,
-                  facebookBusy: controller.facebookLoading,
                 ),
               ],
             ),

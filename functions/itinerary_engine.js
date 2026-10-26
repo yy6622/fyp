@@ -234,12 +234,19 @@ function dayFrom(texts, days) {
  * Returns { answer: {add, update, remove, unresolved}, stats, decided }
  */
 async function buildItinerary({ messages, members, days, plan, saved, catalog = [], destination = "", model,
-  decisions = null, window = null, hasHotel = false, flights = [], hotelStays = [], savedHotels = [], lookupNeed = null }) {
+  decisions = null, window = null, hasHotel = false, flights = [], hotelStays = [], savedHotels = [], lookupNeed = null,
+  // Group Setting > Travel Preferences (Trip.foodPreference / Trip.accommodation) - a soft
+  // tie-break only, see planner/needs.js's matchesFoodPreference doc comment and pickSavedHotel
+  // below. travelStyle isn't threaded in here: this engine only ever resolves a place the chat
+  // already named (see the file header comment) and never invents a suggestion from nothing, so
+  // there's no "pick an activity" step for a style preference to bias - only food/hotel matching
+  // actually chooses among several equally-fitting candidates.
+  foodPreference = "", accommodation = "" }) {
   const { knownPlaces } = require("./planner/places");
   const { tripLogistics } = require("./planner/logistics_plan");
   const { decide, stanceOf } = require("./planner/decide");
   const { schedule } = require("./planner/schedule");
-  const { placeFits, genericPlace } = require("./planner/needs");
+  const { placeFits, genericPlace, matchesFoodPreference } = require("./planner/needs");
   const s = summarise(messages, model, members);
   const known = knownPlaces({ destination: destinationOf(destination, messages), saved, catalog });
   const d = decide({ messages, s, known, members, decisions });
@@ -312,13 +319,22 @@ async function buildItinerary({ messages, members, days, plan, saved, catalog = 
     }
     if (planItems.some((it) => n.need.fits.test(it.label) || normalize(it.label) === normalize(n.name))) continue;
     const free = (pl) => !taken.has(`place:${normalize(pl.name)}`) && !planItemFor(pl, planItems);
-    const fit = known.places.find((pl) => pl.saved && placeFits(pl, n.need, city) && free(pl));
+    // Among several SAVED places that already fit this need, a dietary match (Travel Preferences
+    // > Food Preference) wins the tie - never pulled in over a place that doesn't fit the need at
+    // all, and never changes anything when the need isn't food-related or nobody set a
+    // preference (then this is exactly the old .find(), first match wins).
+    const savedFits = known.places.filter((pl) => pl.saved && placeFits(pl, n.need, city) && free(pl));
+    const fit = n.need.food && foodPreference
+      ? savedFits.find((pl) => matchesFoodPreference(pl, foodPreference)) || savedFits[0]
+      : savedFits[0];
     // nobody saved one: a place of that kind Voya knows in this city (the app's catalog first, then the
-    // gazetteer), preferring one in a district the plan already goes to
+    // gazetteer), preferring a dietary match, then one in a district the plan already goes to
     const districts = new Set(toPlan.map((p) => p.place.district).filter(Boolean));
     const voyaPick = fit ? null : known.places
       .filter((pl) => !pl.saved && placeFits(pl, n.need, city) && free(pl))
-      .sort((a, b) => Number(districts.has(b.district)) - Number(districts.has(a.district)) ||
+      .sort((a, b) =>
+        (n.need.food && foodPreference ? Number(matchesFoodPreference(b, foodPreference)) - Number(matchesFoodPreference(a, foodPreference)) : 0) ||
+        Number(districts.has(b.district)) - Number(districts.has(a.district)) ||
         Number(b.source === "catalog") - Number(a.source === "catalog"))[0];
     const who = n.proposer;
     // still nothing: catalog_places in Firestore, then OpenStreetMap (planner/osm_places.js)
@@ -393,7 +409,15 @@ async function buildItinerary({ messages, members, days, plan, saved, catalog = 
       ideas.unshift({ label: `Hotel near ${hotel.name}`, saved: "", hint: "Not booked yet · save or book one in Explore" });
     }
   } else if (!hasHotel && !planItems.some((it) => it.icon === "hotel")) {
-    ideas.unshift({ label: "Hotel", saved: (savedHotels[0] && savedHotels[0].name) || "",
+    // Among several saved hotels with nothing agreed in chat, one whose name says it's the
+    // group's Accommodation preference (Resort/Hostel/Homestay/Apartment/Hotel) wins the tie -
+    // same soft-preference idea as the dietary match above, never a hard filter: no name match
+    // just falls back to the first saved hotel, exactly like before this existed.
+    const ACCOM_WORDS = { Resort: /resort/i, Hostel: /hostel/i, Homestay: /home.?stay/i,
+      Apartment: /apartment|service[d]? apartment|condo/i, Hotel: /\bhotel\b/i };
+    const accomRe = ACCOM_WORDS[String(accommodation || "").trim()];
+    const hotelPick = (accomRe && savedHotels.find((h) => accomRe.test(h.name))) || savedHotels[0];
+    ideas.unshift({ label: "Hotel", saved: (hotelPick && hotelPick.name) || "",
       hint: savedHotels.length ? `Not booked yet · ${savedHotels.length} saved, none agreed in the chat` : "Not booked yet · the group has not picked one" });
   }
   if (!lp.flightsBooked) {

@@ -240,7 +240,11 @@ class ItineraryAiService extends ChangeNotifier {
       );
       // Cast after the call rather than through call<T>() — same reason as
       // StripeService: the plugin hands back a loosely-typed Map.
-      final result = await callable.call({'tripId': tripId});
+      // AI-Summarised Itinerary Algorithm (FYP documentation), step 1: this call only ever
+      // happens after ai_itinerary_sheet.dart's consent dialog has been accepted (that's the
+      // only call site for ItineraryAiService.start()) - 'consent' here is what the Cloud
+      // Function actually checks before it reads this group's chat, not just a formality.
+      final result = await callable.call({'tripId': tripId, 'consent': true});
       data = (result.data as Map).cast<String, dynamic>();
     } on FirebaseFunctionsException catch (e) {
       // e.message is already a plain, customer-facing sentence —

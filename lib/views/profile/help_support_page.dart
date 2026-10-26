@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../theme.dart';
+import '../shared/contact_launcher.dart';
 import 'sub_page_scaffold.dart';
 
 // ---------------------------------------------------------------------
@@ -55,9 +56,7 @@ class HelpSupportPage extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(vertical: 14),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
               ),
-              onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Support request sent — we\'ll get back to you by email.')),
-              ),
+              onPressed: () => confirmAndLaunch(context, ContactAction.email, 'teohyongyun90@gmail.com'),
               icon: const Icon(Icons.email_outlined, color: AppColors.primary),
               label: const Text('Contact Support', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.w600)),
             ),

@@ -233,10 +233,12 @@ const TABS = {
     },
     detail(r) {
       const row = (label, value) => `<div class="field" style="margin-bottom:12px;"><label>${label}</label><p class="value">${value}</p></div>`;
-      const image = restaurantImageUrl(r);
       const website = r.website || "";
+      // Restaurants never display a photo here (same as the app's Explore/detail
+      // pages) — the catalog's restaurant photos are bulk-import stock images
+      // shared across many unrelated restaurants, not that restaurant's own real
+      // photo, so showing one here would be just as misleading as in the app.
       return `
-        ${image ? `<img src="${image}" style="width:100%;border-radius:12px;margin-bottom:16px;max-height:220px;object-fit:cover;" />` : ""}
         <div class="form-grid">
           ${row("Name", escapeHtml(r.name || "—"))}
           ${row("Cuisine", escapeHtml(restaurantCuisineLabel(r)))}

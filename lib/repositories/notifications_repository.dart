@@ -68,6 +68,23 @@ class NotificationsRepository {
 
   Future<void> delete(String uid, String id) => _of(uid).doc(id).delete();
 
+  /// "Remove All" on the Notifications page — deletes every notification
+  /// in [uid]'s inbox, not just the most recent 100 [watch] shows (a
+  /// `.limit(100)` read still sees every doc there actually is to delete;
+  /// it's only the live UI list that's capped). Chunked at 450 writes per
+  /// batch, same as every other bulk-delete in this app (see
+  /// TripRepository.deleteTrip) — Firestore batches cap at 500.
+  Future<void> deleteAll(String uid) async {
+    final docs = await _of(uid).get();
+    for (var i = 0; i < docs.docs.length; i += 450) {
+      final batch = FirebaseFirestore.instance.batch();
+      for (final doc in docs.docs.skip(i).take(450)) {
+        batch.delete(doc.reference);
+      }
+      await batch.commit();
+    }
+  }
+
   Future<void> send({
     required String toUid,
     required String type,

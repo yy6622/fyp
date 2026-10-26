@@ -54,7 +54,7 @@ class _LoginPageState extends State<LoginPage> {
           // Same destination a brand-new email/password account reaches
           // after verifying — avatar/phone/region/currency/add friend —
           // which itself lands on MainPage when done (see
-          // OnboardingWizardPage._finish()). Google/Facebook accounts
+          // OnboardingWizardPage._finish()). Google accounts
           // skip email verification entirely: the provider already
           // vouches for the address.
           Navigator.of(context).push(MaterialPageRoute(builder: (_) => const OnboardingWizardPage()));
@@ -156,9 +156,7 @@ class _LoginPageState extends State<LoginPage> {
                 socialLoginRow(
                   'Or Login with',
                   onGoogle: () => _handleSocial(controller.loginWithGoogle),
-                  onFacebook: () => _handleSocial(controller.loginWithFacebook),
                   googleBusy: controller.googleLoading,
-                  facebookBusy: controller.facebookLoading,
                 ),
               ],
             ),

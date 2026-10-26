@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../controllers/community_controller.dart';
-import '../../controllers/filter_controller.dart';
 import '../../models/community_models.dart';
+import '../../services/auth_service.dart';
 import '../../theme.dart';
-import '../filter/filter_page.dart';
-import '../../models/filter_models.dart' as filters;
+import '../shared/nice_dialog.dart';
 import 'author_profile_page.dart';
 import 'community_post_detail_page.dart';
 import 'create_post_page.dart';
@@ -29,11 +29,8 @@ class CommunityPage extends StatefulWidget {
 
 class _CommunityPageState extends State<CommunityPage> {
   final CommunityController controller = CommunityController();
-  // FilterPage now always needs an owned controller passed in (see
-  // filter_page.dart) — this page's Filter sheet isn't wired to actually
-  // filter the post feed (unchanged from before), it just needs somewhere
-  // to keep its own selections while open.
-  final FilterController filterController = FilterController();
+
+  String get _myUid => AuthService.instance.currentUser?.uid ?? '';
 
   @override
   void initState() {
@@ -47,16 +44,120 @@ class _CommunityPageState extends State<CommunityPage> {
   @override
   void dispose() {
     controller.dispose();
-    filterController.dispose();
     super.dispose();
   }
 
+  /// The search bar's "tune" icon — used to open an unrelated "Trip
+  /// Duration (days)" sheet (see CommunityController.minRating's doc
+  /// comment) whose choices went nowhere. This one actually filters the
+  /// feed: a tag (the same [CommunityController.activeTagFilter] a tag
+  /// chip on any post already sets) and a minimum rating.
   void _openFilters() {
     showModalBottomSheet(
       context: context,
+      backgroundColor: Colors.white,
       isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => FilterPage(type: filters.FilterType.plan, controller: filterController),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (sheetCtx) => StatefulBuilder(
+        builder: (sheetCtx, setSheetState) {
+          final tags = controller.allTags.toList()..sort();
+          return SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Expanded(
+                        child: Text('Filter Posts', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.navy)),
+                      ),
+                      TextButton(
+                        onPressed: () {
+                          controller.setActiveTagFilter(null);
+                          controller.setMinRating(0);
+                          setSheetState(() {});
+                        },
+                        child: const Text('Reset', style: TextStyle(color: AppColors.textGrey, fontWeight: FontWeight.w600)),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  const Text('Tag', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.black)),
+                  const SizedBox(height: 8),
+                  if (tags.isEmpty)
+                    const Text('No tags on any post yet.', style: TextStyle(fontSize: 12, color: AppColors.textGrey))
+                  else
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: tags.map((tag) {
+                        final selected = controller.activeTagFilter == tag;
+                        return GestureDetector(
+                          onTap: () {
+                            controller.setActiveTagFilter(selected ? null : tag);
+                            setSheetState(() {});
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                            decoration: BoxDecoration(
+                              color: selected ? AppColors.primary : AppColors.chipGrey,
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            child: Text('#$tag',
+                                style: TextStyle(
+                                    fontSize: 12, fontWeight: FontWeight.w600, color: selected ? Colors.white : AppColors.navy)),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  const SizedBox(height: 18),
+                  const Text('Minimum Rating', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.black)),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: const [0.0, 3.5, 4.0, 4.5].map((v) {
+                      final selected = controller.minRating == v;
+                      final label = v == 0 ? 'Any' : '$v+';
+                      return GestureDetector(
+                        onTap: () {
+                          controller.setMinRating(v);
+                          setSheetState(() {});
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                          decoration: BoxDecoration(
+                            color: selected ? AppColors.primary : AppColors.chipGrey,
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: Text(label,
+                              style: TextStyle(
+                                  fontSize: 12, fontWeight: FontWeight.w600, color: selected ? Colors.white : AppColors.navy)),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 20),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        padding: const EdgeInsets.symmetric(vertical: 13),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      onPressed: () => Navigator.of(sheetCtx).pop(),
+                      child: const Text('Done', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
     );
   }
 
@@ -511,41 +612,56 @@ class _CommunityPageState extends State<CommunityPage> {
                     children: post.tags.map((t) => _tagChip(t)).toList(),
                   ),
                 ],
-                const SizedBox(height: 10),
-                SizedBox(
-                  height: 78,
-                  child: Row(
-                    children: List.generate(post.images.length.clamp(0, 3), (i) {
-                      final isLastVisible = i == 2 && post.images.length > 3;
-                      return Expanded(
-                        child: Padding(
-                          padding: EdgeInsets.only(right: i == 2 ? 0 : 6),
-                          child: ClipRRect(
+                if (post.hasVideo || post.images.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    height: 78,
+                    // FR61 — a video post carries no images (see
+                    // CommunityPost.hasVideo's doc comment: a post has at
+                    // most one media item), so the feed card shows a single
+                    // play-badged thumbnail instead of the photo strip.
+                    child: post.hasVideo
+                        ? ClipRRect(
                             borderRadius: BorderRadius.circular(10),
-                            child: Stack(
-                              fit: StackFit.expand,
-                              children: [
-                                Image.network(
-                                  post.images[i],
-                                  fit: BoxFit.cover,
-                                  errorBuilder: (context, error, stackTrace) =>
-                                      Container(color: AppColors.chipGrey, child: const Icon(Icons.image_outlined, color: AppColors.textGrey)),
-                                ),
-                                if (isLastVisible)
-                                  Container(
-                                    color: Colors.black.withValues(alpha: 0.45),
-                                    alignment: Alignment.center,
-                                    child: Text('+${post.images.length - 3}',
-                                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
-                                  ),
-                              ],
+                            child: Container(
+                              color: AppColors.chipGrey,
+                              alignment: Alignment.center,
+                              child: const Icon(Icons.play_circle_fill, size: 30, color: AppColors.navy),
                             ),
+                          )
+                        : Row(
+                            children: List.generate(post.images.length.clamp(0, 3), (i) {
+                              final isLastVisible = i == 2 && post.images.length > 3;
+                              return Expanded(
+                                child: Padding(
+                                  padding: EdgeInsets.only(right: i == 2 ? 0 : 6),
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(10),
+                                    child: Stack(
+                                      fit: StackFit.expand,
+                                      children: [
+                                        Image.network(
+                                          post.images[i],
+                                          fit: BoxFit.cover,
+                                          errorBuilder: (context, error, stackTrace) =>
+                                              Container(color: AppColors.chipGrey, child: const Icon(Icons.image_outlined, color: AppColors.textGrey)),
+                                        ),
+                                        if (isLastVisible)
+                                          Container(
+                                            color: Colors.black.withValues(alpha: 0.45),
+                                            alignment: Alignment.center,
+                                            child: Text('+${post.images.length - 3}',
+                                                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              );
+                            }),
                           ),
-                        ),
-                      );
-                    }),
                   ),
-                ),
+                ],
               ],
             ),
           ),
@@ -554,7 +670,10 @@ class _CommunityPageState extends State<CommunityPage> {
             children: [
               const Icon(Icons.location_on_outlined, size: 14, color: AppColors.primary),
               const SizedBox(width: 3),
-              Text(post.location, style: const TextStyle(fontSize: 11.5, color: AppColors.primary)),
+              Expanded(
+                child: Text(post.location,
+                    maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11.5, color: AppColors.primary)),
+              ),
             ],
           ),
           const SizedBox(height: 10),
@@ -575,22 +694,24 @@ class _CommunityPageState extends State<CommunityPage> {
               ),
               const SizedBox(width: 18),
               GestureDetector(
-                onTap: () => ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Comments are coming soon')),
-                ),
+                onTap: () => _openReviews(post),
                 child: Row(
                   children: [
                     const Icon(Icons.chat_bubble_outline, size: 16, color: AppColors.textGrey),
                     const SizedBox(width: 5),
-                    Text('${post.comments}', style: const TextStyle(fontSize: 12, color: AppColors.textGrey)),
+                    // There has never been a separate "comment" write path
+                    // — `comments`/`commentsCount` is set to 0 at creation
+                    // and nothing ever increments it. Real written
+                    // feedback on a post lives in its reviews (see
+                    // CommunityRepository.addReview), so this now shows
+                    // and opens that instead of a dead "coming soon" tap.
+                    Text('${post.ratingCount}', style: const TextStyle(fontSize: 12, color: AppColors.textGrey)),
                   ],
                 ),
               ),
               const Spacer(),
               GestureDetector(
-                onTap: () => ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Share link copied')),
-                ),
+                onTap: () => _sharePost(post),
                 child: const Icon(Icons.share_outlined, size: 18, color: AppColors.textGrey),
               ),
             ],
@@ -600,32 +721,126 @@ class _CommunityPageState extends State<CommunityPage> {
     );
   }
 
+  /// Opens the post's Review tab directly — see the feed card's comment
+  /// icon doc comment for why that's where real feedback actually lives.
+  void _openReviews(CommunityPost post) {
+    controller.setTab(post, CommunityPostTab.review);
+    _openDetail(post);
+  }
+
+  Future<void> _sharePost(CommunityPost post) async {
+    // No hosted web page exists for a community post (same reasoning as
+    // the trip invite code elsewhere in this app: there's no domain to
+    // serve a real link from), so this shares the post's actual text
+    // through the OS share sheet rather than claiming a link was
+    // "copied" when nothing was ever put on the clipboard.
+    await SharePlus.instance.share(ShareParams(
+      text: '${post.title}\n\n${post.description}\n\n— shared from Voya',
+      subject: post.title,
+    ));
+  }
+
+  Future<void> _reportPostFromFeed(CommunityPost post) async {
+    final reasonCtrl = TextEditingController();
+    final result = await showNiceFormDialog(
+      context: context,
+      title: 'Report post',
+      headerIcon: Icons.flag_outlined,
+      confirmLabel: 'Submit report',
+      fieldsBuilder: (ctx, setState) => [
+        const Text(
+          'Let us know what\'s wrong with this post — our team will review it.',
+          style: TextStyle(fontSize: 12, color: AppColors.textGrey),
+        ),
+        const SizedBox(height: 14),
+        niceDialogField(reasonCtrl, 'Reason', autofocus: true),
+      ],
+    );
+    if (result != true) return;
+    final reason = reasonCtrl.text.trim();
+    if (!mounted) return;
+    if (reason.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please tell us the reason for the report')));
+      return;
+    }
+    final error = await controller.reportPost(post, reason);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(error ?? 'Thanks — our team will take a look at this post.')),
+    );
+  }
+
+  Future<void> _deletePostFromFeed(CommunityPost post) async {
+    final confirmed = await showNiceConfirmDialog(
+      context: context,
+      title: 'Delete Post',
+      message: 'This post will be permanently removed. This cannot be undone.',
+      confirmLabel: 'Delete',
+      icon: Icons.delete_forever,
+      destructive: true,
+    );
+    if (!confirmed) return;
+    final error = await controller.deletePost(post);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(error ?? 'Your post has been deleted.')),
+    );
+  }
+
+  /// The feed card's "⋮" menu — previously the SAME two options
+  /// ("Share"/"Report post", both fake: Share claimed to copy a link
+  /// that was never put on the clipboard, Report called no repository
+  /// method at all) regardless of whose post it was, including your own.
+  /// Now author-aware, and every option here actually does what it
+  /// says — the same real actions the post's detail page already offers
+  /// (see CommunityPostDetailPage._editPost/_deletePost/_reportPost),
+  /// just reachable without leaving the feed.
   void _openPostMenu(CommunityPost post) {
+    final isMine = post.authorId == _myUid;
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (_) => SafeArea(
+      builder: (sheetCtx) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.share_outlined, color: AppColors.navy),
-              title: const Text('Share'),
-              onTap: () {
-                Navigator.of(context).pop();
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Share link copied')));
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.flag_outlined, color: AppColors.navy),
-              title: const Text('Report post'),
-              onTap: () {
-                Navigator.of(context).pop();
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Report submitted')));
-              },
-            ),
-          ],
+          children: isMine
+              ? [
+                  ListTile(
+                    leading: const Icon(Icons.edit_outlined, color: AppColors.navy),
+                    title: const Text('Edit Post'),
+                    onTap: () {
+                      Navigator.of(sheetCtx).pop();
+                      Navigator.of(context).push(MaterialPageRoute(builder: (_) => CreatePostPage(editingPost: post)));
+                    },
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                    title: const Text('Delete Post', style: TextStyle(color: Colors.redAccent)),
+                    onTap: () {
+                      Navigator.of(sheetCtx).pop();
+                      _deletePostFromFeed(post);
+                    },
+                  ),
+                ]
+              : [
+                  ListTile(
+                    leading: const Icon(Icons.share_outlined, color: AppColors.navy),
+                    title: const Text('Share'),
+                    onTap: () {
+                      Navigator.of(sheetCtx).pop();
+                      _sharePost(post);
+                    },
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.flag_outlined, color: AppColors.navy),
+                    title: const Text('Report post'),
+                    onTap: () {
+                      Navigator.of(sheetCtx).pop();
+                      _reportPostFromFeed(post);
+                    },
+                  ),
+                ],
         ),
       ),
     );
@@ -684,9 +899,12 @@ class _CommunityPageState extends State<CommunityPage> {
     );
   }
 
-  void _openCreatePost({String? itineraryTitle}) {
+  // Plain "Normal Post" compose — an Itinerary Post always goes through
+  // _openItinerarySelect instead, since CreatePostPage now needs a real
+  // Trip (see CreatePostPage.itineraryTrip), not just a title string.
+  void _openCreatePost() {
     Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => CreatePostPage(itineraryTitle: itineraryTitle)),
+      MaterialPageRoute(builder: (_) => const CreatePostPage()),
     );
   }
 

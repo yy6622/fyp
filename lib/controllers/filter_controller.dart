@@ -6,9 +6,12 @@ import 'package:flutter/material.dart';
 class FilterController extends ChangeNotifier {
   RangeValues priceRange = const RangeValues(100, 1500);
   RangeValues durationRange = const RangeValues(1, 12);
-  double distanceKm = 5;
-  double tripDays = 5;
   bool openNow = false;
+  // AI-Based Attraction Recommendation Algorithm (FYP documentation) —
+  // the 'accessibility' mandatory constraint. Only ever true when the
+  // person explicitly asks for it on the Attraction filter sheet; see
+  // CatalogRepository's OSM 'wheelchair' tag capture for what backs it.
+  bool accessibleOnly = false;
 
   final Set<String> departureTimes = {};
   final Set<String> stops = {'Direct'};
@@ -23,13 +26,6 @@ class FilterController extends ChangeNotifier {
   final Set<String> restaurantCuisines = {};
   String restaurantPrice = 'Any';
 
-  final Set<String> nearbyCategories = {};
-  String nearbyRating = 'Any';
-
-  final Set<String> tripTypes = {};
-  final Set<String> seasons = {};
-  String pace = 'Balanced';
-
   void setPriceRange(RangeValues v) {
     priceRange = v;
     notifyListeners();
@@ -40,18 +36,13 @@ class FilterController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void setDistanceKm(double v) {
-    distanceKm = v;
-    notifyListeners();
-  }
-
-  void setTripDays(double v) {
-    tripDays = v;
-    notifyListeners();
-  }
-
   void setOpenNow(bool v) {
     openNow = v;
+    notifyListeners();
+  }
+
+  void setAccessibleOnly(bool v) {
+    accessibleOnly = v;
     notifyListeners();
   }
 
@@ -67,16 +58,6 @@ class FilterController extends ChangeNotifier {
 
   void setRestaurantPrice(String v) {
     restaurantPrice = v;
-    notifyListeners();
-  }
-
-  void setNearbyRating(String v) {
-    nearbyRating = v;
-    notifyListeners();
-  }
-
-  void setPace(String v) {
-    pace = v;
     notifyListeners();
   }
 
@@ -100,9 +81,8 @@ class FilterController extends ChangeNotifier {
   void resetFilters() {
     priceRange = const RangeValues(100, 1500);
     durationRange = const RangeValues(1, 12);
-    distanceKm = 5;
-    tripDays = 5;
     openNow = false;
+    accessibleOnly = false;
     departureTimes.clear();
     stops
       ..clear()
@@ -114,11 +94,6 @@ class FilterController extends ChangeNotifier {
     attractionPrice = 'Any';
     restaurantCuisines.clear();
     restaurantPrice = 'Any';
-    nearbyCategories.clear();
-    nearbyRating = 'Any';
-    tripTypes.clear();
-    seasons.clear();
-    pace = 'Balanced';
     notifyListeners();
   }
 }

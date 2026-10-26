@@ -1,32 +1,63 @@
 import 'package:flutter/material.dart';
+import 'package:printing/printing.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../controllers/group_settings_controller.dart';
+import '../../services/itinerary_export_service.dart';
 import '../../theme.dart';
 
 // ---------------------------------------------------------------------
-// Export Itinerary
+// Export Itinerary — real PDF/Image export from the trip's actual plan,
+// flights, hotels and expenses (ItineraryExportService). Used to just
+// show a fake "Itinerary exported as PDF" SnackBar with nothing behind
+// it — see ExportItineraryController's old doc comment.
 // ---------------------------------------------------------------------
 class ExportItineraryPage extends StatefulWidget {
-  const ExportItineraryPage({super.key});
+  final String tripId;
+  const ExportItineraryPage({super.key, required this.tripId});
 
   @override
   State<ExportItineraryPage> createState() => _ExportItineraryPageState();
 }
 
 class _ExportItineraryPageState extends State<ExportItineraryPage> {
-  final ExportItineraryController controller = ExportItineraryController();
-
-  void _export() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Itinerary exported as ${controller.format}')),
-    );
-    Navigator.of(context).maybePop();
-  }
+  late final ExportItineraryController controller = ExportItineraryController(tripId: widget.tripId);
+  bool _exporting = false;
 
   @override
   void dispose() {
     controller.dispose();
     super.dispose();
+  }
+
+  Future<void> _export() async {
+    final trip = controller.trip;
+    if (trip == null) return;
+    setState(() => _exporting = true);
+    try {
+      final bytes = await ItineraryExportService.buildItineraryPdf(trip: trip, expenses: controller.expenses);
+      final fileName = 'Itinerary-${trip.name.isEmpty ? 'Trip' : trip.name}'.replaceAll(RegExp(r'[^A-Za-z0-9\-]+'), '_');
+      if (controller.format == 'PDF') {
+        await Printing.layoutPdf(onLayout: (format) async => bytes, name: '$fileName.pdf');
+      } else {
+        // "Image" — rasterise every page of the same PDF content to PNG
+        // and hand them to the OS share sheet, rather than claiming an
+        // "Image" export when it's really just the PDF again.
+        final pages = await Printing.raster(bytes, dpi: 150).toList();
+        final files = [
+          for (var i = 0; i < pages.length; i++)
+            XFile.fromData(await pages[i].toPng(), mimeType: 'image/png', name: '$fileName-page${i + 1}.png'),
+        ];
+        await SharePlus.instance.share(ShareParams(files: files, subject: fileName));
+      }
+      if (!mounted) return;
+      Navigator.of(context).maybePop();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not export the itinerary: $e')));
+    } finally {
+      if (mounted) setState(() => _exporting = false);
+    }
   }
 
   @override
@@ -83,8 +114,11 @@ class _ExportItineraryPageState extends State<ExportItineraryPage> {
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                   ),
-                  onPressed: _export,
-                  child: const Text('Export', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+                  onPressed: (controller.trip == null || _exporting) ? null : _export,
+                  child: _exporting
+                      ? const SizedBox(
+                          width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : const Text('Export', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
                 ),
               ),
             ),

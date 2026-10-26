@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../../controllers/saved_items_controller.dart';
 import '../../controllers/vote_controller.dart' show PickedSavedItem;
-import '../../repositories/catalog_repository.dart';
 import '../../theme.dart';
 
 // ---------------------------------------------------------------------
@@ -232,9 +231,9 @@ class _SavedItemPickerSheetState extends State<_SavedItemPickerSheet> {
               id: r.id,
               label: r.name,
               subtitle: r.cuisineLabel,
-              imageUrl: r.image,
               rating: r.rating,
               fallbackIcon: Icons.restaurant_outlined,
+              showThumb: false,
             ));
           },
         );
@@ -277,8 +276,10 @@ class _SavedItemPickerSheetState extends State<_SavedItemPickerSheet> {
           padding: const EdgeInsets.symmetric(vertical: 10),
           child: Row(
             children: [
-              _thumb(item.imageUrl, item.fallbackIcon),
-              const SizedBox(width: 12),
+              if (item.showThumb) ...[
+                _thumb(item.imageUrl, item.fallbackIcon),
+                const SizedBox(width: 12),
+              ],
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
