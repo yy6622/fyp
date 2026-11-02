@@ -1,28 +1,3 @@
-/// Real, static reference data for the Group Info > Emergency feature —
-/// keyed by the exact country name a trip's `destination` is set to (see
-/// `countries.dart`/`create_plan_wizard.dart`'s destination picker),
-/// lowercased, the same convention `country_gateways.dart` already uses.
-///
-/// [kEmergencyNumbersByCountry] is each country's well-published local
-/// emergency numbers (the same facts any travel guide or government
-/// travel-advisory page lists) — not trip data, so there's nothing to
-/// fetch per-trip; it just needs to be looked up by the trip's own
-/// destination instead of a single number shown for every trip.
-///
-/// [kEmbassyInfoByCountry] is the nearest Malaysian embassy/consulate's
-/// real contact details. Unlike the emergency numbers above, this isn't
-/// something safe to fill in from general knowledge for every country —
-/// wrong contact details for an actual emergency are worse than none — so
-/// every entry here was copied verbatim from Wisma Putra's own official
-/// mission directory (kln.gov.my/web/guest/overseas-missions, "OVERSEAS
-/// MISSIONS — Total: 111 missions worldwide"), fetched live, not filled
-/// in from general knowledge. Where a country has more than one Malaysian
-/// mission (e.g. China has 6), the one in the country's main destination
-/// city for this app is used — matching [kCountryGateways]' own city
-/// choice where there's overlap (e.g. Beijing, not Hong Kong). [EmbassyPage]
-/// falls back to a link to that same directory for any destination not in
-/// this map (so far just 'malaysia' itself, which doesn't need one), never
-/// guessing.
 library;
 
 class EmergencyNumbers {
@@ -65,9 +40,6 @@ const Map<String, EmergencyNumbers> kEmergencyNumbersByCountry = {
   'mexico': EmergencyNumbers(police: '911', ambulance: '911', fire: '911'),
 };
 
-/// Generic fallback for any destination not in the map above — 112 works
-/// as an emergency number on most GSM phones worldwide even where it
-/// isn't the official local number.
 const kFallbackEmergencyNumbers = EmergencyNumbers(police: '112', ambulance: '112', fire: '112');
 
 class EmbassyInfo {
@@ -92,8 +64,6 @@ const Map<String, EmbassyInfo> kEmbassyInfoByCountry = {
     officeLines: ['+65 6235 0111', '+65 6887 6256'],
     email: 'mwsingapore@kln.gov.my',
   ),
-  // No Malaysian mission in Bali (this app's gateway city) — nearest real
-  // mission is the Embassy in Jakarta.
   'indonesia': EmbassyInfo(
     missionName: 'Embassy of Malaysia, Jakarta',
     address: 'Jl. H.R. Rasuna Said Kav. X/6, No. 1-3, Kuningan, Jakarta Selatan 12950, Indonesia',
@@ -122,7 +92,6 @@ const Map<String, EmbassyInfo> kEmbassyInfoByCountry = {
     emergencyPhone: '+63 961 077 8113',
     email: 'MalaysianEmbassyPh@gmail.com',
   ),
-  // Verified against the embassy's own page at kln.gov.my/web/jpn_tokyo.
   'japan': EmbassyInfo(
     missionName: 'Embassy of Malaysia, Tokyo',
     address: '20-16, Nanpeidai-cho, Shibuya-ku, Tokyo 150-0036, Japan',
@@ -151,8 +120,6 @@ const Map<String, EmbassyInfo> kEmbassyInfoByCountry = {
     emergencyPhone: '+852 6900 6390',
     email: 'mwhongkong@kln.gov.my',
   ),
-  // Malaysia has no formal embassy in Taiwan — this is the real contact
-  // point Wisma Putra's own directory lists there.
   'taiwan': EmbassyInfo(
     missionName: 'Malaysian Friendship and Trade Centre, Taipei',
     address: '8th Floor, San Ho Plastic Building, No. 102 Dunhua N. Road, Songshan District, Taipei City, Taiwan',
@@ -165,8 +132,6 @@ const Map<String, EmbassyInfo> kEmbassyInfoByCountry = {
     officeLines: ['+91-11-2415 9300'],
     email: 'mwdelhi@kln.gov.my',
   ),
-  // No Malaysian mission in Sydney (this app's gateway city) — nearest
-  // real mission is the High Commission in Canberra.
   'australia': EmbassyInfo(
     missionName: 'High Commission of Malaysia, Canberra',
     address: '7 Perth Avenue, Yarralumla, ACT 2600, Australia',
@@ -174,8 +139,6 @@ const Map<String, EmbassyInfo> kEmbassyInfoByCountry = {
     emergencyPhone: '+61 416 334 901',
     email: 'mwcanberra@kln.gov.my',
   ),
-  // No Malaysian mission in Auckland (this app's gateway city) — nearest
-  // real mission is the High Commission in Wellington.
   'new zealand': EmbassyInfo(
     missionName: 'High Commission of Malaysia, Wellington',
     address: '10 Washington Avenue, Brooklyn, Wellington, New Zealand',
@@ -221,8 +184,6 @@ const Map<String, EmbassyInfo> kEmbassyInfoByCountry = {
     emergencyPhone: '+34 659 89 49 43',
     email: 'mwmadrid@kln.gov.my',
   ),
-  // No Malaysian mission in Amsterdam (this app's gateway city) — nearest
-  // real mission is the Embassy in The Hague.
   'netherlands': EmbassyInfo(
     missionName: 'Embassy of Malaysia, The Hague',
     address: 'Rustenburgweg 2, Zuid-Holland, The Hague, Netherlands',
@@ -230,9 +191,6 @@ const Map<String, EmbassyInfo> kEmbassyInfoByCountry = {
     emergencyPhone: '+31 6 3448 5289',
     email: 'mwthehague@kln.gov.my',
   ),
-  // No Malaysian mission in Zurich (this app's gateway city) — nearest
-  // real bilateral mission is the Embassy in Berne (Geneva only hosts
-  // Malaysia's UN mission, not a general consular one).
   'switzerland': EmbassyInfo(
     missionName: 'Embassy of Malaysia, Berne',
     address: 'Jungfraustrasse 1, CH-3005 Berne, Switzerland',
@@ -247,8 +205,6 @@ const Map<String, EmbassyInfo> kEmbassyInfoByCountry = {
     emergencyPhone: '+1 (929) 428-0794',
     email: 'mwnewyorkcg@kln.gov.my',
   ),
-  // No Malaysian mission in Toronto (this app's gateway city) — nearest
-  // real mission is the High Commission in Ottawa.
   'canada': EmbassyInfo(
     missionName: 'High Commission of Malaysia, Ottawa',
     address: '60 Boteler Street, Ottawa, Ontario K1N 8Y7, Canada',
@@ -296,7 +252,4 @@ const Map<String, EmbassyInfo> kEmbassyInfoByCountry = {
   ),
 };
 
-/// Wisma Putra's own directory of every Malaysian mission abroad — the
-/// honest fallback [EmbassyPage] links out to for a destination with no
-/// verified entry above, instead of guessing contact details.
 const kMalaysianMissionsDirectoryUrl = 'https://www.kln.gov.my/web/guest/overseas-missions';

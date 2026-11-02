@@ -16,8 +16,6 @@ import 'saved_items_controller.dart';
 /// Tabs of [GroupTripPage].
 enum GroupTab { plan, chat, expenses, vote }
 
-/// Controller for [GroupTripPage]. Streams the real trip document (and its
-/// chat messages) from Firestore.
 class GroupTripController extends ChangeNotifier {
   final String tripId;
   GroupTab _tab;
@@ -26,25 +24,9 @@ class GroupTripController extends ChangeNotifier {
     _saved.addListener(notifyListeners);
   }
 
-  /// The trip's saved flights/hotels/attractions/restaurants — used to
-  /// match an activity's plain-text label back to the real saved listing
-  /// behind it (image, rating, location, price) when it was added "From
-  /// Saved" in the Add Activity sheet, same idea as VoteTabController's
-  /// own hotelFor/attractionFor/restaurantFor. `late` so its initializer
-  /// (which reads `tripId`) runs after that field is set.
   late final SavedItemsController _saved = SavedItemsController(tripId: tripId);
 
-  /// Matches an activity's label back to the trip's saved hotel with that
-  /// exact name (case/whitespace insensitive) — best-effort: an activity
-  /// typed by hand instead of picked "From Saved" just won't match
-  /// anything, which the Day view treats as a plain card rather than an
-  /// error. Checked in this order (hotel, then attraction, then
-  /// restaurant) and stops at the first hit, since a saved item's name is
-  /// only ever that one listing's.
   CatalogHotel? hotelForActivity(ActivityItem item) => _firstWhereOrNull(_saved.hotels, (h) => _sameName(h.name, item.label));
-  // Saved listing first; otherwise any listing the app has for this trip's destination
-  // (catalog_attractions / catalog_restaurants — including the ones AI Summarise found in
-  // catalog_places / OpenStreetMap), so a real place in Firebase always shows as a card.
   CatalogAttraction? attractionForActivity(ActivityItem item) =>
       _firstWhereOrNull(_saved.attractions, (a) => _sameName(a.name, item.label)) ??
       _firstWhereOrNull(_cityAttractions, (a) => _sameName(a.name, item.label));
@@ -52,7 +34,6 @@ class GroupTripController extends ChangeNotifier {
       _firstWhereOrNull(_saved.restaurants, (r) => _sameName(r.name, item.label)) ??
       _firstWhereOrNull(_cityRestaurants, (r) => _sameName(r.name, item.label));
 
-  /// This trip's destination's attractions / restaurants (not only saved ones), see above.
   List<CatalogAttraction> _cityAttractions = const [];
   List<CatalogRestaurant> _cityRestaurants = const [];
   String _cityKey = '';
@@ -96,14 +77,6 @@ class GroupTripController extends ChangeNotifier {
     _markSeenForTab(value);
   }
 
-  /// Marks [t] seen for the signed-in user the moment they're on it — so
-  /// the Plan Home card's "Plan Updated"/"Expenses Updated" tags (see
-  /// [Trip.planUnseenFor]/[expensesUnseenFor]) clear as soon as the
-  /// member actually opens that tab, not just when they make an edit
-  /// themselves. Called both from [setTab] (switching tabs within this
-  /// page) and once right after the trip's first load (covers opening
-  /// straight into [widget.initialTab] from a Plan Home card tap, which
-  /// never goes through [setTab]).
   void _markSeenForTab(GroupTab t) {
     final uid = _uid;
     if (uid.isEmpty) return;
@@ -140,9 +113,6 @@ class GroupTripController extends ChangeNotifier {
       notifyListeners();
       return;
     }
-    // Covers landing directly on [_tab] (the tab a Plan Home card tap
-    // asked to open) without going through [setTab] — see
-    // [_markSeenForTab]'s doc comment.
     _markSeenForTab(_tab);
     final me = await UserRepository.instance.fetchProfile(uid);
     _myName = me?.name ?? 'You';
@@ -159,8 +129,6 @@ class GroupTripController extends ChangeNotifier {
     });
   }
 
-  /// Which page of the Plan tab's Overview/Day pager is showing.
-  /// -1 = Overview, 0..days.length-1 = that day (0-indexed).
   int _planIndex = -1;
   int get planIndex => _planIndex;
   void setPlanIndex(int value) {
@@ -218,34 +186,21 @@ class GroupTripController extends ChangeNotifier {
     await TripRepository.instance.sendMessage(tripId, senderId: _uid, senderName: _myName, memberIds: _trip?.memberIds ?? const [], text: text);
   }
 
-  /// FR15 — edits one of your own text messages. The call site (the
-  /// message bubble's long-press menu) only ever offers this for a
-  /// message whose senderId is this controller's own [_uid], and the
-  /// server-side rule double-checks that too.
   Future<void> editMessage(String messageId, String newText) {
     final trimmed = newText.trim();
     if (trimmed.isEmpty) return Future.value();
     return TripRepository.instance.editMessage(tripId, messageId, trimmed);
   }
 
-  /// FR17 — deletes one of your own messages.
   Future<void> deleteMessage(String messageId) {
     return TripRepository.instance.deleteMessage(tripId, messageId);
   }
 
-  /// Whether [message] is one the signed-in person sent, i.e. whether the
-  /// edit/delete menu should even be offered for it.
   bool isOwnMessage(TripMessage message) => message.senderId == _uid;
 
   bool _sendingAttachment = false;
   bool get sendingAttachment => _sendingAttachment;
 
-  /// Camera/Gallery attachment row — picks a photo, uploads it, then sends
-  /// it as its own chat message ([TripMessage.isImage]). Returns a
-  /// user-facing error string on failure, or null on success/the person
-  /// just backing out of the picker (both "nothing to show" from the
-  /// caller's point of view, so it doesn't distinguish them with an
-  /// exception).
   Future<String?> sendImageMessage(ImageSource source) async {
     File? file;
     try {
@@ -269,12 +224,6 @@ class GroupTripController extends ChangeNotifier {
     }
   }
 
-  /// Location attachment row button — a one-shot current-position read
-  /// (same [LocationService.getCurrentPosition] used by Account Setting's
-  /// Home Airport picker and Member Location), sent as its own chat
-  /// message ([TripMessage.isLocation]) rather than anything live/
-  /// ongoing. Returns a user-facing error string on failure (location
-  /// services off, permission denied), or null on success.
   Future<String?> sendLocationMessage() async {
     _showAttachments = false;
     notifyListeners();
@@ -320,9 +269,6 @@ class PlanFlightDetailController extends ChangeNotifier {
   }
 }
 
-/// Tabs of [PlanHotelDetailPage] — mirrors [PlanFlightTab], with a
-/// "Guests" tab in place of "Passenger". (No Review tab — reviews were
-/// removed from every hotel/attraction/restaurant surface.)
 enum PlanHotelTab { detail, guests, documents }
 
 /// Controller for [PlanHotelDetailPage].

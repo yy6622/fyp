@@ -1,13 +1,3 @@
-// AI Summarise (itinerary suggestions) - no Gemini, no OpenAI.
-//
-//  1. Voya's own trained model (discussion_summary/) reads every message and its stance
-//     (agree / object / unsure ...).
-//  2. The planner (planner/) anchors those stances on REAL places named in the chat (saved list,
-//     the app's catalog, Voya's place database), applies the group rule "proposed and nobody
-//     objected = agreed", fills wishes like "a museum" from the saved list, and organises the
-//     agreed places into days without clashing with the current plan.
-//
-// Output: {add, update, remove, unresolved} + ideas, parsed / resolved by itinerary_prompt.js.
 
 const { summarise } = require("./discussion_summary/summariser");
 const { normalize } = require("./discussion_summary/textproc");
@@ -37,7 +27,6 @@ const WEEKDAYS = [
 const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
 const FOOD_WORDS = /(eat|makan|吃|food|restaurant|cafe|café|kopitiam|hawker|dim sum|laksa|nasi|mee|ramen|sushi|bbq|steamboat|火锅|餐|饭|面|茶|coffee|breakfast|lunch|dinner|supper)/;
 const SHOP_WORDS = /(shop|shopping|mall|market|bazaar|outlet|购物|商场|市场|beli|pasar)/;
-// Proposal wording to strip when we have to build a name from the message itself.
 const FILLER = [
   /^(ok+|okay|so|guys|eh|wah|hmm+|btw)[, ]+/i,
   /\b(let'?s|lets|we should|should we|can we|how about|what about|i (really )?want to|i wanna|want to|must|wajib|jom|apa kata kita|kita kena)\b/gi,
@@ -48,7 +37,6 @@ const FILLER = [
 
 const tokens = (s) => normalize(s).replace(/[^a-z0-9一-鿿 ]+/g, " ").split(" ").filter(Boolean);
 
-/** A saved place / plan item named in the text (all words of its name, or its Chinese name, appear). */
 function findNamed(text, candidates, nameOf) {
   const norm = normalize(text);
   const words = new Set(tokens(text));
@@ -80,7 +68,6 @@ function dayMonth(str) {
   return null;
 }
 
-/** 1-based trip day the text points at, or null. */
 function readDay(text, days) {
   const s = normalize(text);
   let m = /(?:day|hari)\s*(\d{1,2})/.exec(s);
@@ -118,8 +105,6 @@ function readTime(text) {
     if (m[3] === "am" && h === 12) h = 0;
     if (h <= 23) return `${String(h).padStart(2, "0")}:${m[2] || "00"}`;
   }
-  // Chinese clock: "九点", "下午三点半", "晚上8点"
-  // not "一点点" / "早一点" / "多一点" (= a little), and a bare hour must be a daytime hour
   const zh = /(早上|上午|中午|下午|傍晚|晚上)?\s*(?<![早晚多少快慢好大小有差])([0-9]{1,2}|[一二两三四五六七八九十]{1,3})\s*点(?!点|儿)(半)?/.exec(s);
   if (zh && (zh[1] || !/^(一|两|1|2)$/.test(zh[2]))) {
     const n = zh[2];
@@ -133,7 +118,6 @@ function readTime(text) {
   return null;
 }
 
-/** The part of a message about one place: "先去南京路走走，晚上再去外滩" -> "先去南京路走走" for Nanjing Road. */
 function clauseFor(text, place) {
   const names = [place.name, ...(place.aliases || [])].map((a) => normalize(a)).filter((a) => a.length >= 2);
   const parts = normalize(text).split(/[，,。.;；!！?？\n]|然后|之后|then|after that/);
@@ -156,7 +140,6 @@ const TIME_WORDS = [
 ];
 
 function cleanName(text) {
-  // the name is usually before the first comma ("外滩一定要去，晚上很漂亮")
   let s = String(text).split(/[，,。;；\n]/)[0] || String(text);
   for (const rx of TIME_WORDS) s = s.replace(rx, " ");
   for (const rx of FILLER) s = s.replace(rx, " ");
@@ -168,7 +151,6 @@ function cleanName(text) {
 const toMin = (t) => { const [h, m] = t.split(":").map(Number); return h * 60 + m; };
 const toHHMM = (n) => `${String(Math.floor(n / 60) % 24).padStart(2, "0")}:${String(n % 60).padStart(2, "0")}`;
 
-/** Moves a time later in 30-minute steps until it is free on that day. */
 function freeTime(day, time, taken) {
   let t = toMin(time);
   const set = taken.get(day) || new Set();
@@ -180,7 +162,6 @@ function freeTime(day, time, taken) {
 
 const PACE_PREF = /(不想赶|不要太赶|不用赶|别太赶|慢慢|悠闲|放松|chill|relax|slow pace|not rushed|no rush|don'?t want to rush|santai)/i;
 
-/** The trip's destination, or the city the chat talks about most when the trip has none / an unknown one. */
 function destinationOf(destination, messages) {
   const { placesFor, findCity } = require("./planner/places");
   if (placesFor(destination).city) return destination;
@@ -194,14 +175,12 @@ function destinationOf(destination, messages) {
   return best ? best[0] : destination;
 }
 
-/** "Emily suggested · Alex, Mia +2 agreed" */
 function whyAgreed(p) {
   const others = p.support.filter((w) => w !== p.proposer);
   const names = others.length > 2 ? `${others.slice(0, 2).join(", ")} +${others.length - 2}` : others.join(", ");
   return `${p.proposer} suggested${names ? ` · ${names} agreed` : " · nobody objected"}`;
 }
 
-/** The time itself if nothing else in the plan is on that day at that time, otherwise the next free half hour. */
 function freeSlot(planItems, day, time, self = null) {
   const toM = (t) => { const [h, m] = String(t).split(":").map(Number); return h * 60 + (m || 0); };
   const busy = planItems.filter((it) => it.day === day && it !== self && /^\d{2}:\d{2}$/.test(it.time || "")).map((it) => toM(it.time));
@@ -210,7 +189,6 @@ function freeSlot(planItems, day, time, self = null) {
   return `${String(Math.floor(t / 60)).padStart(2, "0")}:${String(t % 60).padStart(2, "0")}`;
 }
 
-/** Plan item that is this place (any of its names appears in the item's label, or the other way round). */
 function planItemFor(place, planItems) {
   const names = [place.name, ...(place.aliases || [])].map((a) => normalize(a)).filter((a) => a.length >= 2);
   return planItems.find((it) => {
@@ -227,20 +205,8 @@ function dayFrom(texts, days) {
   return null;
 }
 
-/**
- * messages: [{id, speaker, text}], days: [{day, weekday, date}], destination: trip destination,
- * plan: {day: [{id, time, label, location, icon}]}, saved / catalog: [{name, location, type}],
- * window: logistics window (logistics.js) or null, hasHotel: a hotel stay is already booked.
- * Returns { answer: {add, update, remove, unresolved}, stats, decided }
- */
 async function buildItinerary({ messages, members, days, plan, saved, catalog = [], destination = "", model,
   decisions = null, window = null, hasHotel = false, flights = [], hotelStays = [], savedHotels = [], lookupNeed = null,
-  // Group Setting > Travel Preferences (Trip.foodPreference / Trip.accommodation) - a soft
-  // tie-break only, see planner/needs.js's matchesFoodPreference doc comment and pickSavedHotel
-  // below. travelStyle isn't threaded in here: this engine only ever resolves a place the chat
-  // already named (see the file header comment) and never invents a suggestion from nothing, so
-  // there's no "pick an activity" step for a style preference to bias - only food/hotel matching
-  // actually chooses among several equally-fitting candidates.
   foodPreference = "", accommodation = "" }) {
   const { knownPlaces } = require("./planner/places");
   const { tripLogistics } = require("./planner/logistics_plan");
@@ -248,13 +214,12 @@ async function buildItinerary({ messages, members, days, plan, saved, catalog = 
   const { schedule } = require("./planner/schedule");
   const { placeFits, genericPlace, matchesFoodPreference } = require("./planner/needs");
   const s = summarise(messages, model, members);
-  const known = knownPlaces({ destination: destinationOf(destination, messages), saved, catalog });
-  const d = decide({ messages, s, known, members, decisions });
   const planItems = Object.keys(plan).flatMap((k) => (plan[k] || []).map((it) => ({ ...it, day: Number(k) })));
-  // booked flights / hotel stays (or the times the chat gave): the plan is built around them
+  const known = knownPlaces({ destination: destinationOf(destination, messages), saved, catalog,
+    planned: planItems.map((it) => ({ name: it.label, location: it.location, icon: it.icon })) });
+  const d = decide({ messages, s, known, members, decisions });
   const lp = tripLogistics({ flights, hotelStays, days, window, messages });
   window = lp.window;
-  // the schedule sees them as busy slots, so nothing lands on a flight or a check-in
   const planWithFixed = {};
   for (const k of Object.keys(plan)) planWithFixed[k] = [...(plan[k] || [])];
   for (const f of lp.fixed) (planWithFixed[f.day] = planWithFixed[f.day] || []).push({ time: f.time, label: f.label, icon: f.kind });
@@ -266,26 +231,20 @@ async function buildItinerary({ messages, members, days, plan, saved, catalog = 
     const inPlan = planItemFor(p.place, planItems);
     const mentions = p.mentions.map((id) => mentionText.get(id));
     let day = dayFrom(mentions, days);
-    // a day from a reply in the thread ("那排第二天吧"), but not from "我也不想最后一天…才发现…"
     const replyDay = day ? null : dayFrom(p.dayText.filter((t) => !/(不想|不要|别|怕|not|don'?t|won'?t)/i.test(t)), days);
     const fullDay = (p.place.hours || 0) >= 6;
-    // a whole-day place (theme park) is never squeezed into the arrival / last day because of a reply
     if (!day && replyDay && !(fullDay && days.length > 2 && (replyDay === 1 || replyDay === days.length))) day = replyDay;
-    // a clock time only from the messages that name the place; "evening" / "lunch" also from the replies
     let time = null;
     for (const t of mentions) { time = readTime(clauseFor(t, p.place)); if (time) break; }
     if (!time) {
-      // the replies in the same thread ("九点左右应该可以吧", "晚上走走就好")
-      // the last time someone settled on wins; "不要告诉我六点" is not a time anyone wants
       const own = new Set(mentions);
       for (const t of p.dayText) {
         if (own.has(t) || /(不要|别|不想|not|don'?t)[^，,。]*点/.test(t)) continue;
-        // a clock time only from a reply that agrees to it ("九点左右应该可以吧"), not from banter about it
         const tt = readTime(t);
         if (tt && (stanceOf(t) === "agree" || !/\d|点/.test(normalize(t)))) time = tt;
       }
     }
-    if (fullDay) time = null;          // a whole day: starts in the morning, whatever was said about "tonight"
+    if (fullDay) time = null;
     if (p.status === "pending") {
       answer.unresolved.push(p.name);
     } else if (p.status === "rejected") {
@@ -302,9 +261,6 @@ async function buildItinerary({ messages, members, days, plan, saved, catalog = 
     }
   }
 
-  // "a museum" / "夜市" / "本帮菜": unless a place the group already named covers it (上海博物馆 is a
-  // museum), plan a SAVED place of that kind, else one Voya knows in the city, else the wish itself as a
-  // time block (planner/needs.js). Undecided or "if it rains" wishes are shown as ideas.
   const ideas = [];
   const taken = new Set(toPlan.map((p) => p.key));
   for (const n of d.needs) {
@@ -312,23 +268,16 @@ async function buildItinerary({ messages, members, days, plan, saved, catalog = 
     const city = known.city || destination || "";
     const coveredBy = d.places.find((p) => p.status !== "rejected" && placeFits(p.place, n.need, city));
     if (coveredBy) {
-      // "博物馆不错" was a vote for 上海博物馆: count it in that place's reason
       const cp = toPlan.find((x) => x.key === coveredBy.key);
       if (cp) cp.reason = whyAgreed({ ...coveredBy, support: [...new Set([...coveredBy.support, ...n.support])] });
       continue;
     }
     if (planItems.some((it) => n.need.fits.test(it.label) || normalize(it.label) === normalize(n.name))) continue;
     const free = (pl) => !taken.has(`place:${normalize(pl.name)}`) && !planItemFor(pl, planItems);
-    // Among several SAVED places that already fit this need, a dietary match (Travel Preferences
-    // > Food Preference) wins the tie - never pulled in over a place that doesn't fit the need at
-    // all, and never changes anything when the need isn't food-related or nobody set a
-    // preference (then this is exactly the old .find(), first match wins).
     const savedFits = known.places.filter((pl) => pl.saved && placeFits(pl, n.need, city) && free(pl));
     const fit = n.need.food && foodPreference
       ? savedFits.find((pl) => matchesFoodPreference(pl, foodPreference)) || savedFits[0]
       : savedFits[0];
-    // nobody saved one: a place of that kind Voya knows in this city (the app's catalog first, then the
-    // gazetteer), preferring a dietary match, then one in a district the plan already goes to
     const districts = new Set(toPlan.map((p) => p.place.district).filter(Boolean));
     const voyaPick = fit ? null : known.places
       .filter((pl) => !pl.saved && placeFits(pl, n.need, city) && free(pl))
@@ -337,7 +286,6 @@ async function buildItinerary({ messages, members, days, plan, saved, catalog = 
         Number(districts.has(b.district)) - Number(districts.has(a.district)) ||
         Number(b.source === "catalog") - Number(a.source === "catalog"))[0];
     const who = n.proposer;
-    // still nothing: catalog_places in Firestore, then OpenStreetMap (planner/osm_places.js)
     let osmPick = null;
     if (!fit && !voyaPick && n.status === "confirmed" && !n.conditional && lookupNeed) {
       const { fromCatalog } = require("./planner/places");
@@ -371,9 +319,6 @@ async function buildItinerary({ messages, members, days, plan, saved, catalog = 
     });
   }
 
-  // hotels. Booked stay: check in / check out on its days (the exact hotel name, so the plan shows its
-  // card), and a warning when it is not where the group agreed to stay. Nothing booked: the agreed
-  // area, using a hotel someone saved there when there is one.
   let checkIn = lp.checkIn;
   const hotel = d.hotels.find((h) => h.status === "confirmed");
   const hasIcon = (day, icon, label) => planItems.some((it) => it.day === day && it.icon === icon &&
@@ -409,10 +354,6 @@ async function buildItinerary({ messages, members, days, plan, saved, catalog = 
       ideas.unshift({ label: `Hotel near ${hotel.name}`, saved: "", hint: "Not booked yet · save or book one in Explore" });
     }
   } else if (!hasHotel && !planItems.some((it) => it.icon === "hotel")) {
-    // Among several saved hotels with nothing agreed in chat, one whose name says it's the
-    // group's Accommodation preference (Resort/Hostel/Homestay/Apartment/Hotel) wins the tie -
-    // same soft-preference idea as the dietary match above, never a hard filter: no name match
-    // just falls back to the first saved hotel, exactly like before this existed.
     const ACCOM_WORDS = { Resort: /resort/i, Hostel: /hostel/i, Homestay: /home.?stay/i,
       Apartment: /apartment|service[d]? apartment|condo/i, Hotel: /\bhotel\b/i };
     const accomRe = ACCOM_WORDS[String(accommodation || "").trim()];
@@ -427,7 +368,6 @@ async function buildItinerary({ messages, members, days, plan, saved, catalog = 
   for (const h of d.hotels) if (h.status === "pending") answer.unresolved.push(`Hotel near ${h.name}`);
 
   const relaxed = messages.some((m) => PACE_PREF.test(m.text || ""));
-  // the areas each day of the plan already goes to (a place already planned that Voya knows)
   const { aliasHits } = require("./planner/places");
   const planAreas = {};
   for (const it of planItems) {
@@ -441,7 +381,6 @@ async function buildItinerary({ messages, members, days, plan, saved, catalog = 
     const p = byKey.get(t.key);
     const savedName = p.place.saved && p.place.saved.name;
     answer.add.push({ day: t.day, time: t.time,
-      // the exact saved name: that is what makes the plan show it as a rich activity card
       label: savedName || p.place.catalogName || p.name,
       location: (p.place.saved && p.place.saved.location) || p.place.area || "",
       icon: p.place.icon === "activity" ? "activity" : p.place.icon || "place",
@@ -451,7 +390,6 @@ async function buildItinerary({ messages, members, days, plan, saved, catalog = 
   }
   answer.add.sort((a, b) => a.day - b.day || a.time.localeCompare(b.time));
 
-  // undecided budget / dates keep the summary's cleaned value; nothing raw from the chat
   for (const it of s.pending) if (it.value && ["BUDGET", "DATE"].includes(it.category)) answer.unresolved.push(it.value);
   answer.unresolved = [...new Set(answer.unresolved.filter(Boolean))].slice(0, 12);
   return {

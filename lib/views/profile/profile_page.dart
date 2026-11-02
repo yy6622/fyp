@@ -226,10 +226,6 @@ class _ProfilePageState extends State<ProfilePage> {
       destructive: true,
     );
     if (!confirmed) return;
-    // Belt-and-suspenders: drop this account's in-memory flight/hotel
-    // search cache right as it signs out (see CatalogRepository.
-    // clearSearchCache's doc comment) before handing off to whoever
-    // signs in next on this device.
     CatalogRepository.instance.clearSearchCache();
     await AuthService.instance.signOut();
     if (!context.mounted) return;

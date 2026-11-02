@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-/// Controls which tab of [MainPage] (home/explore/plan/profile) is showing.
 class BottomNavController extends ChangeNotifier {
   int _index = 0;
   int get index => _index;

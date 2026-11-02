@@ -1,31 +1,21 @@
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/foundation.dart';
 
-/// A new activity the group agreed on — same fields
-/// [TripRepository.addActivity] takes, so it can be added as-is.
 class AiItineraryAdd {
-  /// 1-based day number, as shown in the app.
   final int day;
 
-  /// The key under `trips/{tripId}.days` — what `addActivity` wants.
   final int dayIndex;
   final String time;
   final String label;
   final String location;
   final String iconKey;
 
-  /// The place was mentioned in the chat but nobody in the group has it in
-  /// their saved list for this trip — shown as a warning, still addable.
   final bool warnNotSaved;
 
-  /// That day already has an activity with this name.
   final bool alreadyInPlan;
 
-  /// Where the place came from: "saved" (the group's saved list - it becomes a rich activity
-  /// card in the plan), "voya" / "catalog" (a real place Voya knows), "pattern" (only its name).
   final String source;
 
-  /// Why it is suggested, e.g. "Emily suggested · Alex, Mia agreed".
   final String reason;
 
   bool get fromSaved => source == 'saved';
@@ -44,8 +34,6 @@ class AiItineraryAdd {
   });
 }
 
-/// An activity that is already in the plan and that the group agreed to
-/// move to another day and/or another time.
 class AiItineraryUpdate {
   final String itemId;
   final String label;
@@ -58,7 +46,6 @@ class AiItineraryUpdate {
   final String oldTime;
   final String newTime;
 
-  /// Why it moves, e.g. "Best in the evening" (Optimise); empty when not given.
   final String reason;
 
   const AiItineraryUpdate({
@@ -78,7 +65,6 @@ class AiItineraryUpdate {
   bool get changesDay => fromDayIndex != toDayIndex;
 }
 
-/// An activity that is already in the plan and that the group agreed to drop.
 class AiItineraryRemove {
   final String itemId;
   final String label;
@@ -94,17 +80,14 @@ class AiItineraryRemove {
   });
 }
 
-/// Something the group wants without a place yet ("Dessert", "Museum (if it rains)").
 class AiItineraryIdea {
   final String label;
   final String hint;
 
-  /// A saved place that would fit, if any.
   final String saved;
   const AiItineraryIdea({required this.label, required this.hint, this.saved = ''});
 }
 
-/// A booked flight / hotel check-in or check-out (or a time the chat gave) the plan was built around.
 class AiItineraryFixed {
   final int day;
   final String time;
@@ -120,11 +103,9 @@ class AiItineraryResult {
   final List<AiItineraryUpdate> update;
   final List<AiItineraryRemove> remove;
 
-  /// Places that came up in the chat but the group never decided on.
   final List<String> unresolved;
   final List<AiItineraryIdea> ideas;
 
-  /// Flights and hotel stays AI Summarise planned around.
   final List<AiItineraryFixed> fixed;
   final bool flightsBooked;
   final bool hotelsBooked;
@@ -147,7 +128,6 @@ class AiItineraryResult {
   bool get isEmpty => add.isEmpty && update.isEmpty && remove.isEmpty && unresolved.isEmpty && ideas.isEmpty;
 }
 
-/// Thrown with a message that is safe to show to the user as-is.
 class ItineraryAiException implements Exception {
   final String message;
   const ItineraryAiException(this.message);
@@ -157,7 +137,6 @@ class ItineraryAiException implements Exception {
 
 enum AiItineraryStatus { idle, running, ready, failed }
 
-/// Where one trip's "AI Summarise" run currently stands.
 class AiItineraryJob {
   final AiItineraryStatus status;
   final AiItineraryResult? result;
@@ -167,23 +146,6 @@ class AiItineraryJob {
   static const running = AiItineraryJob._(AiItineraryStatus.running);
 }
 
-/// Asks the `generateItinerary` Cloud Function (functions/itinerary.js) to
-/// read a trip's group chat — together with the group's saved places and
-/// the current plan — and return the changes the group agreed on. The model
-/// runs server-side; nothing is written to the trip until the user confirms
-/// in the app.
-///
-/// A run belongs to this service, not to whatever screen started it, so the
-/// user can minimise the sheet (or leave the group page) and carry on; the
-/// result is waiting in [jobFor] when they come back.
-///
-/// A [ChangeNotifier] (in addition to each trip's own [ValueNotifier] from
-/// [jobFor]) so something that doesn't already know which trip to watch —
-/// [GlobalAiItineraryBar], shown on every tab via [MainPage], not just the
-/// one group's own page — can still react the instant any trip's run
-/// changes status — the same reason CurrencyService's live rate updates
-/// are pushed through a ChangeNotifier-backed pattern rather than
-/// requiring every listener to poll.
 class ItineraryAiService extends ChangeNotifier {
   ItineraryAiService._();
   static final ItineraryAiService instance = ItineraryAiService._();
@@ -193,11 +155,6 @@ class ItineraryAiService extends ChangeNotifier {
   ValueNotifier<AiItineraryJob> jobFor(String tripId) =>
       _jobs.putIfAbsent(tripId, () => ValueNotifier<AiItineraryJob>(AiItineraryJob.idle));
 
-  /// The first non-idle run found, for whichever trip it belongs to — what
-  /// [GlobalAiItineraryBar] shows regardless of which tab the person is on.
-  /// In practice at most one or two trips ever have a run going at once, so
-  /// "first found" rather than "most recent" is a fine tie-break; nothing
-  /// here claims to order them.
   ({String tripId, AiItineraryJob job})? get anyActiveJob {
     for (final entry in _jobs.entries) {
       if (entry.value.value.status != AiItineraryStatus.idle) {
@@ -207,7 +164,6 @@ class ItineraryAiService extends ChangeNotifier {
     return null;
   }
 
-  /// Starts a run for [tripId] unless one is already going.
   void start(String tripId) {
     final job = jobFor(tripId);
     if (job.value.status == AiItineraryStatus.running) return;
@@ -222,7 +178,6 @@ class ItineraryAiService extends ChangeNotifier {
     });
   }
 
-  /// Forgets the finished run (after the user applied or discarded it).
   void clear(String tripId) {
     final job = jobFor(tripId);
     if (job.value.status != AiItineraryStatus.running) {
@@ -238,21 +193,9 @@ class ItineraryAiService extends ChangeNotifier {
         'generateItinerary',
         options: HttpsCallableOptions(timeout: const Duration(seconds: 120)),
       );
-      // Cast after the call rather than through call<T>() — same reason as
-      // StripeService: the plugin hands back a loosely-typed Map.
-      // AI-Summarised Itinerary Algorithm (FYP documentation), step 1: this call only ever
-      // happens after ai_itinerary_sheet.dart's consent dialog has been accepted (that's the
-      // only call site for ItineraryAiService.start()) - 'consent' here is what the Cloud
-      // Function actually checks before it reads this group's chat, not just a formality.
       final result = await callable.call({'tripId': tripId, 'consent': true});
       data = (result.data as Map).cast<String, dynamic>();
     } on FirebaseFunctionsException catch (e) {
-      // e.message is already a plain, customer-facing sentence —
-      // functions/itinerary.js is responsible for never putting a raw
-      // SDK/HTTP error in there (those go to `firebase functions:log`
-      // instead). Still logged here too (debugPrint only reaches the
-      // terminal/IDE console a developer is watching, never the user),
-      // in case e.message ever comes back empty or unexpectedly technical.
       debugPrint('[ItineraryAiService] generateItinerary failed: ${e.code} ${e.message} ${e.details}');
       if (e.code == 'not-found') {
         throw const ItineraryAiException('The AI itinerary service is not set up yet.');
@@ -262,9 +205,6 @@ class ItineraryAiService extends ChangeNotifier {
         (message != null && message.isNotEmpty) ? message : 'Could not generate the itinerary. Please try again.',
       );
     } catch (e) {
-      // Anything else (no network, request timed out, ...) carries Dart's
-      // own exception text, which is just as unfit for the UI — log it for
-      // whoever is watching the terminal, show the person a plain sentence.
       debugPrint('[ItineraryAiService] generateItinerary unreachable: $e');
       throw const ItineraryAiException('Could not reach the AI itinerary service. Check your connection and try again.');
     }

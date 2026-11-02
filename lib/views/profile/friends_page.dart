@@ -4,9 +4,6 @@ import '../../controllers/profile_controller.dart';
 import '../../repositories/friends_repository.dart';
 import '../../theme.dart';
 
-// ---------------------------------------------------------------------
-// Friends — a plain friends list with block/unblock, not a chat version.
-// ---------------------------------------------------------------------
 class FriendsPage extends StatefulWidget {
   const FriendsPage({super.key});
 
@@ -17,8 +14,6 @@ class FriendsPage extends StatefulWidget {
 class _FriendsPageState extends State<FriendsPage> {
   final FriendsController controller = FriendsController();
 
-  // Names currently mid-resend, so the button can show a spinner and
-  // can't be double-tapped while the write/notification is in flight.
   final Set<String> _resending = {};
 
   @override
@@ -41,9 +36,6 @@ class _FriendsPageState extends State<FriendsPage> {
     );
   }
 
-  /// FR07 — asks before unfriending (this can't be undone from the app),
-  /// matching the same confirm-first pattern used for other destructive
-  /// actions in this app (e.g. group_settings_controller's leaveGroup).
   Future<void> _removeFriend(FriendEntry friend) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -88,9 +80,6 @@ class _FriendsPageState extends State<FriendsPage> {
   String _outcomeMessage(FriendRequestOutcome outcome, String query) {
     switch (outcome.status) {
       case FriendRequestStatus.sent:
-        // Directly says the request is waiting on the other person, not
-        // just "sent" — a persistent "Pending" row below also shows this
-        // for as long as it's outstanding, not just in this one snackbar.
         return 'Friend request sent to ${outcome.name} — waiting for them to accept';
       case FriendRequestStatus.autoAccepted:
         return '${outcome.name} had already requested you — you\'re now friends';
@@ -243,23 +232,10 @@ class _FriendsPageState extends State<FriendsPage> {
           return Column(
             children: [
               Padding(
-                // Horizontal 20 matches every friend row below it
-                // (Padding(horizontal: 20) in the itemBuilder) — this was
-                // 16 before, so the search box sat 4px further left than
-                // the list under it.
                 padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 14),
                   decoration: BoxDecoration(color: AppColors.chipGrey, borderRadius: BorderRadius.circular(24)),
-                  // Icon as a plain Row sibling with a fixed 8px gap —
-                  // the same shape every other search bar in the app
-                  // uses (Plan, Community, Explore's top bar). This used
-                  // to put the search icon on InputDecoration's
-                  // `prefixIcon` instead, which gets its own default
-                  // 48dp tap-target box and sat with different
-                  // spacing/vertical centering than everywhere else —
-                  // the actual cause of this search box visibly not
-                  // lining up with the rest of the app.
                   child: Row(
                     children: [
                       const Icon(Icons.search, color: AppColors.textGrey, size: 20),

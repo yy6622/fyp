@@ -1,12 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-/// One row in a user's `users/{uid}/notifications` subcollection — a
-/// general-purpose in-app notification (the Home bell icon, previously a
-/// dead "No new notifications" snackbar with nothing behind it, now reads
-/// this for real). [type] distinguishes what it's about ('friend_request',
-/// 'friend_request_accepted', ...) and [data] carries whatever that type
-/// needs (e.g. the sender's uid/name for a pending friend request, so the
-/// Notifications page can act on it without a second read).
 class AppNotification {
   final String id;
   final String type;
@@ -40,11 +33,6 @@ class AppNotification {
   }
 }
 
-/// Reads/writes `users/{uid}/notifications`. See firestore.rules: the
-/// owner can read/update(mark-read)/delete their own; any signed-in user
-/// may create one in someone else's inbox (same trust level already given
-/// to liking a post or joining a trip by invite link elsewhere in this
-/// app) — that's what [send] does when, say, a friend request goes out.
 class NotificationsRepository {
   NotificationsRepository._();
   static final NotificationsRepository instance = NotificationsRepository._();
@@ -52,15 +40,12 @@ class NotificationsRepository {
   CollectionReference<Map<String, dynamic>> _of(String uid) =>
       FirebaseFirestore.instance.collection('users').doc(uid).collection('notifications');
 
-  /// Most recent 100 — plenty for an inbox nobody is expected to let pile
-  /// up much further than that before clearing it.
   Stream<List<AppNotification>> watch(String uid) => _of(uid)
       .orderBy('createdAt', descending: true)
       .limit(100)
       .snapshots()
       .map((snap) => snap.docs.map(AppNotification.fromDoc).toList());
 
-  /// Drives the Home bell icon's unread badge.
   Stream<int> watchUnreadCount(String uid) =>
       _of(uid).where('read', isEqualTo: false).snapshots().map((snap) => snap.docs.length);
 
@@ -68,12 +53,6 @@ class NotificationsRepository {
 
   Future<void> delete(String uid, String id) => _of(uid).doc(id).delete();
 
-  /// "Remove All" on the Notifications page — deletes every notification
-  /// in [uid]'s inbox, not just the most recent 100 [watch] shows (a
-  /// `.limit(100)` read still sees every doc there actually is to delete;
-  /// it's only the live UI list that's capped). Chunked at 450 writes per
-  /// batch, same as every other bulk-delete in this app (see
-  /// TripRepository.deleteTrip) — Firestore batches cap at 500.
   Future<void> deleteAll(String uid) async {
     final docs = await _of(uid).get();
     for (var i = 0; i < docs.docs.length; i += 450) {

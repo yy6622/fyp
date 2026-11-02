@@ -3,21 +3,7 @@ import 'dart:math';
 
 import 'package:http/http.dart' as http;
 
-// ---------------------------------------------------------------------
-// Real points-of-interest data — OpenStreetMap (Nominatim geocoding +
-// Overpass POI search). Free, keyless, no billing account to configure,
-// which is why this (rather than Google Places) is what backs Explore's
-// Attractions/Restaurants and Near By: those three used to be a fixed
-// seeded catalogue baked into the app (see the removed
-// CatalogRepository._seedAttractions/_seedRestaurants/_seedPlaces) —
-// this is what replaced it with something that actually reflects a real
-// place on a real map, the same way flights/hotels come from Duffel/
-// RollingGo instead of a hardcoded list.
-// ---------------------------------------------------------------------
 
-/// One POI as returned by Overpass, before it's mapped into this app's
-/// own models (CatalogAttraction/CatalogRestaurant/NearbyPlace all shape
-/// this differently, so the mapping happens at the call site).
 class OsmPlace {
   final String id;
   final String name;
@@ -27,10 +13,6 @@ class OsmPlace {
 
   const OsmPlace({required this.id, required this.name, required this.lat, required this.lon, required this.tags});
 
-  /// Street address built from whatever `addr:*` tags OSM has for this
-  /// node — often partial or missing entirely (OSM coverage varies a lot
-  /// by region), in which case this is just empty and callers fall back
-  /// to the search area's own name instead of inventing one.
   String get address {
     final parts = [
       if ((tags['addr:housenumber'] ?? '').isNotEmpty || (tags['addr:street'] ?? '').isNotEmpty)
@@ -46,34 +28,10 @@ class PlacesApiService {
   PlacesApiService._();
   static final PlacesApiService instance = PlacesApiService._();
 
-  // Nominatim/Overpass both ask every client to send a real identifying
-  // User-Agent — required by Nominatim's usage policy, and politeness
-  // for Overpass's shared public instance.
   static const _userAgent = 'VoyaTravelApp/1.0 (student FYP project; contact: teohyongyun90@gmail.com)';
 
-  /// The reason the most recent [searchNearby] call came back empty, or
-  /// null when it genuinely found zero matching places (a real "nothing
-  /// nearby", not a failure). [searchNearby] itself still never throws —
-  /// every existing caller (Explore's background refresh) keeps working
-  /// exactly as before — but Near By's page reads this afterward to tell
-  /// "nothing here" apart from "the request to OpenStreetMap failed" and
-  /// show the real reason instead of always saying the same generic
-  /// "No places found nearby" either way. Cleared to null at the start of
-  /// every call, so a later success after an earlier failure clears it.
   Object? lastSearchNearbyError;
 
-  /// Resolves a free-text destination ("Tokyo, Japan", "Bali") to a real
-  /// lat/lng (plus, when Nominatim's reverse-geocoded address includes
-  /// one, the destination's ISO 3166-1 alpha-2 country code — e.g. "TR"
-  /// for anywhere in Turkey) via Nominatim's search endpoint — the
-  /// first/best match. [countryCode] is upper-cased here so it compares
-  /// directly against the `country` field CatalogRepository's `places`
-  /// collection stores ("TR", not "tr"); null when Nominatim's result had
-  /// no `address.country_code` (rare, but not guaranteed for every hit).
-  /// Returns null when nothing matched (typo, a place too obscure for
-  /// OSM) or the request failed (offline, endpoint down); callers treat
-  /// that as "couldn't look this destination up right now", not an
-  /// error to surface loudly.
   Future<({double lat, double lon, String? countryCode, String? label})?> geocode(String query) async {
     final trimmed = query.trim();
     if (trimmed.isEmpty) return null;
@@ -95,18 +53,6 @@ class PlacesApiService {
       final address = hit['address'] as Map<String, dynamic>?;
       final rawCountryCode = address?['country_code'] as String?;
       final countryCode = (rawCountryCode != null && rawCountryCode.trim().isNotEmpty) ? rawCountryCode.trim().toUpperCase() : null;
-      // A proper "City, Country" label built from the SAME address
-      // breakdown Nominatim already sent back for [countryCode] above —
-      // no extra request. This is what [refreshAttractions]/
-      // [refreshRestaurants] now store as `location` instead of echoing
-      // the raw search text (see their call sites): a free-text search
-      // like "kek lok di" or "迪士尼" used to get written to Firestore
-      // verbatim, which is honest about what was searched but not a
-      // real place name — callers only need a human-readable place
-      // label, and this is the one Nominatim itself resolved the query
-      // to. city/town/village/municipality/county covers both a city
-      // search ("Tokyo" -> city) and a rural POI (no city tag, only a
-      // county) without silently going blank for the latter.
       final city = (address?['city'] ?? address?['town'] ?? address?['village'] ?? address?['municipality'] ?? address?['county']) as String?;
       final country = address?['country'] as String?;
       final labelParts = [
@@ -120,17 +66,6 @@ class PlacesApiService {
     }
   }
 
-  /// Reverse-geocodes a device position (lat/lng, e.g. from
-  /// [LocationService.getCurrentPosition]) to a human-readable address
-  /// via Nominatim's `/reverse` endpoint — used by "Report New
-  /// Attraction"'s location field so a rider standing at the spot can
-  /// just tap the location icon instead of typing the address by hand.
-  /// Prefers Nominatim's own `display_name` (already a full, readable
-  /// address string built for exactly this purpose); falls back to the
-  /// same city/country label [geocode] builds if a `display_name` is
-  /// ever missing but address fields aren't. Returns null on any
-  /// failure (offline, no match, request error) — callers treat that as
-  /// "couldn't resolve this position right now", same as [geocode].
   Future<String?> reverseGeocode(double lat, double lon) async {
     try {
       final uri = Uri.https('nominatim.openstreetmap.org', '/reverse', {
@@ -158,9 +93,6 @@ class PlacesApiService {
     }
   }
 
-  /// The Overpass QL element filter for each Near By / Explore category
-  /// chip — shared by both callers so "Attractions" means the same OSM
-  /// tags whether it's Near By's chip row or Explore's category.
   static String overpassFilterFor(String category) {
     switch (category) {
       case 'Restaurants':
@@ -180,13 +112,6 @@ class PlacesApiService {
     }
   }
 
-  /// Real nodes/ways matching [filter] (an Overpass tag filter, e.g.
-  /// `["amenity"="restaurant"]` — see [overpassFilterFor]) within
-  /// [radiusMeters] of ([lat], [lon]). Unnamed POIs are dropped — OSM has
-  /// plenty of untagged benches/bins/etc. that would otherwise show up
-  /// as blank rows. Returns an empty list (never throws) on any network
-  /// or parse failure, so a flaky request just means "nothing found
-  /// right now" instead of crashing the page.
   Future<List<OsmPlace>> searchNearby({
     required double lat,
     required double lon,
@@ -232,28 +157,11 @@ class PlacesApiService {
       }
       return out;
     } catch (e) {
-      // Real reason captured here — a TimeoutException (request never
-      // got a response), a SocketException (DNS/connection failure, the
-      // usual shape of a network that blocks this host outright), or
-      // something else — rather than this just going silently empty.
       lastSearchNearbyError = e;
       return const [];
     }
   }
 
-  /// A real photo URL for [tags] when OSM (or something it links to) has
-  /// one — tried in order of how directly usable each is, so a cheap
-  /// check always runs before a network round-trip:
-  /// 1. an `image` tag that's already a direct http(s) URL (some POIs,
-  ///    mostly ones edited via iD/StreetComplete, have this outright);
-  /// 2. a `wikimedia_commons` tag naming a file directly (`File:...`) —
-  ///    Commons' own `Special:FilePath` redirect serves that file's
-  ///    actual image bytes with no API call needed;
-  /// 3. a `wikipedia` tag (`"en:Tokyo Tower"`) — asks Wikipedia's REST
-  ///    summary endpoint for that page's lead photo.
-  /// All three are free and keyless. Returns null (never throws) when
-  /// none of these are present or the one network call in step 3 fails —
-  /// callers fall back to a category icon rather than a blank box.
   Future<String?> resolveImage(Map<String, String> tags) async {
     final direct = tags['image'];
     if (direct != null && (direct.startsWith('http://') || direct.startsWith('https://'))) {
@@ -279,30 +187,12 @@ class PlacesApiService {
             if (source != null && source.isNotEmpty) return source;
           }
         } catch (_) {
-          // Fall through to null — see doc comment.
         }
       }
     }
     return null;
   }
 
-  /// A fallback photo looked up by the place's plain [name], for when
-  /// [resolveImage] found nothing on the OSM tags themselves — most OSM
-  /// nodes (the vast majority of real-world restaurants/cafes/shops, and
-  /// even plenty of attractions) were never tagged with an `image`/
-  /// `wikimedia_commons`/`wikipedia` reference at all; that's a genuine
-  /// data-coverage gap in OpenStreetMap, not a bug, and most of those
-  /// places simply have no free photo available anywhere. This recovers
-  /// the subset that DO have a Wikipedia article but whose OSM node was
-  /// never linked to it — common for well-known landmarks/museums, which
-  /// is why this is only used for Attractions (see
-  /// CatalogRepository.refreshAttractions), not Restaurants: a small
-  /// local eatery's name is far more likely to collide with an unrelated
-  /// Wikipedia article of the same/similar name than an actual named
-  /// landmark is, and showing the wrong place's photo is worse than
-  /// showing no photo. [_looksLikeSamePlace] is the guard against that.
-  /// Returns null (never throws) when nothing matches closely enough or
-  /// the request fails.
   Future<String?> resolveImageByName(String name) async {
     final trimmed = name.trim();
     if (trimmed.isEmpty) return null;
@@ -325,10 +215,6 @@ class PlacesApiService {
     }
   }
 
-  /// A deliberately strict "same place" check for [resolveImageByName] —
-  /// one name has to fully contain the other (case-insensitive) — so a
-  /// generic query (e.g. a shop simply named "Garden") can't pull in an
-  /// unrelated Wikipedia article that merely shares a common word.
   bool _looksLikeSamePlace(String query, String title) {
     final q = query.toLowerCase().trim();
     final t = title.toLowerCase().trim();
@@ -336,18 +222,6 @@ class PlacesApiService {
     return q == t || q.contains(t) || t.contains(q);
   }
 
-  /// A real, place-specific "About" description for [tags] — an OSM
-  /// `description` tag when present (rare, but some POIs are tagged with
-  /// one directly), otherwise the opening extract of that place's own
-  /// Wikipedia page (same `wikipedia` tag [resolveImage] already reads).
-  /// This is what backs Attraction/Restaurant detail pages' About
-  /// section: without it every place in the same category/cuisine showed
-  /// the *exact* same one-size-fits-all sentence (e.g. every museum
-  /// reading "One of the popular museum spots..."), which read as
-  /// obviously fake/templated once you saw two of them back to back.
-  /// Returns null (never throws) when neither source has anything —
-  /// callers keep their own generic sentence for that case rather than
-  /// leaving the section blank.
   Future<String?> resolveDescription(Map<String, String> tags) async {
     final direct = tags['description']?.trim();
     if (direct != null && direct.isNotEmpty) return direct;
@@ -366,22 +240,12 @@ class PlacesApiService {
             if (extract != null && extract.isNotEmpty) return _trimToSentence(extract, 280);
           }
         } catch (_) {
-          // Fall through to null — see doc comment.
         }
       }
     }
     return null;
   }
 
-  /// Fallback "About" text looked up by the place's plain [name], for
-  /// when [resolveDescription] found nothing on the OSM tags — same idea,
-  /// and same attractions-only reasoning, as [resolveImageByName]: most
-  /// OSM nodes were never tagged with a `wikipedia` reference at all, so
-  /// without this every attraction that lacked one fell back to the same
-  /// generic category sentence (every museum reading "One of the popular
-  /// museum spots...") regardless of how different two places actually
-  /// are. Guarded by the same [_looksLikeSamePlace] check so a generic
-  /// name can't pull in an unrelated article's description.
   Future<String?> resolveDescriptionByName(String name) async {
     final trimmed = name.trim();
     if (trimmed.isEmpty) return null;
@@ -407,21 +271,6 @@ class PlacesApiService {
     }
   }
 
-  /// A real photo + description straight from the place's own `website`/
-  /// `contact:website` OSM tag — most real restaurant/shop/attraction
-  /// websites (even a plain Wix/Squarespace/WordPress one) set Open
-  /// Graph meta tags (`og:image`, `og:description`) for link previews,
-  /// and that preview is exactly a usable summary of the real place.
-  /// This is the one source here that's directly tied to the specific
-  /// business rather than matched by name, so it's trusted for
-  /// Restaurants too (unlike [resolveImageByName]/
-  /// [resolveDescriptionByName], which only run for Attractions because
-  /// a name match can be wrong) — a business's own URL, tagged on its
-  /// own OSM node, genuinely is that business. Returns null for both
-  /// fields (never throws) when the site has neither tag, doesn't
-  /// respond, or isn't reachable (some small-business sites are slow,
-  /// expired, or HTTP-only with a broken cert — any of that just means
-  /// no extra data from this source, not an error to surface).
   Future<({String? image, String? description})?> resolveFromWebsite(String url) async {
     final trimmed = url.trim();
     if (trimmed.isEmpty) return null;
@@ -446,15 +295,6 @@ class PlacesApiService {
     }
   }
 
-  /// Pulls a `<meta ... content="...">` tag's value by its `property` or
-  /// `name` attribute ([key], e.g. `"og:image"`) — handles either
-  /// attribute order (some site builders emit `content` before
-  /// `property`), case-insensitively, with single or double quotes. A
-  /// deliberately simple regex rather than a full HTML parser: Open
-  /// Graph tags are always single, self-contained `<meta>` elements in
-  /// the page `<head>`, never nested or multi-line, so this is reliable
-  /// for exactly what it's used for without adding an HTML-parsing
-  /// dependency for one narrow job.
   String? _metaContent(String html, String key) {
     final keyPattern = RegExp.escape(key);
     final afterKey = RegExp('<meta[^>]*(?:property|name)\\s*=\\s*["\']$keyPattern["\'][^>]*content\\s*=\\s*["\']([^"\']*)["\']', caseSensitive: false);
@@ -464,9 +304,6 @@ class PlacesApiService {
     return beforeKey.firstMatch(html)?.group(1);
   }
 
-  /// Decodes the handful of HTML entities actually likely to show up in
-  /// a meta description (not a full HTML-entity table) — numeric
-  /// entities plus the common named ones.
   String _decodeHtmlEntities(String text) {
     return text
         .replaceAllMapped(RegExp(r'&#(\d+);'), (m) => String.fromCharCode(int.parse(m.group(1)!)))
@@ -479,11 +316,6 @@ class PlacesApiService {
         .trim();
   }
 
-  /// Cuts [text] down to roughly [maxLength] characters without stopping
-  /// mid-word/mid-sentence — a full Wikipedia extract can run to several
-  /// paragraphs, too long for a detail page's About card. Breaks at the
-  /// last sentence end before the limit when there is one, else the last
-  /// whole word, and appends "…" whenever that means real text was cut.
   String _trimToSentence(String text, int maxLength) {
     if (text.length <= maxLength) return text;
     final slice = text.substring(0, maxLength);
@@ -493,19 +325,6 @@ class PlacesApiService {
     return '${slice.substring(0, lastSpace > 0 ? lastSpace : slice.length)}…';
   }
 
-  /// A representative photo for a whole destination ("Kyoto, Japan",
-  /// "Bali", just "Japan") — used as a new group's cover photo when the
-  /// person creating the trip didn't upload their own. Free and keyless,
-  /// same Wikipedia REST summary endpoint as [resolveImage]'s step 3, just
-  /// looked up by place name directly instead of via an OSM tag: most
-  /// destinations worth planning a trip to have a plain Wikipedia page
-  /// (city, region or country), and that page's lead photo is a
-  /// reasonable real photo of the place. Tries the destination string as
-  /// typed first, then — for a "City, Country" value — falls back to just
-  /// the city and then just the country, so a city with no dedicated page
-  /// still resolves to something. Returns null (never throws) when none
-  /// of those resolve or every request fails; the caller already has its
-  /// own generic fallback photo for that case.
   Future<String?> destinationPhoto(String destination) async {
     final trimmed = destination.trim();
     if (trimmed.isEmpty) return null;
@@ -528,8 +347,6 @@ class PlacesApiService {
       final res = await http.get(uri, headers: {'User-Agent': _userAgent}).timeout(const Duration(seconds: 8));
       if (res.statusCode != 200) return null;
       final decoded = jsonDecode(res.body) as Map<String, dynamic>;
-      // A disambiguation page ("Georgia" the country vs the US state) has
-      // no useful single photo — skip it rather than show a wrong one.
       if (decoded['type'] == 'disambiguation') return null;
       final thumb = decoded['thumbnail'] as Map<String, dynamic>?;
       final source = thumb?['source'] as String?;
@@ -539,8 +356,6 @@ class PlacesApiService {
     }
   }
 
-  /// Great-circle distance in km, formatted the way the app's distance
-  /// labels already read ("250 m" under 1km, "1.2 km" above).
   static String formatDistance(double lat1, double lon1, double lat2, double lon2) {
     const earthRadiusKm = 6371.0;
     double degToRad(double deg) => deg * (pi / 180);

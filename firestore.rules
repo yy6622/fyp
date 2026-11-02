@@ -32,7 +32,10 @@ service cloud.firestore {
       // email/name); only the account owner can create/update their own doc.
       allow read: if isSignedIn();
       allow create: if isOwner(uid);
-      allow update: if isOwner(uid);
+      // The owner edits their own profile but not their role/status; the
+      // admin console (User Management) changes role and status (suspend).
+      allow update: if (isOwner(uid) && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'status']))
+                    || isAdmin();
       // Account deletion (AccountSettingPage._deleteAccount) deletes this
       // doc while still signed in as its owner, right before deleting the
       // Firebase Auth account itself — see UserRepository.deleteProfile's
@@ -53,6 +56,13 @@ service cloud.firestore {
       }
       match /blocked/{blockedId} {
         allow read, write: if isOwner(uid);
+      }
+      // FR04 trusted devices: only the verifyCode Cloud Function (Admin SDK)
+      // creates these, after a correct email code. The owner can see them and
+      // remove them ("Sign out of all trusted devices"), but never add one.
+      match /trusted_devices/{deviceId} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if false;
       }
       // A real in-app notification inbox (Home's bell icon) — the owner
       // reads/marks-read/deletes their own; anyone signed in may drop one
@@ -561,6 +571,14 @@ service cloud.firestore {
       allow update: if isAdmin() ||
         (isApprovedInsurancePartner() && resource.data.partnerId == request.auth.uid);
       allow delete: if false;
+    }
+
+    // FR04 email codes (hashed) and step-up confirmations: Cloud Functions only.
+    match /verification_codes/{id} {
+      allow read, write: if false;
+    }
+    match /step_up/{uid} {
+      allow read, write: if false;
     }
   }
 }

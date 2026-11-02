@@ -6,20 +6,7 @@ import '../../services/auth_service.dart';
 import '../../theme.dart';
 import '../shared/nice_dialog.dart';
 
-// ---------------------------------------------------------------------
-// Rider-facing Claim / Refund flow — reached from
-// HistoryInsuranceDetailPage (via Profile > History, or a trip's own
-// insurance card). Writes real documents into the same `claims`/`refunds`
-// collections the insurance partner console already reads and manages
-// (admin_web/partner/claims.html, claim-detail.html, refund-detail.html),
-// so a claim/refund filed here shows up for the partner to review exactly
-// like one they logged manually. Previously neither of these existed on
-// the rider side at all — the collections and partner-side management
-// were fully built, but nothing in the app could ever create one.
-// ---------------------------------------------------------------------
 
-/// Shared read-only summary of the real policy a claim/refund is against
-/// — never re-typed, always the actual stored transaction.
 Widget _policySummaryCard(InsuranceTransaction tx) {
   return Container(
     padding: const EdgeInsets.all(16),
@@ -38,8 +25,6 @@ Widget _policySummaryCard(InsuranceTransaction tx) {
   );
 }
 
-/// Same look as TravellerDetailsPage's `_pickerField` — a tappable field
-/// that opens a category picker instead of accepting free text.
 Widget _categoryPickerField(String label, String? value, {required VoidCallback onTap}) {
   return InkWell(
     borderRadius: BorderRadius.circular(10),
@@ -59,12 +44,6 @@ Widget _categoryPickerField(String label, String? value, {required VoidCallback 
   );
 }
 
-/// A trip's bought insurance is visible to every trip member (see
-/// GroupTripPage._insuranceRow), but a claim/refund pays back whoever
-/// actually bought it — so a fellow trip member who isn't the buyer gets
-/// a clear explanation here instead of reaching Firestore's own
-/// permission-denied error after filling in the whole form (the `claims`/
-/// `refunds` create rules only allow the real buyerId to write).
 Widget _notBuyerNotice() {
   return const Center(
     child: Padding(
@@ -114,9 +93,6 @@ Future<String?> _pickCategoryFrom(BuildContext context, List<String> options, St
   );
 }
 
-// ---------------------------------------------------------------------
-// File a Claim
-// ---------------------------------------------------------------------
 class FileClaimPage extends StatefulWidget {
   final String transactionId;
   const FileClaimPage({super.key, required this.transactionId});
@@ -140,13 +116,6 @@ class _FileClaimPageState extends State<FileClaimPage> {
   }
 
   Future<void> _load() async {
-    // getTransaction can throw (not just return null) when Firestore's
-    // own read rule denies it — e.g. a fellow trip member who isn't the
-    // buyer opening this from the trip's shared insurance card (see
-    // insurance_transactions/{id}'s read rule in firestore.rules). Without
-    // this catch, that throw would leave _loading stuck true forever —
-    // an infinite spinner instead of a page. Treated the same as "not
-    // found"/"not the buyer", both already handled by the build below.
     InsuranceTransaction? tx;
     try {
       tx = await InsuranceRepository.instance.getTransaction(widget.transactionId);
@@ -167,8 +136,6 @@ class _FileClaimPageState extends State<FileClaimPage> {
     super.dispose();
   }
 
-  // Guards against a fellow trip member (not the buyer) reaching this
-  // form from the trip's shared insurance card — see _notBuyerNotice.
   bool get _isOwner => _transaction?.buyerId == AuthService.instance.currentUser?.uid;
 
   Future<void> _pickCategory() async {
@@ -272,9 +239,6 @@ class _FileClaimPageState extends State<FileClaimPage> {
   }
 }
 
-// ---------------------------------------------------------------------
-// Request Refund
-// ---------------------------------------------------------------------
 class RequestRefundPage extends StatefulWidget {
   final String transactionId;
   const RequestRefundPage({super.key, required this.transactionId});
@@ -297,13 +261,6 @@ class _RequestRefundPageState extends State<RequestRefundPage> {
   }
 
   Future<void> _load() async {
-    // getTransaction can throw (not just return null) when Firestore's
-    // own read rule denies it — e.g. a fellow trip member who isn't the
-    // buyer opening this from the trip's shared insurance card (see
-    // insurance_transactions/{id}'s read rule in firestore.rules). Without
-    // this catch, that throw would leave _loading stuck true forever —
-    // an infinite spinner instead of a page. Treated the same as "not
-    // found"/"not the buyer", both already handled by the build below.
     InsuranceTransaction? tx;
     try {
       tx = await InsuranceRepository.instance.getTransaction(widget.transactionId);
@@ -323,20 +280,12 @@ class _RequestRefundPageState extends State<RequestRefundPage> {
     super.dispose();
   }
 
-  // Mirrors InsuranceRepository.requestRefund's own eligibility check —
-  // checked here too so the button can be disabled with an explanation
-  // up front, instead of only failing after the rider fills in the form
-  // and taps Submit. A transaction with no stored travel dates (bought
-  // before that field existed) is treated as still eligible, same
-  // reasoning as the repository method.
   bool get _eligible {
     final start = _transaction?.travelStart;
     if (start == null) return true;
     return DateTime.now().isBefore(start);
   }
 
-  // Guards against a fellow trip member (not the buyer) reaching this
-  // form from the trip's shared insurance card — see _notBuyerNotice.
   bool get _isOwner => _transaction?.buyerId == AuthService.instance.currentUser?.uid;
 
   Future<void> _pickCategory() async {

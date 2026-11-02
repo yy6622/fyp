@@ -7,24 +7,6 @@ import '../../theme.dart';
 import 'community_post_detail_page.dart';
 import 'create_post_page.dart';
 
-// ---------------------------------------------------------------------
-// Profile's "Community Post" entry — a real "My Posts" / "Liked" /
-// "Rating & Review" view instead of jumping straight into composing.
-// Backed by the same Firestore-backed [CommunityController] stream the
-// Community feed and post detail page use, so a like/rating/review made
-// anywhere — here, the feed, or a post's own detail page — shows up
-// across all of them without a manual refresh.
-//
-// Liked: posts this user liked (CommunityPost.liked — already resolved
-// for the signed-in user when each post snapshot is read). Rating &
-// Review: posts they've rated and/or left a written review on — the two
-// are the same action now (rating only ever happens as part of leaving a
-// review, see showWriteReviewDialog), so one combined tab covers both;
-// a post lands here if either CommunityPost.myRating > 0 or it's in
-// CommunityController.myReviewedPostIds (a collectionGroup query over
-// every post's `reviews` subcollection) — kept as two checks since older
-// ratings set before review+rating were merged won't have a review doc.
-// ---------------------------------------------------------------------
 class MyCommunityPostsPage extends StatefulWidget {
   const MyCommunityPostsPage({super.key});
 
@@ -34,7 +16,7 @@ class MyCommunityPostsPage extends StatefulWidget {
 
 class _MyCommunityPostsPageState extends State<MyCommunityPostsPage> {
   final CommunityController controller = CommunityController();
-  int _tabIndex = 0; // 0 = My Posts, 1 = Liked, 2 = Rating & Review
+  int _tabIndex = 0;
 
   String get _uid => AuthService.instance.currentUser?.uid ?? '';
 
@@ -67,11 +49,6 @@ class _MyCommunityPostsPageState extends State<MyCommunityPostsPage> {
           };
           return Column(
             children: [
-              // Bare, full-bleed PillTabBar directly under the AppBar — same
-              // as history_page.dart / community_post_detail_page.dart's
-              // tabs. This page used to wrap it in extra 20/14px padding,
-              // which both indented the pills and left a visible gap above
-              // them that no other PillTabBar page has.
               PillTabBar(
                 tabs: const [
                   PillTab('My Posts', Icons.dynamic_feed_outlined),

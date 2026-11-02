@@ -7,9 +7,6 @@ import '../../theme.dart';
 import '../shared/nice_dialog.dart';
 import 'travel_preferences_page.dart';
 
-// ---------------------------------------------------------------------
-// Group Setting
-// ---------------------------------------------------------------------
 class GroupSettingPage extends StatefulWidget {
   final String tripId;
   const GroupSettingPage({super.key, required this.tripId});
@@ -66,10 +63,6 @@ class _GroupSettingPageState extends State<GroupSettingPage> {
                 child: const Text('Leave Group', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
               ),
             ),
-            // FR12 — only the owner can delete the whole group; everyone
-            // else just has Leave Group above. Deleting removes it for
-            // every member at once, so it needs its own, stronger warning
-            // rather than reusing Leave Group's confirm dialog.
             if (controller.isOwner) ...[
               const SizedBox(height: 12),
               SizedBox(
@@ -158,9 +151,6 @@ class _GroupSettingPageState extends State<GroupSettingPage> {
     );
   }
 
-  /// FR12 — irreversible for every member, not just the owner, so this
-  /// gets a stronger message than Leave Group rather than the same dialog
-  /// with a different verb.
   Future<void> _confirmDeleteGroup(BuildContext context) async {
     final confirmed = await showNiceConfirmDialog(
       context: context,
@@ -188,14 +178,6 @@ class _GroupSettingPageState extends State<GroupSettingPage> {
     );
   }
 
-  // [value]'s box is the sole flexible child (an Expanded, not a Spacer +
-  // a second competing Flexible) so it always claims the row's entire
-  // leftover width and its textAlign:right then actually hugs the right
-  // edge next to the chevron — with Spacer()+Flexible() (the old code),
-  // the two split that leftover space evenly and the value only reached
-  // the edge when it happened to be long enough to fill its half, which
-  // is why some rows' values/chevrons lined up flush right and others
-  // (short values, or none at all) sat noticeably left of it.
   Widget _navRow(String label, String value, {VoidCallback? onTap}) {
     return InkWell(
       onTap: onTap,
@@ -282,9 +264,6 @@ class _GroupSettingPageState extends State<GroupSettingPage> {
     }
   }
 
-  /// [onChanged] null means this setting can't be changed by the signed-in
-  /// user right now — the [Switch] renders disabled, and [disabledHint], if
-  /// given, is shown as a snackbar when they tap the label to ask why.
   Widget _switchRow(String label, bool value, ValueChanged<bool>? onChanged, {String? disabledHint}) {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 14),

@@ -5,21 +5,11 @@ import '../../theme.dart';
 import 'insurance_widgets.dart';
 import 'traveller_details_page.dart';
 
-// ---------------------------------------------------------------------
-// Insurance plan detail — coverage breakdown + "Enter Traveller"
-// ---------------------------------------------------------------------
 class InsurancePlanDetailPage extends StatelessWidget {
   final InsurancePlan plan;
-  // See [InsurancePlanCard.tripId] — carried through so a purchase made
-  // here attaches back to the trip it was browsed from.
   final String? tripId;
   const InsurancePlanDetailPage({super.key, required this.plan, this.tripId});
 
-  // Rotating icon/color pairs for real [InsurancePlan.coverageItems] —
-  // chosen by keyword against the partner's own label text rather than a
-  // fixed per-index list, same "map real text to a representative icon"
-  // pattern DetailPageHotel._amenityIcon uses for amenities. Falls back
-  // to a plain shield + the palette's own color when nothing matches.
   static const _palette = [
     (Icons.healing, Color(0xFF3AA089), Color(0xFFE1F3EE)),
     (Icons.flight_takeoff_outlined, Color(0xFFE0604E), Color(0xFFFAE7E4)),
@@ -43,14 +33,9 @@ class InsurancePlanDetailPage extends StatelessWidget {
     if (l.contains('accident') || l.contains('personal') || l.contains('death') || l.contains('disab')) {
       return (Icons.people_alt_outlined, const Color(0xFFC98A4B), const Color(0xFFF6EBE0));
     }
-    // Unrecognized label — still real partner text, just cycle through
-    // the palette by position instead of guessing an icon that's wrong.
     return _palette[index % _palette.length];
   }
 
-  /// Maps a partner-entered highlight badge (e.g. "24/7 Support",
-  /// "Cashless Hospitalisation") to a representative icon, same
-  /// keyword-matching approach as [_coverageVisual].
   IconData _highlightIcon(String label) {
     final l = label.toLowerCase();
     if (l.contains('licen')) return Icons.verified_outlined;
@@ -109,10 +94,6 @@ class InsurancePlanDetailPage extends StatelessWidget {
                     ],
                   ),
                 ),
-                // Real partner-entered highlight badges — hidden entirely
-                // rather than ever padded out with a fixed icon row when
-                // the partner hasn't filled this in (see InsurancePlan's
-                // doc comment).
                 if (plan.highlights.isNotEmpty) ...[
                   const SizedBox(height: 20),
                   SizedBox(
@@ -139,9 +120,6 @@ class InsurancePlanDetailPage extends StatelessWidget {
                   ),
                 ],
                 const SizedBox(height: 16),
-                // Hidden entirely (not a fixed 5-item placeholder list)
-                // when the partner hasn't filled in any coverage items —
-                // see InsurancePlan's doc comment.
                 if (plan.coverageItems.isNotEmpty)
                   Container(
                     padding: const EdgeInsets.all(16),

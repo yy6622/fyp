@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show compute;
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -8,55 +9,50 @@ import 'package:pdf/widgets.dart' as pw;
 import '../controllers/expenses_controller.dart';
 import '../repositories/trip_repository.dart';
 
-/// Builds Voya-branded PDF reports. Currently just the Expenses report
-/// (Personal / Group, from Expenses > Generate Report) — laid out to
-/// match the project's own "Traveller Detailed Expense Report" design
-/// reference exactly (same sections, same fields, same admin-style
-/// navy/teal palette — admin_web/js/report-export.js's own colors, not
-/// this app's single-navy AppColors, since the ask here was to copy the
-/// admin report's look, not the app's): logo + bold title, a two-line
-/// metadata block (Travel Plan / Travel Period / Generated, then
-/// Traveller-or-Members / Currency / Report ID), a 3-stat row (Trip
-/// Budget / Total Expenses / Remaining Budget), a Daily Expense Trend
-/// line chart next to an Expenses by Category bar chart, a zebra-striped
-/// Expense Transaction Detail table, and a "Page X of Y" footer. Every
-/// number on the page comes from live Firestore data via
-/// [ExpensesTabController.snapshotFor] — nothing here is sample/
-/// placeholder content, only the page layout matches the design
-/// reference.
-///
-/// Honest limitation: [_lineChartBody] draws with [pw.CustomPaint] +
-/// [PdfGraphics] (moveTo/lineTo/drawEllipse/strokePath/fillPath) — this
-/// project has no Dart compiler available to verify that exact API
-/// surface against the installed `pdf` package version. If a build error
-/// points at this file, that function is the most likely spot; the
-/// category bar chart and everything else here is built from plain
-/// Container/Row/Expanded (the same widgets already used throughout this
-/// app) and carries much less of that risk.
+class _ReportBuildArgs {
+  final Uint8List logo;
+  final ExpensesReportSnapshot snapshot;
+  const _ReportBuildArgs(this.logo, this.snapshot);
+}
+
+// Top-level (not a class member) because compute() needs a plain function
+// reference. Pure PDF layout/drawing only — no platform channels, no
+// rootBundle — so it needs no Flutter binding set up in the isolate at all.
+Future<Uint8List> _buildExpenseReportIsolateEntry(_ReportBuildArgs args) {
+  return PdfReportService._buildExpenseReportDoc(args.snapshot, args.logo);
+}
+
 class PdfReportService {
   PdfReportService._();
 
-  // admin_web/js/report-export.js's own palette (admin_web/css/tokens.css:
-  // --navy-800:#0e3a52, --teal-600:#1c7d8c), deliberately NOT this app's
-  // single-navy AppColors — see the class doc comment above.
+  /// Same output as [buildExpenseReport], but runs the actual PDF layout/draw
+  /// work on a background isolate so it doesn't freeze the UI thread —
+  /// without this, the "Generate Report" loading spinner stops animating and
+  /// the app looks hung for as long as the PDF takes to build.
+  ///
+  /// The logo asset is loaded here, on the calling (UI) isolate, BEFORE
+  /// spawning the background isolate: `rootBundle` needs `ServicesBinding`,
+  /// which only exists on the isolate that ran `runApp()` — a bare
+  /// `compute()` isolate doesn't have it (that's what `BackgroundIsolateBinaryMessenger.ensureInitialized`
+  /// sets up a binary messenger for, but not a full ServicesBinding/rootBundle).
+  /// So the background isolate only ever does pure Dart PDF drawing with
+  /// bytes it's handed — no asset/platform-channel access needed there.
+  static Future<Uint8List> buildExpenseReportInBackground(ExpensesReportSnapshot snapshot) async {
+    final logo = await _logoBytes();
+    return compute(_buildExpenseReportIsolateEntry, _ReportBuildArgs(logo, snapshot));
+  }
+
   static const _navy = PdfColor.fromInt(0xFF0E3A52);
   static const _teal = PdfColor.fromInt(0xFF1C7D8C);
   static const _gray = PdfColor.fromInt(0xFF6E6E6E);
   static const _zebraBg = PdfColor.fromInt(0xFFF5F8F9);
   static const _gridLine = PdfColor.fromInt(0xFFD2D8DC);
 
-  // Same hand-written month-name approach already used throughout this
-  // project (see e.g. lib/views/expenses/transaction_detail_page.dart) —
-  // no `intl` package dependency anywhere in this project, so this
-  // doesn't introduce one just for the PDF.
   static const _monthNames = [
     'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
   ];
   static String _fmtDate(DateTime? d) => d == null ? '—' : '${d.day} ${_monthNames[d.month - 1]} ${d.year}';
 
-  /// RM with thousands separators and no decimals — matches the design
-  /// reference exactly ("RM6,500", "RM2,100"), unlike the rest of the
-  /// app's own `RM ${v.toStringAsFixed(2)}` style used on-screen.
   static String _money(double v) {
     final rounded = v.round();
     final negative = rounded < 0;
@@ -69,14 +65,8 @@ class PdfReportService {
     return 'RM${negative ? '-' : ''}$buf';
   }
 
-  /// A bare rounded number, no "RM", no comma — matches the design
-  /// reference's chart value/axis labels exactly (e.g. "2100", "500").
   static String _num0(double v) => v.round().toString();
 
-  /// A cosmetic, locally-generated report id in the same shape as the
-  /// design reference's ("VYA-TER-2026-0005") — purely a readable
-  /// reference number printed on the document, not looked up or stored
-  /// anywhere.
   static String _reportId(String code) {
     final now = DateTime.now();
     final n = (now.millisecondsSinceEpoch % 10000).toString().padLeft(4, '0');
@@ -88,10 +78,6 @@ class PdfReportService {
     return data.buffer.asUint8List();
   }
 
-  /// A "nice" axis max + step (5 even segments) for a chart whose largest
-  /// value is [maxValue] — e.g. a real max of 2,180 rounds up to a 2,500
-  /// axis in 500 steps, the same shape as the design reference's
-  /// 0/500/.../2,500 axis, just computed from real data instead of fixed.
   static List<double> _niceAxis(double maxValue) {
     if (maxValue <= 0) return [500, 100];
     final rawStep = maxValue / 5;
@@ -110,12 +96,12 @@ class PdfReportService {
     return [niceStep * 5, niceStep];
   }
 
-  /// Builds the Expenses report (Personal or Group, per [snapshot]) and
-  /// returns the raw PDF bytes. The caller (expenses_tab.dart) hands
-  /// these to `Printing.layoutPdf`, which puts up the OS print/share/save
-  /// sheet — this service never touches the filesystem itself.
   static Future<Uint8List> buildExpenseReport(ExpensesReportSnapshot snapshot) async {
     final logo = await _logoBytes();
+    return _buildExpenseReportDoc(snapshot, logo);
+  }
+
+  static Future<Uint8List> _buildExpenseReportDoc(ExpensesReportSnapshot snapshot, Uint8List logo) async {
     final doc = pw.Document();
     final trip = snapshot.trip;
     final title = snapshot.personal ? 'Traveller Detailed Expense Report' : 'Group Detailed Expense Report';
@@ -204,10 +190,6 @@ class PdfReportService {
     );
   }
 
-  /// Two-line, three-column metadata block, matching the design
-  /// reference exactly: Travel Plan / Travel Period / Generated on the
-  /// first line, then Traveller (Personal) or Members (Group) / Currency
-  /// / Report ID on the second.
   static pw.Widget _metaRow({required ExpensesReportSnapshot snapshot, required String period, required String reportId, Trip? trip}) {
     final generated = _fmtDate(DateTime.now());
     final tripName = (trip != null && trip.name.isNotEmpty) ? trip.name : 'Trip';
@@ -265,10 +247,6 @@ class PdfReportService {
         style: pw.TextStyle(fontSize: 10.5, fontWeight: pw.FontWeight.bold, color: _navy, letterSpacing: 0.4),
       );
 
-  /// Line chart (teal polyline + points over light gridlines), drawn with
-  /// [pw.CustomPaint]/[PdfGraphics] — see the class doc comment's
-  /// "Honest limitation" note on why this is the one part of this file
-  /// that could not be checked against a real compiler.
   static pw.Widget _lineChartBody(List<MapEntry<DateTime, double>> daily, double niceMax) {
     const width = 230.0;
     const height = 110.0;
@@ -282,7 +260,6 @@ class PdfReportService {
             final h = size.y;
             final n = daily.length;
 
-            // Light horizontal gridlines (0/25/50/75/100% of the axis).
             canvas.setColor(_gridLine);
             canvas.setLineWidth(0.5);
             for (var g = 0; g <= 4; g++) {
@@ -382,8 +359,6 @@ class PdfReportService {
     );
   }
 
-  // Date / Description / Category / Paid By / Amount / Receipt / Status —
-  // same order as the design reference (Amount before Receipt/Status).
   static const List<int> _colFlex = [2, 4, 3, 3, 3, 2, 2];
 
   static pw.Widget _tableCell(String text, int flex, {bool header = false, PdfColor? color, pw.TextAlign align = pw.TextAlign.left}) {
@@ -425,12 +400,6 @@ class PdfReportService {
     );
   }
 
-  /// Returns the table as a flat list of top-level widgets (header row,
-  /// one widget per transaction row) rather than one combined Column, so
-  /// [pw.MultiPage] can break between rows at a page boundary instead of
-  /// needing the whole table to fit on one page. No totals row — Total
-  /// Expenses is already shown in the stat row above, matching the design
-  /// reference, which doesn't repeat it in the table either.
   static List<pw.Widget> _transactionTableWidgets(ExpensesReportSnapshot snapshot) {
     final rows = [...snapshot.rows]..sort((a, b) {
         final ad = a.expense.date, bd = b.expense.date;

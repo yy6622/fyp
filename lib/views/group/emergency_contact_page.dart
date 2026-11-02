@@ -4,13 +4,6 @@ import '../../repositories/country_emergency_repository.dart';
 import '../../theme.dart';
 import '../shared/contact_launcher.dart';
 
-// ---------------------------------------------------------------------
-// Police / Ambulance / Firefighters for [destination] — real published
-// local emergency numbers, read live from the admin-curated
-// country_emergency_info Firestore collection (falling back to the
-// static emergency_info.dart maps — see CountryEmergencyRepository), not
-// one fixed set shown regardless of where the trip actually goes.
-// ---------------------------------------------------------------------
 class EmergencyContactPage extends StatefulWidget {
   final String destination;
   const EmergencyContactPage({super.key, required this.destination});

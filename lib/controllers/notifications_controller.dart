@@ -7,9 +7,6 @@ import '../repositories/notifications_repository.dart';
 import '../repositories/user_repository.dart';
 import '../services/auth_service.dart';
 
-/// Controller for [NotificationsPage] — streams `users/{uid}/notifications`
-/// and knows how to act on the one interactive type there is so far
-/// (a pending friend request's Accept/Decline).
 class NotificationsController extends ChangeNotifier {
   List<AppNotification> _items = [];
   List<AppNotification> get items => _items;
@@ -17,11 +14,6 @@ class NotificationsController extends ChangeNotifier {
   bool _loading = true;
   bool get loading => _loading;
 
-  // Surfaced when the Firestore stream itself fails (most commonly:
-  // security rules for `users/{uid}/notifications` haven't been deployed
-  // yet, so every read comes back permission-denied) — previously there
-  // was no `onError` on the subscription below, so a failure here left
-  // `_loading` stuck at true forever and the page spun with no way out.
   String? _error;
   String? get error => _error;
 
@@ -56,8 +48,6 @@ class NotificationsController extends ChangeNotifier {
     );
   }
 
-  /// Re-subscribes after a failure — wired to the Notifications page's
-  /// "Try again" button.
   void retry() {
     _loading = true;
     notifyListeners();
@@ -71,7 +61,6 @@ class NotificationsController extends ChangeNotifier {
   bool _clearingAll = false;
   bool get clearingAll => _clearingAll;
 
-  /// "Remove All" — returns null on success, or an error message to show.
   Future<String?> removeAll() async {
     _clearingAll = true;
     notifyListeners();
@@ -86,8 +75,6 @@ class NotificationsController extends ChangeNotifier {
     }
   }
 
-  /// Accepts or declines the friend request behind [n], then removes the
-  /// notification either way. Returns a short message to show the person.
   Future<String> respondToFriendRequest(AppNotification n, {required bool accept}) async {
     final fromUid = n.data['fromUid'] as String? ?? '';
     final fromName = n.data['fromName'] as String? ?? 'them';

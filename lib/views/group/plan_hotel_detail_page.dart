@@ -8,19 +8,6 @@ import '../../services/hotel_document_service.dart';
 import '../../theme.dart';
 import '../shared/member_select_section.dart';
 
-// ---------------------------------------------------------------------
-// Plan_Hotel_Detail — a hotel stay already on a trip's itinerary
-// (trip.hotelStays). Previously tapping one of these reused
-// DetailPageHotel, which is the *buy a hotel* page (its own "Select
-// Hotel" purchase bar) — confusing for something already booked, and
-// wrong since it has nothing to do with this stay's real check-in/
-// check-out/guest data. This is the read-only counterpart to
-// PlanFlightDetailPage — same Detail/Guests/Documents tab structure,
-// same real document upload, now that TripHotelStay carries
-// bookingRef/status/refId/documents the same way TripFlight does.
-// (No Review tab — reviews were removed from every hotel/attraction/
-// restaurant surface per the user's request.)
-// ---------------------------------------------------------------------
 class PlanHotelDetailPage extends StatefulWidget {
   final String tripId;
   final String id;
@@ -35,13 +22,8 @@ class PlanHotelDetailPage extends StatefulWidget {
   final String guestPhone;
   final String guestIdNumber;
   final String specialRequests;
-  // The `catalog_hotels` doc id this stay was booked from — blank for a
-  // manually-typed stay. No longer read by this page itself (the Review
-  // tab that used it is gone), kept since callers still pass it through.
   final String refId;
   final Map<String, String> documents;
-  // Who this stay is for, and the trip's full member roster to resolve
-  // those uids into display names — see TripHotelStay.forMemberUids.
   final List<String> forMemberUids;
   final Map<String, String> memberNames;
 
@@ -72,9 +54,6 @@ class PlanHotelDetailPage extends StatefulWidget {
 
 class _PlanHotelDetailPageState extends State<PlanHotelDetailPage> {
   final PlanHotelDetailController controller = PlanHotelDetailController();
-  // Local copy so an upload shows immediately without re-fetching the
-  // whole trip — TripRepository.setHotelDocument is still the source of
-  // truth in Firestore.
   late Map<String, String> _documents = Map.of(widget.documents);
   final Set<String> _uploading = {};
 
@@ -126,7 +105,6 @@ class _PlanHotelDetailPageState extends State<PlanHotelDetailPage> {
     );
   }
 
-  /// Same bottom-underline treatment as PlanFlightDetailPage's tabs.
   Widget _tab(String label, PlanHotelTab tab) {
     final selected = controller.tab == tab;
     return GestureDetector(

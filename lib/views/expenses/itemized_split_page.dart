@@ -5,10 +5,6 @@ import '../../theme.dart';
 import '../shared/nice_dialog.dart';
 import 'friend_picker_dialog.dart';
 
-/// Lets the payer type in each line of a receipt (label + price) and pick
-/// who it's split between — a real itemized split, backed by
-/// [AddExpenseController.items], instead of two fixed "Food 1"/"Drink 1"
-/// rows nobody could edit.
 class ItemizedSplitPage extends StatefulWidget {
   final AddExpenseController controller;
   const ItemizedSplitPage({super.key, required this.controller});
@@ -101,9 +97,6 @@ class _ItemizedSplitPageState extends State<ItemizedSplitPage> {
                       style: const TextStyle(fontSize: 12.5, color: Colors.black)),
                 ),
               ),
-              // Mainly for fixing/discarding a misread OCR line (FR56) —
-              // tap the text above to correct it, or this to drop it
-              // entirely, same as any item added by hand.
               GestureDetector(
                 onTap: () => widget.controller.removeItem(index),
                 child: const Padding(
@@ -133,9 +126,6 @@ class _ItemizedSplitPageState extends State<ItemizedSplitPage> {
     );
   }
 
-  /// The shared label/price validation behind both [_addItemDialog] and
-  /// [_editItemDialog] — returns the first problem found, in plain words,
-  /// or null once both fields are ready to save.
   String? _itemProblem(String labelText, String priceText) {
     final priceValue = double.tryParse(priceText);
     if (labelText.trim().isEmpty) return 'Give the item a name';
@@ -168,10 +158,6 @@ class _ItemizedSplitPageState extends State<ItemizedSplitPage> {
     widget.controller.addItem(label.text.trim(), double.parse(price.text.trim()));
   }
 
-  /// Corrects an existing line in place — mainly for fixing an OCR
-  /// misread (FR56: a wrong price, or a label that picked up stray
-  /// characters) without having to delete it and re-add it from scratch,
-  /// which would also lose any assignees already picked for it.
   Future<void> _editItemDialog(int index, ReceiptItem item) async {
     final label = TextEditingController(text: item.label);
     final price = TextEditingController(text: item.price.toStringAsFixed(2));

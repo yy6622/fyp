@@ -2,19 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../theme.dart';
 
-// ---------------------------------------------------------------------
-// Inline "Who is this for?" member picker — dropped into
-// FlightPassengerDetailsPage/HotelGuestDetailsPage whenever the trip being
-// booked for has more than one member, so a flight/hotel added to a group
-// trip's Plan can say who it actually applies to instead of leaving every
-// member to guess whether a booking was for the whole group or just
-// whoever happened to pay. The chosen set is stored on the resulting
-// TripFlight/TripHotelStay (see TripFlight.forMemberUids) and shown on
-// PlanFlightDetailPage/PlanHotelDetailPage and the trip Overview list, so
-// it's visible to every member, not just whoever booked it.
-// ---------------------------------------------------------------------
 class MemberSelectSection extends StatelessWidget {
-  /// uid -> display name, straight from [Trip.memberNames].
   final Map<String, String> memberNames;
   final Set<String> selected;
   final ValueChanged<Set<String>> onChanged;
@@ -46,8 +34,6 @@ class MemberSelectSection extends StatelessWidget {
               onTap: () {
                 final next = {...selected};
                 if (checked) {
-                  // At least one member has to stay selected — this
-                  // booking has to be "for" someone.
                   if (next.length > 1) next.remove(uid);
                 } else {
                   next.add(uid);
@@ -78,14 +64,6 @@ class MemberSelectSection extends StatelessWidget {
   }
 }
 
-/// Short "For: Alice, Bob" label built from a [TripFlight.forMemberUids]/
-/// [TripHotelStay.forMemberUids] list + the trip's [Trip.memberNames] —
-/// shared by PlanFlightDetailPage, PlanHotelDetailPage and the trip
-/// Overview list so the three render this identically. Returns '' (render
-/// nothing) when [forMemberUids] is empty — a solo trip, or a booking
-/// added before this field existed — or covers every member already,
-/// since "For: everyone" says nothing a Plan viewer doesn't already
-/// assume.
 String forMembersLabel(List<String> forMemberUids, Map<String, String> memberNames) {
   if (forMemberUids.isEmpty || forMemberUids.length >= memberNames.length) return '';
   final names = forMemberUids.map((uid) => memberNames[uid]).whereType<String>().where((n) => n.isNotEmpty).toList();

@@ -1,6 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-/// A user's profile document, stored at `users/{uid}`.
 class AppUser {
   final String uid;
   final String name;
@@ -10,41 +9,14 @@ class AppUser {
   final String country;
   final String currencyCode;
 
-  /// IATA code of the person's chosen departure airport (e.g. "PEN"),
-  /// set from Account Setting's Home Airport picker — see
-  /// `location_service.dart`. Empty means "never set"; callers fall
-  /// back to [kDefaultHomeAirport] (KUL) in that case rather than
-  /// treating empty as its own airport.
   final String homeAirportCode;
 
-  /// Privacy and Security's "Share Location with Group" toggle — real now,
-  /// not just local UI state. When true, [lastLat]/[lastLng] (captured the
-  /// moment the person turns this on, and refreshed each time they open
-  /// Group Info > Member Location for a trip that has it on) are shown to
-  /// the other members of any trip whose owner has turned on that trip's
-  /// own Real-Time Location setting — two separate switches have to agree
-  /// (the person's own privacy choice, and the trip's), matching
-  /// `firestore.rules`' `users/{uid}` rule: any signed-in member can read
-  /// this doc, but only its own owner can write it.
   final bool shareLocation;
   final double? lastLat;
   final double? lastLng;
   final DateTime? locationUpdatedAt;
 
-  /// Privacy and Security's "Public Profile" switch — when true (the
-  /// default, matching that switch's default-on state), tapping this
-  /// user's name on a Community post opens their profile and shows the
-  /// trips they've posted (see AuthorProfilePage); when false, everyone
-  /// but the user themself sees a plain "this profile is private"
-  /// notice there instead. Was local-only UI state before this field
-  /// existed — PrivacySecurityController now reads/writes it for real.
   final bool publicProfile;
-
-  /// Privacy and Security's "Two-Factor Authentication" switch — real now
-  /// (was a local-only `_twoFactor` stub on [PrivacySecurityController]
-  /// before, that reset to off every time the app restarted). Backs the
-  /// admin console's User Account Report "2FA adoption" figure.
-  final bool twoFactorEnabled;
 
   const AppUser({
     required this.uid,
@@ -60,7 +32,6 @@ class AppUser {
     this.lastLng,
     this.locationUpdatedAt,
     this.publicProfile = true,
-    this.twoFactorEnabled = false,
   });
 
   factory AppUser.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
@@ -79,12 +50,10 @@ class AppUser {
       lastLng: (data['lastLng'] as num?)?.toDouble(),
       locationUpdatedAt: (data['locationUpdatedAt'] as Timestamp?)?.toDate(),
       publicProfile: (data['publicProfile'] as bool?) ?? true,
-      twoFactorEnabled: (data['twoFactorEnabled'] as bool?) ?? false,
     );
   }
 }
 
-/// Reads/writes `users/{uid}` profile documents in Cloud Firestore.
 class UserRepository {
   UserRepository._();
   static final UserRepository instance = UserRepository._();
@@ -102,7 +71,6 @@ class UserRepository {
       'homeAirportCode': '',
       'shareLocation': false,
       'publicProfile': true,
-      'twoFactorEnabled': false,
       'createdAt': FieldValue.serverTimestamp(),
     });
   }
@@ -116,16 +84,18 @@ class UserRepository {
     return doc.exists ? AppUser.fromDoc(doc) : null;
   }
 
-  /// Deletes the person's own `users/{uid}` profile doc — called right
-  /// before [AuthService.deleteAccount] (see AccountSettingPage.
-  /// _deleteAccount), while they're still authenticated as themselves
-  /// (firestore.rules only allows this while `isOwner(uid)` still holds,
-  /// i.e. before the Firebase Auth account itself is gone). Does not
-  /// touch this user's `friends`/`blocked`/`notifications` subcollections
-  /// or any other collection referencing this uid (trips, posts,
-  /// reviews, ...) — see AuthService.deleteAccount's doc comment for why
-  /// a full cascade is out of scope here.
   Future<void> deleteProfile(String uid) => _users.doc(uid).delete();
+
+  /// True when an admin has suspended this account in the console (FR96).
+  Future<bool> isSuspended(String uid) async {
+    try {
+      final doc = await _users.doc(uid).get();
+      final status = (doc.data()?['status'] as String?)?.trim().toLowerCase();
+      return status == 'suspended' || status == 'blocked';
+    } catch (_) {
+      return false;
+    }
+  }
 
   Future<void> updateProfile(String uid,
       {String? name,
@@ -145,32 +115,14 @@ class UserRepository {
     return _users.doc(uid).update(data);
   }
 
-  /// Flips Privacy and Security's "Share Location with Group" switch.
-  /// Turning it off leaves any previously-captured [AppUser.lastLat]/
-  /// [lastLng] in place but [AppUser.shareLocation]=false hides them from
-  /// every Member Location page immediately — there's no need to also
-  /// clear the stale coordinates for that, and clearing them would lose
-  /// the "last seen" position right as it stops being updated.
   Future<void> setShareLocation(String uid, bool value) {
     return _users.doc(uid).update({'shareLocation': value});
   }
 
-  /// Flips Privacy and Security's "Public Profile" switch — see
-  /// [AppUser.publicProfile].
   Future<void> setPublicProfile(String uid, bool value) {
     return _users.doc(uid).update({'publicProfile': value});
   }
 
-  /// Flips Privacy and Security's "Two-Factor Authentication" switch —
-  /// see [AppUser.twoFactorEnabled].
-  Future<void> setTwoFactorEnabled(String uid, bool value) {
-    return _users.doc(uid).update({'twoFactorEnabled': value});
-  }
-
-  /// Records a fresh on-demand position read — called right when the
-  /// person turns location-sharing on, and again each time they (or
-  /// another member, implicitly, by opening the page) view Member
-  /// Location while it's on. Never a background/periodic write.
   Future<void> updateLocation(String uid, double lat, double lng) {
     return _users.doc(uid).update({
       'lastLat': lat,
@@ -179,8 +131,6 @@ class UserRepository {
     });
   }
 
-  /// Finds a user by exact email or exact display name — used by "Add
-  /// Friend", which lets people search by either.
   Future<AppUser?> findByEmailOrName(String query) async {
     final trimmed = query.trim();
     if (trimmed.isEmpty) return null;

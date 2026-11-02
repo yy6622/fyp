@@ -8,9 +8,6 @@ import '../../theme.dart';
 import '../notifications/notifications_page.dart';
 import 'history_detail_pages.dart';
 
-// ---------------------------------------------------------------------
-// History (Flight / Hotel / Insurance tabs)
-// ---------------------------------------------------------------------
 class HistoryPage extends StatefulWidget {
   const HistoryPage({super.key});
 
@@ -90,11 +87,6 @@ class _HistoryPageState extends State<HistoryPage> {
     }
   }
 
-  // Real inbox behind the mail icon — used to be a dead icon that always
-  // showed "No new booking updates" with nothing behind it. Same
-  // unread-badge pattern as HomePage's bell (NotificationsRepository
-  // .watchUnreadCount), just opening straight into the same shared
-  // NotificationsPage rather than duplicating a second inbox.
   Widget _notificationsBell(BuildContext context) {
     final uid = AuthService.instance.currentUser?.uid;
     return Stack(
@@ -136,9 +128,6 @@ class _HistoryPageState extends State<HistoryPage> {
     );
   }
 
-  // Real sort order for the current tab's list — "Newest first" (the
-  // order Firestore already returns) or "Oldest first" (the same list
-  // reversed client-side, see HistoryController._sorted).
   Future<void> _openSortSheet(BuildContext context) async {
     final choice = await showModalBottomSheet<bool>(
       context: context,
@@ -174,9 +163,6 @@ class _HistoryPageState extends State<HistoryPage> {
     if (choice != null) controller.setOldestFirst(choice);
   }
 
-  // All three tabs read real purchases from Firestore (`users/{uid}/bookings`
-  // — see [BookingRepository] and [HistoryController]); nothing here is a
-  // placeholder row anymore.
   Widget _buildList(BuildContext context) {
     final IconData icon;
     final bool loading;
@@ -257,25 +243,9 @@ class _HistoryPageState extends State<HistoryPage> {
     );
   }
 
-  // Tapping a past booking opens a read-only "past record" page — same
-  // tabs + plain info-card look for all three tabs (see
-  // history_detail_pages.dart, styled to match PlanFlightDetailPage).
-  // Hotel/Insurance used to reuse the *live shopping* pages
-  // (DetailPageHotel / InsurancePlanDetailPage), which have their own
-  // "Select Hotel" / "Enter Traveller" purchase button at the bottom — that
-  // let a past booking be accidentally re-purchased from History, and
-  // looked completely different from the Flight tab. The row's own
-  // title/subtitle/trailing are threaded through so each page reflects the
-  // booking that was actually tapped.
   void _openHistoryDetail(BuildContext context, BookingEntry b) {
     switch (controller.tab) {
       case HistoryTab.flight:
-        // id is the real `users/{uid}/bookings` doc id — passed through as
-        // bookingId so the Documents tab can actually attach an upload
-        // (see HistoryFlightDetailPage / BookingDocumentService). Before,
-        // this reused PlanFlightDetailPage with no tripId/id at all, which
-        // left the upload button permanently disabled for every History
-        // flight entry.
         Navigator.of(context).push(MaterialPageRoute(
           builder: (_) => HistoryFlightDetailPage(
             routeCode: b.title,
@@ -289,13 +259,6 @@ class _HistoryPageState extends State<HistoryPage> {
         ));
         break;
       case HistoryTab.hotel:
-        // trailing reads like "RM 320 (per night)" (see BookingBar) — strip
-        // the suffix back off, HistoryHotelDetailPage labels it itself.
-        // refId (when set) is the original catalog_hotels doc id, which
-        // unlocks a real Review tab on the detail page below. checkIn/
-        // checkOut/bookingRef/guestName now come from the real booking
-        // (written by BookingPaymentPage._confirmPayment) instead of the
-        // hardcoded fallback dates this page used to default to.
         Navigator.of(context).push(MaterialPageRoute(
           builder: (_) => HistoryHotelDetailPage(
             name: b.title,
@@ -317,9 +280,6 @@ class _HistoryPageState extends State<HistoryPage> {
         ));
         break;
       case HistoryTab.insurance:
-        // subtitle reads like "Policy #INS-172..." (see PaymentMethodPage)
-        // — strip the label back off, HistoryInsuranceDetailPage labels it
-        // itself.
         Navigator.of(context).push(MaterialPageRoute(
           builder: (_) => HistoryInsuranceDetailPage(
             planName: b.title,

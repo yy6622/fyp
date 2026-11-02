@@ -3,10 +3,6 @@ import 'package:flutter/foundation.dart';
 import '../repositories/catalog_repository.dart';
 import '../services/attraction_chat_service.dart';
 
-/// One message shown in the Attraction Assistant chat — either what the
-/// person typed, or what the assistant replied (optionally with a few
-/// real attractions resolved from the service's suggestedIds, see
-/// [AttractionChatController._resolve]).
 class AttractionChatMessage {
   final bool fromUser;
   final String text;
@@ -20,27 +16,11 @@ class AttractionChatMessage {
   });
 }
 
-/// Controller for [AttractionChatPage]. Keeps the conversation and talks
-/// to [AttractionChatService], grounding every reply to [candidates] — the
-/// real attractions Explore already has loaded for [destination] — and
-/// tracks which of them the person has tapped "Add" on so the chat's own
-/// cards can show "Added" without waiting on a fresh Firestore read.
 class AttractionChatController extends ChangeNotifier {
   AttractionChatController._({required this.destination, required this.candidates, required this.uid, required this.tripId});
 
-  /// In-memory only (never written to disk) — reusing a cached
-  /// controller keeps the conversation while the app process is still
-  /// alive (switching tabs, navigating away and back within a minute or
-  /// two), but a full app restart clears this map just like any other
-  /// static state, so a brand-new session starts a fresh conversation,
-  /// which is the behavior that was asked for.
   static final Map<String, AttractionChatController> _cache = {};
 
-  /// Returns the existing controller (and its conversation so far) for
-  /// this trip/destination if the chat was already opened this app
-  /// session, otherwise creates and caches a new one. [candidates] is
-  /// refreshed on every call even when reusing a cached controller, so
-  /// grounding stays current without resetting the chat.
   factory AttractionChatController.forTrip({
     required String destination,
     required List<CatalogAttraction> candidates,
@@ -66,10 +46,6 @@ class AttractionChatController extends ChangeNotifier {
   final List<AttractionChatMessage> messages = [];
   bool sending = false;
 
-  /// Ids added to the trip's saved attractions from this chat session —
-  /// checked alongside each attraction's own real `favoritedBy` so a
-  /// suggestion already saved before the chat even opened also shows as
-  /// added, not just ones tapped during this session.
   final Set<String> addedIds = {};
 
   bool isAdded(CatalogAttraction a) => addedIds.contains(a.id) || a.isSavedForTrip(uid, tripId);
@@ -81,10 +57,6 @@ class AttractionChatController extends ChangeNotifier {
     sending = true;
     notifyListeners();
     try {
-      // Everything added so far except the user message just appended
-      // above (that one is sent separately as [userMessage]) — sliced by
-      // position first, then filtered, so an error bubble earlier in the
-      // conversation can't shift a later real message into this slice.
       final history = messages
           .sublist(0, messages.length - 1)
           .where((m) => !m.isError)
@@ -116,15 +88,6 @@ class AttractionChatController extends ChangeNotifier {
     return ids.map((id) => byId[id]).whereType<CatalogAttraction>().toList();
   }
 
-  /// Saves/favorites [attraction] for the current trip — the exact same
-  /// write [ExploreController.toggleAttractionFavorite] uses, so "Add"
-  /// here and the heart icon elsewhere in Explore are the same real
-  /// action, not a parallel concept. With no selected trip there's
-  /// nowhere real to persist the favorite — same as the heart icon
-  /// being disabled with no trip selected elsewhere (see
-  /// AttractionChatPage's "Add" button, disabled whenever [tripId] is
-  /// null) — so this used to still flip the button to a permanent
-  /// "Added" state with nothing behind it; it no longer does.
   Future<void> addToTrip(CatalogAttraction attraction) async {
     final trip = tripId;
     if (trip == null || addedIds.contains(attraction.id)) return;

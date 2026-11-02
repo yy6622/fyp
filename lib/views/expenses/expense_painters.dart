@@ -1,13 +1,8 @@
 import 'package:flutter/material.dart';
 
-/// A simple two-color donut: [fraction] (0..1) of the circle is "settled"
-/// (green), the rest "outstanding" (pink) — driven by real expense totals
-/// from [ExpensesTabController], not a fixed split.
 class PiePainter extends CustomPainter {
-  /// Share of the money that has been paid (0-1): the green part of the ring.
   final double fraction;
 
-  /// No expenses yet: an empty grey ring.
   final bool empty;
   const PiePainter({this.fraction = 0.5, this.empty = false});
 

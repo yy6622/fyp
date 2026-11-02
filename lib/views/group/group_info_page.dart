@@ -13,9 +13,6 @@ import 'group_setting_page.dart';
 import 'invite_qr_page.dart';
 import 'member_location_page.dart';
 
-// ---------------------------------------------------------------------
-// Group Info
-// ---------------------------------------------------------------------
 class GroupInfoPage extends StatelessWidget {
   final String tripId;
   const GroupInfoPage({super.key, required this.tripId});
@@ -39,15 +36,6 @@ class GroupInfoPage extends StatelessWidget {
               padding: EdgeInsets.zero,
               children: [
                 Stack(
-                  // The banner reserves only 168px of scroll space (190 - the
-                  // 22px the card below overlaps it by), but still *paints*
-                  // the full 190px image via OverflowBox — clipBehavior.none
-                  // lets that extra 22px paint past the Stack's own box
-                  // without being clipped. This achieves the "card floats up
-                  // over the banner" look without any negative padding/
-                  // margin, both of which assert non-negative in Flutter
-                  // (a `Padding.only(top: -22)` here used to crash with
-                  // "padding.isNonNegative is not true").
                   clipBehavior: Clip.none,
                   children: [
                     SizedBox(
@@ -240,9 +228,6 @@ class GroupInfoPage extends StatelessWidget {
     );
   }
 
-  /// Only the trip owner can remove a member, and never the owner
-  /// themselves — a tap from anyone else, or on the owner's own avatar, is
-  /// a plain no-op (their name is already shown via the [Tooltip]).
   Future<void> _onMemberTap(BuildContext context, Trip trip, String memberUid, String memberName) async {
     if (trip.ownerId.isEmpty || _uid != trip.ownerId || memberUid == trip.ownerId) return;
     final confirmed = await showNiceConfirmDialog(

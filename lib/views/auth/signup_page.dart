@@ -4,13 +4,10 @@ import 'package:flutter/material.dart';
 import '../../controllers/auth_controller.dart';
 import '../../theme.dart';
 import '../onboarding/onboarding_wizard_page.dart';
-import '../shared/bottom_nav.dart';
 import 'auth_widgets.dart';
+import '../../services/verification_service.dart';
 import 'otp_verification_page.dart';
 
-// ---------------------------------------------------------------------
-// Signup
-// ---------------------------------------------------------------------
 class SignupPage extends StatefulWidget {
   const SignupPage({super.key});
 
@@ -27,15 +24,6 @@ class _SignupPageState extends State<SignupPage> {
     super.dispose();
   }
 
-  /// "Terms of Use"/"Privacy Policy" below used to be plain TextSpans
-  /// styled exactly like links (blue, italic) with no TapGestureRecognizer
-  /// at all — tapping either did nothing. There's no real legal document
-  /// behind either one yet (this is a student FYP project, not a
-  /// registered business), so rather than silently doing nothing OR
-  /// pretending to open a real document, this shows an honest, clearly
-  /// labelled placeholder — same "say so honestly" pattern this app uses
-  /// elsewhere for a feature that genuinely isn't built yet (see
-  /// EmbassyPage's "not available yet" state for a country with no data).
   void _showLegalPlaceholder(String title) {
     showDialog<void>(
       context: context,
@@ -64,17 +52,15 @@ class _SignupPageState extends State<SignupPage> {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
       return;
     }
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const OtpVerificationPage()),
+    // FR04: the account is only usable after the 6-digit code from the email.
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(
+        builder: (_) => VerificationCodePage(purpose: CodePurpose.signup, next: () => const OnboardingWizardPage()),
+      ),
+      (route) => false,
     );
   }
 
-  // The "Register" button below is disabled until Agree to Terms is
-  // checked (see its onPressed) — Google sign-up used to skip that
-  // requirement entirely, since it called straight into _handleSocial
-  // with no gate of its own, letting someone create a
-  // full account without ever agreeing to the Terms of Use/Privacy
-  // Policy. This is the same gate, applied before the social call runs.
   void _requireAgreement(VoidCallback thenRun) {
     if (!controller.agreeToTerms) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -85,9 +71,6 @@ class _SignupPageState extends State<SignupPage> {
     thenRun();
   }
 
-  // "Sign up with Google" and "Login with Google" are the same Firebase
-  // call either way (see _runSocialLogin in
-  // auth_controller.dart) — same handling as LoginPage's.
   Future<void> _handleSocial(Future<SocialLoginOutcome> Function() signIn) async {
     final outcome = await signIn();
     if (!mounted) return;
@@ -98,14 +81,8 @@ class _SignupPageState extends State<SignupPage> {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(outcome.errorMessage!)));
         return;
       case SocialLoginResult.success:
-        if (outcome.isNewUser) {
-          Navigator.of(context).push(MaterialPageRoute(builder: (_) => const OnboardingWizardPage()));
-        } else {
-          Navigator.of(context).pushAndRemoveUntil(
-            MaterialPageRoute(builder: (_) => const MainPage()),
-            (route) => false,
-          );
-        }
+        // FR04: a new device needs the emailed code before the app opens.
+        await openAppAfterSignIn(context, newUser: outcome.isNewUser);
     }
   }
 

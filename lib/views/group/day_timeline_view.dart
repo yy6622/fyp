@@ -5,27 +5,13 @@ import 'package:flutter/material.dart';
 import '../../models/day_plan_models.dart';
 import '../../theme.dart';
 
-// ---------------------------------------------------------------------
-// The Day tab's edit-mode view: a vertical 24-hour time ruler with each
-// activity positioned at its own time, which can be dragged up/down to
-// reschedule it (release = new time, snapped to 5 minutes) — the
-// Google-Calendar-style interaction the user sketched out, replacing the
-// old "delete and re-add" as the only way to change an existing
-// activity's time. Shown only while Day edit mode is on
-// (group_trip_page.dart's `_dayEditMode`); the plain mode keeps the
-// original simple list untouched.
-// ---------------------------------------------------------------------
 
 const double _hourHeight = 88.0;
 const double _rulerWidth = 56.0;
 const int _minutesPerDay = 24 * 60;
 const int _snapMinutes = 5;
-const int _maxMinutes = _minutesPerDay - _snapMinutes; // 23:55, last snappable slot
+const int _maxMinutes = _minutesPerDay - _snapMinutes;
 
-// Auto-scroll-while-dragging tuning: once a dragged chip gets within
-// [_autoScrollEdge] px of the top/bottom of the visible timeline, the
-// view starts scrolling toward that edge, picking up speed the closer
-// the finger gets (up to [_autoScrollMaxSpeed] px per [_autoScrollTick]).
 const double _autoScrollEdge = 64.0;
 const double _autoScrollMaxSpeed = 14.0;
 const Duration _autoScrollTick = Duration(milliseconds: 16);
@@ -50,9 +36,6 @@ String _minutesToHHMM(int minutes) {
   return '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}';
 }
 
-/// Same conversion as group_trip_page.dart's own `_formatTime12h` — kept
-/// as a standalone copy here (this file has no access to that private
-/// method) rather than made public just for one other caller.
 String _formatTime12h(int minutes) {
   final h24 = minutes ~/ 60;
   final m = minutes % 60;
@@ -80,18 +63,11 @@ class DayTimelineView extends StatefulWidget {
 
 class _DayTimelineViewState extends State<DayTimelineView> {
   final ScrollController _scroll = ScrollController();
-  // Resolves the SingleChildScrollView's own RenderBox (the visible
-  // viewport, not the scrolled content) so a dragging chip can tell how
-  // close the finger is to the top/bottom edge in screen space.
   final GlobalKey _viewportKey = GlobalKey();
 
   @override
   void initState() {
     super.initState();
-    // Opens roughly an hour above the earliest activity (or mid-morning
-    // if the day has nothing yet) instead of always at 00:00 — nobody
-    // plans a trip starting at midnight, so starting the scroll there
-    // would mean an extra scroll on every single open.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_scroll.hasClients) return;
       final earliest = widget.items.isEmpty
@@ -170,7 +146,6 @@ class _DayTimelineViewState extends State<DayTimelineView> {
               ),
             ),
             Positioned(top: 0, left: _rulerWidth, right: 0, child: Container(height: 1, color: AppColors.divider)),
-            // Half-hour line, unlabelled and lighter.
             Positioned(
               top: _hourHeight / 2,
               left: _rulerWidth,
@@ -207,17 +182,8 @@ class _TimelineChip extends StatefulWidget {
 }
 
 class _TimelineChipState extends State<_TimelineChip> {
-  // Pixel offset while actively being dragged; null the rest of the
-  // time, when the chip just sits at widget.minutes' canonical position.
-  // Tracked as a raw pixel value (not minutes) so repeated small
-  // onVerticalDragUpdate deltas don't compound rounding error the way
-  // re-deriving minutes on every single update tick would.
   double? _dragTop;
 
-  // Non-zero while the finger sits in the top/bottom edge zone of the
-  // viewport during a drag — signed px-per-tick, applied by
-  // [_autoScrollTimer] until the finger moves back away from the edge
-  // or the drag ends.
   double _autoScrollDelta = 0;
   Timer? _autoScrollTimer;
 
@@ -231,10 +197,6 @@ class _TimelineChipState extends State<_TimelineChip> {
     super.dispose();
   }
 
-  /// Re-checks how close [globalPosition] (the finger, in screen space)
-  /// is to the viewport's top/bottom edge, and starts/stops/retargets
-  /// the auto-scroll timer accordingly. Called on every drag update so
-  /// the scroll speed keeps tracking the finger as it moves.
   void _updateAutoScroll(Offset globalPosition) {
     final viewportBox = widget.viewportKey.currentContext?.findRenderObject() as RenderBox?;
     if (viewportBox == null || !viewportBox.attached) {
@@ -260,11 +222,6 @@ class _TimelineChipState extends State<_TimelineChip> {
     }
   }
 
-  /// One auto-scroll step: nudges the real scroll offset, then nudges
-  /// the dragged chip's own content-space position by exactly the same
-  /// amount actually applied (clamping may shrink it near either end of
-  /// the list) — that's what keeps the chip sitting still under the
-  /// finger while the timeline scrolls underneath it.
   void _tickAutoScroll() {
     if (!_dragging || _autoScrollDelta == 0 || !widget.scrollController.hasClients) return;
     final position = widget.scrollController.position;
@@ -336,10 +293,6 @@ class _TimelineChipState extends State<_TimelineChip> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        // Live time while dragging, same spot a finger is
-                        // already looking at — this is the "see it move
-                        // between 10:00am-2:30am as you scroll" part of
-                        // the sketch.
                         _formatTime12h(liveMinutes),
                         style: TextStyle(
                           fontSize: 12,

@@ -1,37 +1,29 @@
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/foundation.dart';
 
-/// One option the group talked about (a place, a hotel, a budget, dates...)
-/// and how the discussion left it.
-/// A decision the group made in the app for an item the chat left undecided.
 class DiscussionDecision {
   /// confirmed / rejected / split / voting
   final String status;
   final String byName;
 
-  /// For "split": the members who go; everyone else keeps their own plan.
   final List<String> memberNames;
   final String voteTitle;
   const DiscussionDecision({required this.status, required this.byName, required this.memberNames, required this.voteTitle});
 }
 
 class DiscussionItem {
-  /// DESTINATION, DATE, BUDGET, ATTRACTION, TRANSPORT or ACCOMMODATION.
   final String category;
 
   /// confirmed / pending / rejected.
   final String status;
 
-  /// The message that proposed it, as written in the chat.
   final String text;
 
-  /// A cleaned-up value when one could be read ("RM3000 per person", "18-23 Dec").
   final String? value;
   final String proposer;
   final List<String> support;
   final List<String> against;
 
-  /// The chat message that proposed it - the key decisions are stored under.
   final String messageId;
   final DiscussionDecision? decided;
 
@@ -71,10 +63,8 @@ class DiscussionSummary {
   final List<DiscussionPreference> preferences;
   final List<DiscussionItem> pending;
 
-  /// The most important messages, picked by the importance score S(m).
   final List<({String speaker, String text})> highlights;
 
-  /// The whole summary as plain text (for copying).
   final String text;
 
   final int messageCount;
@@ -96,7 +86,6 @@ class DiscussionSummary {
   bool get isEmpty => sections.isEmpty && preferences.isEmpty;
 }
 
-/// Thrown with a message that is safe to show to the user as-is.
 class DiscussionSummaryException implements Exception {
   final String message;
   const DiscussionSummaryException(this.message);
@@ -115,9 +104,6 @@ class DiscussionSummaryJob {
   static const running = DiscussionSummaryJob._(DiscussionSummaryStatus.running);
 }
 
-/// Calls the `summariseDiscussion` Cloud Function (functions/discussion_summary/),
-/// which runs Voya's own trained model (ml/discussion_summary/) over a trip's
-/// group chat. No external AI API is involved, so it is fast and free.
 class DiscussionSummaryService {
   DiscussionSummaryService._();
   static final DiscussionSummaryService instance = DiscussionSummaryService._();
@@ -127,7 +113,6 @@ class DiscussionSummaryService {
   ValueNotifier<DiscussionSummaryJob> jobFor(String tripId) =>
       _jobs.putIfAbsent(tripId, () => ValueNotifier<DiscussionSummaryJob>(DiscussionSummaryJob.idle));
 
-  /// (Re)computes the summary for [tripId] unless a run is already going.
   void start(String tripId) {
     final job = jobFor(tripId);
     if (job.value.status == DiscussionSummaryStatus.running) return;

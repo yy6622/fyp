@@ -13,10 +13,6 @@ import 'author_profile_page.dart';
 import 'community_page.dart';
 import 'create_post_page.dart';
 
-// ---------------------------------------------------------------------
-// Community post detail — hero photo carousel, rating, and an
-// Itinerary/Review tab pair (mirrors the preview shown on the feed card).
-// ---------------------------------------------------------------------
 class CommunityPostDetailPage extends StatefulWidget {
   final CommunityPost post;
   const CommunityPostDetailPage({super.key, required this.post});
@@ -30,18 +26,12 @@ class _CommunityPostDetailPageState extends State<CommunityPostDetailPage> {
   final PageController _photoController = PageController();
   int _photoIndex = 0;
 
-  // FR61 — lazily created the first time the video media is shown (tapping
-  // the play overlay), rather than up front: most posts have no video at
-  // all, and even for ones that do, there's no reason to start buffering
-  // it before the viewer has asked to watch.
   VideoPlayerController? _videoController;
   bool _videoLoading = false;
 
   @override
   void initState() {
     super.initState();
-    // One view per time this page opens — see CommunityRepository.recordView
-    // and the Community Post Analysis Report (admin_web) that reads it.
     controller.recordView(widget.post);
   }
 
@@ -108,13 +98,10 @@ class _CommunityPostDetailPageState extends State<CommunityPostDetailPage> {
     );
   }
 
-  /// FR62 — opens the compose form pre-filled with [post], in edit mode.
   Future<void> _editPost(CommunityPost post) async {
     await Navigator.of(context).push(MaterialPageRoute(builder: (_) => CreatePostPage(editingPost: post)));
   }
 
-  /// FR64 — asks first (irreversible), then deletes and leaves the page,
-  /// since there's nothing left here to show once the post is gone.
   Future<void> _deletePost(CommunityPost post) async {
     final confirmed = await showNiceConfirmDialog(
       context: context,
@@ -135,11 +122,6 @@ class _CommunityPostDetailPageState extends State<CommunityPostDetailPage> {
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Your post has been deleted.')));
   }
 
-  // Looks up the live version of this post from the controller's own
-  // Firestore-backed stream (falling back to the post passed in, before
-  // the first snapshot arrives) so likes/saves/ratings made here — or on
-  // the feed page, since both share the same underlying stream — show up
-  // immediately instead of only after a manual refresh.
   CommunityPost get _livePost {
     for (final p in controller.filteredPosts) {
       if (p.id == widget.post.id) return p;
@@ -155,9 +137,6 @@ class _CommunityPostDetailPageState extends State<CommunityPostDetailPage> {
       backgroundColor: Colors.white,
       appBar: VoyaAppBar(
         title: const Text('Community', style: TextStyle(color: AppColors.navy, fontWeight: FontWeight.bold, fontSize: 20)),
-        // Reporting your own post doesn't make sense — only shown on
-        // someone else's; your own gets the Edit/Delete menu (FR62/FR64)
-        // instead. See _reportPost/CommunityController.reportPost.
         actions: widget.post.authorId == _myUid
             ? [
                 PopupMenuButton<String>(
@@ -185,23 +164,11 @@ class _CommunityPostDetailPageState extends State<CommunityPostDetailPage> {
       ),
       body: ListenableBuilder(
         listenable: controller,
-        // _livePost is read HERE, inside the builder that actually re-runs
-        // when `controller` notifies (a like/rating/review write coming
-        // back from Firestore) — it used to be read once in the outer
-        // build() instead, which only reruns on this State's own setState
-        // (e.g. swiping photos). That meant every tap on Like/Rating here
-        // genuinely wrote to Firestore, but this page kept rendering the
-        // same stale post it captured on first build, so nothing ever
-        // looked like it changed — this is why those controls read as
-        // "not working" even though the data was updating underneath.
         builder: (context, _) {
           final post = _livePost;
           return ListView(
             padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
             children: [
-              // Only ever true for the post's own author — watchPosts
-              // already keeps anyone else's view from ever landing here
-              // with an autoFlagged post. See CommunityRepository.createPost.
               if (post.autoFlagged)
                 Container(
                   width: double.infinity,
@@ -224,8 +191,6 @@ class _CommunityPostDetailPageState extends State<CommunityPostDetailPage> {
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Tapping the author here opens their profile, same as
-                  // the feed card — see AuthorProfilePage.
                   Expanded(
                     child: GestureDetector(
                       behavior: HitTestBehavior.opaque,
@@ -259,9 +224,6 @@ class _CommunityPostDetailPageState extends State<CommunityPostDetailPage> {
                       ),
                     ),
                   ),
-                  // Only one engagement toggle (like) — see CommunityPost's
-                  // doc comment for why the bookmark that used to sit next
-                  // to this was dropped.
                   GestureDetector(
                     onTap: () => controller.toggleLike(post),
                     child: Icon(post.liked ? Icons.favorite : Icons.favorite_border,
@@ -308,10 +270,6 @@ class _CommunityPostDetailPageState extends State<CommunityPostDetailPage> {
     );
   }
 
-  /// Tapping a tag here opens the Community feed pre-filtered to it (see
-  /// CommunityPage.initialTagFilter) — this page's own [controller] is a
-  /// separate instance from the feed's, so there's no local filter state
-  /// to toggle in place the way the feed card's own chips do.
   Widget _tagChip(String tag) {
     return GestureDetector(
       onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => CommunityPage(initialTagFilter: tag))),
@@ -323,10 +281,6 @@ class _CommunityPostDetailPageState extends State<CommunityPostDetailPage> {
     );
   }
 
-  /// FR61 — a post's video, in the same hero slot a photo carousel would
-  /// occupy. Shows a static play button until tapped (see initState's doc
-  /// comment on [_videoController] for why playback starts lazily), then
-  /// becomes a real inline player with its own tap-to-pause/play.
   Widget _videoPlayer(CommunityPost post) {
     final vc = _videoController;
     return ClipRRect(
@@ -424,11 +378,6 @@ class _CommunityPostDetailPageState extends State<CommunityPostDetailPage> {
     );
   }
 
-  // There used to be a standalone "quick rate" star row here, separate
-  // from the Review tab's own star picker — two ways to rate the same
-  // post read as one too many, and rating alongside a review (see
-  // showWriteReviewDialog) already covers "just rating, no comment"
-  // since the comment field there is optional. Dropped in favor of that.
 
   Widget _tabs(CommunityPost post) {
     return PillTabBar(
@@ -445,9 +394,6 @@ class _CommunityPostDetailPageState extends State<CommunityPostDetailPage> {
     if (post.itinerary.isEmpty) {
       return const Text('No itinerary attached yet.', style: TextStyle(fontSize: 12, color: AppColors.textGrey));
     }
-    // Only ever true for a post shared after FR31/FR68 started carrying
-    // structured activities alongside the display strings — see
-    // CommunityItineraryDay.activities' doc comment.
     final importable = post.itinerary.any((d) => d.activities.isNotEmpty);
     return Column(
       children: [
@@ -473,11 +419,6 @@ class _CommunityPostDetailPageState extends State<CommunityPostDetailPage> {
     );
   }
 
-  /// FR31/FR68 — copies this post's itinerary into one of the viewer's OWN
-  /// trips, day-index-aligned (this post's "Day N" -> the target trip's
-  /// day N). A target trip shorter than this itinerary just skips the
-  /// days that don't exist on it rather than failing outright — the days
-  /// that do fit still get added.
   Future<void> _importItinerary(CommunityPost post) async {
     final myUid = _myUid;
     if (myUid.isEmpty) {
@@ -616,15 +557,7 @@ class _CommunityPostDetailPageState extends State<CommunityPostDetailPage> {
     return '$n';
   }
 
-  // Real, Firestore-backed written reviews (`posts/{id}/reviews`) — each
-  // one's star rating also feeds the post's `ratings` map (see
-  // CommunityRepository.addReview), which is what drives avgRating/
-  // myRating now that there's no separate quick-rate widget.
   Widget _fullReviews(CommunityPost post) {
-    // Defensive guard: a post with no Firestore id has nowhere to read or
-    // write reviews from — calling watchReviews('') throws, so show a
-    // friendly message instead of crashing (mirrors DetailPageHotel's
-    // handling of a manually-added hotel with no catalog id).
     if (post.id.isEmpty) {
       return Container(
         padding: const EdgeInsets.symmetric(vertical: 28),

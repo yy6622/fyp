@@ -36,32 +36,16 @@ import 'optimise_sheet.dart';
 import 'plan_flight_detail_page.dart';
 import 'plan_hotel_detail_page.dart';
 
-/// Airport/city choices offered by the "Add Flight" dialog's From/To
-/// fields (see [_GroupTripPageState._addFlightDialog]) — typing a bare
-/// 3-letter IATA code from memory isn't something most people can do, so
-/// these fields now search real airport/city names (like the Airline
-/// field already does for airlines) and the code is pulled out of
-/// whichever suggestion gets picked. Built from the same two lists the
-/// rest of the app already uses for flight search
-/// ([kMalaysiaAirports] for a domestic "From", [kCountryGateways] for an
-/// international "To"), so there's no separate/duplicate airport data.
 final List<String> _flightLocationOptions = [
   for (final a in kMalaysiaAirports) '${a.city} – ${a.name} (${a.iataCode})',
   for (final g in kCountryGateways.entries) '${g.value.hotelPlaceQuery} (${g.value.flightIataCode})',
 ];
 
-/// Pulls the trailing "(CODE)" back out of a picked [_flightLocationOptions]
-/// suggestion. Falls back to just upper-casing whatever was typed, so
-/// someone who still prefers to type a raw code directly (e.g. an
-/// airport not in either list) isn't blocked.
 String _extractAirportCode(String text) {
   final match = RegExp(r'\(([A-Za-z]{2,4})\)\s*$').firstMatch(text.trim());
   return (match?.group(1) ?? text.trim()).toUpperCase();
 }
 
-// ---------------------------------------------------------------------
-// Group trip screen: Plan / Chat / Expenses / Vote tabs
-// ---------------------------------------------------------------------
 class GroupTripPage extends StatefulWidget {
   static const routeName = '/groupTrip';
 
@@ -76,16 +60,10 @@ class GroupTripPage extends StatefulWidget {
 class _GroupTripPageState extends State<GroupTripPage> {
   late final GroupTripController controller = GroupTripController(tripId: widget.tripId, initialTab: widget.initialTab);
 
-  // Toggled by the pencil icon next to the Day header — while on, every
-  // activity card shows a delete button so activities can actually be
-  // removed (there was previously no way to undo "Add Activity" at all).
   bool _dayEditMode = false;
 
-  // Edit mode works on a draft: dragging an activity to a new time or removing it is only
-  // remembered here, and nothing is written to the trip until "Save" is tapped. Leaving edit
-  // mode any other way (back, another day / tab, the other header buttons, Cancel) asks first.
   int? _editDayIndex;
-  final Map<String, String> _draftTimes = {}; // activity id -> new "HH:mm"
+  final Map<String, String> _draftTimes = {};
   final Set<String> _draftRemoved = {}; // activity ids to remove
   bool _savingDraft = false;
 
@@ -109,7 +87,6 @@ class _GroupTripPageState extends State<GroupTripPage> {
     });
   }
 
-  /// The day as it will look once the draft is saved.
   List<ActivityItem> _draftItems(List<ActivityItem> items) => [
         for (final it in items)
           if (!_draftRemoved.contains(it.id))
@@ -128,7 +105,6 @@ class _GroupTripPageState extends State<GroupTripPage> {
                 : it,
       ];
 
-  /// Writes the draft to the trip. Returns false (and stays in edit mode) if something failed.
   Future<bool> _saveDayEdit() async {
     final dayIndex = _editDayIndex;
     if (dayIndex == null || !_hasDraftChanges) {
@@ -161,8 +137,6 @@ class _GroupTripPageState extends State<GroupTripPage> {
     return true;
   }
 
-  /// Call before anything that leaves edit mode. True = go ahead (saved, discarded or nothing
-  /// to save); false = stay in edit mode.
   Future<bool> _confirmLeaveDayEdit() async {
     if (!_dayEditMode) return true;
     if (!_hasDraftChanges) {
@@ -241,7 +215,6 @@ class _GroupTripPageState extends State<GroupTripPage> {
     return false;
   }
 
-  /// Runs [action] only after the edit-mode question above is settled.
   Future<void> _afterLeavingEdit(VoidCallback action) async {
     if (await _confirmLeaveDayEdit()) action();
   }
@@ -321,9 +294,6 @@ class _GroupTripPageState extends State<GroupTripPage> {
               ),
             ),
           ),
-          // Shows only while this trip's AI Summarise and/or Optimise run is
-          // working or has a result waiting; tapping either re-opens its sheet
-          // (ai_itinerary_sheet.dart / optimise_sheet.dart).
           body: Column(
             children: [
               AiItineraryStatusBar(controller: controller),
@@ -354,13 +324,6 @@ class _GroupTripPageState extends State<GroupTripPage> {
     );
   }
 
-  // Matches the Figma tab bar exactly (pulled via get_design_context on
-  // node 57:256 "PlanDetail"): each tab is a white pill whose TOP corners
-  // are square and BOTTOM corners are rounded (10px) — so its 2px bottom
-  // border traces a little upward curve at each end instead of a flat
-  // line. Only the selected tab's bottom border is navy; the other 3 have
-  // a (invisible) white bottom border of the same width, so the curved
-  // shape is there for all 4 but only the selected one's curve is visible.
   Widget _tabButton(String label, IconData icon, GroupTab tab) {
     final selected = controller.tab == tab;
     return Expanded(
@@ -440,9 +403,6 @@ class _GroupTripPageState extends State<GroupTripPage> {
               for (final f in trip.flights)
                 (
                   '${f.dateTime} · ${f.airline}',
-                  // Who this flight is for — see TripFlight.forMemberUids —
-                  // appended so every member can see at a glance whether a
-                  // booking applies to them, not just whoever booked it.
                   _withMembersLabel(f.routeCode, f.forMemberUids, trip.memberNames),
                   () => Navigator.of(context).push(MaterialPageRoute(
                         builder: (_) => PlanFlightDetailPage(
@@ -514,13 +474,6 @@ class _GroupTripPageState extends State<GroupTripPage> {
     );
   }
 
-  // No catalog/booking link exists for this trip's insurance until someone
-  // actually buys a plan for it (`trips/{tripId}.insurance`, set by
-  // PaymentMethodPage on a successful purchase started from here) — so
-  // tapping this row before that shows an honest "not bought yet" prompt
-  // instead of jumping straight into a random plan's detail page. Once a
-  // plan is bought, the row shows the real plan/policy and opens the same
-  // read-only record History's Insurance tab uses.
   Widget _insuranceRow(Trip trip) {
     final insurance = trip.insurance;
     if (insurance == null) {
@@ -604,10 +557,6 @@ class _GroupTripPageState extends State<GroupTripPage> {
     );
   }
 
-  // Splits the combined "23 Sep 2026 - 27 Sep 2026  ·  5 days 4 nights"
-  // label onto two lines — the date range up top, the trip length as a
-  // grey subtitle underneath — matching the reference design instead of
-  // cramming both onto one line.
   Widget _overviewDateRow(Trip trip) {
     final label = trip.dateRangeLabel;
     if (label.isEmpty) {
@@ -619,11 +568,6 @@ class _GroupTripPageState extends State<GroupTripPage> {
     return _overviewRow(Icons.calendar_today_outlined, line1, line2, onTap: () => _editDateRange(trip));
   }
 
-  // Every Overview entry — the date, the destination, a flight/hotel
-  // group, the insurance row — sits on the same light shaded card, matching
-  // the reference design (previously only the flight/hotel groups had a
-  // background; the single-line rows were plain, so the page looked
-  // inconsistent).
   Widget _overviewCard({required Widget child}) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
@@ -665,10 +609,6 @@ class _GroupTripPageState extends State<GroupTripPage> {
     );
   }
 
-  /// Appends "· For: Alice, Bob" to a flight/hotel row's subtitle when the
-  /// booking is only for some of the trip's members — see
-  /// [forMembersLabel]. Returns [base] unchanged for a solo trip, a
-  /// booking that covers everyone, or one added before this existed.
   String _withMembersLabel(String base, List<String> forMemberUids, Map<String, String> memberNames) {
     final label = forMembersLabel(forMemberUids, memberNames);
     return label.isEmpty ? base : '$base · $label';
@@ -727,9 +667,6 @@ class _GroupTripPageState extends State<GroupTripPage> {
         niceAutocompleteField(airline, 'Airline',
             options: kAirlines, icon: Icons.flight_outlined, autofocus: true, focusNode: airlineFocusNode),
         niceDialogField(flightNumber, 'Flight Number', icon: Icons.confirmation_number_outlined),
-        // Search by airport/city name instead of having to already know
-        // the 3-letter IATA code (see _flightLocationOptions) — the code
-        // itself is pulled out of the picked suggestion on submit.
         Row(
           children: [
             Expanded(
@@ -869,13 +806,6 @@ class _GroupTripPageState extends State<GroupTripPage> {
     }
   }
 
-  // ---------------- "Add a flight" / "Add a hotel stay": choose first ----------------
-  // Both entry points offer a real saved list and real booking history to
-  // browse before falling back to typing a brand-new one by hand. Picking
-  // a Saved or History item adds it straight to this trip's flight/hotel
-  // list (mapped from CatalogFlight/CatalogHotel/BookingEntry's fields,
-  // leaving anything they don't carry blank) — "Add manually" is there
-  // for typing one in fully by hand instead.
   Widget _choiceTile(IconData icon, String label, VoidCallback onTap) {
     return ListTile(
       leading: Icon(icon, color: AppColors.primary),
@@ -972,10 +902,6 @@ class _GroupTripPageState extends State<GroupTripPage> {
                     subtitle: Text('${f.depTime} - ${f.arrTime} · ${f.duration}', style: const TextStyle(fontSize: 11, color: AppColors.textGrey)),
                     trailing: Text(f.displayPrice(CurrencyService.instance.lastKnownUserCurrency),
                         style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.navy)),
-                    // Picking a saved flight here means "put this on my
-                    // plan" — it used to instead open the buy-a-flight
-                    // detail page, which made no sense for something
-                    // already saved/chosen. Adds it straight away.
                     onTap: () async {
                       Navigator.of(sheetContext).pop();
                       try {
@@ -1038,8 +964,6 @@ class _GroupTripPageState extends State<GroupTripPage> {
                     title: Text(b.title, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold, color: AppColors.navy)),
                     subtitle: Text(b.subtitle, style: const TextStyle(fontSize: 11, color: AppColors.textGrey)),
                     trailing: Text(b.trailing, style: const TextStyle(fontSize: 12, color: AppColors.navy)),
-                    // Same as _pickSavedFlight: adds straight to the plan
-                    // instead of opening a dead-end detail page.
                     onTap: () async {
                       Navigator.of(sheetContext).pop();
                       try {
@@ -1103,9 +1027,6 @@ class _GroupTripPageState extends State<GroupTripPage> {
                     subtitle: Text(h.location, style: const TextStyle(fontSize: 11, color: AppColors.textGrey)),
                     trailing: Text(h.displayPrice(CurrencyService.instance.lastKnownUserCurrency),
                         style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.navy)),
-                    // Picking a saved hotel here means "put this on my
-                    // plan" — it used to instead open the buy-a-hotel
-                    // detail page. Adds it straight away.
                     onTap: () async {
                       Navigator.of(sheetContext).pop();
                       try {
@@ -1165,8 +1086,6 @@ class _GroupTripPageState extends State<GroupTripPage> {
                     title: Text(b.title, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold, color: AppColors.navy)),
                     subtitle: Text(b.subtitle, style: const TextStyle(fontSize: 11, color: AppColors.textGrey)),
                     trailing: Text(b.trailing, style: const TextStyle(fontSize: 12, color: AppColors.navy)),
-                    // Same as _pickSavedHotel: adds straight to the plan
-                    // instead of opening a dead-end detail page.
                     onTap: () async {
                       Navigator.of(sheetContext).pop();
                       try {
@@ -1194,7 +1113,6 @@ class _GroupTripPageState extends State<GroupTripPage> {
     );
   }
 
-  // ---------------- Overview: edit date range / destination / budget ----------------
   Future<void> _editDateRange(Trip trip) async {
     final now = DateTime.now();
     final range = await showVoyaDateRangePicker(
@@ -1285,11 +1203,6 @@ class _GroupTripPageState extends State<GroupTripPage> {
       headerIcon: Icons.savings_outlined,
       confirmLabel: 'Save',
       fieldsBuilder: (ctx, setState) => [
-        // Label carries the currency ("Budget per Person (RM)") rather
-        // than an inline prefixText — matches every other money field in
-        // the app (Itemized Split's "Price (RM)", the expense form's
-        // "Amount (RM)"), instead of being the one place with its own
-        // different convention.
         niceDialogField(
           budgetController,
           'Budget per Person (RM)',
@@ -1327,7 +1240,6 @@ class _GroupTripPageState extends State<GroupTripPage> {
                 _dayHeaderIcon(Icons.add, onTap: () => _addActivityDialog(trip, dayIndex)),
                 const SizedBox(width: 14),
               ] else ...[
-                // Cancel = leave without saving (asks first if something was changed)
                 GestureDetector(
                   onTap: _savingDraft ? null : () => _confirmLeaveDayEdit(),
                   child: const Padding(
@@ -1337,8 +1249,6 @@ class _GroupTripPageState extends State<GroupTripPage> {
                 ),
                 const SizedBox(width: 10),
               ],
-              // While editing, the pencil becomes "Save": drags and removals are only a
-              // draft until it is tapped (see _saveDayEdit / _confirmLeaveDayEdit).
               _dayEditMode
                   ? _dayHeaderSaveButton(onTap: _savingDraft ? () {} : () => _saveDayEdit())
                   : _dayHeaderIcon(
@@ -1348,10 +1258,6 @@ class _GroupTripPageState extends State<GroupTripPage> {
             ],
           ),
           const SizedBox(height: 14),
-          // Real weather + live traffic for this day's destination (and a
-          // traffic-aware travel-time estimate between its first two
-          // located activities) — fetched once per day shown; see
-          // live_conditions_card.dart.
           LiveConditionsCard(
             key: ValueKey('live-conditions-${day.day}'),
             destination: trip.destination,
@@ -1366,11 +1272,6 @@ class _GroupTripPageState extends State<GroupTripPage> {
               padding: EdgeInsets.symmetric(vertical: 40),
               child: Center(child: Text('No activities planned yet', style: TextStyle(color: AppColors.textGrey))),
             )
-          // Edit mode swaps the plain chronological list for a draggable
-          // 24-hour timeline (DayTimelineView) — dragging an activity up
-          // or down changes its time, which until this existed had no way
-          // to happen short of deleting and re-adding it. Out of edit
-          // mode, the list below is unchanged from before.
           else if (_dayEditMode) ...[
             if (_hasDraftChanges)
               Padding(
@@ -1383,7 +1284,6 @@ class _GroupTripPageState extends State<GroupTripPage> {
             Expanded(
               child: DayTimelineView(
                 items: _draftItems(day.items),
-                // only a draft until "Save"
                 onTimeChanged: (item, newTime) => setState(() {
                   final original = day.items.where((it) => it.id == item.id).map((it) => it.time).firstOrNull;
                   if (original == newTime) {
@@ -1408,11 +1308,6 @@ class _GroupTripPageState extends State<GroupTripPage> {
     );
   }
 
-  /// One of the 3 small icon buttons next to the Day header (AI Optimise /
-  /// add activity / toggle edit mode) — plain glyphs, no circle background,
-  /// matching the reference design. The first opens [showOptimiseModeSheet]
-  /// (optimise_sheet.dart), which lets the person choose Day vs Whole trip
-  /// before anything runs.
   Widget _dayHeaderIcon(IconData icon, {required VoidCallback onTap, bool active = false}) {
     return GestureDetector(
       onTap: onTap,
@@ -1420,9 +1315,6 @@ class _GroupTripPageState extends State<GroupTripPage> {
     );
   }
 
-  /// Replaces the pencil icon while Day edit mode is on (see [_dayContent]).
-  /// Edit mode keeps every change as a draft; this is the only thing that
-  /// writes them to the trip (see [_saveDayEdit]).
   Widget _dayHeaderSaveButton({required VoidCallback onTap}) {
     return GestureDetector(
       onTap: onTap,
@@ -1443,21 +1335,6 @@ class _GroupTripPageState extends State<GroupTripPage> {
 
   String _formatTimeOfDay24(TimeOfDay t) => '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
 
-  /// Add Activity now offers two ways in — type one in by hand (as
-  /// before), or pick something already saved (a favourited Attraction/
-  /// Restaurant/Hotel for this trip) so the name/location don't need
-  /// retyping. Both share the same date+time row: it defaults to
-  /// whichever day's "+" was actually tapped (via [trip.dateForDay]),
-  /// but is a real picker, not a fixed value, so it can be moved to any
-  /// other day of the trip — doing so adds the activity to THAT day
-  /// instead, worked out from the chosen date's offset from the trip's
-  /// own start date (the same math [TripRepository.createTrip] used to
-  /// generate the days in the first place).
-  ///
-  /// Replaces the old cramped [showNiceFormDialog] (narrow enough that
-  /// the icon row could clip past the dialog's right edge on a smaller
-  /// phone) with a full-width bottom sheet — the same pattern already
-  /// used for Add Travellers/Edit Destination elsewhere on this page.
   Future<void> _addActivityDialog(Trip trip, int dayIndex) async {
     final label = TextEditingController();
     final location = TextEditingController();
@@ -1466,8 +1343,6 @@ class _GroupTripPageState extends State<GroupTripPage> {
     DateTime? pickedDate = trip.dateForDay(dayIndex + 1);
     TimeOfDay? pickedTime;
     ({String name, String location, String iconKey})? selectedSaved;
-    // Who this activity is for — defaults to everyone, same convention as
-    // the flight/hotel "Who Is This For?" picker (MemberSelectSection).
     Set<String> selectedMemberUids = trip.memberIds.toSet();
 
     final uid = AuthService.instance.currentUser?.uid ?? '';
@@ -1688,12 +1563,6 @@ class _GroupTripPageState extends State<GroupTripPage> {
                             padding: const EdgeInsets.symmetric(vertical: 14),
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                           ),
-                          // Validated after the sheet closes (same as the
-                          // old dialog) rather than live-disabled here —
-                          // the text controllers' listeners don't trigger
-                          // this StatefulBuilder's setState on every
-                          // keystroke, so a live-disabled button would
-                          // have gone stale after typing.
                           onPressed: () => Navigator.of(ctx).pop(true),
                           child: const Text('Add Activity', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
                         ),
@@ -1717,9 +1586,6 @@ class _GroupTripPageState extends State<GroupTripPage> {
       if (offset >= 0 && offset < trip.days.length) targetDayIndex = offset;
     }
     final timeText = pickedTime == null ? '' : _formatTimeOfDay24(pickedTime!);
-    // Stored as-is even when it covers every member — forMembersLabel()
-    // treats "all members selected" the same as empty (renders nothing),
-    // so there's no need to special-case it here.
     final forMemberUids = selectedMemberUids.toList();
     if (mode == 'saved' && selectedSaved != null) {
       await controller.addActivity(
@@ -1762,27 +1628,6 @@ class _GroupTripPageState extends State<GroupTripPage> {
     );
   }
 
-  // Time label in a fixed-width left column, the card in an Expanded to
-  // its right. The card is a plain display card now — no tap action at
-  // all (it used to toggle the current user's vote on tap; the user
-  // explicitly said they don't want the card to do anything when tapped,
-  // so that's gone — it's a flat Container, not an InkWell). Layout:
-  // icon circle, then a text column with title / (optional) location /
-  // avatar-stack + fraction all left-aligned together — not the avatar
-  // row pinned to the card's right edge, which is what it looked like
-  // before. In edit mode (the pencil icon in the Day header) a delete
-  // button still appears, as its own small tap target next to the text.
-  // dayIndex used to be needed here for the in-list delete button, now
-  // moved onto DayTimelineView's chips (see _dayContent) — this plain
-  // card only ever renders outside edit mode now, so it has nothing left
-  // that needs the day it's on.
-  // An activity added "From Saved" in the Add Activity sheet is matched
-  // back (via GroupTripController.hotelForActivity/attractionForActivity/
-  // restaurantForActivity, same label-matching idea as the Vote tab) to the
-  // real saved listing behind it and rendered with its real image, rating,
-  // location and price instead of just its typed name. An activity typed
-  // by hand instead just shows the plain icon-circle layout it always had
-  // — still has nothing more than that to show.
   Widget _activityCard(ActivityItem item, Trip trip) {
     final memberNames = trip.memberNames.values.toList();
     final forLabel = forMembersLabel(item.forMemberUids, trip.memberNames);
@@ -1826,15 +1671,6 @@ class _GroupTripPageState extends State<GroupTripPage> {
     );
   }
 
-  /// Interleaves a small transportation-suggestion row between
-  /// consecutive activity cards on a day, one per gap between two
-  /// different locations — it suggests how to get there (Walk / Drive,
-  /// with an estimated time, when both stops resolve to a real
-  /// coordinate — see [_effectivePointFor]/[MapsService]), and tapping
-  /// it opens Google Maps with directions already set to that same
-  /// mode. No row is added when either side has no usable location (a
-  /// manually-typed activity with no address) or both stops are the
-  /// same place.
   List<Widget> _dayItemsWithTransport(List<ActivityItem> items, Trip trip) {
     final widgets = <Widget>[];
     for (var i = 0; i < items.length; i++) {
@@ -1852,12 +1688,6 @@ class _GroupTripPageState extends State<GroupTripPage> {
     return widgets;
   }
 
-  /// Same "which saved listing is this?" resolution [_activityCard] already
-  /// does for its body, but returning just the location text — so the
-  /// transport row between two cards points Maps at the same address the
-  /// card itself shows (an attraction with no address falls back to its
-  /// category, same as [_activityAttractionBody]; a plain/manual activity
-  /// uses whatever location text was typed in, which may be empty).
   String _effectiveLocationFor(ActivityItem item) {
     final hotel = controller.hotelForActivity(item);
     if (hotel != null) return hotel.location;
@@ -1877,15 +1707,6 @@ class _GroupTripPageState extends State<GroupTripPage> {
     return null;
   }
 
-  /// The row shown in the gap between two activity cards — shows the
-  /// suggested way to get there (see [MapsService.suggest]: Walk / Drive
-  /// with an estimated time when both stops have a real coordinate, an
-  /// honest unmeasured "Get directions" otherwise) and, tapping it, opens
-  /// Google Maps' Directions already set to that same travel mode. [from]
-  /// and [to] are plain-text addresses (Maps geocodes them itself, same
-  /// as typing them into the app), so no coordinates are needed on either
-  /// side just to open the link — they're only used, when available, to
-  /// decide what to suggest in the first place.
   Widget _transportRow(String from, String to, TransportSuggestion suggestion) {
     final icon = switch (suggestion.mode) {
       SuggestedTravelMode.walk => Icons.directions_walk,
@@ -1935,12 +1756,6 @@ class _GroupTripPageState extends State<GroupTripPage> {
     );
   }
 
-  /// Opens Google Maps' turn-by-turn Directions from [from] to [to] (both
-  /// plain-text addresses/place names) in the Maps app if installed,
-  /// otherwise the browser — same external-app launch already used by
-  /// [_openLocationInMaps] for a shared chat location. [travelMode] is
-  /// Google Maps' own query value ("walking"/"driving"), already decided
-  /// by [MapsService.suggest] before this is called.
   Future<void> _openDirectionsInMaps(String from, String to, String travelMode) async {
     final uri = Uri.parse(
       'https://www.google.com/maps/dir/?api=1'
@@ -1951,11 +1766,6 @@ class _GroupTripPageState extends State<GroupTripPage> {
     await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 
-  /// Opens the real detail page behind a "From Saved" activity — the same
-  /// hotel/attraction/restaurant detail page Explore/Saved Items opens for
-  /// that listing, so tapping the rich card here isn't a dead end. Null
-  /// (no tap at all) for a plain, manually-typed activity — there's no
-  /// saved listing to show detail for.
   VoidCallback? _activityDetailTap(CatalogHotel? hotel, CatalogAttraction? attraction, CatalogRestaurant? restaurant) {
     if (hotel != null) {
       return () => Navigator.of(context).push(MaterialPageRoute(
@@ -2047,8 +1857,6 @@ class _GroupTripPageState extends State<GroupTripPage> {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // No thumbnail for restaurants — see explore_page.dart's restaurant
-        // cards for why (no image-shaped UI at all, not even a placeholder).
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -2071,9 +1879,6 @@ class _GroupTripPageState extends State<GroupTripPage> {
     );
   }
 
-  /// Fallback for an activity that doesn't match anything saved for this
-  /// trip — typically one typed by hand in Add Activity rather than picked
-  /// "From Saved". The original plain icon-circle + label + location card.
   Widget _activityPlainBody(ActivityItem item, String forLabel, List<String> memberNames) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -2099,10 +1904,6 @@ class _GroupTripPageState extends State<GroupTripPage> {
     );
   }
 
-  /// "For: X, Y" line (when the activity isn't for every member) plus the
-  /// avatar-stack + voted/total row — shared by every card body above
-  /// regardless of whether it matched a saved listing, since member-scoping
-  /// and RSVP voting apply either way.
   Widget _activityFooter(ActivityItem item, String forLabel, List<String> memberNames) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -2113,7 +1914,6 @@ class _GroupTripPageState extends State<GroupTripPage> {
             child: Text(forLabel,
                 maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600, color: AppColors.primary)),
           ),
-        // who this activity is for: their real profile photos (everyone when nobody was picked)
         if (_activityMemberUids(item).isNotEmpty)
           Padding(
             padding: const EdgeInsets.only(top: 8),
@@ -2123,9 +1923,6 @@ class _GroupTripPageState extends State<GroupTripPage> {
     );
   }
 
-  /// Rounded-square thumbnail for a matched saved listing's image, same
-  /// idea as Vote tab's own `_thumb` but sized to fit this card's existing
-  /// 48x48 icon-circle slot instead of Vote's roomier 56x56.
   Widget _activityThumb(String url, IconData icon) {
     if (url.isEmpty) {
       return Container(
@@ -2200,17 +1997,9 @@ class _GroupTripPageState extends State<GroupTripPage> {
     }
   }
 
-  /// A small stack of overlapping member-initial avatars — shows up to 3,
-  /// then "+N" for the rest, next to the voted/total fraction. Reuses the
-  /// same "colored circle + first letter of the name" convention already
-  /// used for trip members on [GroupInfoPage] (`Colors.primaries[i % ...]`)
-  /// instead of a generic, unlabelled 3-color placeholder — no profile
-  /// photos in this data model, but this at least reflects the trip's
-  /// actual members rather than decoration with no meaning.
   List<String> _activityMemberUids(ActivityItem item) =>
       effectiveActivityMembers(item, controller.trip?.memberIds ?? const <String>[]);
 
-  /// Overlapping profile photos (up to 4, then "+N") of the members an activity is for.
   Widget _avatarStack(List<String> uids) {
     final shown = uids.take(4).toList();
     final extra = uids.length - shown.length;
@@ -2243,7 +2032,6 @@ class _GroupTripPageState extends State<GroupTripPage> {
     );
   }
 
-  /// "14:30" -> "2:30 pm" for the time header above each activity card.
   String _formatTime12h(String time24) {
     final parts = time24.split(':');
     if (parts.length != 2) return time24;
@@ -2255,13 +2043,6 @@ class _GroupTripPageState extends State<GroupTripPage> {
     return '$h:${parts[1]} $suffix';
   }
 
-  // ---------------- Overview/Day pager ----------------
-  // The left/right arrows sit OUTSIDE the scroll area on purpose: the whole
-  // pager's width already matches the phone's own width (it's a plain
-  // Container in the page's layout), and only the Overview/Day-N label
-  // strip between the two arrows scrolls — so with few days everything
-  // just fits, and with many days the labels scroll while both arrows stay
-  // fixed and visible no matter how many days there are.
   Widget _planPager() {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 12),
@@ -2294,9 +2075,6 @@ class _GroupTripPageState extends State<GroupTripPage> {
     );
   }
 
-  // Made bigger/bolder on request (was 10.5px w600 with tight 6/10 padding —
-  // read as too small/thin) so roughly 4 pills sit comfortably in view
-  // before the row needs to scroll, instead of cramming 6 tiny labels.
   Widget _pagerLabel(String label, int idx) {
     final selected = idx == controller.planIndex;
     return GestureDetector(
@@ -2327,14 +2105,6 @@ class _GroupTripPageState extends State<GroupTripPage> {
               ? const Center(child: Text('No messages yet — say hi!', style: TextStyle(color: AppColors.textGrey, fontSize: 12.5)))
               : ListView.builder(
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-                  // Chat should open already showing the latest message,
-                  // not force a manual scroll-to-bottom every time —
-                  // reverse:true pins the list's start (scroll offset 0)
-                  // to the bottom of the screen, so index 0 needs to be
-                  // the newest message. [controller.messages] itself stays
-                  // oldest-first (TripRepository.watchMessages orders
-                  // that way, and other things may still rely on that
-                  // order), so just the index lookup here is flipped.
                   reverse: true,
                   itemCount: controller.messages.length,
                   itemBuilder: (context, i) {
@@ -2507,9 +2277,6 @@ class _GroupTripPageState extends State<GroupTripPage> {
     ));
   }
 
-  /// FR15/FR17 — long-press menu on your own chat message. A plain text
-  /// message offers Edit + Delete; a photo or shared-location message
-  /// only offers Delete (there's nothing sensible to "edit" about either).
   void _showMessageOptions(TripMessage m) {
     showModalBottomSheet<void>(
       context: context,

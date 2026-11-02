@@ -9,33 +9,11 @@ import '../../services/weather_service.dart';
 import '../../theme.dart';
 import 'optimise_sheet.dart' show startAndShowOptimise;
 
-// ---------------------------------------------------------------------
-// Shown at the top of Group Trip's Plan > Day view (see
-// group_trip_page.dart's _dayContent): that day's real weather at the
-// trip destination, plus — when the day has at least two activities
-// with a real address/location — a live-traffic-aware travel-time
-// estimate between the first two (Google Routes API, routingPreference
-// TRAFFIC_AWARE; see traffic_service.dart for why there's no standalone
-// "congestion near this city" reading any more now that this runs on
-// Google instead of TomTom — Google doesn't expose that as a plain data
-// API). Fetched once when a day is first shown (keyed by day number via
-// this widget's key, so flipping between already-seen days doesn't
-// trigger a fresh network call); after that, only a manual refresh of
-// the Plan tab re-fetches. Nothing here is shown as a guess — a
-// destination with no weather data, no API key configured yet, or
-// activities with no location just quietly leave that piece out, down
-// to hiding the whole card when nothing at all came back.
-// ---------------------------------------------------------------------
 class LiveConditionsCard extends StatefulWidget {
   final String destination;
   final DateTime? forDate;
   final List<ActivityItem> activities;
 
-  /// Needed only for the "Re-optimise Day" action in the bad-weather/
-  /// traffic nudge below (FR30: ask before changing anything) — these
-  /// three identify exactly which day's Optimise run to start, the same
-  /// way the diamond icon in the Day header does (see group_trip_page.
-  /// dart's showOptimiseModeSheet call).
   final GroupTripController controller;
   final int dayIndex;
   final int dayNumber;
@@ -61,11 +39,6 @@ class _LiveConditionsCardState extends State<LiveConditionsCard> {
   String? _routeFromLabel;
   String? _routeToLabel;
 
-  /// FR30: once the person taps "Not now" (or follows through with
-  /// "Re-optimise Day"), the nudge stops asking again for this same day
-  /// view — reappearing on every rebuild would be nagging, not helpful.
-  /// Resets naturally when the day changes, since group_trip_page.dart
-  /// keys this widget by day number, which throws away this State.
   bool _dismissedNudge = false;
 
   @override
@@ -77,20 +50,29 @@ class _LiveConditionsCardState extends State<LiveConditionsCard> {
   Future<DestinationWeather?> _weatherOrNull(String destination) =>
       destination.trim().isEmpty ? Future.value(null) : WeatherService.instance.forDestination(destination, forDate: widget.forDate);
 
-  // Declared return type keeps every call site's Future the same type
-  // (an empty query still goes through this, not a bare `Future.value
-  // (null)`) — a ternary mixing this with a raw `Future.value(null)`
-  // would make Dart infer two different Future types for the same
-  // variable depending on the branch taken.
   Future<({double lat, double lon, String? countryCode, String? label})?> _geocodeOrNull(String query) =>
       query.trim().isEmpty ? Future.value(null) : PlacesApiService.instance.geocode(query);
 
+  bool get _isPastDay {
+    final forDate = widget.forDate;
+    if (forDate == null) return false;
+    final today = DateTime.now();
+    final todayStart = DateTime(today.year, today.month, today.day);
+    return forDate.isBefore(todayStart);
+  }
+
   Future<void> _load() async {
+    if (_isPastDay) {
+      if (!mounted) return;
+      setState(() {
+        _weather = null;
+        _route = null;
+        _loading = false;
+      });
+      return;
+    }
+
     final dest = widget.destination.trim();
-    // Only the first two activities that actually have a location text —
-    // a day with a flight/hotel-only or not-yet-planned first couple of
-    // items just won't show a travel-time row, rather than skipping ahead
-    // to two items that aren't really "the next leg" any more.
     final withLocation = widget.activities.where((a) => a.location.trim().isNotEmpty).toList();
     final hasRoute = withLocation.length >= 2;
 
@@ -115,11 +97,6 @@ class _LiveConditionsCardState extends State<LiveConditionsCard> {
     });
   }
 
-  /// FR30: a condition worth interrupting the person for — meaningful
-  /// rain/snow/storm forecast for the day, or traffic between the
-  /// day's first two activities that's running well above its usual
-  /// time (see DestinationWeather.isDisruptive / TrafficRoute.
-  /// isCongested). Ordinary cloud or light traffic never triggers this.
   bool get _hasBadCondition => _weather?.isDisruptive == true || _route?.isCongested == true;
 
   String get _nudgeMessage {
@@ -199,9 +176,6 @@ class _LiveConditionsCardState extends State<LiveConditionsCard> {
         ),
       );
     }
-    // Nothing came back for either piece (no weather data, no API key
-    // configured yet, nothing geocoded) — show nothing rather than an
-    // empty grey box with no information in it.
     if (_weather == null && _route == null) return const SizedBox.shrink();
 
     final showNudge = _hasBadCondition && !_dismissedNudge;
@@ -209,8 +183,7 @@ class _LiveConditionsCardState extends State<LiveConditionsCard> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (showNudge) _conditionNudge(),
-        _conditionsBox(),
+        if (showNudge) _conditionNudge() else _conditionsBox(),
       ],
     );
   }

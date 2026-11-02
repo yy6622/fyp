@@ -10,13 +10,6 @@ import '../../services/location_service.dart';
 import '../../theme.dart';
 import 'group_setting_page.dart';
 
-// ---------------------------------------------------------------------
-// Member Location — real, not mock: for a trip whose owner has turned on
-// Real-Time Location (Group Setting), this checks each member's own
-// Privacy and Security > "Share Location with Group" flag and shows only
-// the members who actually have it on, with their last captured
-// position. A member with it off is shown as off, never a fake pin.
-// ---------------------------------------------------------------------
 class MemberLocationPage extends StatefulWidget {
   final String tripId;
   const MemberLocationPage({super.key, required this.tripId});
@@ -31,9 +24,6 @@ class _MemberLocationPageState extends State<MemberLocationPage> {
   @override
   void initState() {
     super.initState();
-    // Refresh my own position (if I have sharing on) so my entry in this
-    // list — and everyone else's view of it — isn't stale from whenever I
-    // last toggled the switch. A no-op if I have sharing off.
     _refreshMyLocation();
   }
 
@@ -110,16 +100,6 @@ class _MemberLocationPageState extends State<MemberLocationPage> {
 
 }
 
-/// One member's row — a separate [StatefulWidget] (keyed by [uid] in the
-/// parent's [ListView.separated]) rather than a [StreamBuilder] built
-/// inline inside `itemBuilder`. [MemberLocationPage]'s own trip stream
-/// re-fires on nearly every write anywhere in the trip (chat, votes,
-/// expenses — anything that bumps `lastActivityAt`), which would rebuild
-/// an inline `StreamBuilder` with a brand-new `Stream` instance each
-/// time, cancelling and resubscribing every member's profile listener
-/// from scratch and flashing each row back to its default state. Owning
-/// the stream in this widget's own [State] (created once, kept alive by
-/// the key across the parent's rebuilds) avoids that churn.
 class _MemberLocationRow extends StatefulWidget {
   final String uid;
   final String name;
@@ -208,13 +188,6 @@ class _MemberLocationRowState extends State<_MemberLocationRow> {
   }
 }
 
-/// A small, non-interactive in-app map centred on one member's last known
-/// position — real OpenStreetMap tiles (no API key, same no-key approach
-/// `duffel_api_service.dart` already uses for geocoding), not an external
-/// "open in maps" link. Interaction is switched off so it reads as a
-/// static snapshot in the list, same as how a shared-location preview
-/// looks in a chat app; [MemberLocationRowState._openInMaps] is still
-/// there for anyone who wants the full, pannable map.
 class _StaticMapPreview extends StatelessWidget {
   final double lat;
   final double lng;
@@ -229,8 +202,6 @@ class _StaticMapPreview extends StatelessWidget {
         height: 130,
         width: double.infinity,
         child: IgnorePointer(
-          // Read-only preview — no pan/zoom/tap, so it behaves like a
-          // static map image even though it's real embedded tiles.
           child: FlutterMap(
             options: MapOptions(
               initialCenter: point,

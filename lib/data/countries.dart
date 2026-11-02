@@ -1,12 +1,6 @@
-/// A plain, self-contained country + currency reference list — used by the
-/// onboarding wizard's Region/Country and Currency steps and by Account
-/// Setting. No package/API dependency: this project has no countries/
-/// currency package wired in, so a fixed list covering the common cases is
-/// enough for a travel-planning app rather than pulling in a new
-/// dependency for this alone.
 class Country {
   final String name;
-  final String code; // ISO 3166-1 alpha-2
+  final String code;
   final String currencyCode; // ISO 4217
   final String currencySymbol;
   const Country({required this.name, required this.code, required this.currencyCode, required this.currencySymbol});
@@ -45,18 +39,6 @@ const List<Country> kCountries = [
   Country(name: 'Mexico', code: 'MX', currencyCode: 'MXN', currencySymbol: 'MX\$'),
 ];
 
-/// Countries that actually have real scraped catalog data (catalog_places /
-/// catalog_restaurants) in Firestore, verified directly against live
-/// Firestore doc counts on 2026-10-19 via a one-off admin_web diagnostic
-/// page (since deleted — see admin_web/js/data.js history if it's ever
-/// needed again). Picking a [kCountries] entry NOT in this set would show
-/// an empty Explore tab for that trip (no real attractions/restaurants
-/// scraped for it yet), so Create Plan's destination picker offers
-/// [kDestinationCountries] instead of the full [kCountries] list.
-///
-/// Re-run that diagnostic and update this set by hand if more countries'
-/// data get scraped later — this is not auto-derived from Firestore at
-/// build/run time.
 const Set<String> kCountriesWithCatalogData = {
   'MY', // Malaysia
   'SG', // Singapore
@@ -75,15 +57,8 @@ const Set<String> kCountriesWithCatalogData = {
   'MX', // Mexico
 };
 
-/// [kCountries] filtered down to [kCountriesWithCatalogData] — what Create
-/// Plan's destination picker actually offers, so nobody can pick a
-/// destination with no real attraction/restaurant data behind it.
 List<Country> get kDestinationCountries => kCountries.where((c) => kCountriesWithCatalogData.contains(c.code)).toList();
 
-/// The set of currencies offered on the Currency step — deduplicated from
-/// [kCountries] plus a couple of common ones a traveller may want even if
-/// they didn't pick that country (e.g. USD as a fallback reference
-/// currency).
 class CurrencyOption {
   final String code;
   final String symbol;

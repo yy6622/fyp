@@ -2,16 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../../theme.dart';
 
-/// Shared "nice" form-dialog chrome, used across the app in place of
-/// Flutter's plain default `AlertDialog` + underlined `TextField`s: a
-/// rounded card, an icon-in-a-circle header with a close (X) button,
-/// filled no-underline fields (see [niceDialogField]), and a two-button
-/// Cancel/Confirm footer matching the rest of the app's pill-shaped
-/// primary-button language.
-///
-/// [fieldsBuilder] is handed a [StateSetter] so a dialog that needs its
-/// own local state (a star picker, an icon picker, ...) can still rebuild
-/// just its own content, the same way [StatefulBuilder] normally would.
 Future<bool?> showNiceFormDialog({
   required BuildContext context,
   required String title,
@@ -89,9 +79,6 @@ Future<bool?> showNiceFormDialog({
   );
 }
 
-/// A single filled, rounded field for [showNiceFormDialog] — no underline,
-/// a soft grey fill, and an optional leading icon, in place of the default
-/// Material [TextField] underline look.
 Widget niceDialogField(
   TextEditingController controller,
   String label, {
@@ -133,10 +120,6 @@ Widget niceDialogField(
   );
 }
 
-/// Same filled look as [niceDialogField], but with a filter-as-you-type
-/// dropdown of [options] underneath — used for the "Add Flight" dialog's
-/// Airline field so the person can pick from a list instead of having to
-/// type an airline name out exactly.
 Widget niceAutocompleteField(
   TextEditingController controller,
   String label, {
@@ -149,11 +132,6 @@ Widget niceAutocompleteField(
     padding: const EdgeInsets.only(bottom: 12),
     child: RawAutocomplete<String>(
       textEditingController: controller,
-      // A caller inside a dialog's `fieldsBuilder` should pass its own
-      // FocusNode created once outside the builder (the builder re-runs on
-      // every setState, e.g. picking a date in a sibling field) — creating
-      // a fresh FocusNode here on every rebuild would make RawAutocomplete
-      // detach/reattach focus each time and silently drop the keyboard.
       focusNode: focusNode ?? FocusNode(),
       optionsBuilder: (TextEditingValue value) {
         final q = value.text.trim().toLowerCase();
@@ -213,9 +191,6 @@ Widget niceAutocompleteField(
   );
 }
 
-/// A row of 5 large tappable stars for picking a 1-5 rating inside a
-/// [showNiceFormDialog] `fieldsBuilder` — pair with the builder's
-/// [StateSetter] so tapping a star actually redraws the row.
 Widget niceStarPicker({required int rating, required ValueChanged<int> onChanged}) {
   return Padding(
     padding: const EdgeInsets.only(bottom: 16),
@@ -235,19 +210,6 @@ Widget niceStarPicker({required int rating, required ValueChanged<int> onChanged
   );
 }
 
-/// A single-button info/success dialog — replaces a plain default
-/// `AlertDialog` for "here's what happened, tap to continue" moments
-/// (email sent, payment confirmed, booking added) with the same
-/// rounded-card, icon-in-a-circle language as [showNiceFormDialog], just
-/// with no input fields and one wide confirm button instead of a
-/// Cancel/Confirm pair.
-/// [secondaryLabel]/[onSecondary] add an optional second, text-only action
-/// below the main button (e.g. "Resend email") — omitted entirely when
-/// either is null, so existing single-button call sites are unaffected.
-/// [onSecondary] returns an error message to show, or null on success; on
-/// success the dialog's own message is swapped for [secondarySuccessMessage]
-/// instead of closing, so the person can tap it again if a second email
-/// still doesn't arrive.
 Future<void> showNiceInfoDialog({
   required BuildContext context,
   required String title,
@@ -337,12 +299,6 @@ Future<void> showNiceInfoDialog({
   );
 }
 
-/// A Cancel/Confirm confirmation dialog — replaces a plain default
-/// `AlertDialog` for "are you sure?" moments (leave group, remove member,
-/// delete account, log out). [destructive] switches the icon and confirm
-/// button to red for actions that can't be undone; returns `true` only if
-/// the person actually tapped confirm (never `null`, so callers can use it
-/// directly in an `if`).
 Future<bool> showNiceConfirmDialog({
   required BuildContext context,
   required String title,

@@ -1,10 +1,3 @@
-/// A plain, self-contained airline-name reference list for the "Add
-/// Flight" manual-entry dialog's autocomplete field — same reasoning as
-/// [kCountries] in `countries.dart`: no airline/flight-data package is
-/// wired into this project for the manual-entry flow, so a fixed list
-/// covering major and regional carriers (with an emphasis on
-/// Malaysia/Asia-Pacific routes, matching the app's KUL-centric examples)
-/// is enough for an autocomplete, without pulling in a new dependency.
 const List<String> kAirlines = [
   'Malaysia Airlines',
   'AirAsia',

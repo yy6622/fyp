@@ -57,6 +57,8 @@ dependencies:
   # pub.dev before pinning, same discipline as flutter_svg's version
   # below.)
   cloud_functions: ^6.3.5
+  # FR04: keeps this phone's device id for "trusted device" sign-in.
+  shared_preferences: ^2.3.3
   # Video playback for a Community post's attached video (FR61) — plays
   # the file straight from its Firebase Storage download URL, same as
   # Image.network does for photos. 2.12.0 (the pub.dev latest at the
@@ -167,6 +169,10 @@ dependencies:
 
 dev_dependencies:
   flutter_test:
+    sdk: flutter
+  # Executable test cases (Chapter 5) - integration_test/ runs on an Android
+  # emulator against the Firebase emulators; see TESTING.md.
+  integration_test:
     sdk: flutter
 
   # The "flutter_lints" package below contains a set of recommended lints to

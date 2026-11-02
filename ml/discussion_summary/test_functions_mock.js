@@ -54,7 +54,7 @@ require.cache[fsPath] = { id: fsPath, filename: fsPath, loaded: true,
 
 (async () => {
   const req = (data) => ({ auth: { uid: "u1" }, data });
-  const itin = await require(path.join(fnDir, "itinerary.js")).generateItinerary.run(req({ tripId: "t1" }));
+  const itin = await require(path.join(fnDir, "itinerary.js")).generateItinerary.run(req({ tripId: "t1", consent: true }));
   console.log("generateItinerary:", JSON.stringify({ add: itin.add.map((a) => `${a.label} d${a.day} ${a.time}`),
     remove: itin.remove.map((r) => r.label), unresolved: itin.unresolved, engine: itin.engine, openai: itin.openai }));
   assert.strictEqual(itin.engine, "voya-planner");
@@ -65,7 +65,7 @@ require.cache[fsPath] = { id: fsPath, filename: fsPath, loaded: true,
 
   // a "Decide now" decision in the app overrides the chat: Tianzifang skipped
   trip.discussionDecisions = { m6: { status: "rejected", byName: "Amanda" } };
-  const itin2 = await require(path.join(fnDir, "itinerary.js")).generateItinerary.run(req({ tripId: "t1" }));
+  const itin2 = await require(path.join(fnDir, "itinerary.js")).generateItinerary.run(req({ tripId: "t1", consent: true }));
   assert.ok(!itin2.add.some((a) => a.label === "Tianzifang"), "decided 'Skip' in the app removes the suggestion");
   const sum2 = await require(path.join(fnDir, "discussion_summary")).summariseDiscussion.run(req({ tripId: "t1" }));
   const tz = sum2.sections.flatMap((x) => x.items).find((it) => it.value === "Tianzifang");

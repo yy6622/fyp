@@ -3,19 +3,7 @@ import 'package:flutter/material.dart';
 import '../../data/country_codes.dart';
 import '../../theme.dart';
 
-// ---------------------------------------------------------------------
-// Reusable phone-number field: a tappable country/dial-code chip (e.g.
-// "🇲🇾 +60") next to a plain digits TextField, combined into one string
-// such as "+60 123456789" via [onChanged]. Drop-in replacement for a plain
-// phone TextField/niceDialogField/AuthTextField at any of the app's phone-
-// entry points (Account Setting, onboarding, flight/hotel contact details,
-// insurance traveller details) — each of those just stores the combined
-// string in the same plain `String phone` field it already had, so no
-// model changes are needed anywhere this is dropped in.
-// ---------------------------------------------------------------------
 class PhoneInputField extends StatefulWidget {
-  /// Previously stored value, e.g. "+60 123456789", "0123456789" (no code
-  /// — assumed local to [kDefaultDialCode]), or empty.
   final String? initialValue;
   final ValueChanged<String> onChanged;
   final String label;
@@ -77,22 +65,6 @@ class _PhoneInputFieldState extends State<PhoneInputField> {
 
   @override
   Widget build(BuildContext context) {
-    // IntrinsicHeight wraps the Row so CrossAxisAlignment.stretch below
-    // has a real, well-defined height to stretch its children to. Without
-    // it, this Row sits inside a Container with no explicit height,
-    // itself inside a plain Column (mainAxisSize.max) that in turn sits
-    // inside a ListView — i.e. an unbounded-height ancestor chain. That
-    // combination (loose/unbounded height feeding into a stretched Row)
-    // reproducibly rendered this entire field, and everything after it
-    // in the same Column, as fully blank on at least one real test
-    // device — no exception, no red screen, nothing in the debug
-    // console, just nothing painted. Confirmed by A/B testing: removing
-    // this widget from HotelGuestDetailsPage made the rest of that
-    // page's content (which was *also* blank) reappear immediately.
-    // IntrinsicHeight forces a standard two-pass layout (measure
-    // children's natural height first, then give the Row that height as
-    // a hard constraint) instead of leaving the Row to resolve stretch
-    // against an ambiguous/unbounded height on its own.
     return IntrinsicHeight(
       child: Container(
         decoration: BoxDecoration(
@@ -146,10 +118,6 @@ class _PhoneInputFieldState extends State<PhoneInputField> {
   }
 }
 
-/// Bottom-sheet country/dial-code picker, in the same shape as the
-/// picker sheets already used for Country/Currency/Language in Account
-/// Setting — a title, a search box (the dial-code list is longer than
-/// those), and a scrollable list of flag + name + dial code.
 Future<CountryDialCode?> pickCountryDialCode(BuildContext context, {CountryDialCode? selected}) {
   return showModalBottomSheet<CountryDialCode>(
     context: context,

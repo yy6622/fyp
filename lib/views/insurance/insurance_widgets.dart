@@ -22,9 +22,6 @@ Widget insuranceLogo(InsurancePlan plan, {double size = 46}) {
       border: Border.all(color: const Color(0xFFECECEC)),
     ),
     alignment: Alignment.center,
-    // Real uploaded partner logo when there is one (set in the partner
-    // console's Organization Profile page), falling back to the
-    // letter+color badge if there isn't one yet or it fails to load.
     child: (plan.logoUrl != null && plan.logoUrl!.isNotEmpty)
         ? ClipOval(
             child: Image.network(
@@ -40,13 +37,8 @@ Widget insuranceLogo(InsurancePlan plan, {double size = 46}) {
   );
 }
 
-/// A single plan row, shared by the Home page preview and the full list.
 class InsurancePlanCard extends StatelessWidget {
   final InsurancePlan plan;
-  // Set only when this list was opened to buy insurance *for* a specific
-  // trip (from Group Trip's Overview tab) — threaded through so the
-  // eventual purchase gets attached back to that trip. Null everywhere
-  // else (Home preview, general browse from Explore/Insurance tab).
   final String? tripId;
   const InsurancePlanCard({super.key, required this.plan, this.tripId});
 
@@ -107,7 +99,6 @@ class InsurancePlanCard extends StatelessWidget {
   }
 }
 
-/// Narrower card used in the Home page's horizontal preview row.
 class InsurancePlanTile extends StatelessWidget {
   final InsurancePlan plan;
   const InsurancePlanTile({super.key, required this.plan});

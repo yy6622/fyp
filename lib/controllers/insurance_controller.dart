@@ -6,8 +6,6 @@ import '../models/insurance_models.dart';
 import '../repositories/insurance_repository.dart';
 import 'booking_details_controller.dart' show isValidEmailFormat, isValidPhoneFormat;
 
-/// Controller for [InsuranceListPage]. Streams real plans from
-/// [InsuranceRepository] instead of a hardcoded list.
 class InsuranceListController extends ChangeNotifier {
   InsuranceCategory? _filter;
   InsuranceCategory? get filter => _filter;
@@ -24,9 +22,6 @@ class InsuranceListController extends ChangeNotifier {
       _loading = false;
       notifyListeners();
     }, onError: (_) {
-      // Permission-denied (rules not deployed yet) or a transient
-      // Firestore error shouldn't leave the page spinning forever —
-      // fall back to an empty list, same as "no plans published yet".
       _plans = [];
       _loading = false;
       notifyListeners();
@@ -48,7 +43,6 @@ class InsuranceListController extends ChangeNotifier {
   }
 }
 
-/// Common nationality choices offered in the Traveller Details picker.
 const List<String> nationalityOptions = [
   'Malaysian',
   'Singaporean',
@@ -67,7 +61,6 @@ const List<String> nationalityOptions = [
   'Other',
 ];
 
-/// Per-traveller form data held by [TravellerDetailsController].
 class TravellerData {
   String name = '';
   DateTime? dob;
@@ -82,11 +75,6 @@ class TravellerDetailsController extends ChangeNotifier {
   final List<TravellerData> travellers = [TravellerData()];
   int get travellerCount => travellers.length;
 
-  // The travel period this policy covers — required so a later refund
-  // request can be checked against it (refunds are only allowed before
-  // the trip starts; see InsuranceRepository.requestRefund). Auto-filled
-  // from the trip's own dates when bought from inside a trip (see
-  // TravellerDetailsPage), or picked manually for a standalone purchase.
   DateTime? travelStart;
   DateTime? travelEnd;
 
@@ -98,8 +86,6 @@ class TravellerDetailsController extends ChangeNotifier {
 
   static const maxTravellers = 6;
 
-  /// Returns false (and leaves the list unchanged) once the traveller
-  /// limit is reached, so the view can show feedback.
   bool addTraveller() {
     if (travellers.length >= maxTravellers) return false;
     travellers.add(TravellerData());
@@ -123,14 +109,6 @@ class TravellerDetailsController extends ChangeNotifier {
     notifyListeners();
   }
 
-  // These four were previously missing — the Full Name/Passport/Email/
-  // Phone fields on TravellerDetailsPage were plain TextFields with no
-  // controller or onChanged wired up, so anything typed into them was
-  // silently discarded (only DOB and Nationality, which go through the
-  // picker setters above, actually reached TravellerData). No
-  // notifyListeners() here — these are plain text fields the widget
-  // itself already shows what was typed for; rebuilding on every
-  // keystroke would just fight the TextField's own cursor.
   void setName(int index, String value) {
     travellers[index].name = value;
   }
@@ -147,18 +125,8 @@ class TravellerDetailsController extends ChangeNotifier {
     travellers[index].phone = value;
   }
 
-  /// The first validation problem found, or null once every required
-  /// field for every traveller, plus the lead traveller's (index 0)
-  /// contact email/phone, is filled in — mirrors
-  /// FlightPassengerDetailsController.validate()'s pattern. Previously
-  /// there was no validation at all, so "Continue" navigated to Payment
-  /// regardless of what (if anything) had been filled in.
   String? validate() {
     if (travelStart == null || travelEnd == null) return 'Please select your travel dates.';
-    // A same-day (0-night) trip is a real, supported case — Trip itself
-    // allows startDate == endDate (see Trip.dateRangeLabel's nights
-    // calculation) and showVoyaDateRangePicker lets a rider pick the same
-    // day for both ends. Only a genuinely reversed range is invalid.
     if (travelEnd!.isBefore(travelStart!)) return 'Travel end date must be on or after the start date.';
     for (var i = 0; i < travellers.length; i++) {
       final t = travellers[i];

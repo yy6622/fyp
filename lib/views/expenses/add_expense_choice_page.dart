@@ -10,12 +10,6 @@ import '../../services/receipt_service.dart';
 import '../../theme.dart';
 import 'expense_details_form_page.dart';
 
-// ---------------------------------------------------------------------
-// Add Expense flow — loads the trip once, then shares one
-// [AddExpenseController] across every page in the flow so the amount,
-// category and participants chosen on one step are still there on the
-// next.
-// ---------------------------------------------------------------------
 class AddExpenseChoicePage extends StatefulWidget {
   final String tripId;
   const AddExpenseChoicePage({super.key, required this.tripId});
@@ -66,13 +60,6 @@ class _AddExpenseChoicePageState extends State<AddExpenseChoicePage> {
     );
   }
 
-  /// Real photo capture/pick. Picks (or takes) a photo, stashes it on the
-  /// shared [AddExpenseController] so the Details form can preview it,
-  /// then runs on-device OCR over it (FR56 — see [AddExpenseController.
-  /// scanReceipt]) before opening that form, so items/amount may already
-  /// be filled in by the time the person sees it. OCR is a best effort,
-  /// not a guarantee: the photo is always kept as the real reference/
-  /// receipt of record either way, uploaded to Storage on submit.
   Future<void> _startUploadReceipt(BuildContext context, AddExpenseController controller) async {
     final source = await showModalBottomSheet<ImageSource>(
       context: context,
@@ -101,11 +88,6 @@ class _AddExpenseChoicePageState extends State<AddExpenseChoicePage> {
     if (file == null || !context.mounted) return;
     controller.setReceiptImage(file);
 
-    // FR56 — scan before opening the form, so Details already shows
-    // whatever OCR found instead of the person watching fields fill in
-    // after the fact. A dismiss-free loading dialog: scanReceipt never
-    // throws and is a single bounded on-device call, so there's nothing
-    // useful a "Cancel" button here would do mid-scan.
     unawaited(showDialog<void>(
       context: context,
       barrierDismissible: false,

@@ -1,10 +1,3 @@
-/// Country dial-code reference list, for the phone-number entry fields
-/// across the app (see [PhoneInputField] in
-/// `lib/views/shared/phone_input_field.dart`). Kept as its own small list
-/// (not derived from `kCountries` in `countries.dart`) so this file has no
-/// dependency direction on that one — same set of countries and ordering,
-/// for a consistent picker experience with Account Setting's Country
-/// picker, but a different concern (dial code, not currency).
 library;
 
 class CountryDialCode {
@@ -13,9 +6,6 @@ class CountryDialCode {
   final String dialCode; // without the leading '+'
   const CountryDialCode({required this.name, required this.iso2, required this.dialCode});
 
-  /// Regional-indicator flag emoji, computed from the ISO 3166-1 alpha-2
-  /// code rather than typed by hand (each letter A-Z maps to the Unicode
-  /// regional indicator symbols starting at U+1F1E6).
   String get flag {
     final codeUnits = iso2.toUpperCase().codeUnits;
     if (codeUnits.length != 2) return '🏳';
@@ -61,11 +51,6 @@ const List<CountryDialCode> kCountryDialCodes = [
 
 const CountryDialCode kDefaultDialCode = CountryDialCode(name: 'Malaysia', iso2: 'MY', dialCode: '60');
 
-/// Longest-dial-code-first match of a leading "+<digits>" in [value]
-/// against [kCountryDialCodes] — used to split a stored phone string like
-/// "+60 123456789" back into (dial code, local number) for editing. Tries
-/// the 3-digit codes before 2 then 1 digit so e.g. "+60" isn't mistaken
-/// for a 1-digit match.
 CountryDialCode? matchDialCodePrefix(String digitsOnly) {
   final sorted = [...kCountryDialCodes]..sort((a, b) => b.dialCode.length.compareTo(a.dialCode.length));
   for (final c in sorted) {

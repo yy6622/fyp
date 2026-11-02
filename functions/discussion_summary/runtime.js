@@ -1,5 +1,3 @@
-// Port of ml/discussion_summary/model_runtime.py: TF-IDF (char_wb n-grams) +
-// linear classifier, loaded from model.json (exported by export_model.py).
 
 const { prepare } = require("./textproc");
 
@@ -16,7 +14,6 @@ class TextModel {
     this.topicMinProb = params.topic_min_prob || 0;
   }
 
-  /** sklearn analyzer='char_wb': n-grams inside space-padded words (code points). */
   ngrams(text) {
     const out = [];
     for (const raw of text.split(" ")) {
@@ -32,7 +29,6 @@ class TextModel {
     return out;
   }
 
-  /** L2-normalised TF-IDF vector as Map(featureIndex -> weight), in first-seen order. */
   vector(text) {
     const counts = new Map();
     for (const g of this.ngrams(prepare(text, this.withTags))) {
@@ -68,7 +64,6 @@ class TextModel {
   }
 }
 
-/** Probability of the best class (LogReg: softmax of the decision scores). */
 function softmaxTop(scores) {
   const top = Math.max(...scores);
   let total = 0;
@@ -76,7 +71,6 @@ function softmaxTop(scores) {
   return 1 / total;
 }
 
-/** Both vectors are already L2-normalised. */
 function cosine(a, b) {
   if (a.size > b.size) [a, b] = [b, a];
   let s = 0;

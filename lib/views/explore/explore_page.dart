@@ -31,26 +31,12 @@ class ExplorePage extends StatefulWidget {
 class _ExplorePageState extends State<ExplorePage> {
   final ExploreController controller = ExploreController();
   final TextEditingController _searchController = TextEditingController();
-  // Shared with FilterPage (see _openFilterSheet) so a selection made
-  // there actually changes what's shown here instead of just closing the
-  // sheet — kept alive for the page's lifetime (not recreated per sheet
-  // open) so filters chosen for one category stay applied when the sheet
-  // is reopened.
   final FilterController filterController = FilterController();
 
-  // Marks the "Best Flight Deals" section header so the banner's
-  // "Explore Now" button can scroll straight to it (see
-  // _scrollToBestFlights) — everything on the "All" tab lives inside one
-  // outer SingleChildScrollView (the inner per-category ListViews are
-  // shrink-wrapped, non-scrolling), so Scrollable.ensureVisible finds
-  // that single ancestor scroll view on its own.
   final GlobalKey _bestFlightsKey = GlobalKey();
 
-  // Right under the banner - always on the page, unlike "Best Flight Deals", which is only built when
-  // there are flights to show (with no flights the button used to do nothing at all).
   final GlobalKey _belowBannerKey = GlobalKey();
 
-  // The page's one scroll view: fallback for "Explore Now" if neither marker is on screen yet.
   final ScrollController _pageScroll = ScrollController();
 
   @override
@@ -62,7 +48,6 @@ class _ExplorePageState extends State<ExplorePage> {
     super.dispose();
   }
 
-  /// "Explore Now": scroll down to the deals / places under the banner.
   void _scrollToBestFlights() {
     final ctx = _bestFlightsKey.currentContext ?? _belowBannerKey.currentContext;
     if (ctx != null) {
@@ -77,11 +62,6 @@ class _ExplorePageState extends State<ExplorePage> {
 
   void _runTopBarSearch() => controller.searchFromTopBar(_searchController.text);
 
-  // The actual fix for "after I search I can't get back to the page I
-  // started on" — a manual search overwrites the same flights/hotels/
-  // attractions/restaurants state the default trip/popular view uses,
-  // in place, with nothing that used to undo it. This clears the typed
-  // text and asks the controller to restore that default view.
   void _clearManualSearch() {
     _searchController.clear();
     controller.clearManualSearch();
@@ -90,9 +70,6 @@ class _ExplorePageState extends State<ExplorePage> {
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      // Listens to both — a filter selection only calls filterController's
-      // notifyListeners(), not controller's, so without this the list
-      // behind the sheet would never actually re-filter.
       listenable: Listenable.merge([controller, filterController]),
       builder: (context, _) => Scaffold(
         backgroundColor: AppColors.scaffoldBackground,
@@ -100,13 +77,6 @@ class _ExplorePageState extends State<ExplorePage> {
         body: SafeArea(
           child: Stack(
             children: [
-              // Whole page scrolls as one — the header/trip card/search
-              // bar/category chips used to sit in a plain Column above an
-              // Expanded(ListView), so only that bottom list could scroll
-              // and everything above it was pinned in place. Now it's all
-              // one SingleChildScrollView, with each category's own list
-              // (_buildBody()) laid out inline (shrinkWrap, no scrolling
-              // of its own) instead of independently scrollable.
               SingleChildScrollView(
                 controller: _pageScroll,
                 child: Column(
@@ -166,10 +136,6 @@ class _ExplorePageState extends State<ExplorePage> {
                 icon: Icons.favorite_border,
                 onTap: _openSavedItems,
               ),
-              // "All" is a mixed discovery feed across every category, so
-              // there's no single filter sheet that applies to it — the
-              // filter button only makes sense once a specific category
-              // (Flights/Hotels/Attractions/Restaurants) is selected.
               if (controller.selectedCategory != ExploreCategory.all) ...[
                 const SizedBox(width: 10),
                 HeaderIconButton(
@@ -198,16 +164,8 @@ class _ExplorePageState extends State<ExplorePage> {
   }
 
   void _openFilterSheet() {
-    // Real airlines present in the current search results — never a
-    // fixed list, so the Airlines filter only ever offers carriers that
-    // could actually appear for whatever route was searched.
     final availableAirlines = controller.flightResults.map((f) => f.airlineName).where((n) => n.isNotEmpty).toSet().toList()
       ..sort();
-    // Drop any previously-selected airline that isn't offered by this
-    // search's results (e.g. picked while searching a different route) —
-    // otherwise it would keep silently excluding every result here
-    // without ever showing as checked, since it no longer has a row to
-    // render in the checklist.
     filterController.airlines.removeWhere((a) => !availableAirlines.contains(a));
     showModalBottomSheet(
       context: context,
@@ -221,15 +179,6 @@ class _ExplorePageState extends State<ExplorePage> {
     );
   }
 
-  // ---------------- Filtering ----------------
-  // Applies filterController's current selections (set from the Filter
-  // sheet opened above) to whichever list the active category is showing.
-  // Every field compared here is a real one already on the result/
-  // catalogue object — the Hotel filter sheet no longer offers Property
-  // Type or Amenities precisely because neither Duffel nor RollingGo
-  // returns a property-type field, and the Amenities checklist (while a
-  // real field) was never actually matched against here either; see
-  // filter_page.dart's _hotelFilters() doc comment.
 
   List<int> _numbersIn(String text) => RegExp(r'\d+').allMatches(text).map((m) => int.parse(m.group(0)!)).toList();
 
@@ -299,10 +248,6 @@ class _ExplorePageState extends State<ExplorePage> {
         if (star == null || !f.starRatings.contains('$star★')) return false;
       }
       if (f.guestRating != 'Any') {
-        // RollingGo never returns a guest reviewScore, only the official
-        // star rating — falling back to that (same as everywhere else
-        // this value is shown) instead of silently excluding every
-        // RollingGo hotel whenever this filter is used.
         final score = hotel.reviewScore != null ? hotel.reviewScore! / 2 : hotel.rating;
         final threshold = double.tryParse(f.guestRating.replaceAll('+', '')) ?? 0;
         if (score == null || score < threshold) return false;
@@ -311,12 +256,6 @@ class _ExplorePageState extends State<ExplorePage> {
     }).toList();
   }
 
-  // AI-Based Attraction Recommendation Algorithm (FYP documentation):
-  // category is a person-chosen hard filter (unchanged from before this
-  // existed), then budget/accessibility/operating-hours are the
-  // algorithm's own mandatory constraints, then whatever survives both
-  // is ranked by the weighted Score(a) formula rather than left in
-  // whatever order Firestore/the plain affinity sort returned it in.
   List<CatalogAttraction> get _visibleAttractions {
     final f = filterController;
     final categoryFiltered = controller.attractions.where((item) {
@@ -408,25 +347,7 @@ class _ExplorePageState extends State<ExplorePage> {
     );
   }
 
-  // ---------------- Trip switcher popup ----------------
-  // Per the user's own reference mockup: each trip in the list is styled
-  // as a smaller version of the current-trip bar above it (_tripInfoItem
-  // reused as-is) — trip name as a header, then the same
-  // Destination/Date/Travellers/Budget four-column row with the same thin
-  // vertical dividers — instead of the icon+stacked-text row this popup
-  // had before. The selected trip gets the bar's own teal border; the
-  // rest get a light grey outline. Same real trip data throughout, only
-  // the card styling changed.
   Widget _buildTripSwitcherOverlay() {
-    // mainAxisSize.min with no cap used to size this purely off however
-    // many trips there are — fine normally, but with the keyboard up
-    // (e.g. right after tapping the search field) the space actually
-    // left below this popup's top offset shrinks by the keyboard's own
-    // height, and a list of several trips no longer fit, which showed
-    // as a bottom RenderFlex overflow instead of ever scrolling.
-    // Capping the card to whatever room is genuinely left and letting
-    // its content scroll instead fixes that regardless of trip count
-    // or whether the keyboard is showing.
     final media = MediaQuery.of(context);
     const topOffset = 96.0;
     const bottomBreathingRoom = 40.0;
@@ -509,14 +430,6 @@ class _ExplorePageState extends State<ExplorePage> {
     );
   }
 
-  // "Ask AI for attraction ideas" — a floating button, bottom-right,
-  // always on screen regardless of which category chip is selected
-  // (unlike the earlier inline banner this replaces, which only showed
-  // up on specific tabs and was easy to miss). Opens a chatbot (OpenAI,
-  // see AttractionChatService) scoped to the destination Explore is
-  // currently showing and grounded to the real attractions already
-  // loaded for it ([controller.attractions]), so it can only ever
-  // recommend from real Voya listings, never invent a place.
   Widget _buildAiFab() {
     return FloatingActionButton(
       heroTag: 'explore_ai_fab',
@@ -595,10 +508,6 @@ class _ExplorePageState extends State<ExplorePage> {
                 ),
               ),
             ),
-            // Once a manual search is active, this becomes the quickest
-            // way back to the default view (see _clearManualSearch) —
-            // the decorative mic (never wired to anything) only makes
-            // sense to show the rest of the time.
             controller.isManualSearch
                 ? GestureDetector(
                     onTap: _clearManualSearch,
@@ -611,12 +520,6 @@ class _ExplorePageState extends State<ExplorePage> {
     );
   }
 
-  // Shown only while controller.isManualSearch is true — says plainly
-  // what's on screen now (a search result, not the trip/popular default)
-  // and gives an explicit, labeled way back to it. This is the actual
-  // answer to "after I search I can never get back to the before-search
-  // page": before this existed nothing on screen said a search had even
-  // happened, let alone offered to undo it.
   Widget _buildManualSearchBar() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -697,7 +600,6 @@ class _ExplorePageState extends State<ExplorePage> {
     );
   }
 
-  // ---------------- Body switch (the important part) ----------------
   Widget _buildBody() {
     switch (controller.selectedCategory) {
       case ExploreCategory.all:
@@ -713,16 +615,6 @@ class _ExplorePageState extends State<ExplorePage> {
     }
   }
 
-  // ================= ALL (mixed / discovery view) =================
-  // A section with nothing to show (a failed search, or a real search
-  // that just came back empty) used to render an error box or a "No X
-  // found" line right in the middle of this discovery feed — noisy for a
-  // page whose whole point is "browse what's good", not "see what broke".
-  // Each section below is now only shown at all while loading (so the
-  // spinner still appears) or once it actually has something to show;
-  // the equivalent "nothing found" message only appears on that
-  // category's own dedicated tab (_buildFlightListBody and friends),
-  // where the person went looking on purpose.
   Widget _buildAllView() {
     final showFlights = controller.loadingFlights || (controller.flightError == null && _visibleFlights.isNotEmpty);
     final showHotels = controller.loadingHotels || (controller.hotelError == null && _visibleHotels.isNotEmpty);
@@ -791,16 +683,6 @@ class _ExplorePageState extends State<ExplorePage> {
     );
   }
 
-  // Real destination, real photo — "Explore {destination}" now follows
-  // whichever destination is actually driving the rest of the page
-  // (the selected trip's, or the same popular-destination fallback
-  // flights/hotels default to), and the photo behind it is a live
-  // Wikipedia lookup for that same destination (see
-  // ExploreController._loadBannerImage), not a fixed Japan photo that
-  // used to show regardless of what was actually selected. Falls back
-  // to a neutral scenic travel photo while that lookup is in flight or
-  // if it found nothing — same degrade pattern _placeCardImage already
-  // uses for attraction/restaurant photos.
   static const _bannerFallbackImage = 'https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=800';
 
   Widget _buildExploreBanner() {
@@ -882,15 +764,6 @@ class _ExplorePageState extends State<ExplorePage> {
     );
   }
 
-  // [subtitle] surfaces ExploreController.flightResultsLabel/hotelResultsLabel —
-  // that controller already tracks "what's backing this list and why" (the
-  // trip's destination, or the person's own manual search) with a doc
-  // comment saying it's "shown as a small label above the list", but
-  // nothing here ever actually read it until now; the header always said
-  // the same generic "Best Flight Deals"/"Recommended Hotels" regardless
-  // of whether the group had a trip with a destination or had just run a
-  // search. null (the default "Popular destinations" case) shows nothing
-  // extra, same as before this existed.
   Widget _buildSectionHeader(IconData icon, String title, ExploreCategory jumpTo, {String? subtitle}) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -935,18 +808,8 @@ class _ExplorePageState extends State<ExplorePage> {
     );
   }
 
-  // ================= FLIGHTS (real Duffel search results) =================
-  // No more seeded/placeholder flight data — every card below comes from
-  // controller.flightResults, which is either a trip-driven search, the
-  // cached "popular destinations" default, or the person's own manual
-  // search (see ExploreController). "Favorite" here means "save this
-  // real result into the trip's saved items" — a one-way action per
-  // result (see controller.savedFlightIds); unsaving happens from the
-  // Saved Items page like any other saved catalogue item.
   Widget _buildFlightHorizontalList() {
     if (controller.loadingFlights) return const SizedBox(height: 148, child: Center(child: CircularProgressIndicator(color: AppColors.primary)));
-    // _buildAllView only calls this once there's actually something to
-    // show (see showFlights there), so these are just a safety fallback.
     if (controller.flightError != null || _visibleFlights.isEmpty) return const SizedBox.shrink();
     return SizedBox(
       height: 148,
@@ -1026,11 +889,6 @@ class _ExplorePageState extends State<ExplorePage> {
         priceSuffix: 'Economy',
         airlineLogoUrl: flight.airlineLogoUrl,
         tripId: controller.selectedTrip?.id ?? '',
-        // The real DateTime this search result came with — see
-        // DetailPageFlight's doc comment for why this matters (lets
-        // functions/logistics.js enforce exact flight-time constraints on
-        // the AI itinerary/optimise features, instead of guessing from a
-        // free-text display string).
         departureAt: flight.departureAt,
         arrivalAt: flight.arrivalAt,
         aircraftName: flight.aircraftName,
@@ -1049,23 +907,6 @@ class _ExplorePageState extends State<ExplorePage> {
 
   String _hhmm(DateTime dt) => '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
 
-  /// Duffel's real airline logos (`carrier.logo_symbol_url`/
-  /// `logo_lockup_url`, see [DuffelFlightOffer.airlineLogoUrl]) are
-  /// published as SVG (confirmed against Duffel's own API schema docs) —
-  /// a plain `Image.network` can't decode that, which is why wiring the
-  /// real URL straight into an `Image.network` threw "Invalid image data"
-  /// on every single card. Renders with [SvgPicture.network] instead, and
-  /// falls back to a plain flight icon whenever there's no logo URL at
-  /// all, it's still loading, or it fails to load.
-  ///
-  /// Real airlines' logos come in very different native shapes — a
-  /// square/circular "symbol" mark for some, a wide wordmark for others
-  /// (e.g. VietJet's). A fixed-size circle with `BoxFit.cover` cropped
-  /// those wide ones unpredictably and let them visually overflow the
-  /// card. [size] is instead a fixed outer box every logo is scaled to
-  /// fit *inside* (`BoxFit.contain`, via `FittedBox`) — so every logo
-  /// renders at the exact same, consistent footprint regardless of its
-  /// own aspect ratio, never cropped and never overflowing it.
   Widget _airlineLogo(String? logoUrl, {required double size, required double iconSize}) {
     Widget fallback() => Icon(Icons.flight, size: iconSize, color: AppColors.textGrey);
     return Container(
@@ -1172,11 +1013,8 @@ class _ExplorePageState extends State<ExplorePage> {
     );
   }
 
-  // ================= ACCOMMODATION (real Duffel Stays results) ================
   Widget _buildHotelHorizontalList() {
     if (controller.loadingHotels) return const SizedBox(height: 190, child: Center(child: CircularProgressIndicator(color: AppColors.primary)));
-    // _buildAllView only calls this once there's actually something to
-    // show (see showHotels there), so this is just a safety fallback.
     if (controller.hotelError != null || _visibleHotels.isEmpty) return const SizedBox.shrink();
     return SizedBox(
       height: 190,
@@ -1191,13 +1029,8 @@ class _ExplorePageState extends State<ExplorePage> {
   }
 
   DetailPageHotel _hotelDetailFor(DuffelStayResult hotel) => DetailPageHotel(
-        // Not saved yet — no catalog id, so the detail page's Reviews
-        // section shows its "not available yet" state until this
-        // result is saved (see DetailPageHotel's own doc comment).
         name: hotel.name,
         location: hotel.address,
-        // Same RollingGo-has-no-reviewScore fallback as CatalogRepository.
-        // saveDuffelStay — shows the real star rating instead of nothing.
         ratingLabel: hotel.reviewScore != null
             ? '${(hotel.reviewScore! / 2).toStringAsFixed(1)}(${hotel.reviewCount ?? 0})'
             : (hotel.rating != null ? hotel.rating!.toStringAsFixed(1) : ''),
@@ -1229,11 +1062,6 @@ class _ExplorePageState extends State<ExplorePage> {
               children: [
                 ClipRRect(
                   borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-                  // _placeCardImage already covers both "no photo at all"
-                  // and "the photo URL is there but fails to load" —
-                  // these two used to only handle the first case, falling
-                  // through to Flutter's default broken-image icon on a
-                  // real load failure.
                   child: _placeCardImage(hotel.photoUrl ?? '', height: 95, width: double.infinity, icon: Icons.hotel_outlined),
                 ),
                 Positioned(
@@ -1369,13 +1197,6 @@ class _ExplorePageState extends State<ExplorePage> {
     );
   }
 
-  /// Attractions/restaurants now come from OpenStreetMap (see
-  /// CatalogRepository.refreshAttractions/refreshRestaurants) instead of
-  /// a hand-picked seeded catalogue, and OSM entries frequently have no
-  /// photo at all — so unlike the old fixed Unsplash URLs, [url] here is
-  /// often empty or can fail to load. A plain `Image.network` has no
-  /// fallback for either case; this does, matching the icon-on-chipGrey
-  /// placeholder Near By's place cards already use for the same reason.
   Widget _placeCardImage(String url, {required double height, required double width, required IconData icon}) {
     if (url.isEmpty) {
       return Container(height: height, width: width, color: AppColors.chipGrey, child: Icon(icon, color: AppColors.textGrey, size: height * 0.35));
@@ -1395,8 +1216,6 @@ class _ExplorePageState extends State<ExplorePage> {
     if (controller.loadingPlaces && _visibleAttractions.isEmpty) {
       return const SizedBox(height: 198, child: Center(child: CircularProgressIndicator(color: AppColors.primary)));
     }
-    // _buildAllView only calls this once there's actually something to
-    // show, so this is just a safety fallback.
     if (_visibleAttractions.isEmpty) return const SizedBox.shrink();
     return SizedBox(
       height: 198,
@@ -1573,14 +1392,9 @@ class _ExplorePageState extends State<ExplorePage> {
 
   // ================= RESTAURANTS =================
   Widget _buildRestaurantHorizontalList() {
-    // No cover image on these cards (see _buildRestaurantCompactCard) —
-    // shorter than the attraction list's 198, which still reserves room
-    // for a photo.
     if (controller.loadingPlaces && _visibleRestaurants.isEmpty) {
       return const SizedBox(height: 108, child: Center(child: CircularProgressIndicator(color: AppColors.primary)));
     }
-    // _buildAllView only calls this once there's actually something to
-    // show, so this is just a safety fallback.
     if (_visibleRestaurants.isEmpty) return const SizedBox.shrink();
     return SizedBox(
       height: 108,
@@ -1605,13 +1419,6 @@ class _ExplorePageState extends State<ExplorePage> {
     ));
   }
 
-  // Restaurants never show a photo on this card (not even the usual
-  // category-icon placeholder box) — the catalog's restaurant photos are
-  // bulk-import stock images shared across many unrelated restaurants, so
-  // *any* image-shaped UI here (a real photo or a generic placeholder box)
-  // misleadingly implied a per-restaurant picture that doesn't exist. The
-  // favorite heart moves next to the name since there's no photo to float
-  // it over anymore.
   Widget _buildRestaurantCompactCard(CatalogRestaurant item) {
     final favorited = item.isSavedForTrip(AuthService.instance.currentUser?.uid ?? '', controller.selectedTrip?.id);
     return GestureDetector(
@@ -1704,9 +1511,6 @@ class _ExplorePageState extends State<ExplorePage> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // No thumbnail here on purpose — see _buildRestaurantCompactCard's
-          // comment: restaurants never show image-shaped UI, placeholder
-          // box included, since the catalog has no real per-restaurant photo.
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,

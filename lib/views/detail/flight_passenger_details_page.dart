@@ -15,15 +15,6 @@ const List<String> _monthNames = [
   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
 ];
 
-// ---------------------------------------------------------------------
-// Passenger details — step 1 of the flight checkout flow (Passenger
-// Details -> Payment), the same two-step shape Insurance's own purchase
-// flow uses (TravellerDetailsPage -> PaymentMethodPage). Collects what a
-// real flight booking actually needs per passenger (full name as per
-// passport, date of birth, nationality, passport number + expiry) instead
-// of just a name, plus one contact email/phone for the whole booking.
-// Reached from [BookingBar] for a 'flight' booking.
-// ---------------------------------------------------------------------
 class FlightPassengerDetailsPage extends StatefulWidget {
   final String itemTitle;
   final String itemSubtitle;
@@ -57,18 +48,11 @@ class FlightPassengerDetailsPage extends StatefulWidget {
 class _FlightPassengerDetailsPageState extends State<FlightPassengerDetailsPage> {
   final FlightPassengerDetailsController controller = FlightPassengerDetailsController();
 
-  // Real TextEditingControllers for the plain-text fields (Full Name,
-  // Passport Number per passenger; Email/Phone once for the booking) — see
-  // FlightPassengerDetailsController's doc comment for why these aren't
-  // notifyListeners()-driven.
   final List<TextEditingController> _nameCtrls = [TextEditingController()];
   final List<TextEditingController> _passportCtrls = [TextEditingController()];
   final TextEditingController _emailCtrl = TextEditingController();
   final TextEditingController _phoneCtrl = TextEditingController();
 
-  // Who this booking is for, within the trip — defaults to the whole
-  // trip (no picker shown) once _trip loads
-  // and actually has more than one member; stays null/empty otherwise.
   Trip? _trip;
   Set<String> _forMemberUids = {};
 
@@ -81,8 +65,6 @@ class _FlightPassengerDetailsPageState extends State<FlightPassengerDetailsPage>
         if (!mounted || trip == null) return;
         setState(() {
           _trip = trip;
-          // Defaults to the whole trip — deselecting is how you say "just
-          // some of us", not the other way around.
           _forMemberUids = trip.memberIds.toSet();
         });
       });
@@ -213,12 +195,6 @@ class _FlightPassengerDetailsPageState extends State<FlightPassengerDetailsPage>
                           onChanged: (v) => _phoneCtrl.text = v,
                         ),
                         const SizedBox(height: 12),
-                        // "Who is this for" picker removed per request — a
-                        // flight booked on a group trip now always applies
-                        // to the whole trip (see _trip/_forMemberUids above,
-                        // still fetched so that default stays correct)
-                        // instead of letting the booker narrow it down to
-                        // specific members.
                       ],
                     ),
                   ),

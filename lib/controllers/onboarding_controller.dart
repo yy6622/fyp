@@ -9,12 +9,6 @@ import '../repositories/user_repository.dart';
 import '../services/auth_service.dart';
 import '../services/avatar_service.dart';
 
-/// Controller for the post-registration onboarding wizard (Avatar → Phone
-/// Number → Region/Country → Currency → Add Friend), shown once right
-/// after email verification — see [OtpVerificationPage]. Every step is
-/// individually skippable, and the whole wizard can be skipped too;
-/// nothing collected here is required to use the app, so each step just
-/// saves whatever was filled in and moves on rather than validating.
 class OnboardingController extends ChangeNotifier {
   static const totalSteps = 5;
 
@@ -56,9 +50,6 @@ class OnboardingController extends ChangeNotifier {
         await UserRepository.instance.updateProfile(_uid, avatarUrl: url);
       }
     } catch (e) {
-      // Showing the raw error (not just a generic message) so it's
-      // possible to tell a Storage permission/setup problem apart from a
-      // platform-support problem without needing the debug console.
       avatarError = "Couldn't upload that photo: $e";
     } finally {
       uploadingAvatar = false;
@@ -87,8 +78,6 @@ class OnboardingController extends ChangeNotifier {
 
   void selectCountry(Country country) {
     selectedCountry = country;
-    // Default the Currency step to match, but don't overwrite a choice
-    // already made if they go back and forth between steps.
     selectedCurrency ??= country.currencyCode;
     notifyListeners();
   }
@@ -124,7 +113,6 @@ class OnboardingController extends ChangeNotifier {
     next();
   }
 
-  // ---------------- Step 5: Add a friend ----------------
   final friendQueryController = TextEditingController();
   bool addingFriend = false;
   String? addFriendMessage;

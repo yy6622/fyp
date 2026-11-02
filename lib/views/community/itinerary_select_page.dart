@@ -6,12 +6,6 @@ import '../../repositories/trip_repository.dart';
 import '../../theme.dart';
 import 'create_post_page.dart';
 
-// ---------------------------------------------------------------------
-// Itinerary Post — select one of your REAL trips to turn into a post
-// (FR31/FR68). Used to offer two hardcoded sample itineraries
-// ("Japan Trips"/"Korea Trips") regardless of what trips the signed-in
-// person actually had — see ItinerarySelectController.
-// ---------------------------------------------------------------------
 class ItinerarySelectPage extends StatefulWidget {
   const ItinerarySelectPage({super.key});
 

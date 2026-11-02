@@ -5,20 +5,7 @@ import 'package:http/http.dart' as http;
 
 import 'places_api_service.dart';
 
-// ---------------------------------------------------------------------
-// Real weather for a trip's destination — shown on Home's "Next
-// Adventure" card (see home_page.dart's _cardInfoTile for 'Weather').
-// Backed by Open-Meteo, which — like Nominatim/Overpass already used for
-// geocoding/POIs (see PlacesApiService) — is free and keyless: no billing
-// account to set up, nothing to add to secrets.dart. Geocodes the
-// destination with the same PlacesApiService.geocode this app already
-// uses for catalogue/POI search, then asks Open-Meteo for either today's
-// actual reading or a specific day's forecast.
-// ---------------------------------------------------------------------
 
-/// One day's (or "right now"'s) weather for a destination. [tempMinC]/
-/// [tempMaxC] are set for a day's forecast; for "right now" only [tempC]
-/// is set (a single current reading has no min/max).
 class DestinationWeather {
   final double tempC;
   final double? tempMinC;
@@ -26,10 +13,6 @@ class DestinationWeather {
   final int weatherCode;
   const DestinationWeather({required this.tempC, this.tempMinC, this.tempMaxC, required this.weatherCode});
 
-  /// Short label for the WMO weather code Open-Meteo returns — see
-  /// https://open-meteo.com/en/docs#weathervariables for the full table;
-  /// this only distinguishes the ranges that actually change what a
-  /// traveller would want to see at a glance.
   String get label {
     if (weatherCode == 0) return 'Clear';
     if (weatherCode <= 3) return 'Cloudy';
@@ -45,9 +28,6 @@ class DestinationWeather {
   IconData get icon {
     if (weatherCode == 0) return Icons.wb_sunny_outlined;
     if (weatherCode <= 3) return Icons.wb_cloudy_outlined;
-    // Icons.foggy only exists in newer Material icon sets than this
-    // project's Flutter SDK is guaranteed to have — cloud_outlined reads
-    // close enough and is a long-standing, definitely-available icon.
     if (weatherCode == 45 || weatherCode == 48) return Icons.cloud_outlined;
     if (weatherCode >= 51 && weatherCode <= 67) return Icons.water_drop_outlined;
     if (weatherCode >= 71 && weatherCode <= 77) return Icons.ac_unit;
@@ -56,17 +36,11 @@ class DestinationWeather {
     return Icons.wb_cloudy_outlined;
   }
 
-  /// "24° - 30°C" for a day's forecast, "28°C" for a single current reading.
   String get tempLabel {
     if (tempMinC != null && tempMaxC != null) return '${tempMinC!.round()}°-${tempMaxC!.round()}°C';
     return '${tempC.round()}°C';
   }
 
-  /// True for forecast codes that would actually disrupt outdoor plans
-  /// (meaningful rain, snow, showers, or a storm) — the threshold a
-  /// weather nudge (see live_conditions_card.dart) uses to decide whether
-  /// to suggest re-optimising today's order, rather than flagging
-  /// ordinary cloud or a light drizzle that wouldn't change anyone's plans.
   bool get isDisruptive =>
       (weatherCode >= 61 && weatherCode <= 67) || // Rain
       (weatherCode >= 71 && weatherCode <= 77) || // Snow
@@ -78,22 +52,11 @@ class WeatherService {
   WeatherService._();
   static final WeatherService instance = WeatherService._();
 
-  /// Open-Meteo only forecasts about this many days ahead — a trip
-  /// further out than this just has no weather yet.
   static const _forecastHorizonDays = 15;
 
-  // Keyed by "destination|dateKey" ('now' for a current reading). Short
-  // TTL so Home's StreamBuilder rebuilding on every Firestore snapshot
-  // doesn't re-hit the API every time, without ever going stale for long.
   final Map<String, (DateTime fetchedAt, DestinationWeather? weather)> _cache = {};
   static const _cacheTtl = Duration(minutes: 30);
 
-  /// [forDate] should be a midnight-normalized date (same convention as
-  /// Trip.startDate elsewhere); pass null for "right now" (an ongoing
-  /// trip, or one starting today). Returns null — never a fabricated
-  /// reading — when the destination can't be geocoded, the date is
-  /// beyond Open-Meteo's forecast horizon, or the request fails for any
-  /// reason (offline, endpoint down).
   Future<DestinationWeather?> forDestination(String destination, {DateTime? forDate}) async {
     final trimmed = destination.trim();
     if (trimmed.isEmpty) return null;

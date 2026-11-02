@@ -5,13 +5,6 @@ import '../../theme.dart';
 import '../shared/maps_launcher.dart';
 import 'detail_widgets.dart';
 
-// ---------------------------------------------------------------------
-// Near-by place detail (restaurant, cafe, attraction, shop, ATM, pharmacy)
-// ---------------------------------------------------------------------
-// Near By places are a lighter-weight catalogue than Explore's hotels /
-// attractions (no id-based favoriting yet), so this is a plain info page —
-// no booking or save action, just what NearByPage's row already knows
-// plus a bit more context.
 class DetailPagePlace extends StatelessWidget {
   final NearbyPlace place;
   const DetailPagePlace({super.key, required this.place});
@@ -26,11 +19,6 @@ class DetailPagePlace extends StatelessWidget {
             DetailHeader(title: place.name, imageUrl: place.image),
             Expanded(
               child: ListView(
-                // ListView lays its children out full-width already (one
-                // per row), so this page didn't have DetailPageAttraction's
-                // centering bug — kept as ListView rather than switching to
-                // Column+crossAxisAlignment for consistency's sake, since
-                // the visual result is identical either way.
                 padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
                 children: [
                   Text(place.name, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.navy)),

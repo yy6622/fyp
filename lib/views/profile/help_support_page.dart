@@ -4,9 +4,6 @@ import '../../theme.dart';
 import '../shared/contact_launcher.dart';
 import 'sub_page_scaffold.dart';
 
-// ---------------------------------------------------------------------
-// Help and Support
-// ---------------------------------------------------------------------
 class HelpSupportPage extends StatelessWidget {
   const HelpSupportPage({super.key});
 

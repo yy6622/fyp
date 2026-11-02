@@ -1,131 +1,226 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../controllers/auth_controller.dart';
+import '../../services/auth_service.dart';
+import '../../services/verification_service.dart';
 import '../../theme.dart';
 import '../onboarding/onboarding_wizard_page.dart';
+import '../shared/bottom_nav.dart';
 import 'login_page.dart';
 
-// ---------------------------------------------------------------------
-// Email verification status — shown right after Sign Up. Firebase Auth
-// verifies an email via a link it sends, not a 6-digit code typed in, so
-// this replaces the original 6-box code entry with a status screen
-// (Resend + Continue) instead. Continuing doesn't hard-block on
-// verification finishing (email delivery timing is out of the app's
-// control) — it just lets you know if it hasn't happened yet.
-// ---------------------------------------------------------------------
-class OtpVerificationPage extends StatefulWidget {
-  const OtpVerificationPage({super.key});
-
-  @override
-  State<OtpVerificationPage> createState() => _OtpVerificationPageState();
+/// After a successful sign-in (password or Google), decides where the
+/// traveller goes: the email-code page (unverified email, or a device that is
+/// not trusted yet) or straight into the app (FR04).
+Future<void> openAppAfterSignIn(BuildContext context, {bool newUser = false}) async {
+  final step = await VerificationService.instance.nextStep();
+  if (!context.mounted) return;
+  if (step == SignInStep.suspended) {
+    // FR96: a suspended account is signed out straight away.
+    await AuthService.instance.signOut();
+    if (!context.mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    Navigator.of(context).pushAndRemoveUntil(MaterialPageRoute(builder: (_) => const LoginPage()), (route) => false);
+    messenger.showSnackBar(const SnackBar(content: Text(suspendedMessage)));
+    return;
+  }
+  Widget home() => newUser ? const OnboardingWizardPage() : const MainPage();
+  final Widget target = switch (step) {
+    SignInStep.open || SignInStep.suspended => home(),
+    SignInStep.verifyEmail => VerificationCodePage(purpose: CodePurpose.signup, next: home),
+    SignInStep.verifyDevice => VerificationCodePage(purpose: CodePurpose.login, next: home),
+  };
+  Navigator.of(context).pushAndRemoveUntil(MaterialPageRoute(builder: (_) => target), (route) => false);
 }
 
-class _OtpVerificationPageState extends State<OtpVerificationPage> {
-  final OtpVerificationController controller = OtpVerificationController();
+/// Asks for a fresh email code before a sensitive action (payment, password,
+/// email or account deletion). Returns true only when the code was right.
+Future<bool> confirmWithEmailCode(BuildContext context, CodePurpose purpose) async {
+  final ok = await Navigator.of(context).push<bool>(
+    MaterialPageRoute(builder: (_) => VerificationCodePage(purpose: purpose)),
+  );
+  return ok == true;
+}
 
-  Future<void> _resend() async {
-    await controller.resend();
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Verification email sent')),
-    );
+class VerificationCodePage extends StatefulWidget {
+  final CodePurpose purpose;
+
+  /// Where to go after a correct sign-up / sign-in code. Null for step-up
+  /// purposes, which pop back with `true`.
+  final Widget Function()? next;
+
+  const VerificationCodePage({super.key, required this.purpose, this.next});
+
+  @override
+  State<VerificationCodePage> createState() => _VerificationCodePageState();
+}
+
+class _VerificationCodePageState extends State<VerificationCodePage> {
+  late final VerificationCodeController controller = VerificationCodeController(widget.purpose);
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _send(initial: true));
   }
 
-  Future<void> _continue() async {
-    final verified = await controller.checkVerified();
-    if (!mounted) return;
-    if (!verified) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Not verified yet — you can still continue and verify later")),
-      );
+  @override
+  void dispose() {
+    controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _send({bool initial = false}) async {
+    final error = await controller.send();
+    if (!mounted || initial || error != null) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('A new code was sent to ${controller.email}')));
+  }
+
+  Future<void> _verify() async {
+    final ok = await controller.verify();
+    if (!ok || !mounted) return;
+    final next = widget.next;
+    if (next != null) {
+      Navigator.of(context).pushAndRemoveUntil(MaterialPageRoute(builder: (_) => next()), (route) => false);
+    } else {
+      Navigator.of(context).pop(true);
     }
-    // Onboarding (avatar/phone/region/currency/add friend) runs once right
-    // after this, then lands on MainPage itself — see
-    // OnboardingWizardPage._finish(). Kept as a plain push (not
-    // pushAndRemoveUntil) so the system back button on onboarding's first
-    // step just returns here, which is harmless.
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const OnboardingWizardPage()),
-    );
+  }
+
+  Future<void> _close() async {
+    if (widget.purpose.isStepUp) {
+      Navigator.of(context).pop(false);
+      return;
+    }
+    // Sign-up and sign-in cannot be skipped: leaving signs the traveller out.
+    await AuthService.instance.signOut();
+    if (!mounted) return;
+    Navigator.of(context).pushAndRemoveUntil(MaterialPageRoute(builder: (_) => const LoginPage()), (route) => false);
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 34, vertical: 16),
-          child: ListenableBuilder(
-            listenable: controller,
-            builder: (context, _) => Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                IconButton(
-                  padding: EdgeInsets.zero,
-                  alignment: Alignment.centerLeft,
-                  icon: const Icon(Icons.close, color: Colors.black),
-                  onPressed: () => Navigator.of(context).pushAndRemoveUntil(
-                    MaterialPageRoute(builder: (_) => const LoginPage()),
-                    (route) => false,
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _close();
+      },
+      child: Scaffold(
+        backgroundColor: Colors.white,
+        body: SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 34, vertical: 16),
+            child: ListenableBuilder(
+              listenable: controller,
+              builder: (context, _) => Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  IconButton(
+                    padding: EdgeInsets.zero,
+                    alignment: Alignment.centerLeft,
+                    icon: Icon(widget.purpose.isStepUp ? Icons.arrow_back : Icons.close, color: Colors.black),
+                    onPressed: _close,
                   ),
-                ),
-                const SizedBox(height: 60),
-                const Text(
-                  'Verify Your Email',
-                  style: TextStyle(fontSize: 25, fontWeight: FontWeight.w600, color: AppColors.navy),
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  'We sent a verification link to ${controller.email}. Open it, then come back and tap Continue.',
-                  style: const TextStyle(fontSize: 15, color: Color(0xFF333333)),
-                ),
-                const SizedBox(height: 32),
-                Center(
-                  child: Container(
-                    width: 96,
-                    height: 96,
-                    decoration: const BoxDecoration(color: AppColors.chipGrey, shape: BoxShape.circle),
-                    child: const Icon(Icons.mark_email_unread_outlined, size: 42, color: AppColors.primary),
+                  const SizedBox(height: 40),
+                  Text(
+                    widget.purpose.title,
+                    style: const TextStyle(fontSize: 25, fontWeight: FontWeight.w600, color: AppColors.navy),
                   ),
-                ),
-                const SizedBox(height: 32),
-                SizedBox(
-                  width: double.infinity,
-                  height: 50,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
+                  const SizedBox(height: 12),
+                  Text(
+                    'We sent a 6-digit code to ${controller.email} ${widget.purpose.reason}. '
+                    'It expires in 10 minutes.',
+                    style: const TextStyle(fontSize: 15, color: Color(0xFF333333)),
+                  ),
+                  if (widget.purpose == CodePurpose.login) ...[
+                    const SizedBox(height: 8),
+                    const Text(
+                      'After this, this phone is trusted for 30 days.',
+                      style: TextStyle(fontSize: 13, color: AppColors.textGrey),
                     ),
-                    onPressed: controller.checking ? null : _continue,
-                    child: controller.checking
-                        ? const SizedBox(
-                            width: 22,
-                            height: 22,
-                            child: CircularProgressIndicator(strokeWidth: 2.4, color: Colors.white),
-                          )
-                        : const Text(
-                            'Continue',
-                            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white),
-                          ),
+                  ],
+                  const SizedBox(height: 28),
+                  Center(
+                    child: Container(
+                      width: 88,
+                      height: 88,
+                      decoration: const BoxDecoration(color: AppColors.chipGrey, shape: BoxShape.circle),
+                      child: const Icon(Icons.mark_email_unread_outlined, size: 40, color: AppColors.primary),
+                    ),
                   ),
-                ),
-                const SizedBox(height: 16),
-                Center(
-                  child: GestureDetector(
-                    onTap: controller.sending ? null : _resend,
-                    child: Text(
-                      controller.sending ? 'Sending…' : 'Resend verification email',
-                      style: const TextStyle(
-                        fontSize: 16,
-                        color: Color(0xFF939292),
-                        decoration: TextDecoration.underline,
+                  const SizedBox(height: 28),
+                  TextField(
+                    key: const Key('verification_code_field'),
+                    controller: controller.codeController,
+                    keyboardType: TextInputType.number,
+                    textAlign: TextAlign.center,
+                    maxLength: 6,
+                    autofocus: true,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    style: const TextStyle(fontSize: 28, letterSpacing: 12, fontWeight: FontWeight.w600),
+                    onChanged: (v) {
+                      if (v.length == 6 && !controller.checking) _verify();
+                    },
+                    decoration: InputDecoration(
+                      counterText: '',
+                      hintText: '••••••',
+                      hintStyle: const TextStyle(color: Color(0xFFBDBDBD), letterSpacing: 12),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: const BorderSide(color: Color(0xFF9E9E9E)),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: const BorderSide(color: AppColors.primary, width: 2),
                       ),
                     ),
                   ),
-                ),
-              ],
+                  if (controller.error != null) ...[
+                    const SizedBox(height: 8),
+                    Text(controller.error!, style: const TextStyle(color: Colors.red, fontSize: 13)),
+                  ],
+                  const SizedBox(height: 20),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 50,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
+                      ),
+                      onPressed: controller.checking ? null : _verify,
+                      child: controller.checking
+                          ? const SizedBox(
+                              width: 22,
+                              height: 22,
+                              child: CircularProgressIndicator(strokeWidth: 2.4, color: Colors.white),
+                            )
+                          : const Text(
+                              'Verify',
+                              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white),
+                            ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Center(
+                    child: GestureDetector(
+                      onTap: controller.sending || controller.resendIn > 0 ? null : () => _send(),
+                      child: Text(
+                        controller.sending
+                            ? 'Sending…'
+                            : controller.resendIn > 0
+                                ? 'Resend code in ${controller.resendIn} s'
+                                : 'Resend code',
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: controller.resendIn > 0 ? const Color(0xFFBDBDBD) : const Color(0xFF939292),
+                          decoration: TextDecoration.underline,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),

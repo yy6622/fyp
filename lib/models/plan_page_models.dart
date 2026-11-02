@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-/// Filter chip shown at the top of the Plan tab.
 enum PlanTab { all, plan, voting, expenses }
 
 extension PlanTabMeta on PlanTab {
@@ -33,20 +32,10 @@ extension PlanTabMeta on PlanTab {
 
 class VotingItem {
   final String title, subtitle, date, votes, image;
-  /// Fraction (0..1) of the group that has voted so far — drives the
-  /// progress bar on the detailed Voting-tab card.
   final double progress;
-  /// e.g. "L Hotel is leading with 4 votes" — shown only on the detailed
-  /// Voting-tab card, not the compact "All" preview.
   final String leadingOption;
-  /// Which trip/vote this card opens — set when built from real Firestore
-  /// data so tapping it can jump straight to that trip's Vote tab.
   final String tripId;
   final String voteId;
-  /// Uids of everyone who has voted on at least one option (TripVote.voterUids)
-  /// — drives the avatar-stack next to [votes], same real-photo convention
-  /// as the Vote tab's own option footers, instead of unlabelled placeholder
-  /// circles.
   final List<String> voterUids;
   const VotingItem({
     required this.title,
@@ -66,22 +55,12 @@ class PlanGroup {
   final String title, members, timeAgo, lastMessage;
   final int unread;
   final List<String> tags;
-  /// Expense-specific figures, used only by the Expenses-tab card.
   final double totalExpenses;
   final double yourShare;
   final String lastExpenseLabel;
   final double lastExpenseAmount;
-  /// The real Firestore trip id this card represents.
   final String tripId;
-  /// The trip's own cover photo (Trip.coverImage) — shown in the round
-  /// thumbnail on this card instead of a plain grey circle. Empty for a
-  /// trip with no cover set yet; the card falls back to a placeholder
-  /// icon rather than a broken image either way.
   final String coverImage;
-  /// This member's own "Pin Chat" preference (Trip.pinChatFor(uid)) —
-  /// pinned groups sort to the top of the Plan list (see
-  /// PlanPageController.planGroups). Per-member, not global — see
-  /// Trip.pinChat's doc comment for why.
   final bool pinned;
   const PlanGroup({
     required this.title,

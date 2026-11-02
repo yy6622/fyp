@@ -7,9 +7,6 @@ import '../../services/itinerary_ai_service.dart' show AiItineraryUpdate;
 import '../../services/itinerary_optimise_service.dart';
 import '../../theme.dart';
 
-/// Opened from the Day header's diamond (sparkle) icon — lets the person
-/// choose "Optimise this day" or "Optimise whole trip" before anything
-/// runs, then opens [_OptimiseSheet] for whichever they picked.
 Future<void> showOptimiseModeSheet(
   BuildContext context,
   GroupTripController controller, {
@@ -59,11 +56,6 @@ Future<void> showOptimiseModeSheet(
   );
 }
 
-/// Starts (or reopens) an Optimise run and shows its progress/result
-/// sheet — exported (not just used inside this file) so other widgets
-/// that want to trigger Optimise directly, such as the weather/traffic
-/// nudge in live_conditions_card.dart, can reuse the exact same
-/// start-then-show flow instead of duplicating it.
 void startAndShowOptimise(
   BuildContext context,
   GroupTripController controller,
@@ -71,10 +63,6 @@ void startAndShowOptimise(
   int? dayIndex,
   int? dayNumber,
 }) {
-  // Always call start(): the service itself now decides whether this is
-  // the same scope as what's already running/ready (then it's a no-op, so
-  // reopening a minimised run just shows what's there) or a different one
-  // (then it replaces it) — see ItineraryOptimiseService.start's doc.
   ItineraryOptimiseService.instance.start(controller.tripId, mode: mode, dayIndex: dayIndex, dayNumber: dayNumber);
   showModalBottomSheet<void>(
     context: context,
@@ -85,23 +73,12 @@ void startAndShowOptimise(
   );
 }
 
-/// Reopens the sheet for whatever scope is currently running/ready for
-/// [controller]'s trip — used by [OptimiseStatusBar] when the person taps
-/// it to come back to a run they minimised. Does nothing if there's no
-/// scope recorded (shouldn't happen: the status bar only shows when there
-/// is one).
 void _reopenOptimiseSheet(BuildContext context, GroupTripController controller) {
   final scope = ItineraryOptimiseService.instance.scopeFor(controller.tripId);
   if (scope == null) return;
   startAndShowOptimise(context, controller, scope.mode, dayIndex: scope.dayIndex, dayNumber: scope.dayNumber);
 }
 
-/// Persistent bar shown whenever a trip has an Optimise run in progress or
-/// waiting — the Optimise equivalent of [AiItineraryStatusBar]
-/// (ai_itinerary_sheet.dart), and the actual fix for "I minimised it and
-/// then couldn't find the result again": without this there was nothing on
-/// screen reminding the person a run existed, so they had no way back to
-/// it short of retracing the exact same taps.
 class OptimiseStatusBar extends StatelessWidget {
   final GroupTripController controller;
   const OptimiseStatusBar({super.key, required this.controller});
@@ -153,15 +130,10 @@ class _OptimiseSheet extends StatefulWidget {
   final GroupTripController controller;
   final OptimiseMode mode;
 
-  /// Needed to re-run [OptimiseMode.day] from "Try again" — unused for
-  /// [OptimiseMode.whole].
   final int? dayIndex;
 
-  /// 1-based day number, for the [OptimiseMode.day] title — unused for
-  /// [OptimiseMode.whole].
   final int? dayNumber;
 
-  /// The page under the sheet — used for the snackbar after the sheet closes.
   final BuildContext pageContext;
 
   const _OptimiseSheet({
@@ -179,10 +151,8 @@ class _OptimiseSheet extends StatefulWidget {
 class _OptimiseSheetState extends State<_OptimiseSheet> {
   late final ValueNotifier<OptimiseJob> _job = ItineraryOptimiseService.instance.jobFor(widget.controller.tripId);
 
-  /// The result the ticks below belong to; a new run resets them.
   OptimiseResult? _selectionFor;
 
-  /// Ticked rows, by index into [OptimiseResult.changes].
   final Set<int> _selected = {};
   bool _applying = false;
   String? _applyError;
@@ -205,10 +175,6 @@ class _OptimiseSheetState extends State<_OptimiseSheet> {
     if (mounted) setState(() {});
   }
 
-  /// Resets the ticks whenever a new result arrives. Every change starts
-  /// ticked — unlike AI Summarise's "remove" rows, a reorder/re-time is
-  /// never destructive, so there's no reason to make the person opt in
-  /// one-by-one.
   void _syncSelection() {
     final result = _job.value.result;
     if (result != null && !identical(result, _selectionFor)) {
@@ -267,7 +233,6 @@ class _OptimiseSheetState extends State<_OptimiseSheet> {
       }
     } catch (e) {
       if (!mounted) return;
-      // What was applied has been unticked above, so "Apply" again only retries the rest.
       setState(() {
         _applying = false;
         _applyError = done == 0 ? 'Could not update the plan: $e' : 'Applied $done, then stopped: $e';
@@ -449,7 +414,6 @@ class _OptimiseSheetState extends State<_OptimiseSheet> {
     );
   }
 
-  /// Something Optimise could not fix by itself (a day that is too full in "this day" mode).
   Widget _note(String text) {
     return Container(
       margin: const EdgeInsets.only(top: 10),

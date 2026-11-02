@@ -8,32 +8,7 @@ import '../../services/booking_document_service.dart';
 import '../../theme.dart';
 import '../insurance/claim_refund_page.dart';
 
-// ---------------------------------------------------------------------
-// Past-booking detail pages opened from History's Hotel / Insurance tabs.
-//
-// These mirror PlanFlightDetailPage's look exactly (VoyaAppBar + tab row +
-// plain bordered info card) so all three History tabs feel like one
-// consistent "view a past booking" experience. They are deliberately NOT
-// the live shopping/purchase pages
-// (DetailPageHotel / InsurancePlanDetailPage) that History used to reuse —
-// those have a "Select Hotel" / "Enter Traveller" purchase action at the
-// bottom, which would let a past booking be re-purchased by accident.
-//
-// Only what BookingEntry actually stores (title/subtitle/trailing) is real;
-// the remaining fields use the same kind of static defaults
-// PlanFlightDetailPage already uses for airline/terminal/booking
-// reference/status, since per-booking data that fine-grained isn't kept.
-// Documents are real, though (see BookingDocumentService) — every booking
-// has a real Firestore doc id to attach an upload to, unlike the fields
-// above.
-// ---------------------------------------------------------------------
 
-/// Shared shell: VoyaAppBar with the popup menu, a [PillTabBar] (matching
-/// Plan's Plan/Chat/Expenses/Vote look), and the tab body switch. [tabs]
-/// and [builders] must be the same length and in the same order — each
-/// page below supplies its own set. (Hotel used to add a 4th "Review" tab
-/// here — removed along with every other hotel/attraction/restaurant
-/// review surface.)
 class _HistoryDetailShell extends StatefulWidget {
   final String title;
   final List<PillTab> tabs;
@@ -56,13 +31,6 @@ class _HistoryDetailShellState extends State<_HistoryDetailShell> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
-      // The "⋮" menu here used to offer "Set to private"/"Shift to
-      // Plans" with `onSelected: (_) {}` — neither option did anything,
-      // and neither one maps onto a real field this app actually has
-      // (there's no privacy flag on a booking, and a completed/past
-      // booking has no defined way to "shift" into an active Plan).
-      // Removed rather than left as a menu that looks actionable and
-      // isn't; PillTabBar + info card below are all real.
       appBar: VoyaAppBar(
         title: Text(widget.title, style: const TextStyle(color: AppColors.navy, fontWeight: FontWeight.bold, fontSize: 18)),
       ),
@@ -80,8 +48,6 @@ class _HistoryDetailShellState extends State<_HistoryDetailShell> {
   }
 }
 
-/// One label/value row inside an info card — same shape History's flight
-/// detail page (PlanFlightDetailPage._field) uses.
 Widget _field(String label, String value, {bool last = false}) {
   return Container(
     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -121,13 +87,6 @@ Widget _infoCard(String header, List<Widget> fields) {
   );
 }
 
-/// Guest/traveller list for a past booking — [roleLabel] is the row's
-/// caption ("Guest", "Traveller"), [name]/[email]/[phone]/[idNumber] are
-/// the real values captured at checkout (see BookingPaymentPage.
-/// _confirmPayment → BookingRepository.addBooking). Used to show the
-/// literal role label itself as if it were a name — this now shows what
-/// was actually booked, with an honest "Not available" when a legacy
-/// booking (from before these fields existed) has none stored.
 Widget _peopleList(String roleLabel, {required String name, String email = '', String phone = '', String idNumber = ''}) {
   final hasName = name.isNotEmpty;
   return ListView(
@@ -162,12 +121,6 @@ Widget _peopleList(String roleLabel, {required String name, String email = '', S
   );
 }
 
-/// Real document upload for a History booking — same Upload/uploading-
-/// spinner/Uploaded+View states PlanFlightDetailPage's Documents tab
-/// uses, backed by [BookingDocumentService] + [BookingRepository.
-/// setBookingDocument] instead of the trip-flight equivalents. [onUpload]
-/// drives the parent's own state (so a fresh upload shows immediately
-/// without waiting for the next watchBookings snapshot).
 Widget _documentsList({
   required List<(String, IconData)> docs,
   required Map<String, String> documents,
@@ -226,11 +179,6 @@ Widget _documentsList({
   );
 }
 
-/// Shared upload flow (pick source → pick file → upload → save the URL)
-/// used by both booking detail pages below — identical to
-/// PlanFlightDetailPage._uploadDocument except it saves through
-/// [BookingRepository.setBookingDocument] instead of a trip flight's
-/// document map.
 mixin _BookingDocumentUploader<T extends StatefulWidget> on State<T> {
   Map<String, String> get documents;
   set documents(Map<String, String> value);
@@ -285,16 +233,6 @@ mixin _BookingDocumentUploader<T extends StatefulWidget> on State<T> {
   }
 }
 
-// ---------------------------------------------------------------------
-// Flight
-// ---------------------------------------------------------------------
-// History's Flight tab used to reuse PlanFlightDetailPage with no
-// tripId/id (see group_trip_page.dart's _pickHistoryFlight comment for the
-// in-trip case) — that disabled its Documents tab entirely, which is what
-// made the upload button look broken for a past flight booking. This page
-// is the Flight sibling of HistoryHotelDetailPage/HistoryInsuranceDetailPage
-// below: a real `users/{uid}/bookings` doc id to upload against, instead of
-// a trip-scoped flight id that a bare History entry never has.
 class HistoryFlightDetailPage extends StatefulWidget {
   final String routeCode;
   final String dateTime;
@@ -361,9 +299,6 @@ class _HistoryFlightDetailPageState extends State<HistoryFlightDetailPage> with 
   }
 }
 
-// ---------------------------------------------------------------------
-// Hotel
-// ---------------------------------------------------------------------
 class HistoryHotelDetailPage extends StatefulWidget {
   final String name;
   final String location;
@@ -372,23 +307,12 @@ class HistoryHotelDetailPage extends StatefulWidget {
   final String checkOut;
   final String bookingRef;
   final String status;
-  // Guest details captured at checkout (see BookingPaymentPage.
-  // _confirmPayment) — blank for a legacy booking made before these were
-  // stored.
   final String guestName;
   final String guestEmail;
   final String guestPhone;
   final String guestIdNumber;
   final String specialRequests;
-  // The `catalog_hotels` doc id this booking refers to — blank for a stay
-  // with no catalog link (a manually-typed hotel). No longer read by this
-  // page itself (the Review tab that used it is gone), kept since callers
-  // still pass it through.
   final String hotelId;
-  // The `users/{uid}/bookings` doc id this booking actually is — what
-  // document uploads attach to (see BookingRepository.setBookingDocument).
-  // Blank only for a legacy/placeholder call site, in which case uploads
-  // are disabled (see _BookingDocumentUploader.uploadDocument).
   final String bookingId;
   final Map<String, String> documents;
 
@@ -397,12 +321,6 @@ class HistoryHotelDetailPage extends StatefulWidget {
     required this.name,
     required this.location,
     required this.pricePerNight,
-    // These used to default to fake-looking fixed dates/reference
-    // ("12 Jun 2026" / "HTL0456") whenever the call site didn't pass real
-    // ones — which was always, since history_page.dart never had real
-    // values to pass. Now that BookingPaymentPage actually stores
-    // checkIn/checkOut/bookingRef, an honest "Not available" is correct
-    // for the rare legacy booking that still has none.
     this.checkIn = '',
     this.checkOut = '',
     this.bookingRef = '',
@@ -473,9 +391,6 @@ class _HistoryHotelDetailPageState extends State<HistoryHotelDetailPage> with _B
   }
 }
 
-// ---------------------------------------------------------------------
-// Insurance
-// ---------------------------------------------------------------------
 class HistoryInsuranceDetailPage extends StatefulWidget {
   final String planName;
   final String policyNumber;
@@ -485,10 +400,6 @@ class HistoryInsuranceDetailPage extends StatefulWidget {
   final String travellerName;
   final String bookingId;
   final Map<String, String> documents;
-  // The real `insurance_transactions` doc id this booking links back to
-  // (see InsuranceRepository.recordPurchase) — empty for a policy bought
-  // before this field existed, in which case the Claim/Refund buttons
-  // below are replaced with an explanation instead of a broken link.
   final String transactionId;
 
   const HistoryInsuranceDetailPage({

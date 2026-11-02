@@ -5,9 +5,6 @@ import '../../repositories/friends_repository.dart';
 import '../../theme.dart';
 import 'sub_page_scaffold.dart';
 
-// ---------------------------------------------------------------------
-// Blocked Users
-// ---------------------------------------------------------------------
 class BlockedUsersPage extends StatefulWidget {
   const BlockedUsersPage({super.key});
 

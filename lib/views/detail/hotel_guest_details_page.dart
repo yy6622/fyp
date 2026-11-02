@@ -10,15 +10,6 @@ import '../shared/nice_pickers.dart';
 import '../shared/phone_input_field.dart';
 import 'booking_payment_page.dart';
 
-// ---------------------------------------------------------------------
-// Guest details — step 1 of the hotel checkout flow (Guest Details ->
-// Payment), mirroring Insurance's own two-step purchase flow the same way
-// [FlightPassengerDetailsPage] does for flights. Collects what a real
-// hotel booking actually needs (full name, email, phone, a passport/ID
-// number, optional special requests) plus the room count and stay dates
-// — instead of just a guest name. Reached from [BookingBar] for a 'hotel'
-// booking.
-// ---------------------------------------------------------------------
 class HotelGuestDetailsPage extends StatefulWidget {
   final String itemTitle;
   final String itemSubtitle;
@@ -29,10 +20,6 @@ class HotelGuestDetailsPage extends StatefulWidget {
   final String bookingSubtitle;
   final String refId;
   final String tripId;
-  // Dates already chosen earlier in the flow (edited on the hotel's own
-  // detail page, before "Select Hotel" was even tapped) — seeds the Stay
-  // Dates fields and [controller] instead of starting blank every time,
-  // so a date picked there isn't silently thrown away on this page.
   final DateTime? initialCheckIn;
   final DateTime? initialCheckOut;
   final Future<void> Function(BookingConfirmation confirmation)? onPaid;
@@ -71,8 +58,6 @@ class _HotelGuestDetailsPageState extends State<HotelGuestDetailsPage> {
   final TextEditingController _checkInCtrl = TextEditingController();
   final TextEditingController _checkOutCtrl = TextEditingController();
 
-  // Who this stay is for, within the trip — kept for forMemberUids'
-  // FlightPassengerDetailsPage's equivalent fields.
   Trip? _trip;
   Set<String> _forMemberUids = {};
 
@@ -222,12 +207,6 @@ class _HotelGuestDetailsPageState extends State<HotelGuestDetailsPage> {
                         const SizedBox(height: 12),
                         niceDialogField(_idCtrl, 'Passport / ID Number', icon: Icons.badge_outlined),
                         niceDialogField(_requestsCtrl, 'Special Requests (optional)', icon: Icons.edit_note_outlined, maxLines: 3),
-                        // "Who is this for" picker removed per request — a
-                        // hotel stay booked on a group trip now always
-                        // applies to the whole trip (see _trip/_forMemberUids
-                        // above, still fetched so that default stays
-                        // correct) instead of letting the booker narrow it
-                        // down to specific members.
                       ],
                     ),
                   ),

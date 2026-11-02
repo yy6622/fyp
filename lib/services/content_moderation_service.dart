@@ -5,7 +5,6 @@ import 'package:http/http.dart' as http;
 
 import '../config/secrets.dart';
 
-/// Result of a [ContentModerationService.check] call.
 class ModerationResult {
   final bool flagged;
   final String reason;
@@ -14,33 +13,6 @@ class ModerationResult {
   static const ModerationResult clean = ModerationResult(flagged: false, reason: '');
 }
 
-/// Checks user-submitted text (currently: Community post titles/
-/// descriptions — see [CommunityRepository.createPost]) for profanity,
-/// hate speech, harassment or other content inappropriate for a public
-/// travel feed, BEFORE it goes live.
-///
-/// Uses the same free-tier Gemini Developer API key the AI Summarise/
-/// group-itinerary features call (generativelanguage.googleapis.com — a
-/// plain API key from Google AI Studio, no billing account) — asked, in
-/// plain language, to
-/// classify the text, rather than a dedicated paid moderation API
-/// (Perspective/Azure Content Moderator/etc. all exist, but either need
-/// their own signup+key or a billing account this project deliberately
-/// avoids after getting burned by one already). Multilingual for free, since Gemini
-/// reads Chinese/Malay/etc. profanity just as well as English, unlike a
-/// plain hardcoded bad-word list.
-///
-/// A flagged result does NOT block the post outright — see
-/// [CommunityRepository.createPost] — it's saved with `autoFlagged: true`
-/// and held out of the public feed until an admin approves or rejects it
-/// in admin/content-moderation.html, reusing the exact same
-/// "reported content" queue a human tapping "Report post" already feeds.
-/// A human report stays the backstop for anything this misses.
-///
-/// Fails OPEN, not closed: no key configured, a network error, a timeout,
-/// or a response this can't parse all just return [ModerationResult.clean]
-/// rather than holding back a real person's post over an infrastructure
-/// hiccup. This is a moderation *aid*, not a hard gate.
 class ContentModerationService {
   ContentModerationService._();
   static final ContentModerationService instance = ContentModerationService._();
@@ -48,11 +20,35 @@ class ContentModerationService {
   static const String _endpoint =
       'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent';
 
+  // Obvious profanity is caught locally first, so moderation still works when
+  // Gemini is offline, over quota, or returns an empty answer. Gemini then
+  // handles everything subtler (hate speech, harassment, other languages).
+  static final RegExp _localProfanity = RegExp(
+    r'\b(fuck\w*|shit\w*|bullshit|crap|bitch\w*|bastard\w*|asshole\w*|dickhead\w*|moron\w*|idiot\w*|'
+    r'retard\w*|cunt\w*|wanker\w*|motherfuck\w*|stfu|wtf|pukimak|puki|bodoh|sial|celaka|lancau)\b',
+    caseSensitive: false,
+  );
+  static const List<String> _localProfanityZh = ['他妈的', '操你', '傻逼', '傻b', '妈的', '去死', '王八蛋', '贱人', '白痴'];
+
+  /// Local word-list check (no network). Returns the matched word, or null.
+  static String? localMatch(String text) {
+    final m = _localProfanity.firstMatch(text);
+    if (m != null) return m.group(0);
+    for (final w in _localProfanityZh) {
+      if (text.contains(w)) return w;
+    }
+    return null;
+  }
+
   bool get isConfigured => geminiApiKey.isNotEmpty && geminiApiKey != 'YOUR_GEMINI_API_KEY_HERE';
 
   Future<ModerationResult> check(String text) async {
     final trimmed = text.trim();
     if (trimmed.isEmpty) return ModerationResult.clean;
+    final hit = localMatch(trimmed);
+    if (hit != null) {
+      return const ModerationResult(flagged: true, reason: 'Profanity');
+    }
     if (!isConfigured) {
       debugPrint('[ContentModerationService] skipped — no Gemini API key configured in secrets.dart (geminiApiKey)');
       return ModerationResult.clean;
@@ -79,15 +75,11 @@ class ContentModerationService {
                   ],
                 },
               ],
-              'generationConfig': {'temperature': 0, 'maxOutputTokens': 60},
+              'generationConfig': {'temperature': 0, 'maxOutputTokens': 1024},
             }),
           )
           .timeout(const Duration(seconds: 8));
       if (res.statusCode != 200) {
-        // Silent-to-the-UI by design
-        // (see class doc — never blocks a post), but a logged reason makes
-        // "why didn't this get flagged" diagnosable (a bad/restricted key,
-        // or HTTP 429 free-tier rate limiting).
         debugPrint('[ContentModerationService] HTTP ${res.statusCode} checking text: ${res.body}');
         return ModerationResult.clean;
       }
@@ -99,6 +91,9 @@ class ContentModerationService {
       }
       final parts = (candidates.first as Map)['content']?['parts'] as List?;
       final reply = (parts ?? const []).map((p) => (p as Map)['text'] as String? ?? '').join().trim();
+      if (reply.isEmpty) {
+        debugPrint('[ContentModerationService] empty reply from Gemini: ${res.body}');
+      }
       if (reply.toUpperCase().startsWith('FLAGGED')) {
         final colonIdx = reply.indexOf(':');
         final reason = (colonIdx != -1 && colonIdx + 1 < reply.length) ? reply.substring(colonIdx + 1).trim() : '';
@@ -106,7 +101,6 @@ class ContentModerationService {
       }
       return ModerationResult.clean;
     } catch (e) {
-      // Deliberately not cached/retried — see class doc, fails open.
       debugPrint('[ContentModerationService] error checking text: $e');
       return ModerationResult.clean;
     }

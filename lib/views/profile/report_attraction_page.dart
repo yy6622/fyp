@@ -5,13 +5,6 @@ import '../../controllers/profile_controller.dart';
 import '../../theme.dart';
 import 'sub_page_scaffold.dart';
 
-// ---------------------------------------------------------------------
-// Report New Attraction — real Firestore-backed submission (see
-// ReportAttractionController), with a real camera/gallery photo upload.
-// Previously tapping Submit never wrote anything at all: it just showed
-// a SnackBar and popped the page, and the button itself was mislabeled
-// "Export" (a leftover from somewhere else, not what this button does).
-// ---------------------------------------------------------------------
 class ReportAttractionPage extends StatefulWidget {
   const ReportAttractionPage({super.key});
 

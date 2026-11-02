@@ -5,10 +5,6 @@ import 'package:flutter/material.dart';
 
 import '../models/insurance_models.dart';
 
-/// Thrown by [InsuranceRepository.requestRefund] when the stored travel
-/// period rules the request out (already started/over) — distinct from a
-/// generic Exception so the UI can show the real reason rather than a
-/// bare "failed" message.
 class InsuranceEligibilityException implements Exception {
   final String message;
   const InsuranceEligibilityException(this.message);
@@ -16,18 +12,6 @@ class InsuranceEligibilityException implements Exception {
   String toString() => message;
 }
 
-/// Real Firestore-backed insurance catalogue. Plans are authored in the
-/// admin/partner web console (admin_web/ — see
-/// admin_web/partner/plans.html and admin_web/js/data.js's
-/// createPlan/updatePlan/deletePlan); this repository only ever reads
-/// them for the Flutter app.
-///
-/// Unlike [CatalogRepository]'s Explore catalogue, there is deliberately
-/// no client-side seeding here: firestore.rules restricts `insurance_plans`
-/// writes to a signed-in admin or the owning partner, so a rider's app
-/// could never write one anyway. A partner populates real plans through
-/// admin_web/partner/plans.html's own form — there is no demo seeder any
-/// more (the console used to ship one; it was removed).
 class InsuranceRepository {
   InsuranceRepository._();
   static final InsuranceRepository instance = InsuranceRepository._();
@@ -35,19 +19,40 @@ class InsuranceRepository {
   CollectionReference<Map<String, dynamic>> get _plans => FirebaseFirestore.instance.collection('insurance_plans');
   CollectionReference<Map<String, dynamic>> get _transactions =>
       FirebaseFirestore.instance.collection('insurance_transactions');
-  // Same collections the partner console's admin_web/js/data.js
-  // createClaim/createRefund write to and claim-detail.html/
-  // refund-detail.html read from — see firestore.rules' claims/{id} and
-  // refunds/{id} blocks for the access rules already written for them.
   CollectionReference<Map<String, dynamic>> get _claims => FirebaseFirestore.instance.collection('claims');
   CollectionReference<Map<String, dynamic>> get _refunds => FirebaseFirestore.instance.collection('refunds');
 
-  /// Every currently-published plan, live. A partner's 'draft' plans are
-  /// left out — those aren't ready for riders to see yet.
+  /// Active plans whose insurance partner is still approved. A partner the
+  /// admin suspended, rejected or blocked disappears from the app with all of
+  /// its plans (FR86); their already-sold policies are not affected.
   Stream<List<InsurancePlan>> watchPlans() {
-    return _plans.where('status', isEqualTo: 'active').snapshots().map(
-          (snap) => snap.docs.map(_fromDoc).toList(),
-        );
+    return _plans.where('status', isEqualTo: 'active').snapshots().asyncMap((snap) async {
+      final plans = snap.docs.map(_fromDoc).toList();
+      final hidden = await _partnersNotApproved(plans.map((p) => p.partnerId));
+      return plans.where((p) => !hidden.contains(p.partnerId)).toList();
+    });
+  }
+
+  /// Partner ids (from [partnerIds]) whose status is set and is not "approved".
+  Future<Set<String>> _partnersNotApproved(Iterable<String> partnerIds) async {
+    final ids = partnerIds.where((id) => id.isNotEmpty).toSet().toList();
+    final hidden = <String>{};
+    for (var i = 0; i < ids.length; i += 30) {
+      final chunk = ids.sublist(i, min(i + 30, ids.length));
+      try {
+        final snap = await FirebaseFirestore.instance
+            .collection('insurance_partners')
+            .where(FieldPath.documentId, whereIn: chunk)
+            .get();
+        for (final d in snap.docs) {
+          final status = (d.data()['status'] as String?)?.trim().toLowerCase();
+          if (status != null && status.isNotEmpty && status != 'approved') hidden.add(d.id);
+        }
+      } catch (_) {
+        // Partner status unavailable (e.g. offline): show the plans rather than none.
+      }
+    }
+    return hidden;
   }
 
   InsurancePlan _fromDoc(QueryDocumentSnapshot<Map<String, dynamic>> d) {
@@ -58,11 +63,6 @@ class InsuranceRepository {
     final coverage = (data['coverage'] as num?)?.toInt() ?? 0;
     final premium = (data['premium'] as num?)?.toDouble() ?? 0;
     final logoUrl = (data['providerLogoUrl'] as String?)?.trim();
-    // Partner-authored on plans.html's "Key coverage" / "Highlights"
-    // fields — a plan saved before those existed just has neither array
-    // in Firestore at all, which the ?? const [] below treats the same
-    // as a partner leaving them blank: hidden on the detail page, not
-    // padded out with the old fixed 5-item list.
     final coverageItems = ((data['coverageItems'] as List?) ?? const [])
         .whereType<Map>()
         .map((m) => InsuranceCoverageItem(
@@ -91,11 +91,6 @@ class InsuranceRepository {
     );
   }
 
-  /// Fallback for when a partner hasn't uploaded a real logo (or a plan
-  /// was saved before `providerLogoUrl` existed): the round badge on
-  /// [InsurancePlanCard]/[InsurancePlanTile] still needs *something* per
-  /// plan, so these are derived deterministically from the provider's
-  /// name, so the same provider always gets the same badge.
   String _logoTextFor(String providerName) {
     final words = providerName.trim().split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
     if (words.isEmpty) return '?';
@@ -127,20 +122,12 @@ class InsuranceRepository {
     return buf.toString();
   }
 
-  /// Records a real purchase so it shows up in the partner console's
-  /// Transactions list (admin_web/partner/transactions.html via
-  /// listTransactions) — same collection/shape the console itself writes
-  /// to for a manually-logged sale, just with `channel: 'Mobile App'` and
-  /// a real `buyerId` linking it back to the rider who bought it here.
   Future<String> recordPurchase({
     required InsurancePlan plan,
     required String buyerId,
     required String customerName,
     required String customerEmail,
     required double premium,
-    // The real period this policy covers (see TravellerDetailsController),
-    // stored so a later refund request can be checked against it instead
-    // of trusting whatever the rider claims at refund time.
     required DateTime travelStart,
     required DateTime travelEnd,
     String destination = '',
@@ -161,16 +148,9 @@ class InsuranceRepository {
       'channel': 'Mobile App',
       'createdAt': FieldValue.serverTimestamp(),
     });
-    // The new doc's id links this transaction back to the booking history
-    // row (BookingEntry.transactionId) and the trip's insurance card
-    // (TripInsurance.transactionId), so either entry point can later open
-    // the real Claim/Refund flow against this exact purchase.
     return doc.id;
   }
 
-  /// One real purchase, by id — used to pre-fill the Claim/Refund forms
-  /// with real stored values (never re-typed) and to check refund
-  /// eligibility against the real stored travel dates.
   Future<InsuranceTransaction?> getTransaction(String id) async {
     final doc = await _transactions.doc(id).get();
     if (!doc.exists) return null;
@@ -192,27 +172,12 @@ class InsuranceRepository {
     );
   }
 
-  /// `CLM-<year>-<5 digits>` / `RFD-<year>-<5 digits>` — same shape as the
-  /// partner console's own newClaimRef()/newRefundRef()
-  /// (admin_web/js/data.js), generated here instead since a rider-filed
-  /// claim/refund never goes through that JS helper. claim-detail.html/
-  /// refund-detail.html display this ref with no fallback, so it must
-  /// always be set.
   String _newRef(String prefix) {
     final year = DateTime.now().year;
     final n = 10000 + Random().nextInt(90000);
     return '$prefix-$year-$n';
   }
 
-  /// Files a real claim against a real past purchase — writes to the same
-  /// `claims` collection and shape the partner console's createClaim()
-  /// writes (see admin_web/js/data.js), so it shows up in the partner's
-  /// console exactly like a manually-logged one. [amount] is what the
-  /// rider is claiming for this incident (medical bill, baggage loss,
-  /// etc.) — a real figure they enter, validated as a positive number by
-  /// the caller (see FileClaimPage._submit), never fabricated here. The
-  /// partner reviews and approves/rejects every claim by hand regardless,
-  /// same as a manually-entered one.
   Future<String> fileClaim({
     required InsuranceTransaction transaction,
     required String category,
@@ -241,25 +206,9 @@ class InsuranceRepository {
       'createdAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
     });
-    // The human-readable ref (not the Firestore doc id) is what the rider
-    // sees — it's the same CLM-year-##### shown throughout the partner
-    // console, so a rider quoting it back to support actually means
-    // something there.
     return claimRef;
   }
 
-  /// Requests a refund for a real past purchase — only allowed strictly
-  /// before the stored travel period begins (the user's own requirement:
-  /// a refund makes sense before the trip, not mid-trip or after). A
-  /// transaction with no stored travel dates (bought before that field
-  /// existed) is let through rather than blocked outright — there's no
-  /// real date to check it against, and the partner still reviews every
-  /// request by hand on the console side, so this doesn't bypass any
-  /// real control.
-  ///
-  /// [amount] is always the real premium actually paid — a refund gives
-  /// back what was paid, not a rider-typed figure — so this repository
-  /// takes it from [transaction] itself rather than a parameter.
   Future<String> requestRefund({
     required InsuranceTransaction transaction,
     required String category,

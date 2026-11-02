@@ -5,9 +5,6 @@ import '../../theme.dart';
 import '../shared/nice_pickers.dart';
 import 'saved_item_picker_sheet.dart';
 
-// ---------------------------------------------------------------------
-// Create Vote
-// ---------------------------------------------------------------------
 class CreateVotePage extends StatefulWidget {
   final String tripId;
   const CreateVotePage({super.key, required this.tripId});
@@ -226,12 +223,6 @@ class _CreateVotePageState extends State<CreateVotePage> {
     );
   }
 
-  /// An option picked "From Saved" — shown as a small card (thumbnail,
-  /// name, subtitle, rating) instead of a plain text field, same idea as
-  /// the picker sheet's own rows and the Vote tab's option cards, so a
-  /// saved pick looks like the real listing it is from the moment it's
-  /// added, not just a name. Read-only (there's a real catalog item
-  /// behind it, nothing to type) — the only action is removing it.
   Widget _savedOptionCard(int index, VoteOptionDraft draft) {
     final item = draft.saved!;
     return Container(

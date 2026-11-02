@@ -6,15 +6,6 @@ import '../../theme.dart';
 import '../shared/contact_launcher.dart';
 import 'detail_widgets.dart';
 
-// ---------------------------------------------------------------------
-// Restaurant detail
-// ---------------------------------------------------------------------
-// Like attractions, restaurants don't have a purchase flow — there's no
-// table-reservation system in this app — so the bottom bar is a save
-// toggle instead of [BookingBar], same convention as
-// [DetailPageAttraction]. Saving is scoped to whichever trip the
-// restaurant was opened from (see CatalogRepository's class doc); when
-// there's no trip context (onToggleSave is null) the button is disabled.
 class DetailPageRestaurant extends StatefulWidget {
   final CatalogRestaurant restaurant;
   final bool saved;
@@ -37,12 +28,6 @@ class _DetailPageRestaurantState extends State<DetailPageRestaurant> {
   @override
   void initState() {
     super.initState();
-    // Personalization signal ("based on what you've looked at before",
-    // same idea as CommunityPostDetailPage's own recordView call) — one
-    // view, counted once per person per place (see
-    // CatalogRepository.recordRestaurantView's doc comment). Fire-and-forget:
-    // this never blocks or errors the detail page over an analytics/
-    // personalization write.
     final uid = AuthService.instance.currentUser?.uid;
     if (uid != null && uid.isNotEmpty) {
       CatalogRepository.instance.recordRestaurantView(widget.restaurant.id, uid, widget.restaurant.cuisineTags);
@@ -66,25 +51,14 @@ class _DetailPageRestaurantState extends State<DetailPageRestaurant> {
               child: SingleChildScrollView(
                 child: Column(
                   children: [
-                    // Restaurants never show a photo here at all — not even
-                    // DetailHeader's usual fallback icon box — see
-                    // explore_page.dart's restaurant cards for why.
                     DetailHeader(title: r.name, showHero: false),
                     Padding(
                       padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
                       child: Column(
-                        // Same fix as DetailPageAttraction: without this,
-                        // Column centers every child that doesn't already
-                        // fill the width (title, rating, "About"), which is
-                        // why this page used to look inconsistent with
-                        // Flight/Hotel's left-aligned layout.
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(r.name, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.navy)),
                           const SizedBox(height: 8),
-                          // Star sits before the rating number, matching how every
-                          // other detail page (Hotel, and now Attraction) shows a
-                          // rating — not floated off to the side of the title.
                           Row(
                             children: [
                               const Icon(Icons.star, size: 16, color: AppColors.orange),
@@ -93,9 +67,6 @@ class _DetailPageRestaurantState extends State<DetailPageRestaurant> {
                             ],
                           ),
                           const SizedBox(height: 8),
-                          // Each cuisine tag is its own chip — not one label joined
-                          // with a "•" dot — so they read as separate, scannable
-                          // tags (e.g. "Japanese" and "Ramen" side by side).
                           Wrap(spacing: 6, runSpacing: 6, children: r.cuisineTags.map(tagChip).toList()),
                           const SizedBox(height: 6),
                           Row(
@@ -111,9 +82,6 @@ class _DetailPageRestaurantState extends State<DetailPageRestaurant> {
                           const Text('About', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.navy)),
                           const SizedBox(height: 10),
                           Text(
-                            // See DetailPageAttraction's About text for why
-                            // this prefers a real description over the
-                            // generic cuisine sentence when one exists.
                             r.description.isNotEmpty
                                 ? r.description
                                 : 'A popular ${r.cuisineLabel.toLowerCase()} spot on this trip. Save it to your plan and check '

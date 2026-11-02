@@ -1,24 +1,11 @@
-// Finding a real place for a wish nobody named ("夜市", "massage", "a café") when neither the group's
-// saved list nor Voya's own place list (gazetteer + catalog_attractions / catalog_restaurants) has one:
-//
-//   1. catalog_places in Firestore: the OSM-derived place list the app already uses for Explore, plus
-//      every place found by step 2 on an earlier run (`needKeys` = ["TH:night market", ...]).
-//   2. OpenStreetMap (Nominatim to find the city, Overpass for places of that kind around it). What
-//      is found is written to catalog_places, so the next trip to that city finds it in step 1.
-// The place picked is also copied to catalog_attractions / catalog_restaurants for the trip's destination,
-// so the plan shows it as a rich activity card, like a saved place.
-//
-// Never fails AI Summarise: any error, timeout or empty answer just returns [] and the planner falls
-// back to a time block ("Night market - pick a place"). No AI model involved.
 
 const USER_AGENT = "Voya-FYP/1.0 (group trip planner; contact via app)";
 const OVERPASS = "https://overpass-api.de/api/interpreter";
 const NOMINATIM = "https://nominatim.openstreetmap.org/search";
 const RADIUS_M = 12000;              // around the city centre
-const KEEP = 5;                      // places saved per wish per city
+const KEEP = 5;
 const TIMEOUT_MS = 9000;
 
-// Overpass selectors per wish (needs.js `kind`). Every selector also needs a name.
 const OSM_QUERY = {
   "night market": ['["amenity"="marketplace"]["name"~"night|夜市|pasar malam|ตลาดนัด|야시장|chợ đêm|jodd|ratchada",i]',
     '["amenity"="marketplace"]["opening_hours"~"(1[7-9]|2[0-3]):[0-9]{2}-(2[0-3]|0[0-2]):"]'],
@@ -66,7 +53,6 @@ async function getJson(url, init = {}) {
   }
 }
 
-/** Overpass QL for one wish around a point. */
 function overpassQuery(kind, lat, lon, country) {
   let sel = OSM_QUERY[kind] || [];
   if (kind === "local food") {
@@ -78,7 +64,6 @@ function overpassQuery(kind, lat, lon, country) {
   return `[out:json][timeout:8];(${parts});out center tags 40;`;
 }
 
-/** Overpass elements -> catalog_places rows (best first: well-known, then close to the centre). */
 function rowsFromOverpass(elements, kind, { lat, lon, country, city }) {
   const seen = new Set();
   const rows = [];
@@ -115,7 +100,6 @@ function rowsFromOverpass(elements, kind, { lat, lon, country, city }) {
   return rows.slice(0, KEEP);
 }
 
-/** Planner place (planner/places.js shape) from a catalog_places row. */
 function toPlace(d, kind) {
   const name = (d.nameEn && d.nameEn.trim()) || d.name;
   return {
@@ -128,12 +112,6 @@ function toPlace(d, kind) {
 
 const titleCase = (s) => String(s || "").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 
-/**
- * The app shows an activity as a rich card when its name matches a catalog_attractions /
- * catalog_restaurants document for the trip's destination (GroupTripController). So a place found in
- * catalog_places / OpenStreetMap is also written there, the same way the app's Explore tab copies
- * catalog_places rows (doc id "place_<catalog_places id>", destinationQuery = destination in lower case).
- */
 async function mirrorToCatalog(db, rows, destination, kind) {
   const key = String(destination || "").trim().toLowerCase();
   if (!key || !rows.length) return;
@@ -156,11 +134,6 @@ async function mirrorToCatalog(db, rows, destination, kind) {
   await batch.commit().catch((err) => console.error("catalog mirror failed", err.message));
 }
 
-/**
- * Makes the `lookupNeed(need)` function the planner calls (itinerary_engine.js). One per request:
- * the city is geocoded once, and at most `maxLookups` wishes go to OpenStreetMap.
- * db: Firestore (Admin SDK)   destination: "Bangkok"   fetchJson: injectable for tests
- */
 function makeNeedLookup({ db, destination, fetchJson = getJson, maxLookups = 4, now = () => new Date() }) {
   const tripDestination = String(destination || "").trim();
   let cityP = null;
@@ -182,13 +155,11 @@ function makeNeedLookup({ db, destination, fetchJson = getJson, maxLookups = 4, 
     return cityP;
   };
 
-  /** need: an entry of needs.js NEEDS; cityName: the trip's city as the planner knows it ("Bangkok, Thailand") */
   return async function lookupNeed(need, cityName) {
     try {
       const c = await city(cityName);
       if (!c || !c.country) return [];
       const key = `${c.country}:${need.kind}`;
-      // 1. catalog_places: rows found for this wish before, or OSM-scraped rows of that kind nearby
       if (!countryRows) {
         countryRows = db.collection("catalog_places").where("country", "==", c.country).limit(800).get()
           .then((s) => s.docs.map((d) => ({ ...d.data(), _id: d.id }))).catch(() => []);
@@ -202,12 +173,11 @@ function makeNeedLookup({ db, destination, fetchJson = getJson, maxLookups = 4, 
         return top.map((d) => toPlace(d, need.kind));
       }
 
-      // 2. OpenStreetMap, then remember the result in catalog_places
       if (osmCalls >= maxLookups) return [];
       const q = overpassQuery(need.kind, c.lat, c.lon, c.country);
       if (!q) return [];
       osmCalls++;
-      if (osmCalls > 1) await sleep(300);          // be polite to the public Overpass server
+      if (osmCalls > 1) await sleep(300);
       const r = await fetchJson(OVERPASS, { method: "POST", body: `data=${encodeURIComponent(q)}`,
         headers: { "Content-Type": "application/x-www-form-urlencoded" } });
       const rows = rowsFromOverpass(r && r.elements, need.kind, c);

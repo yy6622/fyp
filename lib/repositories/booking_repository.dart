@@ -1,34 +1,15 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-/// A single row of purchase/booking history — mirrors what [HistoryPage]
-/// shows for one row (title/subtitle/trailing), plus which tab it belongs
-/// to.
 class BookingEntry {
   final String id;
   final String type; // 'flight' | 'hotel' | 'insurance'
   final String title;
   final String subtitle;
   final String trailing;
-  // Links this booking back to its catalog document (e.g. `catalog_hotels`
-  // doc id) so a past booking's detail page can show real reviews for the
-  // actual place — empty when the booking has no such catalog target (a
-  // manually-typed stay, or a type with no reviewable catalog at all).
   final String refId;
-  // Uploaded documents for this booking — docType (e.g. 'Booking
-  // Confirmation') -> real Firebase Storage download URL (see
-  // BookingDocumentService). Empty until someone actually uploads one
-  // from History's Documents tab.
   final Map<String, String> documents;
-  // The real payment/booking reference (Stripe PaymentIntent id for now)
-  // and status — previously only ever written for Insurance; Flight and
-  // Hotel's payment flows now pass their real values here too instead of
-  // leaving every past booking's detail page to show a hardcoded fallback.
   final String bookingRef;
   final String status;
-  // Guest/traveller + stay details, captured at the moment of payment so
-  // History's detail pages can show what was actually booked instead of
-  // nothing at all (these used to be collected on the guest-details page
-  // and then thrown away — never written to `users/{uid}/bookings`).
   final String guestName;
   final String guestEmail;
   final String guestPhone;
@@ -36,18 +17,7 @@ class BookingEntry {
   final String specialRequests;
   final String checkIn;
   final String checkOut;
-  // Real coverage text for an insurance booking (InsurancePlan.coverage at
-  // the moment of purchase) — empty for a flight/hotel booking, or an
-  // insurance one bought before this field existed, in which case
-  // HistoryInsuranceDetailPage falls back to its own generic default
-  // rather than this ever being filled with something invented.
   final String coverage;
-  // Links an insurance booking back to its real `insurance_transactions`
-  // doc (the id InsuranceRepository.recordPurchase returns) so History's
-  // insurance detail page can file a real claim/refund against the
-  // actual purchase instead of guessing which transaction it was. Empty
-  // for a flight/hotel booking, or an insurance one bought before this
-  // field existed.
   final String transactionId;
   const BookingEntry({
     required this.id,
@@ -71,9 +41,6 @@ class BookingEntry {
   });
 }
 
-/// Reads/writes `users/{uid}/bookings` — real purchase history. Only the
-/// Insurance purchase flow writes to this for now (Flight/Hotel history
-/// still shows placeholder rows until those booking flows exist).
 class BookingRepository {
   BookingRepository._();
   static final BookingRepository instance = BookingRepository._();
@@ -107,9 +74,6 @@ class BookingRepository {
         .toList());
   }
 
-  /// Attaches an uploaded document's download URL to a past booking —
-  /// same idea as TripRepository.setFlightDocument, for a History entry
-  /// instead of a trip's own flight.
   Future<void> setBookingDocument(String uid, String bookingId, String docType, String url) {
     return _bookingsOf(uid).doc(bookingId).update({'documents.$docType': url});
   }

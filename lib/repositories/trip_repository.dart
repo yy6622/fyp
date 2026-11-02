@@ -5,16 +5,10 @@ import '../models/booking_details.dart';
 import '../models/day_plan_models.dart';
 import 'notifications_repository.dart';
 
-/// Thrown by [TripRepository.joinByInviteCode] for a blank/unparseable
-/// invite link or code.
 class InviteCodeInvalid implements Exception {}
 
-/// Thrown by [TripRepository.joinByInviteCode] when the code doesn't
-/// match a real, joinable trip.
 class InviteTripNotFound implements Exception {}
 
-/// Maps a short string key (stored in Firestore, since [IconData] can't be)
-/// to the icon shown for a trip activity.
 const Map<String, IconData> activityIcons = {
   'flight': Icons.flight_land,
   'hotel': Icons.hotel_outlined,
@@ -33,61 +27,17 @@ String iconKeyFor(IconData icon) {
 
 IconData iconForKey(String key) => activityIcons[key] ?? Icons.local_activity_outlined;
 
-/// One flight kept on a trip (`trips/{tripId}.flights`) — either typed in
-/// by hand (Add Flight dialog) or added from a real Stripe purchase/saved
-/// search result/booking history pick. [id] is a unique key (generated
-/// once, when the entry is first added) so a single array element can be
-/// found again later to remove it or attach a document to it — Firestore
-/// arrays have no built-in per-item id, so this is ours.
 class TripFlight {
   final String id;
   final String airline, flightNumber, routeCode, routeCities, dateTime, terminal, bookingRef, status;
-  // The flight's real arrival date + time ("5 June 2026 14:35"), same
-  // shape as [dateTime] (which is departure) — added so the AI
-  // itinerary assistant (see functions/itinerary.js's LOGISTICS section)
-  // can avoid suggesting anything on day 1 before the flight actually
-  // lands, instead of guessing. Blank for a manually-typed flight, or
-  // one booked before this existed.
   final String arrivalTime;
-  // Real exact timestamps (DateTime.toIso8601String(), no forced UTC
-  // conversion so this stays the destination's plain wall-clock time, same
-  // "no timezone concept" convention as every other time in this app) —
-  // only ever set when this flight was booked straight from a live Duffel
-  // search result (see explore_page.dart's _flightDetailFor, which has the
-  // real DateTime on hand; a flight added from Saved or typed in by hand
-  // has no such DateTime, so these stay blank). [dateTime]/[arrivalTime]
-  // above are display strings shown to a person (or pasted into the AI
-  // prompt as text); these are what functions/logistics.js uses to do
-  // actual time arithmetic (is this before/after that), which a free-text
-  // display string can't be trusted to parse back out correctly.
   final String departureAtIso;
   final String arrivalAtIso;
-  // Passenger full names collected at checkout (BookingPaymentPage) — empty
-  // for a manually-typed flight, which never went through a checkout step.
-  // Kept alongside [passengerDetails] below (rather than derived from it)
-  // so a manually-typed flight that only has bare names still displays
-  // fine without needing a full PassengerDetail per name.
   final List<String> passengers;
-  // The full real-world booking record per passenger (DOB, nationality,
-  // passport number + expiry) collected on FlightPassengerDetailsPage —
-  // empty for a manually-typed flight or any flight booked before this
-  // was added.
   final List<PassengerDetail> passengerDetails;
-  // Contact details for the whole booking, collected once alongside the
-  // passengers above.
   final String contactEmail;
   final String contactPhone;
-  // Uploaded travel documents for this flight — docType (e.g. 'E-Ticket')
-  // -> real Firebase Storage download URL. Empty until someone actually
-  // uploads one from PlanFlightDetailPage's Documents tab.
   final Map<String, String> documents;
-  // Which of the trip's members this flight is actually for — picked on
-  // FlightPassengerDetailsPage at checkout (see MemberSelectSection) when
-  // the trip has more than one member, so a group trip's Plan shows who a
-  // booking applies to instead of leaving it ambiguous whether it was for
-  // the whole group or just whoever paid. Empty means "not set" (a solo
-  // trip, or a flight added before this existed) — PlanFlightDetailPage
-  // treats that the same as "everyone".
   final List<String> forMemberUids;
   const TripFlight({
     this.id = '',
@@ -155,37 +105,18 @@ class TripFlight {
       );
 }
 
-/// One hotel stay kept on a trip (`trips/{tripId}.hotelStays`) — see
-/// [TripFlight]'s doc comment for why it carries an [id].
 class TripHotelStay {
   final String id;
   final String name, location, checkIn, checkOut;
-  // The name booked under, collected at checkout — blank for a
-  // manually-typed stay (same idea as [TripFlight.passengers]).
   final String guestName;
-  // The rest of the real-world guest record collected on
-  // HotelGuestDetailsPage — blank for a manually-typed stay or any stay
-  // booked before this was added.
   final String guestEmail;
   final String guestPhone;
   final String guestIdNumber;
   final String specialRequests;
-  // Added alongside Flight's equivalent fields so a Plan hotel stay can
-  // show a real booking reference/status (rather than none at all) and
-  // have a Documents tab (setHotelDocument) and a Review tab (refId) —
-  // previously missing entirely, which is why PlanHotelDetailPage had no
-  // Guests/Documents tabs the way PlanFlightDetailPage does.
   final String bookingRef;
   final String status;
-  // The `catalog_hotels` doc id this stay was booked from — blank for a
-  // manually-typed stay. Lets the Plan viewer show real reviews, same as
-  // HistoryHotelDetailPage's hotelId.
   final String refId;
-  // Uploaded documents for this stay — docType -> Firebase Storage URL
-  // (see TripRepository.setHotelDocument), same idea as TripFlight.documents.
   final Map<String, String> documents;
-  // Which of the trip's members this stay is for — see
-  // [TripFlight.forMemberUids]'s doc comment, same idea here.
   final List<String> forMemberUids;
   const TripHotelStay({
     this.id = '',
@@ -242,20 +173,11 @@ class TripHotelStay {
       );
 }
 
-/// The travel insurance plan bought for a trip (`trips/{tripId}.insurance`)
-/// — a single denormalized snapshot of the [InsurancePlan] + policy number
-/// picked at purchase time, same idea as [TripFlight]/[TripHotelStay].
-/// Null on [Trip] until someone actually buys a plan for this trip.
 class TripInsurance {
   final String planName;
   final String coverage;
   final String price;
   final String policyNumber;
-  // Links back to the real `insurance_transactions` doc (the id
-  // InsuranceRepository.recordPurchase returns) so Group Trip's insurance
-  // card can open the same real Claim/Refund flow History's insurance
-  // detail page does, against the actual purchase — empty for a trip
-  // whose insurance was bought before this field existed.
   final String transactionId;
   const TripInsurance({
     required this.planName,
@@ -282,8 +204,6 @@ class TripInsurance {
       );
 }
 
-/// A group trip — `trips/{tripId}`. Backs the Plan / Group Trip / Group Info
-/// / Group Setting screens.
 class Trip {
   final String id;
   final String name;
@@ -293,10 +213,6 @@ class Trip {
   final DateTime? endDate;
   final double budgetPerPerson;
   final List<String> interests;
-  /// The three extra "preferences" fields alongside budget/interests —
-  /// edited together on [TravelPreferencesPage] (reached from Group
-  /// Setting). Empty string means "not set yet", shown as a placeholder
-  /// rather than a fake default.
   final String travelStyle;
   final String accommodation;
   final String foodPreference;
@@ -304,50 +220,15 @@ class Trip {
   final List<String> memberIds;
   final Map<String, String> memberNames;
   final String about;
-  // Per-member chat preferences — `{uid: value}`. Used to be single flat
-  // fields shared by the whole trip doc, which meant one member flipping
-  // "Pin Chat" (or changing the notification level) silently did the same
-  // for every OTHER member too. [pinChatFor]/[notificationOptionFor] read
-  // the signed-in person's own entry.
   final Map<String, bool> pinChat;
   final bool realTimeLocation;
   final Map<String, String> notificationOption;
   final DateTime? createdAt;
-  /// When this trip last had real activity (a plan/day edit, a vote cast,
-  /// an expense added, a chat message) — bumped by [TripRepository] at
-  /// each of those write points. Falls back to [createdAt] in [fromDoc] so
-  /// a trip written before this field existed still gets a sensible value
-  /// instead of null. Used by the Plan tab to decide when a group has gone
-  /// quiet long enough to fold into "Past Plans".
   final DateTime? lastActivityAt;
-  /// When the itinerary (day/activity) content last changed — a NARROWER
-  /// timestamp than [lastActivityAt] (which also counts votes/expenses/
-  /// chat), bumped only by [TripRepository.addActivity]/[removeActivity]/
-  /// [updateActivityTime]. Paired with [planSeenAt] to decide whether the
-  /// Plan tab's "Plan Updated" tag should show for the signed-in user —
-  /// see [planUnseenFor].
   final DateTime? planUpdatedAt;
-  /// Per-member "I've opened the Plan tab since [planUpdatedAt]" marker —
-  /// `{uid: lastOpenedAt}`, written by [TripRepository.markPlanSeen]
-  /// (called whenever [GroupTripController] switches to [GroupTab.plan]).
-  /// Whoever makes a plan edit has that same write also mark themselves
-  /// as having seen it (see [TripRepository.addActivity] etc.), so the
-  /// tag only ever appears for members who didn't make the change AND
-  /// haven't opened the tab since.
   final Map<String, DateTime> planSeenAt;
-  /// Same idea as [planUpdatedAt], but for the expenses subcollection —
-  /// bumped by [TripRepository.addExpense]/[updateExpense]/
-  /// [setParticipantPaid].
   final DateTime? expensesUpdatedAt;
-  /// Same idea as [planSeenAt], but for the Expenses tab.
   final Map<String, DateTime> expensesSeenAt;
-  /// Per-member unread chat-message count — `{uid: count}`, incremented
-  /// for every OTHER member each time [sendMessage] writes a message, and
-  /// zeroed for [uid] by [markChatSeen] (called whenever
-  /// [GroupTripController] switches to [GroupTab.chat]). Drives the red
-  /// number badge on the Plan tab's group card (`PlanGroup.unread`) —
-  /// that badge used to be hardcoded to 0 for every trip, so it could
-  /// never show anything no matter how many unread messages there were.
   final Map<String, int> unreadCounts;
   final List<DayPlan> days;
   final List<TripFlight> flights;
@@ -386,40 +267,14 @@ class Trip {
     this.insurance,
   });
 
-  /// True once the trip's own dates are over AND more than 30 days have
-  /// passed since [lastActivityAt] (or [createdAt] if that's somehow
-  /// still null too) — i.e. the group has gone quiet long enough to fold
-  /// into the Plan tab's "Past Plans" section. Both conditions matter: a
-  /// trip that's still upcoming shouldn't fold away just because nobody's
-  /// touched it in a month (it's not "past" yet, there's nothing to do
-  /// until closer to the date), and a trip whose dates just ended but is
-  /// still being actively wrapped up (settling expenses, chatting) should
-  /// stay visible until that activity actually quiets down too.
-  ///
-  /// A trip with no [endDate] (shouldn't happen — every trip is created
-  /// with one) or no activity timestamp at all is treated as NOT
-  /// inactive, so a data gap never silently hides a trip from its own
-  /// members.
   bool get isInactive {
     final end = endDate;
-    // [endDate] is stored as a date-only midnight timestamp (see
-    // create_plan_wizard.dart / nice_pickers.dart's date pickers), so
-    // comparing against it directly would call the trip "over" the
-    // instant its last day begins, while that day is still ongoing.
-    // Comparing against the start of the NEXT day instead means the
-    // trip only counts as past once its last day has fully elapsed.
     if (end == null || !DateTime.now().isAfter(end.add(const Duration(days: 1)))) return false;
     final last = lastActivityAt ?? createdAt;
     if (last == null) return false;
     return DateTime.now().difference(last) > const Duration(days: 30);
   }
 
-  /// True when [uid] should see the Plan tab's "Plan Updated" tag for
-  /// this trip — there's been a real itinerary edit AND [uid] either
-  /// hasn't opened the Plan tab since, or never has. Whoever made the
-  /// edit has their own [planSeenAt] entry bumped to the same write (see
-  /// [TripRepository.addActivity] etc.), so this is naturally false for
-  /// the person who just made the change themselves.
   bool planUnseenFor(String uid) {
     final updated = planUpdatedAt;
     if (updated == null) return false;
@@ -427,8 +282,6 @@ class Trip {
     return seen == null || updated.isAfter(seen);
   }
 
-  /// Same idea as [planUnseenFor], for the Expenses tab / "Expenses
-  /// Updated" tag.
   bool expensesUnseenFor(String uid) {
     final updated = expensesUpdatedAt;
     if (updated == null) return false;
@@ -436,9 +289,6 @@ class Trip {
     return seen == null || updated.isAfter(seen);
   }
 
-  /// [uid]'s own Pin Chat / Notification preference for this trip — see
-  /// [pinChat]'s doc comment on why these are per-member maps rather than
-  /// single shared fields.
   bool pinChatFor(String uid) => pinChat[uid] ?? false;
   String notificationOptionFor(String uid) => notificationOption[uid] ?? 'All Messages';
 
@@ -447,27 +297,18 @@ class Trip {
     return '$dateOnlyLabel  ·  $nightsLabel';
   }
 
-  /// Just the date-range half of [dateRangeLabel] — split out so a narrow
-  /// card (see HomePage's "Your Next Adventure") can put the "X days Y
-  /// nights" part on its own line instead of squeezing both onto one line
-  /// and losing the nights count to the ellipsis.
   String get dateOnlyLabel {
     if (startDate == null || endDate == null) return '';
     String fmt(DateTime d) => '${d.day} ${_month(d.month)} ${d.year}';
     return '${fmt(startDate!)} - ${fmt(endDate!)}';
   }
 
-  /// Just the "X days Y nights" half of [dateRangeLabel].
   String get nightsLabel {
     if (startDate == null || endDate == null) return '';
     final nights = endDate!.difference(startDate!).inDays;
     return '${nights + 1} days $nights night${nights == 1 ? '' : 's'}';
   }
 
-  /// A short "Oct 2026"-style label — for tight spaces (the Plan tab's
-  /// small voting-card corner badge) where the full [dateRangeLabel]
-  /// ("23 Sep 2026 - 27 Sep 2026  ·  5 days 4 nights") is too long and
-  /// spills out past the badge/card.
   String get shortDateLabel {
     if (startDate == null) return '';
     return '${_month(startDate!.month)} ${startDate!.year}';
@@ -505,10 +346,6 @@ class Trip {
     'December',
   ];
 
-  /// The calendar date for day [dayNumber] (1-indexed, matching
-  /// [DayPlan.day]), spelled out in full — e.g. "12 June 2026" — for the
-  /// Day tab's header. Falls back to null when the trip has no start date
-  /// yet (shouldn't normally happen once a trip is created).
   DateTime? dateForDay(int dayNumber) => startDate?.add(Duration(days: dayNumber - 1));
 
   String fullDateLabelForDay(int dayNumber) {
@@ -522,9 +359,6 @@ class Trip {
     final memberIds = List<String>.from(data['memberIds'] as List? ?? const []);
     final memberNames = Map<String, String>.from(
         (data['memberNames'] as Map?)?.map((k, v) => MapEntry(k.toString(), v.toString())) ?? const {});
-    // {uid: Timestamp} map fields (planSeenAt/expensesSeenAt) -> {uid: DateTime} —
-    // a value could theoretically still be mid-write as a server-timestamp
-    // sentinel on a snapshot from the local cache, hence the `is Timestamp` guard.
     Map<String, DateTime> timestampMap(dynamic raw) {
       final map = raw is Map ? raw : const {};
       final out = <String, DateTime>{};
@@ -539,9 +373,6 @@ class Trip {
     final days = dayKeys.map((key) {
       final d = Map<String, dynamic>.from(daysRaw[key] as Map);
       final itemsRaw = Map<String, dynamic>.from(d['items'] as Map? ?? const {});
-      // Sorted by itemId first just to make the *input* to the time-sort
-      // below deterministic (so two items sharing an identical time always
-      // land in the same order), not because itemId order means anything.
       final itemIds = itemsRaw.keys.toList()..sort();
       final items = itemIds.map((itemId) {
         final it = Map<String, dynamic>.from(itemsRaw[itemId] as Map);
@@ -558,15 +389,6 @@ class Trip {
           forMemberUids: List<String>.from(it['forMemberUids'] as List? ?? const []),
         );
       }).toList()
-        // Always chronological (morning -> night) regardless of how these
-        // items got here - a manual add, an applied AI Summarise change, or
-        // an applied Optimise re-time all just write a new `time` onto an
-        // item without reordering the Firestore map, so without this sort
-        // the list stayed in whatever order the items happened to be
-        // added/keyed in. "HH:mm" (zero-padded 24h, enforced wherever a
-        // time is written) sorts correctly as a plain string compare. Ties
-        // (rare - the model or a manual add can repeat a time) fall back to
-        // itemId so the order is fully deterministic either way.
         ..sort((a, b) {
           final byTime = a.time.compareTo(b.time);
           return byTime != 0 ? byTime : a.id.compareTo(b.id);
@@ -596,10 +418,6 @@ class Trip {
       memberIds: memberIds,
       memberNames: memberNames,
       about: (data['about'] as String?) ?? '',
-      // Both the new per-member map shape and, defensively, a still-bool
-      // value left over from a trip written before this change (so an
-      // old trip doc doesn't crash on read — it just starts with nobody
-      // having pinned yet, which is the same as before).
       pinChat: data['pinChat'] is Map
           ? Map<String, bool>.from((data['pinChat'] as Map).map((k, v) => MapEntry(k.toString(), v == true)))
           : const {},
@@ -628,7 +446,6 @@ class Trip {
   }
 }
 
-/// A single vote/poll attached to a trip — `trips/{tripId}/votes/{voteId}`.
 class VoteOption {
   final String id;
   final String label;
@@ -644,11 +461,6 @@ class TripVote {
   final bool allowMultipleChoice;
   final List<VoteOption> options;
   final DateTime? createdAt;
-  /// When this poll closes — optional (null means "open indefinitely",
-  /// the original behaviour). Past this moment [VoteTab] stops accepting
-  /// new taps on an option, same as every other deadline in this app
-  /// (never enforced server-side; see firestore.rules' general
-  /// member-trust model for trips).
   final DateTime? deadline;
   const TripVote({
     required this.id,
@@ -665,9 +477,6 @@ class TripVote {
 
   int get totalVoters => options.expand((o) => o.votedBy).toSet().length;
 
-  /// Every member who has voted on at least one option, deduplicated —
-  /// e.g. for a Plan Home voting-card's avatar stack (who's voted so far),
-  /// as opposed to [leading]'s option-specific list.
   List<String> get voterUids => options.expand((o) => o.votedBy).toSet().toList();
 
   VoteOption? get leading =>
@@ -696,7 +505,6 @@ class TripVote {
   }
 }
 
-/// One participant's share of a [TripExpense].
 class ExpenseParticipant {
   final String uid;
   final String name;
@@ -705,27 +513,15 @@ class ExpenseParticipant {
   const ExpenseParticipant({required this.uid, required this.name, required this.share, required this.paid});
 }
 
-/// What an expense is called in lists and headings. There is no separate title field in the
-/// Add Expenses form any more: the note describes it (older expenses still have a title).
 String expenseLabel(TripExpense e) {
   if (e.title.trim().isNotEmpty) return e.title.trim();
   if (e.note.trim().isNotEmpty) return e.note.trim();
   return e.category;
 }
 
-/// Shared-Expense Distribution Algorithm (FYP documentation).
-///
-/// Every amount is converted to the smallest currency unit (cents) before
-/// any division happens (step 1), so the shares that come out always sum
-/// back to exactly the original amount — plain `double` division does not
-/// have that guarantee (e.g. RM10.00 / 3 rounded to 2dp per person gives
-/// RM3.33 x 3 = RM9.99, one cent short). [_expenseToCents]/[_expenseFromCents]
-/// are the conversion; everything below only ever divides in cents.
 int _expenseToCents(double amount) => (amount * 100).round();
 double _expenseFromCents(int cents) => cents / 100.0;
 
-/// Step 2: validates totalAmount is positive and at least one member/uid
-/// is present. Throws [ArgumentError] (the algorithm's "return an error").
 void _validateExpenseSplitInputs(double totalAmount, int memberCount) {
   if (totalAmount <= 0) {
     throw ArgumentError('totalAmount must be positive.');
@@ -735,11 +531,6 @@ void _validateExpenseSplitInputs(double totalAmount, int memberCount) {
   }
 }
 
-/// Step 3 — EQUAL split: baseShare = floor(totalAmount / memberCount),
-/// remainder = totalAmount mod memberCount (both in cents); every member
-/// gets baseShare, and the first `remainder` members (in [memberUids]'s
-/// order) get one extra cent each, so the shares sum to exactly
-/// totalAmount with nothing lost or gained to rounding.
 Map<String, double> splitExpenseEqual(double totalAmount, List<String> memberUids) {
   _validateExpenseSplitInputs(totalAmount, memberUids.length);
   final totalCents = _expenseToCents(totalAmount);
@@ -754,11 +545,6 @@ Map<String, double> splitExpenseEqual(double totalAmount, List<String> memberUid
   return shares;
 }
 
-/// Step 4 — CUSTOM split: validates every share is non-negative and that
-/// the shares sum exactly to totalAmount (both checked in cents, so a
-/// display-rounded input like RM3.33 + RM3.33 + RM3.34 = RM10.00 still
-/// passes), then returns the confirmed shares unchanged. Throws
-/// [ArgumentError] on either failed check.
 Map<String, double> splitExpenseCustom(double totalAmount, Map<String, double> customShares) {
   _validateExpenseSplitInputs(totalAmount, customShares.length);
   final totalCents = _expenseToCents(totalAmount);
@@ -777,13 +563,6 @@ Map<String, double> splitExpenseCustom(double totalAmount, Map<String, double> c
   return Map.of(customShares);
 }
 
-/// This app's CUSTOM split is itemized (an uploaded receipt's line items,
-/// each assigned to whichever members shared that item) rather than one
-/// manually-typed share per member — so each item is its own EQUAL split
-/// (step 3's rule, applied per item) among its assignees, and a member's
-/// final share is the sum of what they owe across every item. Validates
-/// every item has at least one assignee first (an unassigned item's cost
-/// would otherwise vanish from the total instead of landing on anyone).
 Map<String, double> splitExpenseItemized(List<({double price, Set<String> assigneeUids})> items) {
   if (items.isEmpty) {
     throw ArgumentError('At least one item is required.');
@@ -806,7 +585,6 @@ Map<String, double> splitExpenseItemized(List<({double price, Set<String> assign
   return totalsCents.map((uid, cents) => MapEntry(uid, _expenseFromCents(cents)));
 }
 
-/// One shared expense — `trips/{tripId}/expenses/{expenseId}`.
 class TripExpense {
   final String id;
   final String tripId;
@@ -820,9 +598,6 @@ class TripExpense {
   final String paidByName;
   final DateTime? date;
   final List<ExpenseParticipant> participants;
-  // Download URL of the receipt photo, when this expense was added via
-  // "Upload Receipt" (see ReceiptService) — blank for a manually-entered
-  // expense with no photo.
   final String receiptImageUrl;
 
   const TripExpense({
@@ -876,7 +651,6 @@ class TripExpense {
   }
 }
 
-/// One chat message — `trips/{tripId}/messages/{messageId}`.
 class TripMessage {
   final String id;
   final String senderId;
@@ -884,11 +658,6 @@ class TripMessage {
   final String text;
   final DateTime? createdAt;
 
-  /// 'text' (default — every message before this field existed, and
-  /// every plain typed message since), 'image' (a Camera/Gallery
-  /// attachment — [text] is empty, [imageUrl] holds the uploaded photo),
-  /// or 'location' (a shared-location attachment — [text] is empty,
-  /// [lat]/[lng] hold the coordinates).
   final String type;
   final String imageUrl;
   final double? lat;
@@ -925,8 +694,6 @@ class TripMessage {
   }
 }
 
-/// Reads/writes the `trips` collection and its `votes` / `expenses` /
-/// `messages` subcollections.
 class TripRepository {
   TripRepository._();
   static final TripRepository instance = TripRepository._();
@@ -949,37 +716,14 @@ class TripRepository {
     return _trips.doc(tripId).snapshots().map((doc) => doc.exists ? Trip.fromDoc(doc, myUid: myUid) : null);
   }
 
-  /// One-shot fetch of a single trip (unlike [watchTrip], no live stream) —
-  /// for a spot where only the current value is needed once, such as
-  /// pulling a trip's destination into an insurance purchase record (see
-  /// PaymentMethodPage._confirmPayment).
   Future<Trip?> getTrip(String tripId, String myUid) async {
     final doc = await _trips.doc(tripId).get();
     return doc.exists ? Trip.fromDoc(doc, myUid: myUid) : null;
   }
 
-  // ---------------- Join by invite code / QR ----------------
-  // The invite code shown on Group Info (InviteQrPage, as both a QR
-  // code and plain text) and fed back in here from Join → Enter code /
-  // Scan QR code. It's just the trip's own Firestore doc id, shown
-  // as-is — this used to be dressed up as a fake https://voya.app/join/...
-  // link, but there's no real hosted route behind it (this app has no
-  // domain to serve that from), so it read like a broken/dead link for
-  // no benefit. A bare code is honest about what it actually is, and
-  // [parseInviteCode] below still accepts the old link shape too, for
-  // anything pasted from before this change.
 
-  /// The shareable invite code for [tripId] — currently just the id
-  /// itself; kept as its own method (rather than passing `tripId`
-  /// straight to [InviteQrPage]) so the "what does an invite actually
-  /// encode" decision stays in one place if that ever changes.
   String inviteCodeFor(String tripId) => tripId;
 
-  /// Pulls a trip id back out of whatever the person typed, pasted, or a
-  /// QR code decoded to — a bare [inviteCodeFor] code, the old
-  /// `https://voya.app/join/<id>` link shape, or a code with spaces/
-  /// dashes added purely for on-screen readability (see
-  /// InviteQrPage._groupedForDisplay) that a person retyped by hand.
   String parseInviteCode(String raw) {
     var trimmed = raw.trim();
     if (trimmed.isEmpty) return '';
@@ -988,19 +732,6 @@ class TripRepository {
     return trimmed.replaceAll(RegExp(r'[\s-]'), '');
   }
 
-  /// Joins [uid] to the trip [rawCode] points at, recording [name] as
-  /// their `memberNames` entry. This is the one write a non-member is
-  /// allowed to make on a trip doc (see firestore.rules' isSelfJoin()) —
-  /// it can only ever add their own uid, nothing else about the trip.
-  /// Already being a member (e.g. re-scanning your own trip's code) is a
-  /// harmless no-op that still resolves normally.
-  ///
-  /// Throws [InviteCodeInvalid] for an empty/unparseable [rawCode], and
-  /// [InviteTripNotFound] when it doesn't match a real, joinable trip —
-  /// Firestore's security rules can't tell a non-existent trip id apart
-  /// from one that exists but was rejected for some other reason, so
-  /// both surface as the same FirebaseException here and get folded into
-  /// one friendly "couldn't join" case for the UI.
   Future<Trip> joinByInviteCode(String rawCode, {required String uid, required String name}) async {
     final tripId = parseInviteCode(rawCode);
     if (tripId.isEmpty) throw InviteCodeInvalid();
@@ -1012,13 +743,6 @@ class TripRepository {
         'lastActivityAt': FieldValue.serverTimestamp(),
       });
     } on FirebaseException catch (e) {
-      // A non-existent trip id and a rules-rejected write both surface
-      // the same way here (Firestore can't tell them apart from the
-      // client side — see isSelfJoin() in firestore.rules), so both mean
-      // "not a real/joinable trip". Anything else (offline, a transient
-      // 'unavailable'/'deadline-exceeded') is a different problem and
-      // shouldn't be mislabeled as a bad invite — let the caller's
-      // generic error handling take it instead.
       if (e.code == 'permission-denied' || e.code == 'not-found') {
         throw InviteTripNotFound();
       }
@@ -1039,12 +763,6 @@ class TripRepository {
     required double budgetPerPerson,
     required List<String> interests,
     Map<String, String> extraMembers = const {},
-    // The photo to show for this group — a real destination photo fetched
-    // by the wizard (see PlacesApiService.destinationPhoto) when the user
-    // didn't upload their own, or left null the one time that lookup also
-    // comes up empty (offline, or a destination string Wikipedia has
-    // nothing for), in which case the old generic travel-stock photo is
-    // still better than a blank cover.
     String? coverImage,
   }) async {
     final nights = endDate.difference(startDate).inDays;
@@ -1087,11 +805,6 @@ class TripRepository {
     return doc.id;
   }
 
-  /// Per-member chat prefs — [uid]'s own entry only, never anyone else's.
-  /// Separate from [updateSettings] (which only ever touches shared-plan
-  /// fields now) since this was the one part of that method that wasn't
-  /// really "this trip's settings" so much as "this device's own
-  /// settings for this trip" — see [pinChat]'s doc comment.
   void setPinChatFor(String tripId, String uid, bool value) {
     if (uid.isEmpty) return;
     _trips.doc(tripId).update({'pinChat.$uid': value}).catchError((_) {});
@@ -1116,7 +829,6 @@ class TripRepository {
     String? accommodation,
     String? foodPreference,
     String? coverImage,
-    // See [addActivity] — who's doing this, for [_notifyMembers].
     String? actorUid,
   }) async {
     final data = <String, dynamic>{};
@@ -1133,13 +845,6 @@ class TripRepository {
     if (accommodation != null) data['accommodation'] = accommodation;
     if (foodPreference != null) data['foodPreference'] = foodPreference;
     if (data.isEmpty) return;
-    // Only the trip-detail edits (destination/dates/budget/preferences)
-    // count as real "planning" activity for the Past Plans fold — muting
-    // chat or renaming the group isn't the kind of activity that should
-    // keep a quiet trip out of that fold. The same list of fields is what
-    // other members get notified about below — a renamed group or a new
-    // cover photo is shared/visible enough to count too, so those two are
-    // folded into the notified set even though they skip lastActivityAt.
     final planFieldsChanged = <String>[
       if (name != null) 'the trip name',
       if (coverImage != null) 'the cover photo',
@@ -1196,8 +901,6 @@ class TripRepository {
       final joinedNames = uidToName.values.join(', ');
       for (final uid in memberIds) {
         if (uid == actorUid) continue;
-        // The newcomer(s) hear it framed as "you" rather than being lumped
-        // into the generic "X added Y to the trip" everyone else gets.
         final isNewcomer = uidToName.containsKey(uid);
         await NotificationsRepository.instance.send(
           toUid: uid,
@@ -1208,17 +911,9 @@ class TripRepository {
         );
       }
     } catch (_) {
-      // See _notifyMembers' doc comment — never mask the real write.
     }
   }
 
-  /// Removes a member from the trip. Used by the trip owner to remove
-  /// someone else (call sites must check `uid == trip.ownerId` and that the
-  /// target isn't the owner themselves before calling this — the repository
-  /// layer doesn't re-derive ownership here). Logic mirrors [leaveTrip];
-  /// kept as a separate, clearly-named method since "an owner removing
-  /// someone else" and "a member leaving on their own" are different
-  /// actions even though they touch the same fields.
   Future<void> removeMember(String tripId, String uid, {String? actorUid}) async {
     var removedName = 'A member';
     if (actorUid != null) {
@@ -1246,15 +941,6 @@ class TripRepository {
     await _notifyMembers(tripId, uid, (_, __) => '$leavingName left the trip', type: 'trip_member_left');
   }
 
-  /// FR12 — permanently deletes the whole travel group. Only the owner may
-  /// call this (also enforced server-side: firestore.rules' `trips/
-  /// {tripId}` delete rule, and the `isTripOwner` cascade clause on each
-  /// subcollection below). Firestore never deletes a document's
-  /// subcollections automatically, so votes/expenses/messages are batch-
-  /// deleted first — while the trip doc (and the `isTripOwner` get() those
-  /// rules rely on) still exists — and the trip doc itself is deleted
-  /// last. Irreversible; the calling UI must confirm with the person
-  /// first.
   Future<void> deleteTrip(String tripId, String ownerUid) async {
     final snap = await _trips.doc(tripId).get();
     if (!snap.exists) return;
@@ -1263,9 +949,6 @@ class TripRepository {
     }
     for (final sub in [_votes(tripId), _expenses(tripId), _messages(tripId)]) {
       final docs = await sub.get();
-      // Firestore batches cap at 500 writes — chunk defensively even
-      // though a single trip's votes/expenses/messages are very unlikely
-      // to ever reach that.
       for (var i = 0; i < docs.docs.length; i += 450) {
         final batch = FirebaseFirestore.instance.batch();
         for (final doc in docs.docs.skip(i).take(450)) {
@@ -1284,12 +967,7 @@ class TripRepository {
     required String label,
     required String iconKey,
     String location = '',
-    // Which members this activity is for — see ActivityItem.forMemberUids.
-    // Empty (the default) means "everyone", same as leaving it unset.
     List<String> forMemberUids = const [],
-    // Who's doing this — passed through to [_notifyMembers] so every other
-    // member hears about it. Null (the default) skips notifying, for
-    // callers that don't have a signed-in actor to attribute it to.
     String? actorUid,
   }) async {
     final itemId = '${DateTime.now().microsecondsSinceEpoch}';
@@ -1333,12 +1011,6 @@ class TripRepository {
     }
   }
 
-  /// Moves an existing activity to a new time only — label/location/icon/
-  /// votes are untouched. [time] is 24-hour "HH:MM", same format
-  /// [addActivity] stores. The drag-to-reschedule timeline in Day edit
-  /// mode (see `day_timeline_view.dart`) is the only caller today; before
-  /// it existed there was no way to change an activity's time short of
-  /// deleting and re-adding it.
   Future<void> updateActivityTime(String tripId, int dayIndex, String itemId, String time, {String? actorUid}) {
     return _trips.doc(tripId).update({
       'days.$dayIndex.items.$itemId.time': time,
@@ -1370,11 +1042,6 @@ class TripRepository {
     }
   }
 
-  /// Firestore arrays have no per-item update/remove by id — `flights` is
-  /// one, so removing a single entry means reading the whole array,
-  /// dropping the one whose [TripFlight.id] matches, and writing the
-  /// whole array back. Same approach [setFlightDocument] below uses to
-  /// attach a document to one entry.
   Future<void> removeFlight(String tripId, String flightId) async {
     final snap = await _trips.doc(tripId).get();
     final flights = ((snap.data()?['flights'] as List?) ?? const [])
@@ -1384,10 +1051,6 @@ class TripRepository {
     await _trips.doc(tripId).update({'flights': flights, 'lastActivityAt': FieldValue.serverTimestamp()});
   }
 
-  /// Attaches (or replaces) one uploaded document's download URL on a
-  /// specific flight already on this trip — see [TripFlight.documents].
-  /// A no-op if [flightId] isn't found (e.g. the flight was removed from
-  /// under the page that's still open).
   Future<void> setFlightDocument(String tripId, String flightId, String docType, String url) async {
     final snap = await _trips.doc(tripId).get();
     final flights = ((snap.data()?['flights'] as List?) ?? const []).map((e) => Map<String, dynamic>.from(e as Map)).toList();
@@ -1414,10 +1077,6 @@ class TripRepository {
     }
   }
 
-  /// Attaches (or replaces) one uploaded document's download URL on a
-  /// specific hotel stay already on this trip — see
-  /// [TripHotelStay.documents]. Mirrors [setFlightDocument] exactly; a
-  /// no-op if [stayId] isn't found.
   Future<void> setHotelDocument(String tripId, String stayId, String docType, String url) async {
     final snap = await _trips.doc(tripId).get();
     final stays = ((snap.data()?['hotelStays'] as List?) ?? const []).map((e) => Map<String, dynamic>.from(e as Map)).toList();
@@ -1429,7 +1088,6 @@ class TripRepository {
     await _trips.doc(tripId).update({'hotelStays': stays, 'lastActivityAt': FieldValue.serverTimestamp()});
   }
 
-  /// Same idea as [removeFlight], for `hotelStays`.
   Future<void> removeHotelStay(String tripId, String stayId) async {
     final snap = await _trips.doc(tripId).get();
     final stays = ((snap.data()?['hotelStays'] as List?) ?? const [])
@@ -1439,9 +1097,6 @@ class TripRepository {
     await _trips.doc(tripId).update({'hotelStays': stays, 'lastActivityAt': FieldValue.serverTimestamp()});
   }
 
-  /// Records the insurance plan bought for this trip — a single field
-  /// (unlike `flights`/`hotelStays`, which are lists), since a trip only
-  /// ever shows one active policy at a time on the Overview tab.
   Future<void> setInsurance(String tripId, TripInsurance insurance, {String? actorUid}) async {
     await _trips.doc(tripId).update({
       'insurance': insurance.toMap(),
@@ -1457,28 +1112,11 @@ class TripRepository {
     }
   }
 
-  /// Fields to merge into a trip-doc update when itinerary content
-  /// changes — bumps [Trip.planUpdatedAt] and, when [actorUid] is known,
-  /// marks that same write as already "seen" by whoever made the edit
-  /// (see [Trip.planUnseenFor]), so the Plan tab's "Plan Updated" tag
-  /// never shows for the person who just made the change.
   Map<String, dynamic> _planUpdateFields({String? actorUid}) => {
         'planUpdatedAt': FieldValue.serverTimestamp(),
         if (actorUid != null && actorUid.isNotEmpty) 'planSeenAt.$actorUid': FieldValue.serverTimestamp(),
       };
 
-  /// Bumps the trip's `lastActivityAt` — used by write methods that don't
-  /// already touch the trip document directly (votes/expenses/messages
-  /// live in subcollections). Fire-and-forget: this is UI-only metadata
-  /// (drives "Past Plans" folding on the Plan tab), not worth failing or
-  /// delaying the write that triggered it.
-  ///
-  /// [category] additionally bumps that category's own "updated at" +
-  /// (when [actorUid] is known) marks it seen for the actor — see
-  /// [Trip.expensesUnseenFor]/[planUnseenFor]. Only `'expenses'` is used
-  /// today (votes/chat don't have their own "unseen" tag — see
-  /// [PlanPageController.planGroups]'s "Poll Ongoing" tag, which checks
-  /// each poll's own open/voted state directly instead of a seen marker).
   void _touchActivity(String tripId, {String? category, String? actorUid}) {
     final update = <String, dynamic>{'lastActivityAt': FieldValue.serverTimestamp()};
     if (category == 'expenses') {
@@ -1487,42 +1125,19 @@ class TripRepository {
         update['expensesSeenAt.$actorUid'] = FieldValue.serverTimestamp();
       }
     }
-    // Genuinely fire-and-forget: swallow any failure (offline, permission
-    // denied, doc deleted mid-flight) so it can never surface as an
-    // unrelated error on top of the real write that triggered this.
     _trips.doc(tripId).update(update).catchError((_) {});
   }
 
-  /// Records that [uid] has opened the Plan tab just now — called by
-  /// [GroupTripController] whenever it switches to (or opens directly
-  /// into) [GroupTab.plan]. Fire-and-forget, same reasoning as
-  /// [_touchActivity]: this is UI-only "have they seen it" metadata, not
-  /// worth surfacing an error over.
   void markPlanSeen(String tripId, String uid) {
     if (uid.isEmpty) return;
     _trips.doc(tripId).update({'planSeenAt.$uid': FieldValue.serverTimestamp()}).catchError((_) {});
   }
 
-  /// Same idea as [markPlanSeen], for [GroupTab.expenses].
   void markExpensesSeen(String tripId, String uid) {
     if (uid.isEmpty) return;
     _trips.doc(tripId).update({'expensesSeenAt.$uid': FieldValue.serverTimestamp()}).catchError((_) {});
   }
 
-  /// Notifies every *other* member of [tripId] (everyone but [actorUid])
-  /// that something changed on the shared plan — a new activity, flight,
-  /// hotel stay, poll, expense, a settings edit, or a membership change.
-  /// Re-reads the trip doc rather than trusting a [Trip] object a caller
-  /// might be holding (it could be seconds stale), so the member list and
-  /// the actor's display name are always current. [buildBody] gets the
-  /// actor's resolved name and the trip's name so each call site can write
-  /// its own message ("X added an activity to Day 2") without needing a
-  /// second round-trip to look either up itself. Best-effort: a caller
-  /// passes `actorUid: null` to opt out entirely (e.g. the trip-creation
-  /// wizard, where there's nobody else to notify yet), and any failure
-  /// here (offline, a member's inbox write denied, trip deleted mid-flight)
-  /// is swallowed so it never surfaces as an error on top of the write that
-  /// triggered it.
   Future<void> _notifyMembers(
     String tripId,
     String actorUid,
@@ -1550,7 +1165,6 @@ class TripRepository {
         );
       }
     } catch (_) {
-      // See doc comment — never let this mask the real write's result.
     }
   }
 
@@ -1591,29 +1205,10 @@ class TripRepository {
     );
   }
 
-  /// Group Voting Algorithm (FYP documentation), steps 1-9 all inside one
-  /// Firestore transaction — so two simultaneous casts from the same
-  /// member, or two casts landing at the same instant on the same option,
-  /// can never both succeed (one retries and sees the other's write).
-  /// [vote] is only used to know which poll to open; every check below
-  /// re-reads the LIVE session and trip membership inside the transaction,
-  /// never the possibly-stale [vote] object the caller passed in (step 2).
-  ///
-  /// Throws [StateError] ("return an error") when: the poll doesn't exist
-  /// or is closed (step 3); [uid] isn't an active member of the trip
-  /// (step 4); [optionId] doesn't exist on this poll (step 5); or [uid]
-  /// already has a vote on this poll (step 6) — for a single-choice poll
-  /// that means any option, for a multiple-choice poll it means this same
-  /// option (voting for several different options is the point of that
-  /// mode, so only an exact repeat counts as a duplicate). There is no
-  /// "withdraw my vote" path any more: once cast, a vote stands, matching
-  /// the documented algorithm exactly — [VoteTab] disables the tap target
-  /// once [uid] has voted so this isn't hit from the normal UI.
   Future<void> castVote(String tripId, TripVote vote, String optionId, String uid) async {
     final tripRef = _trips.doc(tripId);
     final voteRef = _votes(tripId).doc(vote.id);
     await FirebaseFirestore.instance.runTransaction((tx) async {
-      // Steps 1-2: transaction started; re-read the session and the trip's membership.
       final voteSnap = await tx.get(voteRef);
       final tripSnap = await tx.get(tripRef);
       // Step 3.
@@ -1646,31 +1241,14 @@ class TripRepository {
       if (live.allowMultipleChoice ? alreadyVotedThisOption : alreadyVotedAnyOption) {
         throw StateError('You have already voted.');
       }
-      // Steps 7-8: store the vote and increment the option's vote count
-      // (votedBy is kept too — it's what [VoteTabController.votedByMe] and
-      // the avatar-stack UI read; voteCount is the documented algorithm's
-      // explicit counter, redundant with votedBy.length but literal to the
-      // spec and immune to ever reading a half-written votedBy array).
       tx.update(voteRef, {
         'options.$optionId.votedBy': FieldValue.arrayUnion([uid]),
         'options.$optionId.voteCount': FieldValue.increment(1),
       });
-      // Step 9: committing happens when this callback returns without throwing.
     });
     _touchActivity(tripId);
-    // Step 10: watchVotes()'s stream (every screen showing this poll
-    // already listens to it) picks up the transaction's write and
-    // recalculates totals/leading option on its own.
   }
 
-  /// Adds one more option to an already-created poll — what
-  /// [TripVote.allowAddOptions] actually turning it on enables (the
-  /// toggle existed on the create screen before but had nothing in the
-  /// app that read it back, so it did nothing for anyone but the
-  /// creator). [VoteTab] only shows the control that calls this when
-  /// that flag is true and the poll isn't closed; this just performs the
-  /// write, with dot-notation so it can never clobber another member's
-  /// concurrent vote or add on the same poll.
   Future<void> addVoteOption(String tripId, String voteId, String label) async {
     final optionId = 'opt_${DateTime.now().microsecondsSinceEpoch}';
     _touchActivity(tripId);
@@ -1685,15 +1263,6 @@ class TripRepository {
         (snap) => snap.docs.map(TripExpense.fromDoc).toList());
   }
 
-  /// All expenses across every trip that [uid] participates in. NOT used by
-  /// the Expenses tab's "Personal" view anymore — that view is intentionally
-  /// scoped to one trip only (a trip's "Personal" expenses must not
-  /// interconnect with any other trip's), and derives its list client-side
-  /// from [watchExpenses] instead. Left here, unused, in case a future
-  /// cross-trip "all my expenses" dashboard wants it. Uses a
-  /// collection-group query, so a brand-new Firebase project may need to
-  /// create the suggested index the first time this runs (Firestore's error
-  /// message links straight to it).
   Stream<List<TripExpense>> watchMyExpenses(String uid) {
     return FirebaseFirestore.instance
         .collectionGroup('expenses')
@@ -1706,18 +1275,6 @@ class TripRepository {
     });
   }
 
-  /// Steps 5-7 of the Shared-Expense Distribution Algorithm. [participants]
-  /// must already carry the confirmed per-member shares (step 3's EQUAL or
-  /// step 4's CUSTOM split — see [splitExpenseEqual]/[splitExpenseCustom]/
-  /// [splitExpenseItemized] — run by the caller before this is reached);
-  /// this re-validates them (step 2, defense in depth) and creates a
-  /// payment-status record per member (step 5 — the `paid` flag nested in
-  /// each participant entry, true only for whoever already paid, i.e. the
-  /// payer), then stores the expense and every member's share in one
-  /// Firestore write (step 6 — a single document create is atomic by
-  /// construction: the shares live inside the same doc as the expense, so
-  /// there is no multi-document write to desynchronise). Returns the
-  /// stored memberShares (step 7).
   Future<Map<String, double>> addExpense(
     String tripId, {
     required String tripName,
@@ -1730,29 +1287,17 @@ class TripRepository {
     required String paidByName,
     required List<ExpenseParticipant> participants,
     String receiptImageUrl = '',
-    // FR60 — when true, every non-payer participant gets an immediate
-    // payment-reminder notification right after the expense is created
-    // (see [sendPaymentReminder]), same as the Add Expense form's
-    // "Reminder" switch asks for. False (the default) matches every
-    // existing caller/test that doesn't pass it.
     bool sendReminder = false,
   }) async {
     _validateExpenseSplitInputs(amount, participants.length);
-    // Step 2's "shares sum to totalAmount" is implicitly true here because
-    // every caller builds [participants] from splitExpenseEqual/Custom/
-    // Itemized, all of which already guarantee it in cents — this re-checks
-    // it rather than trusting that blindly, since a future caller might not.
     final sumCents = participants.fold<int>(0, (n, p) => n + _expenseToCents(p.share));
     if (sumCents != _expenseToCents(amount)) {
       throw ArgumentError('Member shares (${_expenseFromCents(sumCents)}) must sum to amount ($amount).');
     }
     final participantsMap = <String, dynamic>{
-      // Step 5: a payment-status record per assigned member (paid starts
-      // true only for the payer, who has implicitly "paid" their own share).
       for (final p in participants) p.uid: {'name': p.name, 'share': p.share, 'paid': p.paid}
     };
     _touchActivity(tripId, category: 'expenses', actorUid: paidBy);
-    // Step 6: one atomic Firestore write for the expense + every member's share.
     final docRef = _expenses(tripId).doc();
     final batch = FirebaseFirestore.instance.batch();
     batch.set(docRef, {
@@ -1785,14 +1330,6 @@ class TripRepository {
     return {for (final p in participants) p.uid: p.share};
   }
 
-  /// FR60 — notifies every participant who hasn't marked their own share
-  /// paid yet (never the payer, whose share is implicitly settled already
-  /// — see [TripExpense.isSettled]). Used both right after [addExpense]
-  /// (when its `sendReminder` is true) and from Transaction Detail's
-  /// "Remind to Pay" button for a later follow-up nudge. Returns how many
-  /// people were actually notified, so the caller can say "Reminded 2
-  /// people" rather than just "Done" — or tell the payer everyone's
-  /// already settled up.
   Future<int> sendPaymentReminder(String tripId, String expenseId) async {
     final snap = await _expenses(tripId).doc(expenseId).get();
     if (!snap.exists) return 0;
@@ -1810,16 +1347,6 @@ class TripRepository {
     return unpaid.length;
   }
 
-  /// The payer edits their own expense (Transaction detail -> Edit). When the amount changes the
-  /// split follows: an equal split stays equal, an uneven (itemized) split keeps its proportions.
-  /// Who has already paid is kept. Firestore rules only let [TripExpense.paidBy] do this.
-  /// Re-splits an edited expense's amount the same cents-safe way as
-  /// [addExpense] (EQUAL via [splitExpenseEqual] when every participant
-  /// currently has the same share; otherwise a cents-safe proportional
-  /// re-split that keeps each member's existing ratio of the total, using
-  /// the same floor + largest-remainder rule as the documented algorithm's
-  /// EQUAL split so the new shares still sum to exactly the new amount —
-  /// not the old per-row `.toStringAsFixed(2)` that could lose a cent).
   Future<void> updateExpense(
     TripExpense expense, {
     required String title,
@@ -1829,8 +1356,6 @@ class TripRepository {
     String? receiptImageUrl,
   }) {
     final ps = expense.participants;
-    // Someone besides the payer already paid their share: the amount is locked (the edit sheet
-    // explains this; this stops it from being bypassed).
     if ((amount - expense.amount).abs() > 0.001 && ps.any((p) => p.paid && p.uid != expense.paidBy)) {
       throw StateError('The amount can\'t change after someone has paid their share.');
     }
@@ -1841,11 +1366,6 @@ class TripRepository {
     } else if (equal || expense.amount <= 0) {
       newShares = splitExpenseEqual(amount, ps.map((p) => p.uid).toList());
     } else {
-      // Proportional re-split: each member's raw new share in cents, floored,
-      // then the leftover cents go to whichever members had the largest
-      // fractional remainder — the standard cents-safe way to keep ratios
-      // while still landing on an exact total (step 3's floor + remainder
-      // rule, generalised from "equal shares" to "proportional shares").
       final totalCents = _expenseToCents(amount);
       final oldTotalCents = _expenseToCents(expense.amount);
       final raw = <String, double>{
@@ -1883,14 +1403,29 @@ class TripRepository {
     return _expenses(tripId).doc(expenseId).update({'participants.$uid.paid': paid});
   }
 
+  // Owner-only.
+  Future<void> deleteExpense(String tripId, String expenseId, {required String actorUid}) async {
+    final snap = await _expenses(tripId).doc(expenseId).get();
+    if (!snap.exists) return;
+    final expense = TripExpense.fromDoc(snap);
+    if (expense.paidBy != actorUid) {
+      throw StateError('Only the expense owner can delete this expense.');
+    }
+    _touchActivity(tripId, category: 'expenses', actorUid: actorUid);
+    await _expenses(tripId).doc(expenseId).delete();
+    await _notifyMembers(
+      tripId,
+      actorUid,
+      (_, __) => '${expense.paidByName} deleted an expense: "${expenseLabel(expense)}" (RM${expense.amount.toStringAsFixed(2)})',
+      type: 'trip_expense_deleted',
+    );
+  }
+
   // ---------------- Chat ----------------
   Stream<List<TripMessage>> watchMessages(String tripId) {
     return _messages(tripId).orderBy('createdAt').snapshots().map((snap) => snap.docs.map(TripMessage.fromDoc).toList());
   }
 
-  /// [type] is 'text' (default — pass just [text]), 'image' (pass
-  /// [imageUrl], leave [text] empty), or 'location' (pass [lat]/[lng],
-  /// leave [text] empty) — see [TripMessage]'s doc comment.
   Future<void> sendMessage(
     String tripId, {
     required String senderId,
@@ -1913,9 +1448,6 @@ class TripRepository {
       if (lng != null) 'lng': lng,
       'createdAt': FieldValue.serverTimestamp(),
     });
-    // Bump every OTHER member's unread badge (see [Trip.unreadCounts]).
-    // Fire-and-forget like [_touchActivity] — a dropped badge increment
-    // is a cosmetic miss, not worth failing the message send over.
     final others = memberIds.where((uid) => uid != senderId && uid.isNotEmpty);
     if (others.isNotEmpty) {
       final update = <String, dynamic>{};
@@ -1926,22 +1458,11 @@ class TripRepository {
     }
   }
 
-  /// Same idea as [markPlanSeen], for [GroupTab.chat] — zeroes [uid]'s own
-  /// unread-message badge (see [Trip.unreadCounts]) the moment they open
-  /// the Chat tab.
   void markChatSeen(String tripId, String uid) {
     if (uid.isEmpty) return;
     _trips.doc(tripId).update({'unreadCounts.$uid': 0}).catchError((_) {});
   }
 
-  /// FR15 — edits a text message's own content. Only ever called for a
-  /// message the signed-in person sent themselves; the server-side rule
-  /// (firestore.rules' `messages/{messageId}` update) enforces that too,
-  /// and also enforces that only `text`/`edited`/`editedAt` ever change —
-  /// an edit can't quietly turn into a different sender or a different
-  /// message type. [TripMessage] doesn't yet expose `edited`, so the UI
-  /// can't show an "edited" label from this alone; that's a smaller,
-  /// separate follow-up if it's ever wanted.
   Future<void> editMessage(String tripId, String messageId, String newText) {
     return _messages(tripId).doc(messageId).update({
       'text': newText,
@@ -1950,10 +1471,6 @@ class TripRepository {
     });
   }
 
-  /// FR17 — deletes one of your own messages. The trip owner can also
-  /// delete any message, but only as part of [deleteTrip]'s cascade
-  /// cleanup when the whole group is being removed — there's no "owner
-  /// moderates chat" feature here.
   Future<void> deleteMessage(String tripId, String messageId) {
     return _messages(tripId).doc(messageId).delete();
   }

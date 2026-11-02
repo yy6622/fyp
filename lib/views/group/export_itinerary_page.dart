@@ -6,12 +6,6 @@ import '../../controllers/group_settings_controller.dart';
 import '../../services/itinerary_export_service.dart';
 import '../../theme.dart';
 
-// ---------------------------------------------------------------------
-// Export Itinerary — real PDF/Image export from the trip's actual plan,
-// flights, hotels and expenses (ItineraryExportService). Used to just
-// show a fake "Itinerary exported as PDF" SnackBar with nothing behind
-// it — see ExportItineraryController's old doc comment.
-// ---------------------------------------------------------------------
 class ExportItineraryPage extends StatefulWidget {
   final String tripId;
   const ExportItineraryPage({super.key, required this.tripId});
@@ -40,9 +34,6 @@ class _ExportItineraryPageState extends State<ExportItineraryPage> {
       if (controller.format == 'PDF') {
         await Printing.layoutPdf(onLayout: (format) async => bytes, name: '$fileName.pdf');
       } else {
-        // "Image" — rasterise every page of the same PDF content to PNG
-        // and hand them to the OS share sheet, rather than claiming an
-        // "Image" export when it's really just the PDF again.
         final pages = await Printing.raster(bytes, dpi: 150).toList();
         final files = [
           for (var i = 0; i < pages.length; i++)

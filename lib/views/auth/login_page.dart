@@ -2,15 +2,11 @@ import 'package:flutter/material.dart';
 
 import '../../controllers/auth_controller.dart';
 import '../../theme.dart';
-import '../onboarding/onboarding_wizard_page.dart';
-import '../shared/bottom_nav.dart';
 import 'auth_widgets.dart';
 import 'forgot_password_page.dart';
+import 'otp_verification_page.dart';
 import 'signup_page.dart';
 
-// ---------------------------------------------------------------------
-// Login
-// ---------------------------------------------------------------------
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
 
@@ -34,10 +30,8 @@ class _LoginPageState extends State<LoginPage> {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
       return;
     }
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => const MainPage()),
-      (route) => false,
-    );
+    // FR04: unverified email or a new device -> 6-digit email code first.
+    await openAppAfterSignIn(context);
   }
 
   Future<void> _handleSocial(Future<SocialLoginOutcome> Function() signIn) async {
@@ -50,20 +44,8 @@ class _LoginPageState extends State<LoginPage> {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(outcome.errorMessage!)));
         return;
       case SocialLoginResult.success:
-        if (outcome.isNewUser) {
-          // Same destination a brand-new email/password account reaches
-          // after verifying — avatar/phone/region/currency/add friend —
-          // which itself lands on MainPage when done (see
-          // OnboardingWizardPage._finish()). Google accounts
-          // skip email verification entirely: the provider already
-          // vouches for the address.
-          Navigator.of(context).push(MaterialPageRoute(builder: (_) => const OnboardingWizardPage()));
-        } else {
-          Navigator.of(context).pushAndRemoveUntil(
-            MaterialPageRoute(builder: (_) => const MainPage()),
-            (route) => false,
-          );
-        }
+        // FR04: a new device needs the emailed code before the app opens.
+        await openAppAfterSignIn(context, newUser: outcome.isNewUser);
     }
   }
 

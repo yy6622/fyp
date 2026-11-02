@@ -2,26 +2,13 @@ import 'package:flutter/material.dart';
 
 import '../../theme.dart';
 
-// ---------------------------------------------------------------------
-// Themed replacements for Flutter's default showDatePicker/showTimePicker
-// system dialogs — rounded bottom sheets in the app's own navy/orange
-// palette instead of the plain Material calendar/clock. showVoyaDatePicker
-// and showVoyaDateRangePicker share one calendar widget (_VoyaCalendarSheet)
-// so a range can be picked in a single flow (both ends highlighted with a
-// connected pill, like a travel-booking calendar) instead of two separate
-// dialogs chained together.
-// ---------------------------------------------------------------------
 
-/// What the calendar sheet pops with — kept private since callers only ever
-/// see it through [showVoyaDatePicker]/[showVoyaDateRangePicker]'s own
-/// return types ([DateTime]/[DateTimeRange]).
 class _PickResult {
   final DateTime start;
   final DateTime? end;
   const _PickResult(this.start, [this.end]);
 }
 
-/// Single-date picker — e.g. date of birth, a one-off flight date.
 Future<DateTime?> showVoyaDatePicker({
   required BuildContext context,
   DateTime? initialDate,
@@ -45,9 +32,6 @@ Future<DateTime?> showVoyaDatePicker({
   return result?.start;
 }
 
-/// Two-date range picker — trip dates, hotel check-in/check-out. Both ends
-/// are picked in one sheet (tap a start day, then an end day) instead of
-/// two chained single-date dialogs.
 Future<DateTimeRange?> showVoyaDateRangePicker({
   required BuildContext context,
   DateTime? initialStart,
@@ -156,7 +140,6 @@ class _VoyaCalendarSheetState extends State<_VoyaCalendarSheet> {
         return;
       }
       if (_start == null || _end != null) {
-        // Nothing picked yet, or a full range was already picked — start over.
         _start = day;
         _end = null;
       } else if (day.isBefore(_start!)) {
@@ -305,12 +288,9 @@ class _VoyaCalendarSheetState extends State<_VoyaCalendarSheet> {
     );
   }
 
-  /// Always a full 6x7 block (padded with the previous/next month's
-  /// overflow days) so the grid doesn't resize/jump between 4-, 5- and
-  /// 6-row months.
   List<List<DateTime>> _buildWeeks() {
     final firstOfMonth = DateTime(_visibleMonth.year, _visibleMonth.month, 1);
-    final leading = firstOfMonth.weekday % 7; // DateTime.weekday: Mon=1..Sun=7 -> want Sun=0..Sat=6
+    final leading = firstOfMonth.weekday % 7;
     final gridStart = firstOfMonth.subtract(Duration(days: leading));
     final days = List.generate(42, (i) => gridStart.add(Duration(days: i)));
     return List.generate(6, (w) => days.sublist(w * 7, w * 7 + 7));
@@ -328,9 +308,6 @@ class _VoyaCalendarSheetState extends State<_VoyaCalendarSheet> {
         final isRangeEdge = isStart || isEnd;
         final isToday = _isSame(day, _dateOnly(DateTime.now()));
 
-        // Whether this cell should visually merge with its row neighbour,
-        // so a multi-day range reads as one continuous connected pill
-        // instead of separate circles touching at their corners.
         final connectLeft = widget.rangeMode && highlighted && i > 0 && _cellHighlighted(days[i - 1]);
         final connectRight = widget.rangeMode && highlighted && i < 6 && _cellHighlighted(days[i + 1]);
 
@@ -407,11 +384,6 @@ class _VoyaCalendarSheetState extends State<_VoyaCalendarSheet> {
   }
 }
 
-// ---------------------------------------------------------------------
-// Themed time picker — three scroll wheels (hour/minute/AM-PM) in a
-// rounded sheet, in place of Flutter's default analogue/digital clock
-// dialog.
-// ---------------------------------------------------------------------
 
 Future<TimeOfDay?> showVoyaTimePicker({
   required BuildContext context,

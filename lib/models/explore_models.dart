@@ -2,12 +2,6 @@ import 'package:flutter/material.dart';
 
 import 'filter_models.dart';
 
-/// The category currently selected in the Explore chip row. Drives which
-/// list renders below the chips.
-///
-/// Insurance used to be one of these categories, but it now lives on the
-/// Home page instead — Explore is for flights, hotels, places to visit and
-/// (now) places to eat.
 enum ExploreCategory { all, flights, accommodation, attractions, restaurants }
 
 extension ExploreCategoryMeta on ExploreCategory {
@@ -41,7 +35,6 @@ extension ExploreCategoryMeta on ExploreCategory {
     }
   }
 
-  /// Maps this category to the matching filter sheet content.
   FilterType get filterType {
     switch (this) {
       case ExploreCategory.all:
@@ -59,18 +52,7 @@ extension ExploreCategoryMeta on ExploreCategory {
 
 class FlightData {
   final String depTime, arrTime, duration, from, to, stops, price, fareType;
-  // Defaults to '' rather than being required — the seeded mock flights
-  // predate this field, and CatalogRepository.watchFlights() falls back
-  // to a default label for those, but a bare '' here keeps any other
-  // FlightData construction (tests, future call sites) compiling without
-  // having to know about airline.
   final String airline;
-  // Real flight number (e.g. "AK71") and departure date label — same
-  // "defaults to '' for anything that predates this field" reasoning as
-  // [airline] above. A saved flight with this still empty just means it
-  // was favorited before CatalogRepository.saveDuffelFlight() started
-  // persisting these; the detail page shows nothing rather than a fixed
-  // placeholder in that case (see DetailPageFlight's own doc comment).
   final String flightNo;
   final String date;
   const FlightData({
@@ -90,13 +72,6 @@ class FlightData {
 
 class HotelData {
   final String name, location, rating, reviews, price, image;
-  // Real per-hotel amenity names (e.g. "WiFi", "Pool", "Parking") — from
-  // Duffel's `accommodation.amenities` (Flights' stays product) or
-  // RollingGo's `hotelAmenities` (Hotels' real data source — see
-  // DuffelStayResult.fromRollingGo/fromJson). '' when the source result
-  // just doesn't have any for that particular hotel; the detail page
-  // hides the Amenities row entirely rather than showing a fixed list
-  // that isn't actually about this hotel.
   final List<String> amenities;
   const HotelData({
     required this.name,
@@ -109,14 +84,6 @@ class HotelData {
   });
 }
 
-/// Entry fees broken down by age tier (adult/child/senior all often differ)
-/// — every tier is optional, so an attraction that's free or only has one
-/// flat price just leaves all of these unset and the detail page falls
-/// back to showing the plain [AttractionData.price] instead. (A
-/// resident-vs-tourist split, like some real listings also have, isn't
-/// modelled here — every trip in this app is a Malaysian traveller
-/// visiting somewhere else, so there's no "local" tier that would ever
-/// actually apply.)
 class AttractionFees {
   final String? adult, child, senior;
   const AttractionFees({this.adult, this.child, this.senior});
@@ -126,17 +93,7 @@ class AttractionFees {
 
 class AttractionData {
   final String name, category, rating, reviews, price, image;
-  // Location/openingHours were missing before — an attraction's page had no
-  // way to tell the user *where* it is or *when* it's open, both of which
-  // matter more for a real visit than the entry price does.
   final String location, openingHours;
-  // Fuller detail-page content, closer to what a real listing (e.g. a
-  // Google Places-backed one) shows: full street address, more than one
-  // category tag, a proper day-by-day opening schedule, amenities on site,
-  // trip-planning highlights, contact info, how long to budget for a
-  // visit, more than one photo, and tiered entry pricing. Every field
-  // defaults to "not set" so older/simpler seed data keeps working — the
-  // detail page only shows a section when it actually has content for it.
   final String address;
   final List<String> categories;
   final Map<String, String> openingHoursByDay;
@@ -147,30 +104,10 @@ class AttractionData {
   final String recommendedDuration;
   final List<String> images;
   final AttractionFees fees;
-  // A real, place-specific summary — OSM's own `description` tag or that
-  // place's Wikipedia lead paragraph (see
-  // PlacesApiService.resolveDescription) when either exists, '' when
-  // neither does. The detail page only falls back to its generic
-  // category sentence when this is empty, rather than always showing
-  // the same templated text for every place in a category.
   final String description;
 
-  // AI-Based Attraction Recommendation Algorithm (FYP documentation) —
-  // D(a), the distance factor. Straight-line km from this attraction to
-  // the destination's geocoded centre at the moment it was scraped/
-  // refreshed (see CatalogRepository._distanceKm's call sites) — null
-  // for anything written before this existed, or sourced from a path
-  // that has no coordinates to measure from. A null here makes D(a)
-  // fall back to a neutral score rather than zero (see
-  // AttractionRecommendation.distanceScore), so older rows aren't
-  // punished for data they were never given.
   final double? distanceKm;
 
-  // The Plan page's transportation-suggestion row (group_trip_page.dart)
-  // and the Optimised Itinerary Generation Algorithm's "Maps service"
-  // both want real coordinates, not just a pre-computed distance — see
-  // lib/services/maps_service.dart. Same null-means-not-measured-yet
-  // story as [distanceKm].
   final double? lat;
   final double? lng;
 
@@ -199,33 +136,16 @@ class AttractionData {
     this.lng,
   });
 
-  /// Every category tag to show as its own chip — falls back to the single
-  /// [category] when no extra tags were seeded.
   List<String> get categoryTags => categories.isNotEmpty ? categories : [category];
 
-  /// Every photo for the detail page's gallery strip — falls back to just
-  /// [image] when no extra photos were seeded.
   List<String> get gallery => images.isNotEmpty ? images : [image];
 }
 
 class RestaurantData {
   final String name, location, rating, reviews, priceRange, openingHours, image;
-  // Separate tags (e.g. ['Japanese', 'Ramen']) rendered as their own small
-  // chips — not one string joined with a "•" dot, which read as a single
-  // odd label instead of two distinct, scannable tags.
   final List<String> cuisineTags;
-  // Real street address/phone/website from OpenStreetMap (see
-  // CatalogRepository.refreshRestaurants) — same contact-info shape
-  // AttractionData already has, added here so a restaurant's detail page
-  // can show (and let someone tap) the same Contact section an
-  // attraction's does, instead of having nowhere to put this data.
-  // Default '' for older/simpler construction sites and for a POI OSM
-  // just doesn't have this field for.
   final String address, phone, website;
-  // Same idea as AttractionData.description — a real, place-specific
-  // summary when OSM or Wikipedia has one, '' otherwise.
   final String description;
-  // Same as AttractionData.lat/lng — see that field's doc comment.
   final double? lat;
   final double? lng;
   const RestaurantData({
@@ -245,7 +165,5 @@ class RestaurantData {
     this.lng,
   });
 
-  /// One plain string for places that just want a short description
-  /// (e.g. "a popular X spot") rather than separate tag chips.
   String get cuisineLabel => cuisineTags.join(' ');
 }

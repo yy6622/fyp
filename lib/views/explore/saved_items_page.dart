@@ -11,8 +11,6 @@ import '../detail/detail_page_restaurant.dart';
 
 enum _SavedTab { flights, hotels, attractions, restaurants }
 
-/// Shown when the heart icon on Explore is tapped — everything the user
-/// saved for [tripName] specifically (see [SavedItemsController]).
 class SavedItemsPage extends StatefulWidget {
   final String tripId;
   final String tripName;
@@ -123,11 +121,6 @@ class _SavedItemsPageState extends State<SavedItemsPage> {
     );
   }
 
-  /// Attractions/restaurants now come from OpenStreetMap, which often has
-  /// no photo for a given place (unlike the old seeded catalogue's fixed
-  /// Unsplash URLs) — so a plain `Image.network` would just show a
-  /// broken-image glyph for those. Falls back to an icon on a neutral
-  /// background instead, same convention used on Explore's own cards.
   Widget _cardImage(String url, IconData icon) {
     if (url.isEmpty) {
       return Container(width: 56, height: 56, color: AppColors.chipGrey, child: Icon(icon, color: AppColors.textGrey, size: 22));
@@ -291,8 +284,6 @@ class _SavedItemsPageState extends State<SavedItemsPage> {
       )),
       child: Row(
         children: [
-          // No thumbnail for restaurants — see explore_page.dart's restaurant
-          // cards for why (no image-shaped UI at all, not even a placeholder).
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,

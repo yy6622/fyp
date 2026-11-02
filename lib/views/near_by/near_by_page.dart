@@ -131,10 +131,6 @@ class _NearByPageState extends State<NearByPage> {
                   }
                   if (controller.places.isEmpty) {
                     if (controller.error != null) {
-                      // A real request failure (timeout / blocked / bad
-                      // response), not just "nothing here" — shown with
-                      // its actual reason plus a retry, instead of the
-                      // same generic empty message either way.
                       return Center(
                         child: Padding(
                           padding: const EdgeInsets.all(24),
@@ -168,10 +164,6 @@ class _NearByPageState extends State<NearByPage> {
     );
   }
 
-  /// Matches a place's category chip to its icon (see [_categories]) —
-  /// used as the fallback image box so a place with no real photo still
-  /// shows something relevant to what it actually is, not a plain blank
-  /// grey square.
   IconData _iconFor(String category) {
     for (final (label, icon) in _categories) {
       if (label == category) return icon;
@@ -179,9 +171,6 @@ class _NearByPageState extends State<NearByPage> {
     return Icons.place_outlined;
   }
 
-  /// A distinct marker color per category, same idea as the old painted
-  /// map's colored pins — but now actually tied to what each pin really
-  /// is instead of five arbitrary colors in a fixed order.
   Color _colorFor(String category) {
     switch (category) {
       case 'Restaurants':
@@ -201,21 +190,10 @@ class _NearByPageState extends State<NearByPage> {
     }
   }
 
-  /// A real, interactive embedded map (OpenStreetMap tiles, no API key —
-  /// same approach MemberLocationPage's map already uses in this app) —
-  /// replaces what used to be a hand-painted fake map (colored lines and
-  /// pins drawn with CustomPaint, with no relation to any real place).
-  /// Centered on the device's real current position, with one real marker
-  /// per place actually returned for the selected category — each at its
-  /// real OSM coordinates, tappable to open that place's detail page, same
-  /// as tapping its card below.
   Widget _map() {
     final myLat = controller.myLat;
     final myLon = controller.myLon;
     if (myLat == null || myLon == null) {
-      // Still resolving (or failed to resolve) the device's position —
-      // the list below already explains why; this just avoids showing an
-      // empty/broken map while that's unresolved.
       return Container(
         color: AppColors.chipGrey,
         alignment: Alignment.center,
@@ -296,9 +274,6 @@ class _NearByPageState extends State<NearByPage> {
         decoration: BoxDecoration(border: Border.all(color: const Color(0xFFECECEC)), borderRadius: BorderRadius.circular(14)),
         child: Row(
           children: [
-            // Restaurants never show image-shaped UI here at all (not even
-            // the usual placeholder icon box) — see explore_page.dart's
-            // restaurant cards for why. Every other category keeps its photo.
             if (place.category != 'Restaurants') ...[
               ClipRRect(
                 borderRadius: BorderRadius.circular(12),
@@ -331,11 +306,6 @@ class _NearByPageState extends State<NearByPage> {
                 const SizedBox(height: 4),
                 Text(place.distance, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.primary)),
                 const SizedBox(height: 2),
-                // A real IconButton (not a plain Icon) so its tap is
-                // handled here and never bubbles up to the card's own
-                // onTap (which opens the detail page instead) — lets
-                // "get directions" work straight from the list, not just
-                // from inside the detail page.
                 IconButton(
                   onPressed: () => openDirections(context, place.lat, place.lon),
                   icon: const Icon(Icons.directions_outlined, size: 18, color: AppColors.primary),

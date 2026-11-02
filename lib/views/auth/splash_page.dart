@@ -2,13 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../../services/auth_service.dart';
 import '../../theme.dart';
-import '../shared/bottom_nav.dart';
 import 'login_page.dart';
+import 'otp_verification_page.dart';
 
-// ---------------------------------------------------------------------
-// Splash / "Loding Page" — after the brand beat, routes straight to
-// MainPage if a Firebase session is already active, otherwise to Login.
-// ---------------------------------------------------------------------
 class SplashPage extends StatefulWidget {
   const SplashPage({super.key});
 
@@ -22,10 +18,13 @@ class _SplashPageState extends State<SplashPage> {
     super.initState();
     Future.delayed(const Duration(seconds: 2), () {
       if (!mounted) return;
-      final signedIn = AuthService.instance.currentUser != null;
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => signedIn ? const MainPage() : const LoginPage()),
-      );
+      if (AuthService.instance.currentUser == null) {
+        Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => const LoginPage()));
+        return;
+      }
+      // Still signed in: the trusted-device check (FR04) runs again, so a phone
+      // whose 30 days have passed asks for a new email code.
+      openAppAfterSignIn(context);
     });
   }
 

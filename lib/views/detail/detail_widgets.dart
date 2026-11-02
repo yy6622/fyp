@@ -12,32 +12,15 @@ import 'booking_payment_page.dart';
 import 'flight_passenger_details_page.dart';
 import 'hotel_guest_details_page.dart';
 
-// ---------------------------------------------------------------------
-// Shared bits used across the flight/hotel/plan detail pages
-// ---------------------------------------------------------------------
 class DetailHeader extends StatelessWidget {
   final String title;
-  /// The real photo for whatever this detail page is showing (a hotel,
-  /// restaurant, attraction or manually-added place) — null/empty when
-  /// the source has none, in which case [_fallbackBox] shows instead of
-  /// guessing at a stock photo.
   final String? imageUrl;
-  /// A flight has no per-offer photo — Duffel only gives the airline's own
-  /// logo (SVG), so flight detail pages pass this instead of [imageUrl].
-  /// Takes priority over [imageUrl] when both are somehow set.
   final String? logoUrl;
-  /// False hides the hero area entirely (no image, no fallback icon box)
-  /// instead of degrading to [_fallbackBox] — used by restaurants, which
-  /// have no real per-restaurant photo, so even the placeholder box would
-  /// be image-shaped UI implying a picture that doesn't exist.
   final bool showHero;
   const DetailHeader({super.key, required this.title, this.imageUrl, this.logoUrl, this.showHero = true});
 
   @override
   Widget build(BuildContext context) {
-    // A plain white app bar (back button + centered title + bottom
-    // border) sitting above the hero photo — matching the flight/hotel
-    // detail designs — rather than the title being overlaid on the image.
     return Column(
       children: [
         Container(
@@ -70,11 +53,6 @@ class DetailHeader extends StatelessWidget {
     );
   }
 
-  // Used to previously be a fixed `adventure_bg.jpg` stock photo on every
-  // single detail page regardless of what was being viewed (a hotel page
-  // showed the same picture as a flight page) — now the real photo/logo
-  // for the thing actually being shown, falling back to a neutral icon
-  // box (never the old stock photo) when there's no real image to show.
   Widget _buildHero() {
     if (logoUrl != null && logoUrl!.isNotEmpty) {
       return Container(
@@ -117,9 +95,6 @@ class DetailHeader extends StatelessWidget {
   Widget _fallbackIcon(IconData icon) => Icon(icon, size: 44, color: AppColors.textGrey);
 }
 
-/// A small standalone pill for one tag/category label — used wherever a
-/// place has more than one tag (cuisine, category) so each shows as its
-/// own chip instead of being joined into one string with a "•" separator.
 Widget tagChip(String label) {
   return Container(
     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
@@ -128,8 +103,6 @@ Widget tagChip(String label) {
   );
 }
 
-/// A single bullet-style rule row (icon + text), used by the flight
-/// detail page's "Fare Rules" section.
 class FareRuleRow extends StatelessWidget {
   final IconData icon;
   final String text;
@@ -150,12 +123,6 @@ class FareRuleRow extends StatelessWidget {
   }
 }
 
-/// A real Firestore/API field (a flight/hotel/attraction/place's actual
-/// data) that came back empty shows as "-" rather than a blank space —
-/// blank reads as "the page is broken", "-" reads as "this place just
-/// doesn't have that info". Doesn't apply to a value that's already a
-/// deliberate, more specific fallback string (e.g. "Not specified",
-/// "Flexible") — those already say something more useful than "-" would.
 String orDash(String value) => value.trim().isEmpty ? '-' : value;
 
 class InfoField extends StatelessWidget {
@@ -180,27 +147,11 @@ class BookingBar extends StatelessWidget {
   final String price;
   final String priceSuffix;
   final String buttonLabel;
-  // Which History tab this purchase should show up under, and what its row
-  // should read there — e.g. bookingType 'flight', bookingTitle 'KUL →
-  // NRT', bookingSubtitle '12 June 2026 9:20'. Confirming the booking below
-  // writes a real `users/{uid}/bookings` doc so it's not just a dialog —
-  // History reads from the same collection (see [BookingRepository]).
   final String bookingType;
   final String bookingTitle;
   final String bookingSubtitle;
-  // Catalog doc id this booking refers to (e.g. a `catalog_hotels` doc id)
-  // so History Detail can later show real reviews for the actual place —
-  // blank when there's no such catalog target.
   final String refId;
-  // The trip this booking should be auto-added to once payment succeeds
-  // (blank when there's no trip context) and the callback that actually
-  // does that add — built by the caller (DetailPageFlight/DetailPageHotel)
-  // since only they have the full flight/hotel data a trip record needs.
   final String tripId;
-  // Hotel stay dates already chosen on DetailPageHotel's own preview row
-  // (before this bar's button was even tapped) — forwarded into
-  // HotelGuestDetailsPage so an edit made there isn't silently discarded
-  // once checkout actually starts. Unused for a 'flight' booking.
   final DateTime? checkIn;
   final DateTime? checkOut;
   final Future<void> Function(BookingConfirmation confirmation)? onPaid;
@@ -245,12 +196,6 @@ class BookingBar extends StatelessWidget {
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
             ),
             onPressed: () {
-              // Was an instant "confirm and write the booking right here,
-              // no payment step at all" tap — now goes through a real
-              // multi-step checkout (Passenger/Guest Details -> Payment),
-              // the same shape Insurance's own purchase flow uses
-              // (TravellerDetailsPage -> PaymentMethodPage), instead of
-              // skipping straight to "booked" with just a name.
               final unitPrice = double.tryParse(price.replaceAll(RegExp('[^0-9.]'), '')) ?? 0;
               final currencyLabel = price.replaceAll(RegExp(r'[0-9.,\s]'), '');
               final resolvedCurrency = currencyLabel.isEmpty ? price : currencyLabel;
@@ -326,11 +271,6 @@ class AmenityIcon extends StatelessWidget {
   }
 }
 
-/// The shape [ReviewCard] renders — always built from live Firestore data
-/// via [reviewDataFromPlace] (see [ReviewsSection]). [flag]/[country] are
-/// optional and blank for a real user review (we don't know a reviewer's
-/// country); [timeAgo] fills the same subtitle line instead when they're
-/// blank.
 class ReviewData {
   final String name;
   final String flag;
@@ -338,11 +278,6 @@ class ReviewData {
   final int rating;
   final String comment;
   final String timeAgo;
-  // See PlaceReview.autoFlagged's doc comment — only ever true for a
-  // review the viewer is also the author of (watchReviewsFor already
-  // filters out anyone else's flagged review before it ever reaches
-  // reviewDataFromPlace), so [ReviewCard] uses this purely to show that
-  // viewer their own "pending review" state.
   final bool autoFlagged;
   const ReviewData({
     required this.name,
@@ -355,8 +290,6 @@ class ReviewData {
   });
 }
 
-/// Converts one real Firestore-backed [PlaceReview] into the [ReviewData]
-/// shape [ReviewCard] already knows how to render.
 ReviewData reviewDataFromPlace(PlaceReview r) => ReviewData(
       name: r.authorName,
       rating: r.rating,
@@ -371,11 +304,6 @@ class ReviewCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Every reviewer gets a colored circle keyed off their name (same
-    // scheme Community post authors already use via colorValueForName)
-    // with their initial inside it, instead of one flat grey circle that
-    // looked identical for every single review — that sameness read as
-    // "no avatar showing" even though a (blank) circle was there.
     final initial = data.name.trim().isEmpty ? '?' : data.name.trim()[0].toUpperCase();
     return Container(
       padding: const EdgeInsets.all(14),
@@ -436,23 +364,6 @@ class ReviewCard extends StatelessWidget {
   }
 }
 
-/// Opens the shared "write a review" popup (star picker + comment, in the
-/// same rounded-card style as [showNiceFormDialog] everywhere else) and,
-/// if the person actually submits one, resolves their display name and
-/// calls [onSubmit] with the chosen rating/comment. Used by every real
-/// "Reviews" section (see [ReviewsSection]) so Hotel/Restaurant/Attraction/
-/// Community post all write reviews the same way.
-///
-/// The comment is optional — submitting just picks a star rating (defaults
-/// to 5) and leaves the comment blank; [ReviewCard] only shows a comment
-/// line when there actually is one. A tap on "Submit" always counts, same
-/// as the star picker on its own used to.
-///
-/// [onSubmit] returns true when content moderation flagged the comment
-/// (see `review_helpers.dart`'s `addReviewFor`) — shown here as a one-off
-/// SnackBar, since otherwise the only feedback is the review quietly
-/// disappearing from view (held back until an admin reviews it) instead
-/// of the usual "it just appears in the list" confirmation.
 Future<void> showWriteReviewDialog(
   BuildContext context, {
   required String title,
@@ -484,25 +395,11 @@ Future<void> showWriteReviewDialog(
   }
 }
 
-/// The shared "Reviews" section used by every real detail page (Hotel,
-/// Restaurant, Attraction, Community post) — a live-streamed top-3
-/// preview, "Write a Review", and (once there are more than 3) "View All".
-/// Everything here is real: [reviewsStream] comes straight from Firestore,
-/// nothing is canned/sample content.
 class ReviewsSection extends StatelessWidget {
   final String title;
   final String ratingSummary;
   final Stream<List<ReviewData>> reviewsStream;
   final Future<bool> Function({required String authorId, required String authorName, required int rating, required String comment}) onSubmitReview;
-  // Hotel reviews can only be written from History (after a real stay),
-  // not from the Hotel detail page itself — a hotel stay is a real paid
-  // transaction, so its reviews should read like genuine guest feedback,
-  // not a comment section anyone passing through Explore can post to.
-  // Restaurant/Attraction reviews (and a Community post's comments,
-  // which also use this same widget) stay open to everyone, same as
-  // before. [allowWriting] controls whether "Write a Review" shows at
-  // all; DetailPageHotel passes false, HistoryHotelDetailPage (the only
-  // legitimate channel to write one) leaves it at the default true.
   final bool allowWriting;
   const ReviewsSection({
     super.key,

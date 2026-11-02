@@ -8,20 +8,6 @@ import '../../services/auth_service.dart';
 import '../../theme.dart';
 import '../shared/contact_launcher.dart';
 
-// ---------------------------------------------------------------------
-// The signed-in trip member's OWN embassy/consulate for [destination] —
-// the app isn't Malaysia-only, so this looks up the home country from
-// the signed-in user's own Account Setting > Country/Region (falling
-// back to Malaysia while that's unset, since that's the only data this
-// app shipped with originally), reads live from the admin-curated
-// country_emergency_info/{destination}/embassies/{homeCountry} Firestore
-// collection (falling back to the static, already-verified
-// emergency_info.dart maps for Malaysia only — see
-// CountryEmergencyRepository). Only ever shows real, verified contact
-// details — a (destination, home country) pair with nothing on file gets
-// an honest "not available yet" state, for Malaysia with a link to
-// Wisma Putra's own mission directory, never a guessed phone number.
-// ---------------------------------------------------------------------
 class EmbassyPage extends StatefulWidget {
   final String destination;
   const EmbassyPage({super.key, required this.destination});
@@ -43,8 +29,6 @@ class _EmbassyPageState extends State<EmbassyPage> {
           homeCountry = profile.country;
         }
       } catch (_) {
-        // Fall back to the Malaysia default below rather than leaving
-        // the page blank over a profile-read hiccup.
       }
     }
     final embassy = await CountryEmergencyRepository.instance.embassyFor(widget.destination, homeCountry);
@@ -147,9 +131,6 @@ class _EmbassyPageState extends State<EmbassyPage> {
     );
   }
 
-  /// The embassy's real photo when an admin has uploaded one (see
-  /// admin/country-emergency-form.html), with a graceful icon fallback
-  /// while loading, on an empty URL, or if the image fails to load.
   Widget _photoOrIcon(String photoUrl) {
     final placeholder = Container(
       width: 64,

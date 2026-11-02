@@ -46,3 +46,7 @@ app.*.map.json
 
 # Real API keys (Duffel, RollingGo, etc.) — never committed.
 /lib/config/secrets.dart
+
+# Test runs (run_tests.ps1)
+test_results/
+tests/node_modules/

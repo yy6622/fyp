@@ -6,41 +6,10 @@ import '../config/secrets.dart';
 import '../data/country_gateways.dart';
 import '../models/duffel_models.dart';
 
-/// Talks to RollingGo's real hotel data (2M+ hotels, wholesale rates) —
-/// Explore's real Hotels data source, used instead of Duffel Stays
-/// because Duffel's Hotels/Stays product needs a separate account
-/// approval beyond the Flights sandbox token (`duffelApiKey` in
-/// secrets.dart keeps powering [DuffelApiService.searchFlights] —
-/// nothing about Flights changes). See
-/// https://github.com/RollingGo-AI/RollingGo-Hotel-MCP-Global.
-///
-/// IMPORTANT — unlike Duffel, RollingGo doesn't publish a plain REST
-/// API: it's an MCP (Model Context Protocol) server reached over HTTP
-/// with JSON-RPC 2.0 request bodies (the same protocol Claude and other
-/// AI tools use to call external tools), not a normal `GET`/`POST
-/// {json}` REST endpoint. This service speaks that protocol directly
-/// (an `initialize` handshake, then a `tools/call` for `searchHotels`)
-/// instead of pulling in a full MCP client package, since all this app
-/// needs is the one tool.
-///
-/// [_extractHotels] reads the response shape confirmed by RollingGo's
-/// own published example (`hotelInformationList`, with each hotel's
-/// price under `price.lowestPrice`/`price.currency`) — a first version
-/// of this file guessed at a few plausible key names before that
-/// example was found, which is why hotel search silently came back
-/// empty against the real server even though the request itself worked
-/// (no error — a genuinely empty result list looks identical to "found
-/// the array under the wrong key"). The older guessed key names are
-/// kept as a fallback in [_extractHotels] in case a different RollingGo
-/// deployment/version ever shapes it differently.
 class RollingGoApiService {
   RollingGoApiService._();
   static final RollingGoApiService instance = RollingGoApiService._();
 
-  // RollingGo publishes two endpoints for this same MCP server: a
-  // China-domestic one (mcp.rollinggo.cn) and this global one. Switch to
-  // the `.cn` host instead if the key came from RollingGo's China
-  // console rather than https://global.rollinggo.store/apply.
   static const String _base = 'https://mcp.rollinggo.ai/mcp';
 
   Map<String, String> _headers([String? sessionId]) => {
@@ -52,16 +21,6 @@ class RollingGoApiService {
 
   bool get isConfigured => rollingGoApiKey.isNotEmpty && rollingGoApiKey != 'YOUR_ROLLINGGO_API_KEY_HERE';
 
-  /// Hotel search for [destinationQuery] between [checkIn] and
-  /// [checkOut] — same signature/contract as
-  /// [DuffelApiService.searchStays] (including the "a bare
-  /// [kCountries] name gets swapped for [CountryGateway.hotelPlaceQuery]
-  /// first" behaviour), so [CatalogRepository] can call either
-  /// interchangeably. [adults]/[rooms] are accepted for that same
-  /// interface compatibility but aren't threaded into the `searchHotels`
-  /// call below yet — RollingGo's docs never named a guests/occupancy
-  /// field, and every call site in this app currently searches with the
-  /// defaults anyway, so this was left rather than guessed at.
   Future<List<DuffelStayResult>> searchStays({
     required String destinationQuery,
     required DateTime checkIn,
@@ -89,26 +48,7 @@ class RollingGoApiService {
     );
 
     final hotels = _extractHotels(result);
-    // An empty list here is ambiguous: it's either a real "no hotels for
-    // this search" (fine — the UI already shows that as a plain empty
-    // state) or a parsing mismatch against a response shape this app
-    // hasn't actually seen yet (already happened once — see the
-    // `hotelInformationList` fix in _extractHotels's doc comment).
-    // _emptyResultDiagnostic tells the two apart: null means a known key
-    // was genuinely found with nothing in it, a non-null message means
-    // none of the expected keys were found at all, which this surfaces
-    // as a real, specific, visible error (via hotelError in the UI)
-    // instead of silently looking identical to a real empty result.
     if (hotels.isEmpty) {
-      // Diagnostic-only console log (no UI/behaviour change) — searches
-      // for a past checkIn date reportedly come back with hotels while
-      // the same destination with a future checkIn date doesn't, which
-      // isn't explained by anything _extractHotels/_emptyResultDiagnostic
-      // can tell from here. Logging RollingGo's raw payload (it may carry
-      // its own `message` explaining an empty-but-known-key result, which
-      // _emptyResultDiagnostic currently doesn't surface) is the only way
-      // to see why without being able to call RollingGo directly from
-      // either sandbox (both are blocked from mcp.rollinggo.ai).
       dynamic payload = result['structuredContent'];
       payload ??= _parsedTextContent(result);
       // ignore: avoid_print
@@ -116,16 +56,8 @@ class RollingGoApiService {
       final diagnostic = _emptyResultDiagnostic(result);
       if (diagnostic != null) throw RollingGoApiException(diagnostic);
     } else {
-      // Same diagnostic logging for the success case, so a past-date vs
-      // future-date search for the same place can be compared side by
-      // side in the `flutter run` console.
-      // ignore: avoid_print
       print('[RollingGo] place=$resolvedQuery checkIn=${_dateOnly(checkIn)} stayNights=$stayNights -> ${hotels.length} hotels');
     }
-    // One oddly-shaped hotel entry shouldn't blank out an otherwise-good
-    // result list — skip it and keep the rest, same "degrade, don't
-    // crash" approach DuffelApiService takes parsing a third-party
-    // response it doesn't fully control.
     final parsed = <DuffelStayResult>[];
     for (final h in hotels) {
       try {
@@ -140,12 +72,6 @@ class RollingGoApiService {
   String _dateOnly(DateTime d) =>
       '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
-  /// Standard MCP handshake — a server is allowed to require a session
-  /// before accepting `tools/call`, so this always runs first (a lenient
-  /// server that doesn't need it just gets one extra round trip, which
-  /// is cheap and safe; skipping it against a strict server would break
-  /// every call). Returns the `Mcp-Session-Id` response header if the
-  /// server sent one, or null for a server that doesn't use sessions.
   Future<String?> _initialize() async {
     http.Response res;
     try {
@@ -176,12 +102,6 @@ class RollingGoApiService {
     return sessionId;
   }
 
-  /// The MCP spec has the client send this right after `initialize`
-  /// succeeds, before any `tools/call` — no response is expected (it's a
-  /// JSON-RPC *notification*, not a request: no `id` field). A lenient
-  /// server ignores it; a strict one may refuse `tools/call` without it
-  /// first. Best-effort only — a failure here shouldn't block the actual
-  /// search, since plenty of MCP servers don't enforce this at all.
   Future<void> _sendInitializedNotification(String? sessionId) async {
     try {
       await http
@@ -192,7 +112,6 @@ class RollingGoApiService {
           )
           .timeout(const Duration(seconds: 10));
     } catch (_) {
-      // Best-effort — see doc comment above.
     }
   }
 
@@ -236,11 +155,6 @@ class RollingGoApiService {
     return casted;
   }
 
-  /// A streamable-http MCP server may answer with plain `application/json`
-  /// or with an `text/event-stream` body (one or more `data: {...}`
-  /// frames) — this app only sends one request at a time and only cares
-  /// about the final JSON-RPC message, so it takes the last `data:`
-  /// line when the body is SSE-framed.
   Map<String, dynamic>? _decodeJsonRpcBody(http.Response res) {
     final body = res.body.trim();
     if (body.isEmpty) return null;
@@ -259,19 +173,6 @@ class RollingGoApiService {
     }
   }
 
-  /// MCP tool results carry their payload either as `result.structuredContent`
-  /// (the newer, directly-parseable form) or as a JSON string inside
-  /// `result.content[0].text` (the original, text-only form) — tried in
-  /// that order. The hotel list itself is nested under
-  /// `hotelInformationList` — confirmed against RollingGo's own
-  /// published example response (`{"message": "Hotel search succeeded",
-  /// "hotelInformationList": [{"hotelId": ..., "name": ..., "price":
-  /// {"currency": ..., "lowestPrice": ...}, ...}]}` — see
-  /// github.com/RollingGo-AI/RollingGo-Hotel-MCP-Global), which is also
-  /// exactly what [DuffelStayResult.fromRollingGo] already reads
-  /// (hotelId/name/address/starRating/price.lowestPrice/price.currency
-  /// all match). The other key names are kept as a fallback in case a
-  /// different RollingGo deployment/version ever shapes it differently.
   List<Map<String, dynamic>> _extractHotels(Map<String, dynamic> result) {
     dynamic payload = result['structuredContent'];
     payload ??= _parsedTextContent(result);
@@ -286,12 +187,6 @@ class RollingGoApiService {
     return const [];
   }
 
-  /// See the call site in [searchStays] — null means the empty hotel
-  /// list is real (a known key was found, just with nothing in it, or
-  /// the payload was itself a bare empty array), non-null means none of
-  /// the shapes [_extractHotels] knows how to read were found at all,
-  /// so the caller throws this as a concrete, visible error instead of
-  /// it looking identical to a genuine zero-result search.
   String? _emptyResultDiagnostic(Map<String, dynamic> result) {
     dynamic payload = result['structuredContent'];
     payload ??= _parsedTextContent(result);
@@ -330,8 +225,6 @@ class RollingGoApiService {
   }
 }
 
-/// Thrown by [RollingGoApiService] on a non-2xx response, an MCP-level
-/// error, or a request that couldn't be made at all.
 class RollingGoApiException implements Exception {
   final String message;
   const RollingGoApiException(this.message);

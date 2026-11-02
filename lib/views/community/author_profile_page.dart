@@ -7,18 +7,6 @@ import '../../services/auth_service.dart';
 import '../../theme.dart';
 import 'community_post_detail_page.dart';
 
-// ---------------------------------------------------------------------
-// Opened by tapping a Community post's author (feed card or the post
-// detail page) — that author's own profile, scoped to what's relevant
-// from here: the trips they've posted. Gated by that person's own
-// Privacy and Security > Public Profile switch (see
-// PrivacySecurityController / AppUser.publicProfile): off, and this page
-// shows nothing but a plain "this user's profile is private" notice,
-// same as any social app's profile-privacy gate. Viewing your OWN name
-// always shows your posts regardless of that switch — there's nothing to
-// hide from yourself, and this doubles as another way into the same list
-// MyCommunityPostsPage's "My Posts" tab shows.
-// ---------------------------------------------------------------------
 class AuthorProfilePage extends StatefulWidget {
   final String authorId;
   final String authorName;
@@ -153,12 +141,6 @@ class _AuthorProfilePageState extends State<AuthorProfilePage> {
     );
   }
 
-  // Same card shape as MyCommunityPostsPage's own post row (thumbnail +
-  // title/location/like+rating) — kept as its own small copy here rather
-  // than factored out, since the two pages' rows are only coincidentally
-  // identical today and starting a shared widget on this one touch point
-  // risks drifting the existing, working page for a style change that
-  // belongs to this page alone.
   Widget _postRow(CommunityPost post) {
     return GestureDetector(
       onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => CommunityPostDetailPage(post: post))),

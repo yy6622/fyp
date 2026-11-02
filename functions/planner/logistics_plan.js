@@ -1,16 +1,3 @@
-// Flights and hotel stays for AI Summarise.
-//
-// The plan is built AROUND them:
-//   - booked flights   nothing before the arrival flight has landed (+90 min), nothing in the
-//                      3 hours before the flight home. A flight booked in Explore has exact ISO
-//                      times (logistics.js); a typed-in one has display text ("5 June 2026 14:35"),
-//                      parsed here.
-//   - booked hotels    check-in (15:00) and check-out (11:00) are blocked on their days, and the
-//                      first day starts after check-in.
-//   - nothing booked   times the group mentioned in the chat ("我们8号下午3点到", "flight home is 6pm")
-//                      are used instead.
-// They are also returned as fixed rows so the app can show the plan next to them, and the hotel /
-// flight the group agreed on in the chat is compared with what is booked or saved.
 
 const { normalize } = require("../discussion_summary/textproc");
 
@@ -18,7 +5,6 @@ const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "
 const toMin = (t) => { const [h, m] = String(t).split(":").map(Number); return h * 60 + (m || 0); };
 const toHHMM = (n) => `${String(Math.floor(n / 60)).padStart(2, "0")}:${String(n % 60).padStart(2, "0")}`;
 
-/** {d, m} from "5 June 2026 14:35", "2026-06-05T14:35:00", "8 Oct", "Oct 8". */
 function dayMonthOf(text) {
   const s = normalize(text);
   let m = /(\d{4})-(\d{1,2})-(\d{1,2})/.exec(s);
@@ -32,7 +18,6 @@ function dayMonthOf(text) {
   return null;
 }
 
-/** "14:35" / "2:35 pm" / ISO "...T14:35" -> "14:35" */
 function clockOf(text) {
   const s = normalize(text);
   let m = /t(\d{2}):(\d{2})/.exec(s);
@@ -47,7 +32,6 @@ function clockOf(text) {
   return h <= 23 ? `${String(h).padStart(2, "0")}:${min}` : null;
 }
 
-/** 1-based trip day for a date in any of the formats above, or null. */
 function tripDayOf(text, days) {
   const dm = dayMonthOf(text || "");
   if (!dm) return null;
@@ -60,12 +44,6 @@ function tripDayOf(text, days) {
 
 const flightName = (f) => [f.airline, f.flightNumber].filter(Boolean).join(" ").trim() || "Flight";
 
-/**
- * flights: trip.flights   hotelStays: trip.hotelStays   days: [{day, weekday, date}]
- * window: logistics.js computeLogisticsWindow(trip) (exact, from ISO times) or null
- * messages: chat (only used when no flight is booked)
- * Returns { window, fixed: [{day, time, label, kind, location}], checkIn, stays, flightsBooked, notes }
- */
 function tripLogistics({ flights = [], hotelStays = [], days = [], window = null, messages = [] }) {
   const n = days.length;
   const out = { window: { floor: window && window.floor, ceil: window && window.ceil }, fixed: [], checkIn: null, stays: [],
@@ -95,10 +73,8 @@ function tripLogistics({ flights = [], hotelStays = [], days = [], window = null
     if (!out.window.ceil) out.window.ceil = { day: home.depDay, maxMinutes: toMin(home.depTime) - 180 };
   }
 
-  // ---- nothing booked: what the chat said ("我们8号下午3点到", "flight back is 6pm on the 15th")
   if (!parsed.length) {
     const { readDay, readTime } = require("../itinerary_engine");
-    // "下午2点到上海" / "2pm到" / "lands at 3": a time followed by 到 counts as arriving
     const ARRIVE = /(land|arrive|arrival|reach|到达|抵达|降落|落地|飞到|sampai|tiba|(点|:\d\d|am|pm)\s*(左右|多)?\s*(就)?到)/i;
     const LEAVE = /(fly back|flight back|flight home|return flight|depart|回程|回去的飞机|飞回|起飞|balik)/i;
     for (const m of messages) {
@@ -125,7 +101,6 @@ function tripLogistics({ flights = [], hotelStays = [], days = [], window = null
     if (!fromDay && !toDay) continue;
     out.stays.push({ name: h.name || "Hotel", location: h.location || "", fromDay: fromDay || 1, toDay: toDay || n });
     if (fromDay) {
-      // check in after landing if that is later than 15:00
       const land = out.window.floor && out.window.floor.day === fromDay ? out.window.floor.minMinutes : 0;
       const t = Math.max(15 * 60, Math.ceil(land / 15) * 15);
       out.fixed.push({ day: fromDay, time: toHHMM(Math.min(t, 23 * 60)), label: `Check in · ${h.name || "hotel"}`, kind: "hotel", location: h.location || "" });

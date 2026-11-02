@@ -6,11 +6,6 @@ import '../../services/auth_service.dart';
 import 'group_trip_page.dart';
 import 'join_trip_page.dart';
 
-// ---------------------------------------------------------------------
-// Scan a trip's invite QR code (shown on that trip's Group Info page —
-// see InviteQrPage) to join it with the camera instead of typing the
-// invite code. Reached from New Plan's "Scan QR code" tile.
-// ---------------------------------------------------------------------
 class ScanQrPage extends StatefulWidget {
   const ScanQrPage({super.key});
 
@@ -138,9 +133,6 @@ class _ScanQrPageState extends State<ScanQrPage> {
   }
 }
 
-/// The square viewfinder outline over the camera preview — purely
-/// decorative (mobile_scanner finds a code anywhere in frame, not just
-/// inside this box), so it's wrapped in [IgnorePointer] at the call site.
 class _ScanFrame extends StatelessWidget {
   const _ScanFrame();
 

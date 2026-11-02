@@ -1,12 +1,8 @@
-// Pure helpers for generateItinerary (see itinerary.js) - no Firebase imports, so they can be
-// tested with plain `node`: parseItineraryAnswer checks the planner's answer, and
-// resolveItineraryAnswer pins it to the real saved places and plan items.
 
 const ICONS = ["flight", "hotel", "shopping", "food", "place", "activity"];
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 
-/** The first balanced {...} in the text (string-aware), or null. */
 function firstJsonObject(text) {
   const start = text.indexOf("{");
   if (start < 0) return null;
@@ -29,14 +25,7 @@ function firstJsonObject(text) {
 const cleanText = (v, max) => (typeof v === "string" ? v.trim().slice(0, max) : "");
 const validDay = (d, dayCount) => Number.isInteger(d) && d >= 1 && d <= dayCount;
 
-/**
- * Never trust model output: keep only well-formed entries on days that exist.
- * Returns { add, update, remove, unresolved } in the model's own field names,
- * or null if the text isn't the expected JSON at all.
- */
 function parseItineraryAnswer(text, dayCount) {
-  // Use the first complete JSON object only: the tuned model occasionally
-  // repeats its answer, or wraps it in a code fence.
   const raw = firstJsonObject(String(text || ""));
   if (raw === null) return null;
   let obj;
@@ -60,8 +49,6 @@ function parseItineraryAnswer(text, dayCount) {
       location: cleanText(it.location, 120),
       icon: ICONS.includes(it.icon) ? it.icon : "activity",
       saved: it.saved === true,
-      // "known": the place is in Voya's place database / the app's catalog (planner/places.js),
-      // so it is a real place even when nobody saved it - no "not in your saved list" warning
       known: it.known === true,
       source: ["saved", "voya", "catalog", "pattern"].includes(it.source) ? it.source : "",
       reason: cleanText(it.reason, 140),
@@ -92,7 +79,6 @@ function parseItineraryAnswer(text, dayCount) {
 
 const norm = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9一-鿿]+/g, " ").trim();
 
-/** Same place, allowing a shorter/longer form of the name ("Tim Ho Wan" / "Tim Ho Wan (Sham Shui Po)"). */
 function samePlace(a, b) {
   const na = norm(a);
   const nb = norm(b);
@@ -104,7 +90,6 @@ function samePlace(a, b) {
   return [...small].every((t) => big.has(t));
 }
 
-/** Exact (normalised) name first, then the looser match - but only if exactly one candidate fits. */
 function findOne(candidates, label, nameOf) {
   const exact = candidates.filter((c) => norm(nameOf(c)) === norm(label));
   if (exact.length >= 1) return exact[0];
@@ -112,27 +97,16 @@ function findOne(candidates, label, nameOf) {
   return loose.length === 1 ? loose[0] : null;
 }
 
-/**
- * Turns the model's answer into things the app can apply, checking every
- * claim against the real data instead of trusting the model:
- *  - "saved" is decided by actually finding the place in the saved list
- *    (and then the saved name/location are used verbatim)
- *  - update / remove must point at an item that really is in the plan,
- *    otherwise they are dropped - a wrong one would damage the user's plan
- *
- * saved: [{name, location, type}]
- * plan:  {day: [{id, time, label, location, icon}]}
- */
 function resolveItineraryAnswer(answer, saved, plan) {
   const dayItems = (day) => (plan && plan[day]) || [];
   const allItems = Object.keys(plan || {}).flatMap((d) => dayItems(d).map((it) => ({ ...it, day: Number(d) })));
   const locate = (label, day) => {
     const onDay = findOne(dayItems(day), label, (it) => it.label);
     if (onDay) return { ...onDay, day };
-    return findOne(allItems, label, (it) => it.label); // the model named the wrong day
+    return findOne(allItems, label, (it) => it.label);
   };
 
-  const touched = new Set(); // plan item ids already used by an update/remove
+  const touched = new Set();
   const update = [];
   for (const u of answer.update) {
     const item = locate(u.label, u.from_day);
@@ -171,9 +145,7 @@ function resolveItineraryAnswer(answer, saved, plan) {
       location: match && match.location ? match.location : a.location,
       icon: match && match.type === "restaurant" ? "food" : a.icon,
       inSavedList: Boolean(match),
-      // hotel check-in / airport runs are never "saved places", so no warning for them
       warnNotSaved: !match && !logistics && !a.known,
-      // where the place came from and why it is suggested ("Emily suggested · Alex, Mia agreed")
       source: match ? "saved" : a.source || "",
       reason: a.reason || "",
       alreadyInPlan: dayItems(a.day).some((it) => samePlace(it.label, label)),
@@ -183,9 +155,6 @@ function resolveItineraryAnswer(answer, saved, plan) {
   return { add, update, remove, unresolved: answer.unresolved };
 }
 
-// findOne/firstJsonObject are also exported for optimise_prompt.js (see
-// optimise.js) to reuse — same name-matching/JSON-extraction behaviour,
-// no change to either function itself.
 module.exports = {
   parseItineraryAnswer,
   resolveItineraryAnswer,

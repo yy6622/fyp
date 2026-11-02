@@ -11,15 +11,7 @@ import 'community_post_detail_page.dart';
 import 'create_post_page.dart';
 import 'itinerary_select_page.dart';
 
-// ---------------------------------------------------------------------
-// Community page — a single feed of travel posts (each post carries its
-// own itinerary breakdown + reviews, expandable right on the card).
-// ---------------------------------------------------------------------
 class CommunityPage extends StatefulWidget {
-  /// Set when arriving here from a hashtag tap elsewhere (see
-  /// CommunityPostDetailPage's tag chips) — applied once in [initState]
-  /// so the feed opens already filtered to that tag, same as tapping the
-  /// chip directly on this page would do.
   final String? initialTagFilter;
   const CommunityPage({super.key, this.initialTagFilter});
 
@@ -47,11 +39,6 @@ class _CommunityPageState extends State<CommunityPage> {
     super.dispose();
   }
 
-  /// The search bar's "tune" icon — used to open an unrelated "Trip
-  /// Duration (days)" sheet (see CommunityController.minRating's doc
-  /// comment) whose choices went nowhere. This one actually filters the
-  /// feed: a tag (the same [CommunityController.activeTagFilter] a tag
-  /// chip on any post already sets) and a minimum rating.
   void _openFilters() {
     showModalBottomSheet(
       context: context,
@@ -172,9 +159,6 @@ class _CommunityPageState extends State<CommunityPage> {
             children: [
               Column(
                 children: [
-                  // The only thing that stays put while scrolling — the
-                  // search bar, the story banner and the feed all move
-                  // together underneath it now (see _buildScrollableBody).
                   _buildHeader(),
                   Expanded(child: _buildScrollableBody()),
                 ],
@@ -217,13 +201,6 @@ class _CommunityPageState extends State<CommunityPage> {
     );
   }
 
-  // ---------------- Search + banner ----------------
-  // Same shape as Explore's top search bar (ExplorePage._buildSearchBar)
-  // — same fill color, radius and the extra `vertical: 4` padding that
-  // gives it its height; kept as two separate widgets rather than one
-  // shared one since Explore's trailing icon runs a search/voice action
-  // and this one opens the post filter sheet, a genuinely different
-  // control, not just a style difference.
   Widget _buildSearchBar() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -255,12 +232,6 @@ class _CommunityPageState extends State<CommunityPage> {
     );
   }
 
-  // Same footprint as a feed post card below (white card, 16 radius,
-  // ECECEC border) — just filled with a full-bleed image instead of
-  // text content. Drop your own picture in at assets/images/story_banner.jpg
-  // (declared in pubspec.yaml's assets/images/ folder already) and it
-  // replaces the placeholder automatically; until then AppImage shows a
-  // graceful grey placeholder instead of crashing.
   Widget _buildStoryBanner() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -321,9 +292,6 @@ class _CommunityPageState extends State<CommunityPage> {
     );
   }
 
-  // Small "Showing: #tag ✕" pill under the search bar while a hashtag chip
-  // filter is active (see CommunityController.activeTagFilter) — tapping
-  // the ✕ clears it, same as tapping the chip itself again would.
   Widget _buildTagFilterIndicator() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -349,11 +317,6 @@ class _CommunityPageState extends State<CommunityPage> {
     );
   }
 
-  // "Recommended for you" — posts sharing tags with what the signed-in
-  // traveller has viewed before (CommunityController.recommendedPosts).
-  // A horizontal shelf rather than full cards in the main feed, since this
-  // is a highlight reel sitting above the real feed, not a second copy of
-  // it.
   Widget _buildRecommendedSection(List<CommunityPost> recommended) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -427,10 +390,6 @@ class _CommunityPageState extends State<CommunityPage> {
     );
   }
 
-  /// A single tappable "#tag" chip — tapping it sets
-  /// [CommunityController.activeTagFilter], filtering the whole feed down
-  /// to posts carrying that tag. [dense] shrinks it for the recommended
-  /// shelf's tighter cards.
   Widget _tagChip(String tag, {bool dense = false}) {
     final active = controller.activeTagFilter == tag;
     return GestureDetector(
@@ -453,14 +412,6 @@ class _CommunityPageState extends State<CommunityPage> {
     );
   }
 
-  // ---------------- Scrollable body (search bar + banner + feed) ----------------
-  // Everything below the fixed header scrolls as one — the search bar
-  // and story banner used to be fixed Column children with only the
-  // feed below them scrolling in its own ListView, which meant they
-  // permanently ate screen height even once someone had scrolled past
-  // them. A CustomScrollView with the search bar/banner as a
-  // SliverToBoxAdapter ahead of the feed's own sliver lets all of it
-  // scroll together under one shared scroll position instead.
   Widget _buildScrollableBody() {
     final posts = controller.filteredPosts;
     final recommended = controller.recommendedPosts;
@@ -503,11 +454,6 @@ class _CommunityPageState extends State<CommunityPage> {
         else
           SliverPadding(
             padding: const EdgeInsets.fromLTRB(20, 4, 20, 90),
-            // A plain SliverChildListDelegate (rather than
-            // SliverList.separated, a newer constructor not worth
-            // depending on sight-unseen) with the gap manually
-            // interleaved — same visual result as the old
-            // ListView.separated(separatorBuilder: SizedBox(height: 18)).
             sliver: SliverList(
               delegate: SliverChildListDelegate([
                 for (var i = 0; i < posts.length; i++) ...[
@@ -534,10 +480,6 @@ class _CommunityPageState extends State<CommunityPage> {
         children: [
           Row(
             children: [
-              // Tapping the author (avatar/name/handle) opens their
-              // profile instead of this post's detail now — the post
-              // itself is still reachable via the title/image area right
-              // below, which has its own separate onTap.
               Expanded(
                 child: GestureDetector(
                   behavior: HitTestBehavior.opaque,
@@ -583,10 +525,6 @@ class _CommunityPageState extends State<CommunityPage> {
                   ],
                 ),
                 const SizedBox(height: 4),
-                // Only ever renders for the post's own author — watchPosts
-                // already hides an autoFlagged post from everyone else, so
-                // reaching this card at all means either it's not flagged,
-                // or the viewer is the author checking on their own post.
                 if (post.autoFlagged) ...[
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -616,10 +554,6 @@ class _CommunityPageState extends State<CommunityPage> {
                   const SizedBox(height: 10),
                   SizedBox(
                     height: 78,
-                    // FR61 — a video post carries no images (see
-                    // CommunityPost.hasVideo's doc comment: a post has at
-                    // most one media item), so the feed card shows a single
-                    // play-badged thumbnail instead of the photo strip.
                     child: post.hasVideo
                         ? ClipRRect(
                             borderRadius: BorderRadius.circular(10),
@@ -699,12 +633,6 @@ class _CommunityPageState extends State<CommunityPage> {
                   children: [
                     const Icon(Icons.chat_bubble_outline, size: 16, color: AppColors.textGrey),
                     const SizedBox(width: 5),
-                    // There has never been a separate "comment" write path
-                    // — `comments`/`commentsCount` is set to 0 at creation
-                    // and nothing ever increments it. Real written
-                    // feedback on a post lives in its reviews (see
-                    // CommunityRepository.addReview), so this now shows
-                    // and opens that instead of a dead "coming soon" tap.
                     Text('${post.ratingCount}', style: const TextStyle(fontSize: 12, color: AppColors.textGrey)),
                   ],
                 ),
@@ -721,19 +649,12 @@ class _CommunityPageState extends State<CommunityPage> {
     );
   }
 
-  /// Opens the post's Review tab directly — see the feed card's comment
-  /// icon doc comment for why that's where real feedback actually lives.
   void _openReviews(CommunityPost post) {
     controller.setTab(post, CommunityPostTab.review);
     _openDetail(post);
   }
 
   Future<void> _sharePost(CommunityPost post) async {
-    // No hosted web page exists for a community post (same reasoning as
-    // the trip invite code elsewhere in this app: there's no domain to
-    // serve a real link from), so this shares the post's actual text
-    // through the OS share sheet rather than claiming a link was
-    // "copied" when nothing was ever put on the clipboard.
     await SharePlus.instance.share(ShareParams(
       text: '${post.title}\n\n${post.description}\n\n— shared from Voya',
       subject: post.title,
@@ -787,14 +708,6 @@ class _CommunityPageState extends State<CommunityPage> {
     );
   }
 
-  /// The feed card's "⋮" menu — previously the SAME two options
-  /// ("Share"/"Report post", both fake: Share claimed to copy a link
-  /// that was never put on the clipboard, Report called no repository
-  /// method at all) regardless of whose post it was, including your own.
-  /// Now author-aware, and every option here actually does what it
-  /// says — the same real actions the post's detail page already offers
-  /// (see CommunityPostDetailPage._editPost/_deletePost/_reportPost),
-  /// just reachable without leaving the feed.
   void _openPostMenu(CommunityPost post) {
     final isMine = post.authorId == _myUid;
     showModalBottomSheet(
@@ -899,9 +812,6 @@ class _CommunityPageState extends State<CommunityPage> {
     );
   }
 
-  // Plain "Normal Post" compose — an Itinerary Post always goes through
-  // _openItinerarySelect instead, since CreatePostPage now needs a real
-  // Trip (see CreatePostPage.itineraryTrip), not just a title string.
   void _openCreatePost() {
     Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => const CreatePostPage()),

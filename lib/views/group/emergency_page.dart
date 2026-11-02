@@ -8,11 +8,6 @@ import '../../theme.dart';
 import 'embassy_page.dart';
 import 'emergency_contact_page.dart';
 
-// ---------------------------------------------------------------------
-// Emergency — reached from Group Info. Everything here is keyed off the
-// trip's own [Trip.destination] (see emergency_info.dart), never a fixed
-// country regardless of which trip it was opened from.
-// ---------------------------------------------------------------------
 class EmergencyPage extends StatelessWidget {
   final String tripId;
   const EmergencyPage({super.key, required this.tripId});
@@ -68,20 +63,10 @@ class EmergencyPage extends StatelessWidget {
     );
   }
 
-  /// One-tap, one-off share of the device's *current* position — not the
-  /// persistent member-list feature (that's Group Info > Member
-  /// Location). Captures a fresh position right now and hands a Google
-  /// Maps link to the OS share sheet (WhatsApp or anything else the
-  /// person picks), the same way sharing a location from a messaging app
-  /// normally works. Nothing is written to Firestore by this action.
   Future<void> _shareCurrentLocation(BuildContext context) async {
     showDialog<void>(
       context: context,
       barrierDismissible: false,
-      // canPop: false also blocks the system back button from dismissing
-      // this — without it, the unconditional pop() below (once the await
-      // finishes) could end up popping EmergencyPage itself instead of an
-      // already-closed dialog.
       builder: (_) => const PopScope(
         canPop: false,
         child: Center(child: CircularProgressIndicator(color: AppColors.primary)),
@@ -98,8 +83,6 @@ class EmergencyPage extends StatelessWidget {
     }
     final mapsUrl = 'https://www.google.com/maps/search/?api=1&query=${position.latitude},${position.longitude}';
     if (!context.mounted) return;
-    // sharePositionOrigin anchors the iOS/iPadOS share-sheet popover — iPad
-    // requires it (the share can silently fail there without one).
     final origin = Offset.zero & MediaQuery.of(context).size;
     await SharePlus.instance.share(ShareParams(text: 'My current location: $mapsUrl', sharePositionOrigin: origin));
   }

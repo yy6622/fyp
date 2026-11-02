@@ -1,4 +1,3 @@
-/// Each tab in Explore (and a few other screens) has its own kind of filter.
 enum FilterType { flight, hotel, attraction, restaurant }
 
 extension FilterTypeLabel on FilterType {

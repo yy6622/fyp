@@ -9,15 +9,6 @@ import '../../services/flight_document_service.dart';
 import '../../theme.dart';
 import '../shared/member_select_section.dart';
 
-// ---------------------------------------------------------------------
-// Plan_Flight_Detail — flight card inside a group's itinerary. Shown for a
-// flight that's actually on the trip (trip.flights), so every field here
-// is the real stored TripFlight data — never a placeholder. [tripId]/[id]
-// are blank only when this page is opened for a bare History entry with
-// no real trip.flights record behind it (see group_trip_page.dart's
-// _pickHistoryFlight), in which case Passenger/Documents editing is
-// disabled rather than silently doing nothing.
-// ---------------------------------------------------------------------
 class PlanFlightDetailPage extends StatefulWidget {
   final String tripId;
   final String id;
@@ -26,8 +17,6 @@ class PlanFlightDetailPage extends StatefulWidget {
   final String routeCode;
   final String routeCities;
   final String dateTime;
-  // Blank for a manually-typed flight or one booked before this existed —
-  // see TripFlight.arrivalTime.
   final String arrivalTime;
   final String terminal;
   final String bookingRef;
@@ -37,9 +26,6 @@ class PlanFlightDetailPage extends StatefulWidget {
   final String contactEmail;
   final String contactPhone;
   final Map<String, String> documents;
-  // Who this flight is for, and the trip's full member roster to resolve
-  // those uids into display names — see TripFlight.forMemberUids and
-  // MemberSelectSection.
   final List<String> forMemberUids;
   final Map<String, String> memberNames;
 
@@ -71,9 +57,6 @@ class PlanFlightDetailPage extends StatefulWidget {
 
 class _PlanFlightDetailPageState extends State<PlanFlightDetailPage> {
   final PlanFlightDetailController controller = PlanFlightDetailController();
-  // Local copy so an upload shows immediately without re-fetching the
-  // whole trip — TripRepository.setFlightDocument is still the source of
-  // truth in Firestore.
   late Map<String, String> _documents = Map.of(widget.documents);
   final Set<String> _uploading = {};
 
@@ -125,9 +108,6 @@ class _PlanFlightDetailPageState extends State<PlanFlightDetailPage> {
     );
   }
 
-  /// Same bottom-underline treatment as DetailPageHotel's Details/Review
-  /// toggle (_tabButton there) — same text size/weight/colors — so this
-  /// page's tabs read as the same tab system, not a different one.
   Widget _tab(String label, PlanFlightTab tab) {
     final selected = controller.tab == tab;
     return GestureDetector(
@@ -203,11 +183,6 @@ class _PlanFlightDetailPageState extends State<PlanFlightDetailPage> {
     );
   }
 
-  /// Route code and city names stacked on their own lines instead of
-  /// crammed into one Row next to the "Route" label — a long real city
-  /// pair (e.g. "Kuala Lumpur → Tokyo (Narita)") has room to sit on its
-  /// own line under the bold route code rather than fighting the label
-  /// for width.
   Widget _fieldRoute(String route, String cities) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -256,9 +231,6 @@ class _PlanFlightDetailPageState extends State<PlanFlightDetailPage> {
         ),
       );
     }
-    // Richer per-passenger records exist for anything booked since the
-    // real passenger-details flow was added; older/manually-typed entries
-    // only ever have the bare name list, so fall back to that.
     final hasFullDetails = widget.passengerDetails.length == widget.passengers.length;
     return ListView(
       padding: const EdgeInsets.all(20),

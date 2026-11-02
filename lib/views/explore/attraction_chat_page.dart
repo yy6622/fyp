@@ -5,14 +5,6 @@ import '../../repositories/catalog_repository.dart';
 import '../../services/attraction_chat_service.dart';
 import '../../theme.dart';
 
-/// "Ask AI for attraction ideas" — a conversational chatbot (OpenAI, see
-/// AttractionChatService) scoped to whichever destination Explore is
-/// currently showing, and grounded to the real attractions already loaded
-/// there (see AttractionChatController) so it can only ever recommend
-/// places Voya actually has listed, never an invented one. Each
-/// recommendation shows as a real attraction card with an "Add" button
-/// that saves/favorites it to the current trip — the same action as the
-/// heart icon everywhere else in Explore.
 class AttractionChatPage extends StatefulWidget {
   final String destination;
   final List<CatalogAttraction> candidates;
@@ -43,9 +35,6 @@ class _AttractionChatPageState extends State<AttractionChatPage> {
 
   @override
   void dispose() {
-    // controller is NOT disposed here — it's cached by AttractionChatController
-    // .forTrip and reused the next time this chat is opened for the same
-    // trip/destination, so the conversation survives navigating away and back.
     _inputCtrl.dispose();
     _scrollCtrl.dispose();
     super.dispose();
@@ -246,12 +235,6 @@ class _AttractionChatPageState extends State<AttractionChatPage> {
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               minimumSize: Size.zero,
             ),
-            // Disabled with no real trip to save against — same guard
-            // Explore's own save/heart toggle uses (see explore_page.dart's
-            // `onToggleSave: tripId == null ? null : ...`). Used to still
-            // flip to a permanent "Added" state here with nothing actually
-            // persisted whenever this chat was opened with no trip
-            // selected (e.g. a brand-new account with no trips yet).
             onPressed: (added || controller.tripId == null) ? null : () => controller.addToTrip(a),
             child: Text(
               added ? 'Added' : 'Add',

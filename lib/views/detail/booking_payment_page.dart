@@ -7,25 +7,12 @@ import '../../services/auth_service.dart';
 import '../../services/format_utils.dart';
 import '../../services/stripe_service.dart';
 import '../../theme.dart';
+import '../../services/verification_service.dart';
+import '../auth/otp_verification_page.dart';
 
-/// Everything collected at checkout that a paid-for flight/hotel needs once
-/// it's added to a trip's plan — handed to [BookingBar.onPaid] so the detail
-/// page that knows the rest of the flight/hotel data (airline, route, hotel
-/// name/location, ...) can build a real `TripFlight`/`TripHotelStay` from
-/// it, instead of this generic checkout page having to know about those
-/// models itself.
-///
-/// All the passenger/guest fields below are collected one step earlier, on
-/// [FlightPassengerDetailsPage]/[HotelGuestDetailsPage] — this page only
-/// ever forwards what it was handed, plus the real [paymentRef] from the
-/// Stripe charge that only it can produce.
 class BookingConfirmation {
-  // The real Stripe PaymentIntent id (see [StripeService.payWithSheet]) —
-  // used as a genuine, transaction-linked booking reference.
   final String paymentRef;
 
-  // Flight only — one full record per passenger (name, DOB, nationality,
-  // passport number + expiry), length == quantity.
   final List<PassengerDetail> passengerDetails;
   final String contactEmail;
   final String contactPhone;
@@ -39,10 +26,6 @@ class BookingConfirmation {
   final DateTime? checkIn;
   final DateTime? checkOut;
 
-  // Which of the trip's members this booking is for (see
-  // MemberSelectSection, shown on FlightPassengerDetailsPage/
-  // HotelGuestDetailsPage for a group trip) — empty for a solo trip or no
-  // trip context at all.
   final List<String> forMemberUids;
 
   const BookingConfirmation({
@@ -60,48 +43,25 @@ class BookingConfirmation {
     this.forMemberUids = const [],
   });
 
-  /// Back-compat convenience for any display code that just wants the
-  /// plain list of passenger names (e.g. PlanFlightDetailPage's summary
-  /// row) without caring about the rest of each passenger's record.
   List<String> get passengerNames => passengerDetails.map((p) => p.name).toList();
 }
 
-// ---------------------------------------------------------------------
-// Flight/Hotel checkout — a real Stripe payment (sandbox: no actual money
-// moves, but every charge genuinely goes through Stripe's own servers and
-// its real Payment Sheet UI). Passenger/guest details and the seat/room
-// quantity are collected one step earlier (FlightPassengerDetailsPage /
-// HotelGuestDetailsPage, reached from [BookingBar]) — this page just shows
-// the item + those details as a final review, then charges the card.
-// ---------------------------------------------------------------------
 class BookingPaymentPage extends StatefulWidget {
   final String itemTitle;
   final String itemSubtitle;
-  // The real per-unit price, already parsed out of whatever formatted
-  // string (e.g. "RM 592") the detail page was showing — see
-  // [BookingBar]'s call site for how that's derived.
   final double unitPrice;
   final String currencyLabel;
-  // 'per night' / 'Economy' / etc — shown under the unit price, same text
-  // BookingBar itself used to show.
   final String unitSuffix;
-  // 'flight' | 'hotel' — decides what [BookingRepository] files this
-  // booking under and which details summary (Passenger vs Guest) is shown
-  // below.
   final String bookingType;
   final String bookingTitle;
   final String bookingSubtitle;
   final String refId;
-  // Seats (flight) / rooms (hotel) — fixed here, decided on the details
-  // page one step earlier.
   final int quantity;
 
-  // Flight details, collected on FlightPassengerDetailsPage.
   final List<PassengerDetail> passengerDetails;
   final String contactEmail;
   final String contactPhone;
 
-  // Hotel details, collected on HotelGuestDetailsPage.
   final String guestName;
   final String guestEmail;
   final String guestPhone;
@@ -110,14 +70,8 @@ class BookingPaymentPage extends StatefulWidget {
   final DateTime? checkIn;
   final DateTime? checkOut;
 
-  // Which of the trip's members this booking is for — collected one step
-  // earlier (see BookingConfirmation.forMemberUids) and just forwarded.
   final List<String> forMemberUids;
 
-  // The trip to auto-add this booking to once payment succeeds, and the
-  // callback that does it (built by the detail page that knows the full
-  // flight/hotel data) — see [BookingBar]. Blank/null when there's no
-  // trip context, in which case paying just records History as before.
   final String tripId;
   final Future<void> Function(BookingConfirmation confirmation)? onPaid;
 
@@ -167,12 +121,6 @@ class _BookingPaymentPageState extends State<BookingPaymentPage> {
     super.dispose();
   }
 
-  /// Stripe needs the real ISO currency code (e.g. "myr"), but
-  /// [BookingBar] hands this page the *display* label instead — which is
-  /// the ISO code itself for every currency except MYR, where
-  /// CurrencyService deliberately shows "RM" (what Malaysians actually
-  /// call it) rather than the ISO code. That's the one special case to
-  /// undo here; everything else is already the ISO code.
   String get _isoCurrency => widget.currencyLabel.toUpperCase() == 'RM' ? 'myr' : widget.currencyLabel.toLowerCase();
 
   String get _quantityLabel {
@@ -377,13 +325,12 @@ class _BookingPaymentPageState extends State<BookingPaymentPage> {
 
   Future<void> _confirmPayment() async {
     final user = AuthService.instance.currentUser;
+    // FR04 step-up: a payment needs the 6-digit code emailed to the traveller.
+    if (!await confirmWithEmailCode(context, CodePurpose.payment)) return;
+    if (!mounted) return;
     setState(() => _paying = true);
     final String paymentRef;
     try {
-      // The actual charge — Stripe's own Payment Sheet collects the card
-      // and confirms the PaymentIntent the createPaymentIntent Cloud
-      // Function created (see StripeService). Nothing is booked unless
-      // this genuinely succeeds.
       paymentRef = await StripeService.instance.payWithSheet(
         amount: controller.subtotal,
         currencyCode: _isoCurrency,
@@ -401,13 +348,6 @@ class _BookingPaymentPageState extends State<BookingPaymentPage> {
 
     if (user != null) {
       final qtyNote = controller.quantity > 1 ? ' · ${controller.quantity} $_quantityLabel' : '';
-      // Guest/passenger details collected one step earlier (on
-      // FlightPassengerDetailsPage/HotelGuestDetailsPage) were previously
-      // only forwarded to `onPaid` (the trip's own TripFlight/TripHotelStay)
-      // and never written into this booking's own History row — so History
-      // showed a bare title/subtitle with nothing underneath. Written here
-      // too now, so History's detail pages have the same real data Plan's
-      // does.
       final isFlight = widget.bookingType == 'flight';
       final guestName = isFlight ? widget.passengerDetails.map((p) => p.name).where((n) => n.isNotEmpty).join(', ') : widget.guestName;
       final guestEmail = isFlight ? widget.contactEmail : widget.guestEmail;
@@ -434,9 +374,6 @@ class _BookingPaymentPageState extends State<BookingPaymentPage> {
           checkOut: widget.checkOut != null ? formatLongDate(widget.checkOut!) : '',
         );
       } catch (e) {
-        // The Stripe charge itself already succeeded at this point — only
-        // the follow-up Firestore write failed, so this says so rather
-        // than implying the payment didn't go through.
         if (!mounted) return;
         setState(() => _paying = false);
         ScaffoldMessenger.of(context).showSnackBar(
@@ -446,10 +383,6 @@ class _BookingPaymentPageState extends State<BookingPaymentPage> {
       }
     }
 
-    // Auto-add the paid flight/hotel to the trip it was booked for (see
-    // BookingBar.onPaid) — best-effort: the charge and the booking-history
-    // entry above already succeeded, so a failure here only means the trip
-    // itself doesn't get this entry, not that the payment is in doubt.
     try {
       await widget.onPaid?.call(BookingConfirmation(
         paymentRef: paymentRef,

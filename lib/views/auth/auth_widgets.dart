@@ -2,9 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../../theme.dart';
 
-// ---------------------------------------------------------------------
-// Shared bits: text field + social login row
-// ---------------------------------------------------------------------
 class AuthTextField extends StatelessWidget {
   final String hint;
   final bool obscure;
@@ -43,14 +40,6 @@ class AuthTextField extends StatelessWidget {
   }
 }
 
-// [onGoogle] was previously unset — the circle below was plain decoration
-// with no onTap at all. [googleBusy] shows a small spinner in place of the
-// icon while sign-in is in flight, the same shape the rest of this app's
-// buttons use for a loading state.
-//
-// Facebook Login was removed from the app (was never fully configured with
-// real native credentials, and the person decided not to pursue it) — this
-// used to show both a Google and a Facebook circle side by side.
 Widget socialLoginRow(
   String label, {
   required VoidCallback onGoogle,

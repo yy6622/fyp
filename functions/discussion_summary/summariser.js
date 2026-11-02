@@ -1,6 +1,3 @@
-// Port of ml/discussion_summary/summariser.py - line by line, keep the two identical.
-// See the Python file for the explanation of every step; test_parity.py checks
-// that both produce the same summary for every test chat.
 
 const { normalize, MONEY_RE, DATE_RE, QUESTION_RE } = require("./textproc");
 const { cosine, softmaxTop } = require("./runtime");
@@ -57,8 +54,6 @@ function contentSize(norm) {
 const CAP_WORD = /[A-Z][A-Za-z']{3,}/g;
 const REACTION_CUES = [].concat(LEX.AGREE, LEX.REJECT, LEX.DEFER, LEX.FINALIZE);
 
-// False when a reply names a place (a Capitalised word that is not the first word)
-// that never appears in the topic's own messages.
 function namesFit(rawText, topicTexts) {
   const all = rawText.match(CAP_WORD) || [];
   const skipFirst = /^[A-Z][A-Za-z']{3,}/.test(rawText.trim()) ? 1 : 0;
@@ -69,7 +64,6 @@ function namesFit(rawText, topicTexts) {
   return ws.some((w) => joined.includes(w));
 }
 
-// Rules in front of the classifier - see gate() in summariser.py.
 function gate(label, text, topProb = 1, minProb = 0) {
   const norm = normalize(text);
   let rest = norm;
@@ -207,7 +201,6 @@ function latestStances(stances) {
   return latest;
 }
 
-// "Silence is consent": a proposal nobody argues against is agreed.
 function decisionStatus(stances, nMembers, superseded) {
   const latest = latestStances(stances);
   const finalized = stances.some(([, st]) => st === "finalize");
@@ -299,10 +292,6 @@ function renderText(summary) {
   return lines.join("\n");
 }
 
-/**
- * messages: [{id, speaker, text}] in chat order; members: array (only its length is used).
- * Returns the same structure as summariser.py's summarise().
- */
 function summarise(messages, model, members = null, weights = null, highlightRatio = 0.2) {
   const w = Object.assign({}, DEFAULT_WEIGHTS, weights || {});
   const speakers = [];
@@ -515,7 +504,6 @@ function summarise(messages, model, members = null, weights = null, highlightRat
   return summary;
 }
 
-/** Python's round() for x.5 cases (banker's rounding) - used for the highlight count. */
 function pyRound(x) {
   const f = Math.floor(x);
   const diff = x - f;

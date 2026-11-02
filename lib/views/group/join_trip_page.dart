@@ -7,11 +7,6 @@ import '../../theme.dart';
 import 'group_trip_page.dart';
 import 'scan_qr_page.dart';
 
-// ---------------------------------------------------------------------
-// Join a trip by typing its invite code — the text form of whatever's
-// shown as a QR code on that trip's Group Info page (see InviteQrPage).
-// Reached from New Plan's "Join with invite code" tile.
-// ---------------------------------------------------------------------
 class JoinTripPage extends StatefulWidget {
   const JoinTripPage({super.key});
 

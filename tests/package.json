@@ -1,0 +1,13 @@
+{
+  "name": "voya-tests",
+  "private": true,
+  "description": "Executable test cases for the Voya FYP report (Chapter 5). See TESTING.md.",
+  "scripts": {
+    "functions": "node --test functions/",
+    "web": "playwright test -c web",
+    "live": "node --test live/"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.48.2"
+  }
+}

@@ -14,10 +14,9 @@ import '../auth/login_page.dart';
 import '../shared/nice_dialog.dart';
 import '../shared/phone_input_field.dart';
 import 'sub_page_scaffold.dart';
+import '../../services/verification_service.dart';
+import '../auth/otp_verification_page.dart';
 
-// ---------------------------------------------------------------------
-// Account Setting
-// ---------------------------------------------------------------------
 class AccountSettingPage extends StatefulWidget {
   const AccountSettingPage({super.key});
 
@@ -68,8 +67,6 @@ class _AccountSettingPageState extends State<AccountSettingPage> {
       final url = await AvatarService.instance.upload(uid, file);
       await UserRepository.instance.updateProfile(uid, avatarUrl: url);
     } catch (e) {
-      // Raw error, not a generic message — need to see whether this is a
-      // Storage permission/setup problem or a platform-support problem.
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Couldn't upload photo: $e")));
       }
@@ -116,9 +113,6 @@ class _AccountSettingPageState extends State<AccountSettingPage> {
     await UserRepository.instance.updateProfile(uid, currencyCode: picked.code);
   }
 
-  /// "Kuala Lumpur (KUL)" for a known airport code, or the bare code
-  /// itself if it's somehow not in [kMalaysiaAirports] (shouldn't
-  /// happen, but a raw code is still a meaningful fallback label).
   String _airportLabel(String iataCode) {
     for (final a in kMalaysiaAirports) {
       if (a.iataCode == iataCode) return '${a.city.split(',').first} (${a.iataCode})';
@@ -158,12 +152,6 @@ class _AccountSettingPageState extends State<AccountSettingPage> {
     await UserRepository.instance.updateProfile(uid, name: field == 'name' ? value : null, phone: field == 'phone' ? value : null);
   }
 
-  /// Both Password and Email rows used to look exactly like the real
-  /// editable rows above/below them (same chevron, same tappable style)
-  /// but had no `onTap` at all — tapping either did nothing. Firebase
-  /// requires the current password for both (and for account deletion
-  /// below), so each of these asks for it up front rather than failing
-  /// confusingly after the fact.
   Future<void> _changePassword() async {
     final currentCtrl = TextEditingController();
     final newCtrl = TextEditingController();
@@ -188,6 +176,8 @@ class _AccountSettingPageState extends State<AccountSettingPage> {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Passwords don\'t match.')));
       return;
     }
+    // FR04 step-up: confirm with the emailed code before changing the password.
+    if (!await confirmWithEmailCode(context, CodePurpose.changePassword) || !mounted) return;
     try {
       await AuthService.instance.changePassword(currentPassword: currentCtrl.text, newPassword: newCtrl.text);
       if (!mounted) return;
@@ -217,6 +207,7 @@ class _AccountSettingPageState extends State<AccountSettingPage> {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Enter a valid email address.')));
       return;
     }
+    if (!await confirmWithEmailCode(context, CodePurpose.changeEmail) || !mounted) return;
     try {
       await AuthService.instance.changeEmail(currentPassword: currentCtrl.text, newEmail: newEmail);
       if (!mounted) return;
@@ -229,8 +220,6 @@ class _AccountSettingPageState extends State<AccountSettingPage> {
     }
   }
 
-  /// Previously asked for confirmation and then discarded the answer —
-  /// neither "Delete" nor the cancel button did anything different.
   Future<void> _deleteAccount() async {
     final confirmed = await showNiceConfirmDialog(
       context: context,
@@ -252,12 +241,9 @@ class _AccountSettingPageState extends State<AccountSettingPage> {
       ],
     );
     if (verified != true || !mounted) return;
+    if (!await confirmWithEmailCode(context, CodePurpose.deleteAccount) || !mounted) return;
     final uid = AuthService.instance.currentUser?.uid;
     try {
-      // Delete the person's own profile doc first — unambiguously
-      // theirs alone (see AuthService.deleteAccount's doc comment on why
-      // it doesn't also try to cascade-delete shared data like trips or
-      // posts) — then the Firebase Auth account itself.
       if (uid != null) {
         await UserRepository.instance.deleteProfile(uid);
       }
@@ -364,17 +350,6 @@ class _AccountSettingPageState extends State<AccountSettingPage> {
   }
 }
 
-/// Home Airport's picker sheet — unlike the plain [_PickerSheet] below,
-/// this one kicks off an on-demand [LocationService] lookup as soon as
-/// it opens and, when that succeeds, puts the nearest airport(s) in
-/// their own "NEAR YOU" section above the full list (see
-/// `location_service.dart`'s doc comment for why: someone in Penang
-/// should be offered PEN, not have to scroll a plain A-Z list looking
-/// for it while KUL sits at the top by coincidence of list order).
-/// Location failing in any of its ordinary ways (service off,
-/// permission declined, no fix within the timeout) just shows a short
-/// explanation and falls back to the plain full list — never blocks
-/// picking an airport manually.
 class _HomeAirportPickerSheet extends StatefulWidget {
   const _HomeAirportPickerSheet();
 
@@ -488,8 +463,6 @@ class _HomeAirportPickerSheetState extends State<_HomeAirportPickerSheet> {
   }
 }
 
-/// A plain scrollable pick-one-from-a-list bottom sheet, shared by the
-/// Country/Region and Currency rows above — pops the chosen item.
 class _PickerSheet<T> extends StatelessWidget {
   final String title;
   final List<T> items;

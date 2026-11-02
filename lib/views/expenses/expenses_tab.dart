@@ -8,9 +8,6 @@ import '../../theme.dart';
 import 'expense_painters.dart';
 import 'transaction_detail_page.dart';
 
-// ---------------------------------------------------------------------
-// Expenses tab (Groups / Personal) — lives inside GroupTripPage
-// ---------------------------------------------------------------------
 class ExpensesTab extends StatefulWidget {
   final String tripId;
   const ExpensesTab({super.key, required this.tripId});
@@ -103,10 +100,6 @@ class _ExpensesTabState extends State<ExpensesTab> {
     );
   }
 
-  /// Opens the Group/Personal choice sheet — deliberately independent of
-  /// whichever one [controller.personal] currently has the screen set to
-  /// (see [ExpensesTabController.snapshotFor]), since the person generating
-  /// a report may want the other view without switching the toggle first.
   Widget _generateReportButton(BuildContext context) {
     return TextButton.icon(
       onPressed: controller.loading ? null : () => _showGenerateReportSheet(context),
@@ -165,7 +158,7 @@ class _ExpensesTabState extends State<ExpensesTab> {
     );
     try {
       final snapshot = controller.snapshotFor(personal);
-      final bytes = await PdfReportService.buildExpenseReport(snapshot);
+      final bytes = await PdfReportService.buildExpenseReportInBackground(snapshot);
       if (context.mounted) Navigator.of(context, rootNavigator: true).pop();
       final tripName = (snapshot.trip != null && snapshot.trip!.name.isNotEmpty) ? snapshot.trip!.name : 'Trip';
       await Printing.layoutPdf(
@@ -206,10 +199,6 @@ class _ExpensesTabState extends State<ExpensesTab> {
           ),
           const SizedBox(height: 12),
           Row(
-            // "You Owe" / "You're Owed" are a personal-money question, so they
-            // only make sense once you're looking at your own bills — under
-            // Groups the card instead shows group-wide budget stats, which
-            // don't mean anything scoped to just one person.
             children: personal
                 ? [
                     _statTile('You Owe', 'RM ${controller.youOwe.toStringAsFixed(2)}'),
@@ -227,7 +216,6 @@ class _ExpensesTabState extends State<ExpensesTab> {
     );
   }
 
-  /// Donut: green = share of the money already paid back, pink = still owed; % paid in the middle.
   Widget _pie(double fraction) {
     final empty = controller.visibleExpenses.isEmpty;
     return SizedBox(
@@ -250,8 +238,6 @@ class _ExpensesTabState extends State<ExpensesTab> {
     );
   }
 
-  /// Personal's summary icon — a plain wallet glyph instead of the Groups
-  /// donut, since "% of the group's bills settled" isn't a personal stat.
   Widget _walletIcon() {
     return Container(
       width: 76,
@@ -319,8 +305,6 @@ class _ExpensesTabState extends State<ExpensesTab> {
   }
 
   Widget _transactionRow(BuildContext context, TripExpense expense) {
-    // Settled only when EVERY participant has paid their share (the transaction is complete),
-    // not just the signed-in user.
     final paidCount = expense.participants.where((p) => p.paid).length;
     final total = expense.participants.length;
     final settled = total > 0 && paidCount == total;

@@ -1,16 +1,9 @@
 import 'package:flutter/material.dart';
 
-/// Controller backing [FilterPage]. Holds every filter field across all
-/// [FilterType]s — only the ones relevant to the current type get read by
-/// the view, matching the original single-State-class design.
 class FilterController extends ChangeNotifier {
   RangeValues priceRange = const RangeValues(100, 1500);
   RangeValues durationRange = const RangeValues(1, 12);
   bool openNow = false;
-  // AI-Based Attraction Recommendation Algorithm (FYP documentation) —
-  // the 'accessibility' mandatory constraint. Only ever true when the
-  // person explicitly asks for it on the Attraction filter sheet; see
-  // CatalogRepository's OSM 'wheelchair' tag capture for what backs it.
   bool accessibleOnly = false;
 
   final Set<String> departureTimes = {};
@@ -61,8 +54,6 @@ class FilterController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Shared toggle logic for every chip group. If [singleSelect] is true,
-  /// acts like a radio group (only one chip can be active at a time).
   void toggleInSet(Set<String> set, String label, {bool singleSelect = false}) {
     if (singleSelect) {
       set

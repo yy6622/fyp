@@ -5,10 +5,6 @@ import 'package:flutter/material.dart';
 import '../repositories/trip_repository.dart';
 import '../services/auth_service.dart';
 
-/// Controller for [ExportItineraryPage]. Streams the real trip doc and its
-/// expenses so the Export button can build an actual PDF (ItineraryExportService)
-/// from the real day-by-day plan/flights/hotels/expenses — this used to just
-/// show a fake "Itinerary exported as PDF" SnackBar with nothing behind it.
 class ExportItineraryController extends ChangeNotifier {
   final String tripId;
   ExportItineraryController({required this.tripId}) {
@@ -46,8 +42,6 @@ class ExportItineraryController extends ChangeNotifier {
   }
 }
 
-/// Controller for [GroupSettingPage] — streams and updates the real trip
-/// document's name/about/notification settings.
 class GroupSettingController extends ChangeNotifier {
   final String tripId;
   GroupSettingController({required this.tripId}) {
@@ -66,8 +60,6 @@ class GroupSettingController extends ChangeNotifier {
 
   String get _uid => AuthService.instance.currentUser?.uid ?? '';
 
-  /// Real-Time Location affects every member's privacy, not just the
-  /// toggler's own — so only the trip owner may flip it.
   bool get isOwner => _trip != null && _trip!.ownerId.isNotEmpty && _trip!.ownerId == _uid;
 
   final TextEditingController nameController = TextEditingController();
@@ -75,8 +67,6 @@ class GroupSettingController extends ChangeNotifier {
 
   StreamSubscription<Trip?>? _sub;
 
-  // Per-member now (see Trip.pinChatFor's doc comment) — always read/write
-  // the signed-in person's OWN entry, never the whole map.
   bool get pinChat => _trip?.pinChatFor(_uid) ?? false;
   bool get realTimeLocation => _trip?.realTimeLocation ?? false;
   String get notificationOption => _trip?.notificationOptionFor(_uid) ?? 'All Messages';
@@ -104,11 +94,6 @@ class GroupSettingController extends ChangeNotifier {
     return TripRepository.instance.leaveTrip(tripId, uid);
   }
 
-  /// FR12 — permanently deletes the whole group. Only [isOwner] should
-  /// ever be able to reach this from the UI; [TripRepository.deleteTrip]
-  /// double-checks ownership itself (and firestore.rules triple-checks it
-  /// server-side), so this never silently fails open even if a UI check
-  /// is ever missed.
   Future<void> deleteGroup() {
     final uid = AuthService.instance.currentUser?.uid;
     if (uid == null) return Future.value();

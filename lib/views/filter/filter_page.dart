@@ -4,22 +4,9 @@ import '../../controllers/filter_controller.dart';
 import '../../models/filter_models.dart';
 import '../../theme.dart';
 
-// ---------------------------------------------------------------------
-// FilterPage — content changes completely based on `type`
-// ---------------------------------------------------------------------
 class FilterPage extends StatefulWidget {
   final FilterType type;
-  // Owned by whichever page opened this sheet (e.g. ExplorePage) so the
-  // selections made here actually take effect on what that page shows,
-  // and survive the sheet being closed and reopened. That page is also
-  // responsible for disposing it — this sheet only reads/mutates it.
   final FilterController controller;
-  // Real airlines actually present in the current flight search
-  // results (ExplorePage passes `flightResults.map((f) => f.airlineName)`
-  // deduped/sorted) — never a fixed airline list, so searching a
-  // different route only ever offers airlines that could actually show
-  // up in that route's results (e.g. a China route offers Chinese
-  // carriers, a Europe route doesn't). Empty before any search has run.
   final List<String> availableAirlines;
   const FilterPage({super.key, required this.type, required this.controller, this.availableAirlines = const []});
 
@@ -170,14 +157,6 @@ class _FilterPageState extends State<FilterPage> {
     ];
   }
 
-  // ---------------- HOTEL ----------------
-  // Property Type and Amenities checklists used to live here as fixed
-  // inline option lists ('Hotel'/'Resort'/..., 'Free WiFi'/'Pool'/...),
-  // but neither Duffel's stays search nor RollingGo's searchHotels
-  // returns a property-type field at all, and the Amenities checklist
-  // was never actually wired into _visibleHotels's match logic even
-  // though the field itself is real — both removed rather than kept as
-  // filters that look functional but silently do nothing.
   List<Widget> _hotelFilters() {
     return [
       _sectionTitle('Price Range (per night)'),
@@ -191,12 +170,6 @@ class _FilterPageState extends State<FilterPage> {
     ];
   }
 
-  // ---------------- ATTRACTION / PLACES ----------------
-  // Duration and Rating used to live here (a hardcoded duration-bucket
-  // chip row that was display-only — recommendedDuration isn't
-  // consistently structured across every attraction, so it never
-  // actually matched anything — and a star-rating selector) — both
-  // removed by request.
   List<Widget> _attractionFilters() {
     return [
       _sectionTitle('Category'),
@@ -221,18 +194,12 @@ class _FilterPageState extends State<FilterPage> {
       ),
       const SizedBox(height: 20),
       _sectionTitle('Availability'),
-      // AI-Based Attraction Recommendation Algorithm (FYP documentation)
-      // — these two map straight onto its mandatory constraints: a place
-      // that fails either is dropped from the list entirely, never just
-      // ranked lower (see RecommendationEngine.passesMandatoryConstraints).
       _switchTile('Open now', controller.openNow, controller.setOpenNow),
       const SizedBox(height: 8),
       _switchTile('Wheelchair accessible', controller.accessibleOnly, controller.setAccessibleOnly),
     ];
   }
 
-  // ---------------- RESTAURANT ----------------
-  // Rating selector removed by request (same as Attraction's above).
   List<Widget> _restaurantFilters() {
     return [
       _sectionTitle('Cuisine'),
@@ -259,9 +226,6 @@ class _FilterPageState extends State<FilterPage> {
   }
 
 
-  // ---------------------------------------------------------------
-  // Reusable filter building blocks
-  // ---------------------------------------------------------------
   Widget _sectionTitle(String title) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
@@ -329,8 +293,6 @@ class _FilterPageState extends State<FilterPage> {
     );
   }
 
-  /// Wrap of selectable chips. If [singleSelect] is true, acts like a radio
-  /// group (only one chip can be active at a time).
   Widget _chipsGroup(
       List<String> options,
       Set<String> selected, {
@@ -378,8 +340,6 @@ class _FilterPageState extends State<FilterPage> {
     );
   }
 
-  /// Vertical checklist with checkboxes — used where many options may apply
-  /// at once (airlines, amenities).
   Widget _checklistGroup(List<String> options, Set<String> selected) {
     return Column(
       children: options.map((label) {
@@ -408,7 +368,6 @@ class _FilterPageState extends State<FilterPage> {
     );
   }
 
-  /// Horizontal row of pill options where exactly one must be selected.
   Widget _singleChoiceRow(
       List<String> options,
       String selectedValue,

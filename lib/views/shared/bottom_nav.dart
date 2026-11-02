@@ -41,41 +41,19 @@ class _MainPageState extends State<MainPage> {
   ];
   static const _labels = ['Home', 'Explore', 'Plan', 'Profile'];
 
-  // ---------------------------------------------------------------------
-  // Real-time location tracking. MainPage stays mounted for as long as
-  // the person is signed in and using the app (it's the IndexedStack
-  // host behind every tab), which makes it the right long-lived place to
-  // run a background position subscription — started only while their
-  // own "Share Location with Group" flag (Privacy and Security) is on,
-  // and only re-emitting on a real `distanceFilter`-sized move rather
-  // than on a timer. See LocationService.trackPosition.
-  // ---------------------------------------------------------------------
   StreamSubscription<AppUser?>? _profileSub;
   StreamSubscription<Position>? _positionSub;
   bool _tracking = false;
-  // The Firestore profile doc only re-emits when it actually changes, so a
-  // mid-stream failure (GPS toggled off, permission revoked) would
-  // otherwise leave tracking stuck off with shareLocation still true in
-  // Firestore until something unrelated happened to touch the doc again.
-  // Caching what the person *wants* separately from whether it's
-  // currently running lets the error handler below retry on its own.
   bool _wantsTracking = false;
   Timer? _retryTimer;
 
   @override
   void initState() {
     super.initState();
-    // Warms CurrencyService's rate table for the whole app session (not
-    // just once Explore happens to be opened) — MainPage is mounted for
-    // as long as the person is signed in and using the app, same reason
-    // it hosts location tracking below.
     unawaited(CurrencyService.instance.ensureRatesLoaded());
     final uid = AuthService.instance.currentUser?.uid;
     if (uid != null) {
       _profileSub = UserRepository.instance.watchProfile(uid).listen((user) {
-        // See CurrencyService.lastKnownUserCurrency's doc comment — this
-        // is the one long-lived subscription that keeps it current for
-        // every screen other than Explore (which tracks its own).
         CurrencyService.instance.lastKnownUserCurrency = user?.currencyCode;
         _wantsTracking = user?.shareLocation ?? false;
         if (_wantsTracking && !_tracking) {
@@ -94,10 +72,6 @@ class _MainPageState extends State<MainPage> {
       (position) {
         UserRepository.instance.updateLocation(uid, position.latitude, position.longitude);
       },
-      // A denied/disabled service mid-stream ends the subscription on its
-      // own. Reset the flag and, as long as sharing is still wanted and
-      // this page is still mounted, retry after a short delay instead of
-      // leaving tracking silently stuck off.
       onError: (_) {
         _tracking = false;
         if (_wantsTracking && mounted) {
@@ -133,14 +107,6 @@ class _MainPageState extends State<MainPage> {
       listenable: controller,
       builder: (context, _) {
         return Scaffold(
-          // The AI Summarise status bar used to live only inside
-          // GroupTripPage, so leaving that one trip's page (any of the
-          // four tabs below, not just Plan) meant losing sight of a run
-          // that was still going in the background — the user asked for
-          // it to be visible from anywhere in the app, not just "the chat
-          // page". A sibling of the IndexedStack, not inside any one
-          // page, is what makes that true regardless of which tab is
-          // selected.
           body: Column(
             children: [
               Expanded(
@@ -158,12 +124,6 @@ class _MainPageState extends State<MainPage> {
     );
   }
 
-  // IMPORTANT: don't give this a fixed total `height`. The bar must size
-  // itself to its content (icon + optional label + padding) and let the
-  // bottom safe-area inset (gesture bar / nav bar) add on *top* of that,
-  // otherwise devices with a tall inset (or the label appearing on the
-  // selected tab) push the content past a fixed height and Flutter
-  // reports a bottom overflow.
   Widget _buildBottomNav() {
     return Container(
       decoration: const BoxDecoration(
@@ -223,14 +183,6 @@ class _MainPageState extends State<MainPage> {
   }
 }
 
-/// The app-wide counterpart to [AiItineraryStatusBar] (which only shows
-/// while that one trip's own group page is open) — sits above the bottom
-/// nav on every tab, so a run that's still going (or just finished) stays
-/// visible no matter where in the app the person wanders off to. Shows
-/// nothing when no trip has an active run. Tapping it opens that trip's
-/// group page, where the existing page-local bar (and from there, the
-/// full sheet) picks up the exact same run — this bar is just a second,
-/// always-reachable way to notice it, not a separate one.
 class _GlobalAiItineraryBar extends StatelessWidget {
   const _GlobalAiItineraryBar();
 
@@ -268,13 +220,6 @@ class _GlobalAiItineraryBar extends StatelessWidget {
                     const Icon(Icons.auto_awesome, size: 16, color: AppColors.navy),
                   const SizedBox(width: 10),
                   Expanded(
-                    // The per-trip bar on the group page itself doesn't
-                    // need the trip's name (it's obvious which trip you're
-                    // looking at); this one can be seen from any tab, so a
-                    // bare "AI suggestions are ready" would leave someone
-                    // with more than one trip guessing which one. Falls
-                    // back to the plain status text while the trip doc
-                    // hasn't loaded yet or has no name.
                     child: uid == null
                         ? Text(statusText, style: const TextStyle(fontSize: 12.5, color: AppColors.navy))
                         : StreamBuilder<Trip?>(

@@ -3,15 +3,6 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'nice_dialog.dart';
 
-// ---------------------------------------------------------------------
-// Shared "are you sure you want to leave the app?" confirmation for any
-// tappable phone/website/email field (attraction/restaurant contact info,
-// embassy, emergency numbers, ...). Before this, some of these fields
-// jumped straight to the dialer/browser/mail app on a single tap with no
-// confirmation at all, and others (attraction's phone/website) weren't
-// even tappable — this gives every one of them the same
-// "tap -> confirm -> jump" behaviour instead.
-// ---------------------------------------------------------------------
 enum ContactAction { call, website, email }
 
 Future<void> confirmAndLaunch(BuildContext context, ContactAction action, String value) async {

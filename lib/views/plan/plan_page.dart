@@ -18,9 +18,6 @@ class _PlanPageState extends State<PlanPage> {
   final PlanPageController controller = PlanPageController();
   final TextEditingController _searchCtrl = TextEditingController();
 
-  /// Whether the "Past Plans" fold (groups/polls whose trip has had no
-  /// activity for 30+ days) is expanded. Starts collapsed — that's the
-  /// whole point of folding them away.
   bool _showPast = false;
 
   @override
@@ -97,10 +94,6 @@ class _PlanPageState extends State<PlanPage> {
   }
 
   Widget _buildEmptyState() {
-    // A real search with no match is a different state from genuinely
-    // having no trips yet — "create your first plan" would be a
-    // confusing thing to show someone whose search just didn't match
-    // any of their existing (real) trips.
     final searching = controller.searchQuery.isNotEmpty;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 60),
@@ -128,9 +121,6 @@ class _PlanPageState extends State<PlanPage> {
     );
   }
 
-  // Shown on the Voting tab itself when there's at least one trip but no
-  // open vote on any of them — otherwise that tab was just a blank screen
-  // below the tab chips.
   Widget _buildVotingEmptyState() {
     return const Padding(
       padding: EdgeInsets.symmetric(horizontal: 20, vertical: 60),
@@ -216,12 +206,6 @@ class _PlanPageState extends State<PlanPage> {
     );
   }
 
-  // ---------------- Tab chips ----------------
-  // Scrollable instead of a plain Row: a plain Row has no way to shrink
-  // below the natural width of 4 icon+label chips, so on narrower phones
-  // it overflowed off the right edge of the screen. A horizontal
-  // ListView never overflows — it scrolls instead — and still lets every
-  // chip stay tappable.
   Widget _buildTabChips() {
     return SizedBox(
       height: 42,
@@ -263,12 +247,6 @@ class _PlanPageState extends State<PlanPage> {
     );
   }
 
-  // ---------------- Section header ----------------
-  // "View All" used to render as plain, unwrapped Text here — styled
-  // exactly like a tappable link (blue, bold) but with no GestureDetector
-  // at all, so every section header on this page looked actionable and
-  // wasn't. [onViewAll] is now required precisely so a future call site
-  // can't reintroduce the same dead-looking link by accident.
   Widget _buildSectionHeader(String title, {IconData? showIcon, required VoidCallback onViewAll}) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -352,9 +330,6 @@ class _PlanPageState extends State<PlanPage> {
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
                 decoration: BoxDecoration(color: Colors.black.withOpacity(0.55), borderRadius: BorderRadius.circular(8)),
-                // maxLines/overflow so a longer date never spills past the
-                // image's rounded corner (it used to, with no width limit
-                // and no truncation at all).
                 child: Text(item.date, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 8)),
               ),
             ),
@@ -397,11 +372,6 @@ class _PlanPageState extends State<PlanPage> {
     );
   }
 
-  /// Real voter avatars (not an unlabelled 3-color placeholder) next to
-  /// [VotingItem.votes] — same "[UserAvatar] fetches each uid's current
-  /// profile photo live" convention the Vote tab's own option footers use
-  /// (see vote_tab.dart's _voterAvatarStack), sized to fit this card's
-  /// smaller 14px-circle slot.
   Widget _voterAvatarStack(List<String> voterUids) {
     final shown = voterUids.length.clamp(0, 3);
     if (shown == 0) return const SizedBox.shrink();
@@ -423,10 +393,6 @@ class _PlanPageState extends State<PlanPage> {
     );
   }
 
-  // ---------------- Detailed voting list (Voting tab only) ----------------
-  // The "All" tab's horizontal image cards are a compact teaser; selecting
-  // Voting specifically should show the poll status clearly, not just repeat
-  // the same compact preview.
   Widget _buildVotingDetailedList() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -505,10 +471,6 @@ class _PlanPageState extends State<PlanPage> {
                     children: [
                       Text(item.votes, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.navy)),
                       const SizedBox(width: 6),
-                      // leadingOption is a full sentence built from the
-                      // leading option's own label (e.g. a saved place's
-                      // name), which can run long — Expanded + ellipsis so
-                      // it never overflows the card's right edge.
                       Expanded(
                         child: Text(item.leadingOption,
                             textAlign: TextAlign.right,
@@ -583,9 +545,6 @@ class _PlanPageState extends State<PlanPage> {
     );
   }
 
-  // ---------------- Expenses total (Expenses tab only) ----------------
-  // Unlike the "All" tab's tap-to-settle notification banner, this is a
-  // direct stat: the total figure up front, not wrapped in a message.
   Widget _buildExpensesTotalCard() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -634,9 +593,6 @@ class _PlanPageState extends State<PlanPage> {
     );
   }
 
-  // ---------------- Expense group card (Expenses tab only) ----------------
-  // Shows what the group actually owes/spent, not the Plan tab's chat
-  // preview — that's the point of a separate filter.
   Widget _buildExpenseGroupCard(PlanGroup group) {
     final settled = group.yourShare <= 0;
     return Padding(
@@ -702,10 +658,6 @@ class _PlanPageState extends State<PlanPage> {
                         ),
                       ],
                     ),
-                    // Only a real expense has a label — an empty one means
-                    // this group hasn't logged anything yet, so there's no
-                    // "last expense" to preview (previously showed a bare
-                    // " · RM 0.00" chip here even with nothing logged).
                     if (group.lastExpenseLabel.isNotEmpty) ...[
                       const SizedBox(height: 8),
                       Container(
@@ -813,11 +765,6 @@ class _PlanPageState extends State<PlanPage> {
     );
   }
 
-  // ---------------- Past Plans fold ----------------
-  // Groups whose trip has had no real activity (plan edit, vote, expense,
-  // chat message) for 30+ days, per Trip.isInactive. Collapsed by default;
-  // a single small header + arrow reveals both past groups and past polls
-  // together (a group and its own polls fold as one unit, not two).
   Widget _buildPastSection() {
     final pastGroups = controller.pastPlanGroups;
     final pastVotes = controller.showVoting ? controller.pastVotingItems : const <VotingItem>[];

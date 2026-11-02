@@ -6,15 +6,6 @@ import '../../theme.dart';
 import '../shared/contact_launcher.dart';
 import 'detail_widgets.dart';
 
-// ---------------------------------------------------------------------
-// Attraction detail
-// ---------------------------------------------------------------------
-// Attractions don't have a purchase flow like flights/hotels do (there's
-// nothing to "book" — you just go), so the bottom bar here is a save
-// toggle instead of [BookingBar]. Saving is scoped to whichever trip the
-// attraction was opened from (see CatalogRepository's class doc); when
-// there's no trip context (onToggleSave is null) the button is just
-// disabled rather than silently doing nothing.
 class DetailPageAttraction extends StatefulWidget {
   final CatalogAttraction attraction;
   final bool saved;
@@ -37,12 +28,6 @@ class _DetailPageAttractionState extends State<DetailPageAttraction> {
   @override
   void initState() {
     super.initState();
-    // Personalization signal ("based on what you've looked at before",
-    // same idea as CommunityPostDetailPage's own recordView call) — one
-    // view, counted once per person per place (see
-    // CatalogRepository.recordAttractionView's doc comment). Fire-and-forget:
-    // this never blocks or errors the detail page over an analytics/
-    // personalization write.
     final uid = AuthService.instance.currentUser?.uid;
     if (uid != null && uid.isNotEmpty) {
       CatalogRepository.instance.recordAttractionView(widget.attraction.id, uid, widget.attraction.categoryTags);
@@ -59,10 +44,6 @@ class _DetailPageAttractionState extends State<DetailPageAttraction> {
   @override
   Widget build(BuildContext context) {
     final a = widget.attraction;
-    // Only the days that actually have hours set, in week order — used so
-    // the last *rendered* row is the one without a bottom border, even if
-    // a future attraction's schedule skips a day (e.g. closed Mondays)
-    // instead of always assuming Sunday is present.
     final presentDays = _weekdays.where((d) => a.openingHoursByDay[d] != null).toList();
     return Scaffold(
       backgroundColor: Colors.white,
@@ -77,22 +58,10 @@ class _DetailPageAttractionState extends State<DetailPageAttraction> {
                     Padding(
                       padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
                       child: Column(
-                        // Was missing before — without this, Column defaults
-                        // to centering every child that doesn't fill the
-                        // width itself (the title, the rating row, "About"),
-                        // while full-width children (the info card, chips)
-                        // stayed where they were. That's what made the page
-                        // read as "some stuff in the middle, some to the
-                        // side" instead of one consistent left-aligned page
-                        // like Flight/Hotel/Restaurant's detail pages.
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(a.name, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.navy)),
                           const SizedBox(height: 8),
-                          // Star sits right before the rating number (matching
-                          // Hotel's rating row) — it used to float next to the
-                          // title instead, which read as decoration rather than
-                          // part of the rating.
                           Row(
                             children: [
                               const Icon(Icons.star, size: 16, color: AppColors.orange),
@@ -101,8 +70,6 @@ class _DetailPageAttractionState extends State<DetailPageAttraction> {
                             ],
                           ),
                           const SizedBox(height: 8),
-                          // Every category as its own chip — not one label joined
-                          // with a "•" dot.
                           Wrap(spacing: 6, runSpacing: 6, children: a.categoryTags.map(tagChip).toList()),
                           if (a.location.isNotEmpty || a.address.isNotEmpty) ...[
                             const SizedBox(height: 8),
@@ -147,12 +114,6 @@ class _DetailPageAttractionState extends State<DetailPageAttraction> {
                           const Text('About', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.navy)),
                           const SizedBox(height: 10),
                           Text(
-                            // A real description (OSM/Wikipedia, see
-                            // PlacesApiService.resolveDescription) when
-                            // this place has one — only every attraction
-                            // OSM/Wikipedia has nothing for falls back to
-                            // this generic category sentence, rather than
-                            // every attraction sharing the exact same text.
                             a.description.isNotEmpty
                                 ? a.description
                                 : 'One of the popular ${a.category.toLowerCase()} spots on this trip. Save it to your plan and check '

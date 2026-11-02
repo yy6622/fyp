@@ -6,16 +6,6 @@ import 'package:pdf/widgets.dart' as pw;
 
 import '../repositories/trip_repository.dart';
 
-/// Builds a real "Export Itinerary" PDF (Group Setting > ... > Export
-/// Itinerary) from a trip's actual day-by-day plan, flights, hotels and
-/// expenses — previously that page's "Export" button only ever showed a
-/// fake "Itinerary exported as PDF" SnackBar with nothing behind it (see
-/// ExportItineraryController's old doc comment). Deliberately plain
-/// widgets only (Container/Row/Column/Text, same as most of
-/// PdfReportService) — no PdfGraphics/CustomPaint charts — since this
-/// project has no Dart compiler available to check against the installed
-/// `pdf` package version, and this file is new, unlike PdfReportService's
-/// already-shipped chart code.
 class ItineraryExportService {
   ItineraryExportService._();
 
@@ -46,9 +36,6 @@ class ItineraryExportService {
     return data.buffer.asUint8List();
   }
 
-  /// Builds the PDF and returns its raw bytes. [expenses] is optional —
-  /// a trip with no recorded expenses just skips that section rather than
-  /// showing an empty table.
   static Future<Uint8List> buildItineraryPdf({required Trip trip, List<TripExpense> expenses = const []}) async {
     final logo = await _logoBytes();
     final doc = pw.Document();

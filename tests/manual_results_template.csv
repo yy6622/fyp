@@ -1,0 +1,5 @@
+Test case,Test,Result (PASS/FAIL/NOT RUN),Actual result / notes
+TC04,Google sign-in with a real Google account (native account picker),NOT RUN,
+TC24,Nearby map asks for location permission then shows pins,NOT RUN,
+TC59,Emergency page - tap police number opens the phone dialer,NOT RUN,
+TC60,Emergency page - Shared Location opens the share sheet with a map link,NOT RUN,

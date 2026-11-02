@@ -1,12 +1,3 @@
-/// Result shapes for the real Flights/Hotels data source — Duffel's
-/// Flights (air/offer_requests) and Stays (stays/search) REST APIs. See
-/// [DuffelApiService] for the calls that produce these.
-///
-/// A couple of nested fields (accommodation address shape, photo list
-/// shape) are parsed defensively with fallbacks, since Duffel's public
-/// docs describe them at a high level without pinning down every nested
-/// key — if a field ever comes back empty where you'd expect a value,
-/// check the raw response shape against what's parsed below and adjust.
 library;
 
 class DuffelFlightOffer {
@@ -16,12 +7,6 @@ class DuffelFlightOffer {
   final String flightNumber;
   final String originCode;
   final String destinationCode;
-  // Real city name for the origin/destination place Duffel returned
-  // (`city_name`, falling back to the place's own `name` when Duffel
-  // didn't send a separate city name) — null whenever neither was
-  // present, same "don't fabricate" rule as the fields below; the
-  // detail page falls back to the bare IATA code rather than ever
-  // showing a fixed placeholder city.
   final String? originCityName;
   final String? destinationCityName;
   final DateTime departureAt;
@@ -29,20 +14,12 @@ class DuffelFlightOffer {
   final int stops;
   final double totalAmount;
   final String totalCurrency;
-  // Real per-offer detail from Duffel's first segment/`conditions` block —
-  // null/empty whenever Duffel's own response didn't have it, same
-  // "don't fabricate" rule as DuffelStayResult.amenities. Detail page
-  // hides each row rather than ever showing a fixed placeholder value.
   final String? aircraftName;
   final String? cabinClass;
   final String? originTerminal;
   final String? destinationTerminal;
   final int? checkedBagQuantity;
   final int? carryOnBagQuantity;
-  // Duffel's conditions.change_before_departure / refund_before_departure
-  // — `allowed` is nullable because Duffel itself sometimes doesn't know
-  // (airline didn't return fare-rule data for this offer), which is a
-  // real third state, not the same as "not allowed".
   final bool? changeAllowed;
   final String? changePenaltyAmount;
   final String? changePenaltyCurrency;
@@ -98,20 +75,12 @@ class DuffelFlightOffer {
     final carrier = (firstSeg['marketing_carrier'] as Map?)?.cast<String, dynamic>() ?? const {};
 
     DateTime parseDt(dynamic v) => DateTime.tryParse(v as String? ?? '') ?? DateTime.now();
-    // A "place" field (slice/segment origin/destination) may come back as
-    // either a plain IATA-code string or a richer {iata_code, name, ...}
-    // object depending on the endpoint — handle both.
     String? iataOf(dynamic place) {
       if (place is String) return place;
       if (place is Map) return place['iata_code'] as String?;
       return null;
     }
 
-    // Same place object, but its human-readable city name — Duffel
-    // sends `city_name` directly on airport places; `name` is the
-    // fallback for place shapes that only carry a plain name. A bare
-    // IATA-code string (no nested object) has no name to read, so this
-    // returns null rather than inventing one.
     String? cityNameOf(dynamic place) {
       if (place is! Map) return null;
       final city = place['city_name'] as String?;
@@ -121,10 +90,6 @@ class DuffelFlightOffer {
       return null;
     }
 
-    // Duffel puts per-passenger fare detail (cabin, baggage allowance) on
-    // the segment under `passengers`, keyed by passenger id — the first
-    // entry is enough for a single-traveller display; a real seatmap/
-    // multi-passenger breakdown is out of scope here.
     final segPassengers = (firstSeg['passengers'] as List?) ?? const [];
     final segPassenger = segPassengers.isNotEmpty ? segPassengers.first as Map<String, dynamic> : <String, dynamic>{};
     final baggages = (segPassenger['baggages'] as List?) ?? const [];
@@ -177,10 +142,6 @@ class DuffelFlightOffer {
     );
   }
 
-  /// A plain, flat serialization for [CatalogRepository]'s "popular
-  /// flights" Firestore cache — deliberately its own simple format
-  /// rather than reusing [fromJson]'s raw-Duffel-response shape, so
-  /// caching doesn't depend on faking a realistic-looking API response.
   Map<String, dynamic> toCacheMap() => {
         'id': id,
         'airlineName': airlineName,
@@ -239,8 +200,6 @@ class DuffelFlightOffer {
 }
 
 class DuffelStayResult {
-  /// The *search result* id — what you'd pass along to fetch full rates /
-  /// start a booking. Not the same as [accommodationId].
   final String searchResultId;
   final String accommodationId;
   final String name;
@@ -253,26 +212,7 @@ class DuffelStayResult {
   final String cheapestCurrency;
   final DateTime checkInDate;
   final DateTime checkOutDate;
-  /// Real per-hotel amenity names — Duffel's `accommodation.amenities`
-  /// (each entry's `description`, falling back to `type`) or RollingGo's
-  /// `hotelAmenities` (already plain strings). Empty when the source
-  /// result just didn't have any, same "don't fabricate" rule as
-  /// [reviewScore]/[reviewCount].
   final List<String> amenities;
-  // The accommodation's own check-in/check-out policy times (e.g.
-  // "3:00 PM") — Duffel's `accommodation.check_in_information` block,
-  // read defensively across a few plausible key names since Duffel's
-  // public docs don't pin the exact shape down (same caveat as this
-  // file's other nested-field parsing). Not the stay's own dates
-  // ([checkInDate]/[checkOutDate] above) — this is the hotel's
-  // standing policy, the same for every booking. Null whenever Duffel
-  // didn't send it, or for a RollingGo result (no equivalent field in
-  // its documented response) — the detail page hides that row rather
-  // than ever showing a fixed placeholder time. There is no real
-  // cancellation-policy data available from either source at the
-  // search stage (Duffel only returns that once you fetch a specific
-  // rate/quote, which this app doesn't currently call), so there's no
-  // field for it here — the detail page simply has no cancellation row.
   final String? checkInPolicyTime;
   final String? checkOutPolicyTime;
 
@@ -317,12 +257,6 @@ class DuffelStayResult {
 
     DateTime parseDate(dynamic v) => DateTime.tryParse(v as String? ?? '') ?? DateTime.now();
 
-    // Duffel's check-in/check-out policy time, read defensively: the
-    // nested block's own key name isn't confirmed against a live
-    // response, so a few plausible candidates are tried, and a raw
-    // "HH:mm[:ss]" value is reformatted to "3:00 PM"-style; anything
-    // that doesn't parse as a time is shown exactly as Duffel sent it
-    // rather than dropped.
     final checkInInfo = (accommodation['check_in_information'] as Map?)?.cast<String, dynamic>() ?? const {};
     String? formatPolicyTime(dynamic raw) {
       if (raw is! String || raw.isEmpty) return null;
@@ -343,10 +277,6 @@ class DuffelStayResult {
         checkInInfo['check_out_time'] ??
         accommodation['check_out_time']);
 
-    // Duffel's accommodation.amenities is a list of {type, description}
-    // objects (e.g. {"type": "wifi", "description": "WiFi"}) — prefer the
-    // human-readable description, fall back to the type code, and drop
-    // anything that ends up with neither rather than showing a blank chip.
     final amenitiesField = accommodation['amenities'];
     final amenities = <String>[];
     if (amenitiesField is List) {
@@ -381,8 +311,6 @@ class DuffelStayResult {
     );
   }
 
-  /// Same reasoning as [DuffelFlightOffer.toCacheMap] — a plain, flat
-  /// shape dedicated to [CatalogRepository]'s "popular hotels" cache.
   Map<String, dynamic> toCacheMap() => {
         'searchResultId': searchResultId,
         'accommodationId': accommodationId,
@@ -419,17 +347,6 @@ class DuffelStayResult {
         checkOutPolicyTime: m['checkOutPolicyTime'] as String?,
       );
 
-  /// Same shape, sourced from [RollingGoApiService.searchStays]'s
-  /// `searchHotels` tool result instead of Duffel's `/stays/search`.
-  /// RollingGo's documented hotel object doesn't carry a separate
-  /// "search result id" vs "accommodation id" the way Duffel's two-tier
-  /// scheme does, so [hotelId] fills both — every other field this app
-  /// reads off a [DuffelStayResult] (saving, display, caching) only
-  /// needs *some* stable id, not Duffel's specific split. Field names
-  /// are read defensively (multiple candidates tried where RollingGo's
-  /// docs were ambiguous, e.g. the photo field) since this mapping
-  /// hasn't been verified against a live response yet — see
-  /// RollingGoApiService's doc comment.
   factory DuffelStayResult.fromRollingGo(
     Map<String, dynamic> json, {
     required DateTime checkIn,
@@ -453,10 +370,6 @@ class DuffelStayResult {
         photoUrl = first is String ? first : (first is Map ? _rgString(first['url']) : null);
       }
     }
-    // RollingGo's searchHotels response carries `hotelAmenities` as a
-    // sibling field on each hotel object, already a plain list of strings
-    // (e.g. ["Bar", "Gym", "Pool", "SPA", "Parking", "WIFI"]) — no
-    // {type, description} unwrapping needed the way Duffel's shape does.
     final amenitiesField = json['hotelAmenities'];
     final amenities = amenitiesField is List
         ? amenitiesField.map((e) => _rgString(e)).whereType<String>().toList()
@@ -468,11 +381,6 @@ class DuffelStayResult {
       name: _rgString(json['name']) ?? 'Unnamed Hotel',
       address: _rgString(json['address']) ?? '',
       rating: _rgNum(json['starRating']),
-      // RollingGo's documented searchHotels response has no separate
-      // guest-review score/count field (only the star classification
-      // above) — left null rather than guessed, same "don't fabricate"
-      // rule as everywhere else in this app; the UI already hides the
-      // review row whenever reviewScore is null.
       reviewScore: null,
       reviewCount: null,
       photoUrl: photoUrl,
@@ -481,20 +389,11 @@ class DuffelStayResult {
       checkInDate: checkIn,
       checkOutDate: checkOut,
       amenities: amenities,
-      // RollingGo's documented searchHotels response has no check-in/
-      // check-out policy time field — left null, same "don't fabricate"
-      // rule as [reviewScore] above; the detail page hides those rows.
       checkInPolicyTime: null,
       checkOutPolicyTime: null,
     );
   }
 
-  /// [fromRollingGo] reads every field through these helpers rather than
-  /// a hard `as` cast — accepting whichever of the plausible JSON types
-  /// (a number sent as a JSON number vs. as a numeric string, same
-  /// inconsistency Duffel itself has between its own endpoints) shows
-  /// up, instead of throwing and losing that whole search result over
-  /// one unexpected type.
   static String? _rgString(dynamic v) => v is String && v.isNotEmpty ? v : null;
   static double? _rgNum(dynamic v) {
     if (v is num) return v.toDouble();
@@ -502,12 +401,6 @@ class DuffelStayResult {
     return null;
   }
 
-  /// Same idea as [_rgString], specifically for an id field — RollingGo's
-  /// own published example has `hotelId` as a JSON *number* (`43615`),
-  /// not a string, so [_rgString] alone would silently return null and
-  /// leave [searchResultId]/[accommodationId] empty for every real
-  /// result (breaking save/detail navigation/caching, anything keyed on
-  /// that id) — caught by a fresh-eyes review before this ever shipped.
   static String? _rgId(dynamic v) {
     if (v is String && v.isNotEmpty) return v;
     if (v is num) return v.toString();
@@ -515,8 +408,6 @@ class DuffelStayResult {
   }
 }
 
-/// Thrown by [DuffelApiService] on a non-2xx response or a request that
-/// couldn't be made at all (network error, timeout).
 class DuffelApiException implements Exception {
   final String message;
   const DuffelApiException(this.message);

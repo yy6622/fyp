@@ -3,9 +3,6 @@ import 'package:flutter/material.dart';
 import '../../controllers/expenses_controller.dart';
 import '../../theme.dart';
 
-/// Full-page member checklist for "Split Method: Equally" — picks which of
-/// the trip's real members [AddExpenseController.selectedUids] the amount
-/// is split between.
 class SplitFriendsPage extends StatefulWidget {
   final AddExpenseController controller;
   const SplitFriendsPage({super.key, required this.controller});

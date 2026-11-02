@@ -14,9 +14,6 @@ const List<String> _monthNames = [
   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
 ];
 
-// ---------------------------------------------------------------------
-// Traveller details form
-// ---------------------------------------------------------------------
 class TravellerDetailsPage extends StatefulWidget {
   final InsurancePlan plan;
   // See [InsurancePlanCard.tripId].
@@ -30,20 +27,8 @@ class TravellerDetailsPage extends StatefulWidget {
 class _TravellerDetailsPageState extends State<TravellerDetailsPage> {
   final TravellerDetailsController controller = TravellerDetailsController();
 
-  // When bought from inside a trip, the travel period is this trip's own
-  // real dates (Trip.startDate/endDate) rather than something re-typed —
-  // fetched once here and fed into the controller once it arrives.
   bool _loadingTrip = false;
 
-  // Real TextEditingControllers for the four plain-text fields per
-  // traveller (Full Name, Passport Number, Email, Phone) — these used to
-  // be bare TextFields with no controller at all (see
-  // TravellerDetailsController's doc comment), so typing into them never
-  // reached TravellerData. _addTraveller/_removeTraveller below keep each
-  // list's length in exact lockstep with controller.travellerCount, adding
-  // or removing at the same index as the traveller itself (not just
-  // trimming from the end) so a mid-list removal doesn't mix up which
-  // controller belongs to which remaining traveller.
   final List<TextEditingController> _nameCtrls = [];
   final List<TextEditingController> _passportCtrls = [];
   final List<TextEditingController> _emailCtrls = [];
@@ -52,8 +37,6 @@ class _TravellerDetailsPageState extends State<TravellerDetailsPage> {
   @override
   void initState() {
     super.initState();
-    // Starts with exactly one traveller (TravellerDetailsController's own
-    // initial state).
     _nameCtrls.add(TextEditingController());
     _passportCtrls.add(TextEditingController());
     _emailCtrls.add(TextEditingController());
@@ -67,12 +50,6 @@ class _TravellerDetailsPageState extends State<TravellerDetailsPage> {
     final uid = AuthService.instance.currentUser?.uid;
     if (uid == null) return;
     setState(() => _loadingTrip = true);
-    // A network blip, a permission hiccup, or the trip being deleted
-    // mid-flow could make this throw — without this catch that would
-    // leave _loadingTrip stuck true forever (an infinite spinner on the
-    // Travel Period card, blocking Continue with no way out). Falling
-    // back to null here degrades to the same "trip has no dates yet"
-    // path _travelPeriodField already handles: an editable date picker.
     Trip? trip;
     try {
       trip = await TripRepository.instance.getTrip(widget.tripId!, uid);
@@ -282,9 +259,6 @@ class _TravellerDetailsPageState extends State<TravellerDetailsPage> {
     );
   }
 
-  // Was a bare TextField with no controller/onChanged at all — see
-  // TravellerDetailsController's doc comment for why that silently
-  // discarded whatever was typed. Now a real, wired-up text field.
   Widget _field(
     TextEditingController controller,
     String label, {
@@ -317,9 +291,6 @@ class _TravellerDetailsPageState extends State<TravellerDetailsPage> {
     );
   }
 
-  /// A tappable field that opens a picker (Nationality, Date of Birth)
-  /// instead of accepting free text. Shows [value] when set, otherwise
-  /// [label] as a placeholder.
   Widget _pickerField(String label, String? value, {required VoidCallback onTap}) {
     return InkWell(
       borderRadius: BorderRadius.circular(10),
@@ -359,10 +330,6 @@ class _TravellerDetailsPageState extends State<TravellerDetailsPage> {
     if (picked != null) controller.setDob(index, picked);
   }
 
-  /// Travel-period field — a read-only row showing this trip's own real
-  /// dates when bought from inside a trip (nothing to edit: the dates
-  /// belong to the trip itself), or a tappable date-range picker for a
-  /// standalone purchase (or the rare trip with no dates set yet).
   Widget _travelPeriodField() {
     final hasDates = controller.travelStart != null && controller.travelEnd != null;
     final label = hasDates

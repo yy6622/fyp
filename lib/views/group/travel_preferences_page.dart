@@ -6,14 +6,6 @@ import '../../services/auth_service.dart';
 import '../../theme.dart';
 import '../shared/nice_dialog.dart';
 
-// ---------------------------------------------------------------------
-// Travel Preferences — real, per-trip settings edited by any group member
-// and shared by the whole group (reached from Group Setting). Replaces
-// the old Profile > Travel Preferences screen, which only ever showed two
-// hardcoded fake plans ("Japan Trips"/"Korea Trips") with fixed values
-// that could never actually be changed. Everything here reads and writes
-// the trip's own Firestore document.
-// ---------------------------------------------------------------------
 class TravelPreferencesPage extends StatelessWidget {
   final String tripId;
   const TravelPreferencesPage({super.key, required this.tripId});
@@ -135,9 +127,6 @@ class TravelPreferencesPage extends StatelessWidget {
     await TripRepository.instance.updateSettings(tripId, budgetPerPerson: parsed, actorUid: _uid);
   }
 
-  /// A simple single-select bottom sheet — matches [GroupSettingPage]'s
-  /// own notification-option picker rather than introducing a different
-  /// look for the same "pick one of a few options" interaction.
   void _pickSingle(
     BuildContext context, {
     required String title,

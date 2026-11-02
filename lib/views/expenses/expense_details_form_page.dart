@@ -35,7 +35,6 @@ class _ExpenseDetailsFormPageState extends State<ExpenseDetailsFormPage> {
 
   static const double _maxAmount = 1000000;
 
-  /// null = valid, otherwise what is wrong with it.
   String? _amountError(String text) {
     final t = text.trim();
     if (t.isEmpty) return 'Enter an amount';
@@ -46,8 +45,6 @@ class _ExpenseDetailsFormPageState extends State<ExpenseDetailsFormPage> {
     return null;
   }
 
-  /// Amount gets its own dialog: digits and one "." with at most 2 decimals can be typed at all,
-  /// the problem is shown under the field as you type, and Save only works for a valid amount.
   Future<void> _editAmount() async {
     final ctrl = TextEditingController(text: widget.controller.amountController.text);
     String? error;
@@ -87,7 +84,6 @@ class _ExpenseDetailsFormPageState extends State<ExpenseDetailsFormPage> {
       ),
     );
     if (saved == true) {
-      // store it tidy: "12.5" -> "12.50"
       widget.controller.setAmountText(double.parse(ctrl.text.trim()).toStringAsFixed(2));
     }
   }
@@ -186,7 +182,6 @@ class _ExpenseDetailsFormPageState extends State<ExpenseDetailsFormPage> {
     );
   }
 
-  /// The first thing that stops this expense from being saved, in plain words.
   String _whatIsMissing() {
     final c = widget.controller;
     if (c.splitEqually) {
@@ -200,10 +195,6 @@ class _ExpenseDetailsFormPageState extends State<ExpenseDetailsFormPage> {
     return 'Add an amount and who to split with';
   }
 
-  /// Lets the split method be changed from right inside Details, instead of
-  /// being locked in by which "Add Expenses" tile was tapped — "Split With"
-  /// (equal, member checklist) or "Itemized" (per-line-item), either
-  /// reachable at any point while filling the form in.
   Future<void> _chooseSplitMethod() async {
     final choice = await showModalBottomSheet<String>(
       context: context,
@@ -262,8 +253,6 @@ class _ExpenseDetailsFormPageState extends State<ExpenseDetailsFormPage> {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 14),
         decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: Color(0xFFE4E4E4)))),
-        // The value side must be Expanded: a Flexible inside a Row that itself sits unconstrained in
-        // another Row cannot be laid out, and every row of this form rendered blank.
         child: Row(
           children: [
             Text(label, style: const TextStyle(fontSize: 13, color: AppColors.textGrey)),

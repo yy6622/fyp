@@ -5,18 +5,6 @@ import 'package:qr_flutter/qr_flutter.dart';
 import '../../repositories/trip_repository.dart';
 import '../../theme.dart';
 
-// ---------------------------------------------------------------------
-// The QR / code half of inviting someone to a trip — reached from Group
-// Info's "Invite via QR / Code" menu entry. Scanning this with
-// Join → Scan QR code (or typing the code below into Join → Enter code)
-// adds the scanner/typer as a real trip member — see
-// TripRepository.joinByInviteCode and firestore.rules' isSelfJoin().
-//
-// Shown as a short code rather than the old fake https://voya.app/join/...
-// link — there's no real domain behind this app to serve that from, so
-// the link never actually opened anything; a bare code is both honest
-// about that and reads less like a dead/broken link.
-// ---------------------------------------------------------------------
 class InviteQrPage extends StatelessWidget {
   final String tripId;
   final String tripName;
@@ -29,12 +17,6 @@ class InviteQrPage extends StatelessWidget {
     }
   }
 
-  /// Splits [code] into 4-character groups with a thin space between
-  /// them ("aB3d E9kL mN2p Q7rS") purely for on-screen legibility — the
-  /// QR code and the copy button both still use the plain, ungrouped
-  /// [code]; [TripRepository.parseInviteCode] also strips any spaces/
-  /// dashes back out, so pasting this grouped text still works if
-  /// someone copies it by hand instead of using the copy button.
   String _groupedForDisplay(String code) {
     final buffer = StringBuffer();
     for (var i = 0; i < code.length; i += 4) {

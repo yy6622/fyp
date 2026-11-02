@@ -3,12 +3,6 @@ import 'dart:io';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
 
-/// Picks and uploads a travel document photo (booking confirmation, room
-/// voucher, passport scan, ...) for a hotel stay already on a trip's plan
-/// — the hotel-stay sibling of [FlightDocumentService], same shape, its
-/// own storage path (`hotel_documents/{tripId}/{stayId}/{docType}_
-/// {timestamp}.jpg`) so a re-upload doesn't clobber an earlier one before
-/// the new download URL is saved.
 class HotelDocumentService {
   HotelDocumentService._();
   static final HotelDocumentService instance = HotelDocumentService._();

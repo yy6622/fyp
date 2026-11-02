@@ -4,25 +4,7 @@ import '../../controllers/saved_items_controller.dart';
 import '../../controllers/vote_controller.dart' show PickedSavedItem;
 import '../../theme.dart';
 
-// ---------------------------------------------------------------------
-// "Add from Saved" — a bottom sheet for Create Vote's option list, so an
-// option can be picked from what's already saved for this trip (a
-// shortlisted hotel, attraction, restaurant or flight) instead of being
-// typed out by hand every time. Multi-select, across all four
-// flights/hotels/attractions/restaurants tabs at once — confirming
-// appends one option per thing picked.
-//
-// [PickedSavedItem] itself lives in vote_controller.dart (it's what
-// CreateVoteController's option list is actually made of), not here —
-// this sheet just builds instances of it from the catalog rows it shows.
-// ---------------------------------------------------------------------
 
-/// Opens the picker and returns whatever was picked (empty/null if the
-/// sheet was dismissed without confirming anything). [alreadyAdded] is the
-/// set of [PickedSavedItem.dedupeKey]s already sitting in Create Vote's
-/// option list — those rows show as already-added and can't be picked
-/// again, so the exact same saved listing can't end up as two separate
-/// options.
 Future<List<PickedSavedItem>?> showSavedItemPicker(
   BuildContext context, {
   required String tripId,
@@ -51,9 +33,6 @@ class _SavedItemPickerSheetState extends State<_SavedItemPickerSheet> {
   late final SavedItemsController controller = SavedItemsController(tripId: widget.tripId);
   _PickerTab _tab = _PickerTab.flights;
 
-  // Selection is keyed by "<kind>:<id>" (== PickedSavedItem.dedupeKey) ->
-  // the full picked item, so confirming just returns `_selected.values`
-  // regardless of which tabs the picks came from.
   final Map<String, PickedSavedItem> _selected = {};
 
   @override
@@ -137,12 +116,6 @@ class _SavedItemPickerSheetState extends State<_SavedItemPickerSheet> {
     );
   }
 
-  // Same shape as SavedItemsPage's own tab row (Expanded + bottom-border
-  // underline) rather than fixed-width pill chips — four chips wide
-  // enough to fit "Attractions" in full, side by side with no scrolling,
-  // overflowed past the screen edge on a real phone. Expanded always
-  // divides the available width evenly, so this can't overflow no matter
-  // how long a label is.
   Widget _tabButton(String label, _PickerTab tab) {
     final selected = _tab == tab;
     return GestureDetector(
@@ -293,10 +266,6 @@ class _SavedItemPickerSheetState extends State<_SavedItemPickerSheet> {
                 ),
               ),
               const SizedBox(width: 8),
-              // Already sitting in Create Vote's option list (picked in an
-              // earlier "From Saved" trip to this sheet) — shown locked-in
-              // rather than selectable, so the same listing can't become
-              // two separate options.
               alreadyAdded
                   ? const Text('Added', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600, color: AppColors.textGrey))
                   : Icon(

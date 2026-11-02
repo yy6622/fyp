@@ -1,15 +1,15 @@
+import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../repositories/user_repository.dart';
 import '../services/auth_service.dart';
+import '../services/verification_service.dart';
 
-/// What came back from a Google sign-in attempt — a plain result
-/// instead of a bare nullable string, because the caller needs to tell
-/// three outcomes apart: closing the account picker (do nothing), a real
-/// failure (show it), and success, which itself needs to know whether to
-/// send a brand-new account through onboarding or straight into the app.
 enum SocialLoginResult { cancelled, success, error }
+
+const String suspendedMessage = 'This account has been suspended. Please contact Voya support.';
 
 class SocialLoginOutcome {
   final SocialLoginResult result;
@@ -18,20 +18,16 @@ class SocialLoginOutcome {
   const SocialLoginOutcome({required this.result, this.isNewUser = false, this.errorMessage});
 }
 
-/// Shared by [LoginController] and [SignupController]'s Google
-/// button — "login with Google" and "sign up with Google" are the same
-/// Firebase call either way (it creates the account the first time,
-/// signs in to it every time after), so there's one real implementation.
-/// Creates the Firestore profile doc the first time this account signs
-/// in — Google skips the normal Sign Up form that would
-/// otherwise do that (see SignupController.signUp) — using whatever
-/// name/email the provider handed back.
 Future<SocialLoginOutcome> _runSocialLogin(Future<UserCredential?> Function() signIn) async {
   try {
     final cred = await signIn();
     final user = cred?.user;
     if (user == null) return const SocialLoginOutcome(result: SocialLoginResult.cancelled);
     final existing = await UserRepository.instance.fetchProfile(user.uid);
+    if (existing != null && await UserRepository.instance.isSuspended(user.uid)) {
+      await AuthService.instance.signOut();
+      return const SocialLoginOutcome(result: SocialLoginResult.error, errorMessage: suspendedMessage);
+    }
     if (existing != null) return const SocialLoginOutcome(result: SocialLoginResult.success, isNewUser: false);
     final name = (user.displayName ?? '').trim();
     await UserRepository.instance.createProfile(
@@ -66,7 +62,6 @@ class LoginController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Returns null on success, or a message to show the user.
   Future<String?> login() async {
     final email = emailController.text.trim();
     final password = passwordController.text;
@@ -74,7 +69,12 @@ class LoginController extends ChangeNotifier {
     _loading = true;
     notifyListeners();
     try {
-      await AuthService.instance.signIn(email: email, password: password);
+      final user = await AuthService.instance.signIn(email: email, password: password);
+      // FR96: an account the admin suspended cannot sign in.
+      if (await UserRepository.instance.isSuspended(user.uid)) {
+        await AuthService.instance.signOut();
+        return suspendedMessage;
+      }
       return null;
     } on AuthFailure catch (e) {
       return e.message;
@@ -154,8 +154,6 @@ class SignupController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Creates the Firebase account + Firestore profile doc, and kicks off
-  /// email verification. Returns null on success, or a message to show.
   Future<String?> signUp() async {
     final username = usernameController.text.trim();
     final email = emailController.text.trim();
@@ -171,7 +169,7 @@ class SignupController extends ChangeNotifier {
     try {
       final user = await AuthService.instance.signUp(email: email, password: password);
       await UserRepository.instance.createProfile(uid: user.uid, name: username, email: email);
-      await AuthService.instance.sendEmailVerification();
+      // The 6-digit email code is sent by VerificationCodePage (FR04).
       return null;
     } on AuthFailure catch (e) {
       return e.message;
@@ -209,7 +207,6 @@ class ForgotPasswordController extends ChangeNotifier {
   bool _loading = false;
   bool get loading => _loading;
 
-  /// Returns null on success, or a message to show.
   Future<String?> sendResetLink() async {
     final email = emailController.text.trim();
     if (email.isEmpty) return 'Enter your registered email address.';
@@ -235,38 +232,88 @@ class ForgotPasswordController extends ChangeNotifier {
   }
 }
 
-/// Controller for [OtpVerificationPage] — repurposed as an email
-/// verification status screen. Firebase Auth verifies an email via a link
-/// it sends, not a code the user types in, so there's no 6-digit code to
-/// collect here (see the view for what changed and why).
-class OtpVerificationController extends ChangeNotifier {
+/// Controller for [VerificationCodePage]: sends the 6-digit email code,
+/// counts down before it can be re-sent, and checks what the traveller typed.
+class VerificationCodeController extends ChangeNotifier {
+  final CodePurpose purpose;
+  VerificationCodeController(this.purpose);
+
+  final TextEditingController codeController = TextEditingController();
+
   bool _sending = false;
   bool get sending => _sending;
 
   bool _checking = false;
   bool get checking => _checking;
 
+  String? _error;
+  String? get error => _error;
+
+  int _resendIn = 0;
+  int get resendIn => _resendIn;
+  Timer? _timer;
+
   String get email => AuthService.instance.currentUser?.email ?? 'your email';
 
-  Future<void> resend() async {
+  /// Sends a code. Returns an error message, or null when the email went out.
+  Future<String?> send() async {
+    if (_sending || _resendIn > 0) return null;
     _sending = true;
+    _error = null;
     notifyListeners();
     try {
-      await AuthService.instance.sendEmailVerification();
+      await VerificationService.instance.sendCode(purpose);
+      _startCountdown(60);
+      return null;
+    } on VerificationException catch (e) {
+      final wait = RegExp(r'(\d+) s').firstMatch(e.message);
+      if (wait != null) _startCountdown(int.parse(wait.group(1)!));
+      _error = e.message;
+      return e.message;
     } finally {
       _sending = false;
       notifyListeners();
     }
   }
 
-  Future<bool> checkVerified() async {
+  void _startCountdown(int seconds) {
+    _timer?.cancel();
+    _resendIn = seconds;
+    _timer = Timer.periodic(const Duration(seconds: 1), (t) {
+      _resendIn = _resendIn > 0 ? _resendIn - 1 : 0;
+      if (_resendIn == 0) t.cancel();
+      notifyListeners();
+    });
+  }
+
+  /// True when the code was right.
+  Future<bool> verify() async {
+    final code = codeController.text.trim();
+    if (!RegExp(r'^\d{6}$').hasMatch(code)) {
+      _error = 'Enter the 6-digit code from the email.';
+      notifyListeners();
+      return false;
+    }
     _checking = true;
+    _error = null;
     notifyListeners();
     try {
-      return await AuthService.instance.reloadAndCheckVerified();
+      await VerificationService.instance.verifyCode(purpose, code);
+      return true;
+    } on VerificationException catch (e) {
+      _error = e.message;
+      codeController.clear();
+      return false;
     } finally {
       _checking = false;
       notifyListeners();
     }
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    codeController.dispose();
+    super.dispose();
   }
 }

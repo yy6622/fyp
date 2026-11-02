@@ -5,12 +5,7 @@ import '../../models/insurance_models.dart';
 import '../../theme.dart';
 import 'insurance_widgets.dart';
 
-// ---------------------------------------------------------------------
-// Insurance list page — "View All" from Home lands here.
-// ---------------------------------------------------------------------
 class InsuranceListPage extends StatefulWidget {
-  // See [InsurancePlanCard.tripId] — set when this list was opened to buy
-  // insurance for a specific trip (from Group Trip's Overview tab).
   final String? tripId;
   const InsuranceListPage({super.key, this.tripId});
 
@@ -97,11 +92,6 @@ class _InsuranceListPageState extends State<InsuranceListPage> {
     );
   }
 
-  // Was a coded gradient+text+icon banner; now a plain image slot so you
-  // can drop your own designed banner in. Put the file at
-  // assets/images/insurance_banner.jpg (same assets/images/ folder already
-  // declared in pubspec.yaml) and it replaces the placeholder automatically
-  // — AppImage shows a graceful grey placeholder until then, no crash.
   Widget _buildBanner() {
     return ClipRRect(
       borderRadius: BorderRadius.circular(18),

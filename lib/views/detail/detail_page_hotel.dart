@@ -7,52 +7,17 @@ import '../../theme.dart';
 import '../shared/nice_pickers.dart';
 import 'detail_widgets.dart';
 
-// ---------------------------------------------------------------------
-// Hotel detail
-// ---------------------------------------------------------------------
 class DetailPageHotel extends StatefulWidget {
-  // Defaults match the original Japan-trip mock so existing callers that
-  // still just do `const DetailPageHotel()` render exactly as before; real
-  // callers (Explore, a trip's hotel stays) pass the actual hotel through.
-  // [hotelId] is the `catalog_hotels` doc id — only set when this page was
-  // opened from a real catalog hotel (Explore, Saved, History). No longer
-  // used by this page itself (the Review tab that read it is gone), kept
-  // only because BookingBar still records it as the booked stay's refId.
   final String hotelId;
   final String name;
   final String location;
   final String ratingLabel;
   final String pricePerNight;
-  // The hotel's real photo (Duffel/RollingGo's own accommodation photo, or
-  // the saved catalog hotel's `image`) — empty for a trip's manually-typed
-  // hotel stay, which has no photo data at all, same as [hotelId].
   final String image;
-  // The trip this stay should be added to once payment succeeds (see
-  // BookingBar's onPaid) — blank when there's no trip context. checkIn/
-  // checkOut are the dates actually searched for (when known), so the
-  // preview row below starts from them instead of a fixed placeholder —
-  // still editable from there (see _pickDates), with whatever the person
-  // lands on carried into the real booking instead of being discarded.
   final String tripId;
   final DateTime? checkIn;
   final DateTime? checkOut;
-  // Real per-hotel amenity names from Duffel/RollingGo (see
-  // DuffelStayResult.amenities / CatalogHotel.amenities) — empty for a
-  // manually-typed trip stay or any source result that just didn't have
-  // this data. The amenities row only renders when this is non-empty,
-  // rather than ever showing a fixed list that isn't actually about this
-  // hotel.
   final List<String> amenities;
-  // The accommodation's real check-in/check-out policy time (see
-  // DuffelStayResult.checkInPolicyTime/checkOutPolicyTime) — null for a
-  // manually-typed trip stay, a RollingGo-sourced result (no such field
-  // in its response), or whenever Duffel just didn't send it. Each row
-  // in the Hotel Policies card only renders when its value is non-null,
-  // and the whole card is hidden when both are null, rather than ever
-  // showing a fixed time that isn't actually this hotel's policy. There
-  // is no cancellation-policy field at all — Duffel only returns that
-  // once a specific rate/quote is fetched, which this app doesn't
-  // currently call — so there's no cancellation row here any more.
   final String? checkInPolicyTime;
   final String? checkOutPolicyTime;
 
@@ -77,11 +42,6 @@ class DetailPageHotel extends StatefulWidget {
 }
 
 class _DetailPageHotelState extends State<DetailPageHotel> {
-  // Local, editable copy of the stay dates — seeded from whatever this
-  // page was opened with (a real search's dates, a trip's existing stay,
-  // or nothing) and changed in place by [_pickDates], so the preview row
-  // reflects an edit immediately without waiting on whoever opened this
-  // page to pass new props back down.
   late DateTime? _checkIn = widget.checkIn;
   late DateTime? _checkOut = widget.checkOut;
 
@@ -117,11 +77,6 @@ class _DetailPageHotelState extends State<DetailPageHotel> {
                       Padding(
                         padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
                         child: Column(
-                          // Same fix as DetailPageAttraction/DetailPageRestaurant:
-                          // without this, Column centers every child that
-                          // doesn't already fill the width (name, rating,
-                          // "About"), which is why this page looked
-                          // inconsistent with the others' left-aligned layout.
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                     Text(widget.name, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.navy)),
@@ -136,10 +91,6 @@ class _DetailPageHotelState extends State<DetailPageHotel> {
                     const SizedBox(height: 6),
                     Text(widget.location, style: const TextStyle(fontSize: 12, color: AppColors.textGrey)),
                     const SizedBox(height: 16),
-                    // Only render this row when the source result actually
-                    // had amenities data — no fixed fallback list, same
-                    // "don't fabricate" rule this app uses for
-                    // reviewScore/description elsewhere.
                     if (widget.amenities.isNotEmpty) ...[
                       SizedBox(
                         height: 74,
@@ -188,9 +139,6 @@ class _DetailPageHotelState extends State<DetailPageHotel> {
                             id: '${DateTime.now().microsecondsSinceEpoch}',
                             name: widget.name,
                             location: widget.location,
-                            // The dates actually confirmed at checkout —
-                            // real, not whatever (possibly since-edited)
-                            // dates this page happened to show.
                             checkIn: confirmation.checkIn != null
                                 ? formatLongDate(confirmation.checkIn!)
                                 : (_checkIn != null ? formatLongDate(_checkIn!) : ''),
@@ -202,13 +150,6 @@ class _DetailPageHotelState extends State<DetailPageHotel> {
                             guestPhone: confirmation.guestPhone,
                             guestIdNumber: confirmation.guestIdNumber,
                             specialRequests: confirmation.specialRequests,
-                            // The real Stripe PaymentIntent id from this
-                            // charge, and the catalog hotel this stay was
-                            // booked from (when there is one) — previously
-                            // dropped on the floor because TripHotelStay had
-                            // nowhere to put them, which is why Plan's hotel
-                            // viewer couldn't show a Booking Reference or a
-                            // Review tab the way Flight's can.
                             bookingRef: confirmation.paymentRef,
                             status: 'Confirmed',
                             refId: widget.hotelId,
@@ -233,10 +174,6 @@ class _DetailPageHotelState extends State<DetailPageHotel> {
         onTap: _pickDates,
       ),
       const SizedBox(height: 20),
-      // Real policy times only (see DetailPageHotel's doc comment) — the
-      // whole card is left out entirely when neither is available,
-      // rather than showing a fixed placeholder policy for a hotel that
-      // has no real policy data behind it.
       if (widget.checkInPolicyTime != null || widget.checkOutPolicyTime != null) ...[
         const Text('Hotel Policies', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.navy)),
         const SizedBox(height: 12),
@@ -278,13 +215,6 @@ class _DetailPageHotelState extends State<DetailPageHotel> {
     return InkWell(borderRadius: BorderRadius.circular(12), onTap: onTap, child: row);
   }
 
-  /// Maps a real amenity name (Duffel's `description`/`type`, or
-  /// RollingGo's plain `hotelAmenities` string — e.g. "WiFi"/"WIFI",
-  /// "Pool", "Gym", "Parking", "Bar", "SPA") to a representative icon.
-  /// Matching is case-insensitive substring matching rather than an exact
-  /// lookup table, since the two APIs don't share one fixed vocabulary;
-  /// anything unrecognized still renders with its real label text, just
-  /// under a generic fallback icon instead of guessing wrong.
   IconData _amenityIcon(String amenity) {
     final a = amenity.toLowerCase();
     if (a.contains('wifi') || a.contains('wi-fi') || a.contains('internet')) return Icons.wifi;

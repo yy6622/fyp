@@ -9,18 +9,8 @@ import '../../services/discussion_summary_service.dart';
 import 'decide_now_sheet.dart';
 import '../../theme.dart';
 
-/// Opened from the chat's "AI Summarise" attachment option. Starts (or
-/// re-opens) this trip's AI run: the model reads the group's discussion
-/// together with their saved places and the current plan, and suggests what
-/// to add, move, re-time or remove. Nothing changes until the user confirms.
-///
-/// The run itself lives in [ItineraryAiService], so this sheet can be
-/// minimised while it works — [AiItineraryStatusBar] brings it back.
 Future<void> showAiItinerarySheet(BuildContext context, GroupTripController controller) async {
   final job = ItineraryAiService.instance.jobFor(controller.tripId);
-  // AI-Summarised Itinerary Algorithm (FYP documentation), step 1: consent gate. Only the very
-  // first read of this group's chat for this job needs it - reopening the sheet for a run that's
-  // already going, or already has a result, is not a new read, so it skips straight to showing it.
   if (job.value.status == AiItineraryStatus.idle) {
     final consented = await _confirmAiSummariseConsent(context);
     if (!consented) return;
@@ -36,10 +26,6 @@ Future<void> showAiItinerarySheet(BuildContext context, GroupTripController cont
   );
 }
 
-/// Step 1 of the documented algorithm, in person-facing terms: explains what AI Summarise is
-/// about to read before it reads it, and only proceeds on an explicit yes. The Cloud Function
-/// (functions/itinerary.js) refuses the request outright without this - this dialog is what
-/// actually gets that consent, not just a label on it.
 Future<bool> _confirmAiSummariseConsent(BuildContext context) async {
   final result = await showDialog<bool>(
     context: context,
@@ -58,9 +44,6 @@ Future<bool> _confirmAiSummariseConsent(BuildContext context) async {
   return result == true;
 }
 
-/// A thin bar for the top of the group page: shows while this trip's AI run
-/// is working or has a result waiting, and re-opens the sheet when tapped.
-/// Takes no space otherwise.
 class AiItineraryStatusBar extends StatelessWidget {
   final GroupTripController controller;
   const AiItineraryStatusBar({super.key, required this.controller});
@@ -107,7 +90,6 @@ class AiItineraryStatusBar extends StatelessWidget {
 class _AiItinerarySheet extends StatefulWidget {
   final GroupTripController controller;
 
-  /// The page under the sheet — used for the snackbar after the sheet closes.
   final BuildContext pageContext;
   const _AiItinerarySheet({required this.controller, required this.pageContext});
 
@@ -118,10 +100,8 @@ class _AiItinerarySheet extends StatefulWidget {
 class _AiItinerarySheetState extends State<_AiItinerarySheet> {
   late final ValueNotifier<AiItineraryJob> _job = ItineraryAiService.instance.jobFor(widget.controller.tripId);
 
-  /// The result the ticks below belong to; a new run resets them.
   AiItineraryResult? _selectionFor;
 
-  /// Ticked rows: "a<i>" additions, "u<i>" changes, "r<i>" removals.
   final Set<String> _selected = {};
   bool _applying = false;
   String? _applyError;
@@ -131,7 +111,6 @@ class _AiItinerarySheetState extends State<_AiItinerarySheet> {
     super.initState();
     _job.addListener(_onJob);
     _syncSelection();
-    // The model's view of what is still undecided - behind the "Decide now" button below.
     DiscussionSummaryService.instance.start(widget.controller.tripId);
   }
 
@@ -146,14 +125,11 @@ class _AiItinerarySheetState extends State<_AiItinerarySheet> {
     if (mounted) setState(() {});
   }
 
-  /// Resets the ticks whenever a new result arrives.
   void _syncSelection() {
     final result = _job.value.result;
     if (result != null && !identical(result, _selectionFor)) {
       _selectionFor = result;
       _selected.clear();
-      // Additions and changes start ticked. Removals start unticked: taking
-      // something out of the plan should be a deliberate tap.
       for (var i = 0; i < result.add.length; i++) {
         if (!result.add[i].alreadyInPlan) _selected.add('a$i');
       }
@@ -209,8 +185,6 @@ class _AiItinerarySheetState extends State<_AiItinerarySheet> {
         _selected.remove('u$i');
         done++;
       }
-      // One at a time and in day/time order: the plan shows a day's
-      // activities in the order they were added.
       for (var i = 0; i < result.add.length; i++) {
         if (!_selected.contains('a$i')) continue;
         final a = result.add[i];
@@ -220,7 +194,6 @@ class _AiItinerarySheetState extends State<_AiItinerarySheet> {
       }
     } catch (e) {
       if (!mounted) return;
-      // What was applied has been unticked above, so "Apply" again only retries the rest.
       setState(() {
         _applying = false;
         _applyError = done == 0 ? 'Could not update the plan: $e' : 'Applied $done, then stopped: $e';
@@ -281,11 +254,6 @@ class _AiItinerarySheetState extends State<_AiItinerarySheet> {
                 ],
               ),
             ),
-            // Shown regardless of the AI job's own status — this comes
-            // straight from the current plan's own data (who each
-            // activity is for + its time), not from anything the AI
-            // reads, so it's accurate even while a run is still going or
-            // has nothing to suggest.
             if (conflicts.isNotEmpty) _conflictsSection(conflicts, trip!.memberNames),
             Expanded(child: _body(job)),
             if (job.status == AiItineraryStatus.ready && !job.result!.isEmpty) _footer(),
@@ -295,11 +263,6 @@ class _AiItinerarySheetState extends State<_AiItinerarySheet> {
     );
   }
 
-  /// "Some members are double-booked" warning — one or more same-day,
-  /// same-time activities whose "who's this for" lists overlap (see
-  /// [findScheduleConflicts]). This is what surfaces "some people want to
-  /// go elsewhere at this time while others want to go here" at a glance,
-  /// without needing the AI to have figured that out from the chat.
   Widget _conflictsSection(List<ScheduleConflict> conflicts, Map<String, String> memberNames) {
     return Container(
       margin: const EdgeInsets.fromLTRB(20, 10, 20, 0),
@@ -440,8 +403,6 @@ class _AiItinerarySheetState extends State<_AiItinerarySheet> {
     );
   }
 
-  /// "Still undecided" + a "Decide now" button (agree / skip / vote / split, see decide_now_sheet.dart),
-  /// enabled once the discussion summary for this trip is ready.
   Widget _undecidedHeader() {
     return ValueListenableBuilder<DiscussionSummaryJob>(
       valueListenable: DiscussionSummaryService.instance.jobFor(widget.controller.tripId),
@@ -520,7 +481,6 @@ class _AiItinerarySheetState extends State<_AiItinerarySheet> {
     );
   }
 
-  /// One day as a timeline: what is already planned (grey) and the suggestions (tickable), by time.
   Widget _dayBlock(int day, AiItineraryResult result) {
     DayPlan? plan;
     for (final p in widget.controller.days) {
@@ -531,7 +491,7 @@ class _AiItinerarySheetState extends State<_AiItinerarySheet> {
     final rows = <({String time, Widget child})>[];
     for (final it in plan?.items ?? const <ActivityItem>[]) {
       final u = moving[it.id];
-      if (u != null && !u.changesDay) continue; // shown below as its "new time" card
+      if (u != null && !u.changesDay) continue;
       final note = removing.contains(it.id) ? 'Agreed to drop' : u != null ? 'Moves to Day ${u.toDay}' : 'In your plan';
       rows.add((time: it.time, child: _existingRow(it, note: note)));
     }
@@ -541,7 +501,6 @@ class _AiItinerarySheetState extends State<_AiItinerarySheet> {
     for (var i = 0; i < result.update.length; i++) {
       if (result.update[i].toDay == day) rows.add((time: result.update[i].newTime, child: _updateCard(result.update[i], 'u$i')));
     }
-    // flights the plan was built around (hotel check-in / out come as suggestions or are already planned)
     for (final f in result.fixed) {
       if (f.day == day && f.kind == 'flight') rows.add((time: f.time, child: _fixedRow(f)));
     }
@@ -589,8 +548,6 @@ class _AiItinerarySheetState extends State<_AiItinerarySheet> {
     );
   }
 
-  /// The saved listing's photo when the place is in the saved list (same matching as the plan's
-  /// activity cards), otherwise the activity icon.
   Widget _thumb(AiItineraryAdd a) {
     final probe = ActivityItem(time: a.time, icon: iconForKey(a.iconKey), label: a.label, voted: 0, total: 0);
     final c = widget.controller;
@@ -655,7 +612,6 @@ class _AiItinerarySheetState extends State<_AiItinerarySheet> {
                       ),
                       if (a.fromSaved) ...[const SizedBox(width: 6), _badge('Saved', _green)],
                       if (a.source == 'booked') ...[const SizedBox(width: 6), _badge('Booked', AppColors.navy)],
-                      // a wish with no place yet ("Night market"): a time block to swap for a real place
                       if (a.source == 'generic') ...[const SizedBox(width: 6), _badge('Pick a place', AppColors.orange)],
                     ],
                   ),
@@ -712,7 +668,6 @@ class _AiItinerarySheetState extends State<_AiItinerarySheet> {
     );
   }
 
-  /// Something already in the plan, for context (not tickable).
   Widget _existingRow(ActivityItem it, {required String note}) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
@@ -737,7 +692,6 @@ class _AiItinerarySheetState extends State<_AiItinerarySheet> {
     );
   }
 
-  /// A booked flight (or one the chat mentioned): nothing is planned around it too closely.
   Widget _fixedRow(AiItineraryFixed f) {
     final fromChat = f.label.contains('(from the chat)');
     return Container(

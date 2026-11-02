@@ -6,18 +6,6 @@ import '../../models/community_models.dart';
 import '../../repositories/trip_repository.dart';
 import '../../theme.dart';
 
-// ---------------------------------------------------------------------
-// Create Post ("Community Post" / "Itinerary Post" compose form) — also
-// reused as the Edit Post form (FR62): pass [editingPost] and this same
-// page pre-fills from it and saves in place instead of publishing a new
-// post. See CreatePostController's editingPostId/editingPost.
-//
-// [itineraryTrip] (FR31/FR68) is the signed-in person's own REAL trip
-// being shared — previously this took a plain [String] title looked up
-// in a hardcoded two-entry mock list, so every "Itinerary Post" on
-// Community was actually one of those two fake sample trips regardless
-// of what the person had actually planned. See ItinerarySelectController.
-// ---------------------------------------------------------------------
 class CreatePostPage extends StatefulWidget {
   final Trip? itineraryTrip;
   final CommunityPost? editingPost;
@@ -49,9 +37,6 @@ class _CreatePostPageState extends State<CreatePostPage> {
       Navigator.of(context).pop();
       return;
     }
-    // Content moderation (see CommunityRepository.createPost) may have
-    // auto-flagged this post for review instead of publishing it live —
-    // controller.lastPublishWasFlagged tells us which message is true.
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text(controller.lastPublishWasFlagged
           ? "Your post was submitted and is pending review before it appears publicly."
@@ -60,8 +45,6 @@ class _CreatePostPageState extends State<CreatePostPage> {
     Navigator.of(context).pop();
   }
 
-  /// FR65 — "AI summary when sharing". Only offered for an Itinerary
-  /// Post; there's nothing to summarise when there's no attached trip.
   Future<void> _generateAiSummary() async {
     final trip = widget.itineraryTrip;
     if (trip == null) return;
@@ -70,8 +53,6 @@ class _CreatePostPageState extends State<CreatePostPage> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 
-  /// FR61 — the single photo/video attachment, now a real picker instead
-  /// of a bare toggle (see CreatePostController.pickMedia).
   Future<void> _pickMedia() async {
     if (controller.mediaAdded) {
       controller.removeMedia();
@@ -158,8 +139,6 @@ class _CreatePostPageState extends State<CreatePostPage> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       _label('Description'),
-                      // FR65 — only meaningful with a real itinerary to
-                      // summarise.
                       if (isItinerary)
                         GestureDetector(
                           onTap: controller.generatingSummary ? null : _generateAiSummary,
@@ -268,10 +247,6 @@ class _CreatePostPageState extends State<CreatePostPage> {
     );
   }
 
-  /// A plain hashtag text field with an inline "Add" button — pressing it
-  /// or hitting enter on the keyboard both call [CreatePostController.
-  /// addTagFromInput], which does the trimming/dedup and clears the field
-  /// for the next tag.
   Widget _tagInput() {
     final border = OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFFECECEC)));
     return Row(
@@ -303,8 +278,6 @@ class _CreatePostPageState extends State<CreatePostPage> {
     );
   }
 
-  /// The author's own added-so-far tag chips, each with a tiny "✕" to
-  /// remove it before publishing.
   Widget _tagChips() {
     return Wrap(
       spacing: 8,

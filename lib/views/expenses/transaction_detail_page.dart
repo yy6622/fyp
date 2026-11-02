@@ -8,17 +8,8 @@ import '../../repositories/trip_repository.dart';
 import '../../services/auth_service.dart';
 import '../../services/receipt_service.dart';
 import '../../theme.dart';
+import '../shared/nice_dialog.dart';
 
-// ---------------------------------------------------------------------
-// Transaction detail
-//
-// - The receipt photo is the thumbnail at the top right of the card; tap it to see it full screen
-//   (pinch to zoom).
-// - "Paid by" and "Split between" show each person's real profile photo (UserAvatar).
-// - The person who paid can edit the expense (pencil in the app bar): title, amount, category, note
-//   and the receipt photo. Firestore rules only allow the payer to do this.
-// - Live: reads the expense from Firestore, so an edit or a "Mark as paid" shows straight away.
-// ---------------------------------------------------------------------
 class TransactionDetailPage extends StatefulWidget {
   final TripExpense expense;
   const TransactionDetailPage({super.key, required this.expense});
@@ -43,8 +34,28 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Marked as paid')));
   }
 
-  /// FR60 — the payer's follow-up nudge for whoever still hasn't marked
-  /// their share paid; see [TripRepository.sendPaymentReminder].
+  Future<void> _confirmDelete(TripExpense e) async {
+    final confirmed = await showNiceConfirmDialog(
+      context: context,
+      title: 'Delete Expense',
+      message: 'This permanently deletes this expense for everyone in the trip. This cannot be undone.',
+      confirmLabel: 'Delete',
+      icon: Icons.delete_forever,
+      destructive: true,
+    );
+    if (!confirmed) return;
+    try {
+      await TripRepository.instance.deleteExpense(e.tripId, e.id, actorUid: _uid);
+    } catch (err) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not delete: $err')));
+      return;
+    }
+    if (!mounted) return;
+    Navigator.of(context).pop();
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Expense deleted')));
+  }
+
   Future<void> _remindUnpaid() async {
     final count = await TripRepository.instance.sendPaymentReminder(widget.expense.tripId, widget.expense.id);
     if (!mounted) return;
@@ -74,6 +85,12 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
                   tooltip: 'Edit',
                   icon: const Icon(Icons.edit_outlined, color: AppColors.navy),
                   onPressed: () => _openEditSheet(e),
+                ),
+              if (isOwner)
+                IconButton(
+                  tooltip: 'Delete',
+                  icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                  onPressed: () => _confirmDelete(e),
                 ),
             ],
           ),
@@ -155,8 +172,6 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
                     ),
                   ),
                 ),
-              // FR60 — only the payer sees this, and only while someone
-              // besides them still owes their share.
               if (isOwner && others.any((p) => !p.paid))
                 Padding(
                   padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
@@ -181,7 +196,6 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
     );
   }
 
-  /// The receipt photo (tap = full screen). Without one: a plain placeholder.
   Widget _receiptThumb(TripExpense e) {
     const size = 84.0;
     if (e.receiptImageUrl.isEmpty) {
@@ -265,8 +279,6 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
     final amount = TextEditingController(text: e.amount.toStringAsFixed(2));
     final note = TextEditingController(text: e.note);
     var category = e.category;
-    // Once someone (other than the payer, whose own share counts as paid) has paid, the amount is
-    // locked: changing it would change what they already paid for.
     final paidOthers = e.participants.where((p) => p.paid && p.uid != e.paidBy).map((p) => p.name).toList();
     final amountLocked = paidOthers.isNotEmpty;
     final lockReason = paidOthers.isEmpty
@@ -337,7 +349,6 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
                   const SizedBox(height: 14),
                   TextField(
                     controller: amount,
-                    // read-only (not disabled), so the lock icon's tooltip can still be tapped
                     readOnly: amountLocked,
                     style: TextStyle(color: amountLocked ? AppColors.textGrey : Colors.black),
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -466,7 +477,6 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
   }
 }
 
-/// Full-screen receipt: black background, pinch to zoom, tap X to close.
 class _ReceiptViewer extends StatelessWidget {
   final String url;
   const _ReceiptViewer({required this.url});

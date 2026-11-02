@@ -3,8 +3,6 @@ import 'package:flutter/material.dart';
 import '../../repositories/trip_repository.dart';
 import '../../theme.dart';
 
-/// Picks which of the trip's real members an itemized receipt line is
-/// split between.
 class FriendPickerDialog extends StatefulWidget {
   final Trip trip;
   final Set<String> initialSelectedUids;

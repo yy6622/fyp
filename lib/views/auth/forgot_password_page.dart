@@ -5,12 +5,6 @@ import '../../theme.dart';
 import '../shared/nice_dialog.dart';
 import 'auth_widgets.dart';
 
-// ---------------------------------------------------------------------
-// Forgot Password — sends a real Firebase password-reset email. Firebase
-// resets passwords via a link it emails, not an in-app code, so this no
-// longer hands off to the OTP screen; it shows a "check your email"
-// confirmation and returns to Login instead.
-// ---------------------------------------------------------------------
 class ForgotPasswordPage extends StatefulWidget {
   const ForgotPasswordPage({super.key});
 
@@ -42,9 +36,6 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
       iconColor: AppColors.primary,
       buttonLabel: 'Back to Login',
       onDone: () => Navigator.of(context).pop(),
-      // Didn't get it the first time (spam filter, typo'd into the wrong
-      // inbox folder, slow delivery)? Re-sends the same real Firebase
-      // reset email without closing the dialog or leaving this page.
       secondaryLabel: 'Resend email',
       onSecondary: controller.sendResetLink,
       secondarySuccessMessage: "Sent again — check your email for the password reset link.",

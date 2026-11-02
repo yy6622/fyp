@@ -1,19 +1,11 @@
-// Decisions the group made in the app for items the chat left undecided
-// (Discussion summary card -> "Decide now"). Stored on the trip document:
-//   trips/{tripId}.discussionDecisions.{proposalMessageId} =
-//     { status: "confirmed" | "rejected" | "split" | "voting", byName, memberNames: [..], voteTitle, at }
-// They override what the model concluded for that proposal, in the summary card
-// and in AI Summarise.
 
-/** confirmed / rejected / pending as the rest of the pipeline understands it. */
 function effectiveStatus(decision, fallback) {
   if (!decision) return fallback;
   if (decision.status === "confirmed" || decision.status === "split") return "confirmed";
   if (decision.status === "rejected") return "rejected";
-  return "pending"; // voting: still open until the poll is settled
+  return "pending";
 }
 
-/** Applies decisions to a summariseDiscussion response (in place) and returns it. */
 function applyToSummary(result, decisions) {
   if (!decisions || !Object.keys(decisions).length) return result;
   const order = { confirmed: 0, pending: 1, rejected: 2 };

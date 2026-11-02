@@ -6,11 +6,6 @@ import '../../services/format_utils.dart';
 import '../../theme.dart';
 import '../shared/nice_dialog.dart';
 
-// ---------------------------------------------------------------------
-// Notifications — real inbox behind the Home bell icon (previously just
-// showed "No new notifications" with nothing behind it). A friend request
-// is the one actionable type today: Accept/Decline right from the list.
-// ---------------------------------------------------------------------
 class NotificationsPage extends StatefulWidget {
   const NotificationsPage({super.key});
 
@@ -21,8 +16,6 @@ class NotificationsPage extends StatefulWidget {
 class _NotificationsPageState extends State<NotificationsPage> {
   final NotificationsController controller = NotificationsController();
 
-  // Prevents a double-tap on Accept/Decline from firing the batch write
-  // twice while the first call is still in flight.
   final Set<String> _busy = {};
 
   @override
@@ -31,8 +24,6 @@ class _NotificationsPageState extends State<NotificationsPage> {
     super.dispose();
   }
 
-  /// "Remove All" — asks first (irreversible, deletes every
-  /// notification, not just the unread ones).
   Future<void> _removeAll() async {
     final confirmed = await showNiceConfirmDialog(
       context: context,
@@ -99,8 +90,6 @@ class _NotificationsPageState extends State<NotificationsPage> {
       backgroundColor: Colors.white,
       appBar: VoyaAppBar(
         title: const Text('Notifications', style: TextStyle(color: AppColors.navy, fontWeight: FontWeight.bold, fontSize: 19)),
-        // Only worth offering once there's actually something to clear —
-        // an empty inbox has nothing for "Remove All" to do.
         actions: controller.items.isEmpty
             ? null
             : [

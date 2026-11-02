@@ -3,11 +3,6 @@ import 'dart:io';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
 
-/// Picks and uploads a receipt photo for the "Upload Receipt" expense entry
-/// point — same shape as [AvatarService], but each upload gets its own
-/// unique path (`receipts/{tripId}/{uid}_{timestamp}.jpg`) instead of a
-/// fixed per-user path, since a trip can have many receipts and each one
-/// needs to keep its own photo rather than overwriting the last.
 class ReceiptService {
   ReceiptService._();
   static final ReceiptService instance = ReceiptService._();

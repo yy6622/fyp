@@ -6,24 +6,9 @@ import '../../services/auth_service.dart';
 import '../../theme.dart';
 import 'detail_widgets.dart';
 
-// ---------------------------------------------------------------------
-// Flight detail
-// ---------------------------------------------------------------------
 class DetailPageFlight extends StatefulWidget {
-  // Defaults match the Explore-flow Air Asia KUL→NRT mock so existing
-  // callers (explore_page.dart) render exactly as before. History passes
-  // the actual tapped booking's route/date/time/price through so the
-  // detail page it opens on actually reflects what was tapped, instead of
-  // always showing this same static flight regardless of which row you
-  // tap from History.
   final String airline;
   final String fromCode;
-  // Real city name for the origin/destination (Duffel's `city_name`
-  // off the place object — see DuffelFlightOffer) — null when this
-  // page was opened without one (Saved/History has no city data to
-  // pass), in which case the subtitle under the IATA code falls back
-  // to the code itself rather than ever showing a fixed placeholder
-  // city.
   final String? fromCity;
   final String toCode;
   final String? toCity;
@@ -35,32 +20,10 @@ class DetailPageFlight extends StatefulWidget {
   final String stops;
   final String price;
   final String priceSuffix;
-  // Duffel's real carrier logo (SVG) for this flight's airline — there's
-  // no per-flight photo concept, so this is what the header shows instead
-  // of a photo. Null/empty falls back to a neutral flight icon.
   final String? airlineLogoUrl;
-  // The trip this flight should be added to once payment succeeds (see
-  // BookingBar's onPaid) — blank when this page was opened with no trip
-  // context (e.g. no trip selected on Explore yet), in which case paying
-  // just records the booking in History same as before, with nothing
-  // auto-added to a plan.
   final String tripId;
-  // Real exact timestamps for [depTime]/[arrTime] above, when this page was
-  // opened on a live Duffel search result (see explore_page.dart's
-  // _flightDetailFor, which has the real DateTime on hand) — carried
-  // through to TripFlight.departureAtIso/arrivalAtIso on booking so
-  // functions/logistics.js can enforce real flight-time constraints on the
-  // AI itinerary/optimise features. Null when this page was opened from
-  // Saved or History (no live search result on hand), in which case the
-  // booked flight just has no exact timestamp, same as before this existed.
   final DateTime? departureAt;
   final DateTime? arrivalAt;
-  // Real per-offer detail from Duffel (see DuffelFlightOffer) — null
-  // whenever Duffel's response didn't have it (or this page was opened
-  // from Saved/History, which has no live offer behind it). Each row/
-  // section below is hidden rather than ever padded out with a fixed
-  // placeholder value, same "don't fabricate" rule the hotel detail page
-  // already follows for amenities.
   final String? aircraftName;
   final String? cabinClass;
   final String? originTerminal;
@@ -205,11 +168,6 @@ class _DetailPageFlightState extends State<DetailPageFlight> {
                               ],
                             ),
                             const SizedBox(height: 20),
-                            // Same Details/X two-tab pattern DetailPageHotel
-                            // uses — flights have no reviewable catalog
-                            // entity (see DetailPageFlightController's doc
-                            // comment), so the second tab is Fare Rules
-                            // instead of Review.
                             Row(
                               children: [
                                 Expanded(child: _tabButton('Details', !controller.showFareRules)),
@@ -246,17 +204,9 @@ class _DetailPageFlightState extends State<DetailPageFlight> {
                             routeCities: '${widget.fromCity ?? widget.fromCode} → ${widget.toCity ?? widget.toCode}',
                             dateTime: '${widget.date} ${widget.depTime}',
                             arrivalTime: '${widget.date} ${widget.arrTime}',
-                            // .toIso8601String() with no .toUtc() first, so
-                            // this stays the plain destination wall-clock
-                            // time (see TripFlight's doc comment) — blank
-                            // when this page wasn't opened with a real
-                            // DateTime (Saved/History, not a fresh search).
                             departureAtIso: widget.departureAt?.toIso8601String() ?? '',
                             arrivalAtIso: widget.arrivalAt?.toIso8601String() ?? '',
                             terminal: '',
-                            // The real Stripe PaymentIntent id this charge
-                            // went through under — a genuine reference tied
-                            // to an actual transaction, not a made-up PNR.
                             bookingRef: confirmation.paymentRef,
                             status: 'Confirmed',
                             passengers: confirmation.passengerNames,
@@ -296,8 +246,6 @@ class _DetailPageFlightState extends State<DetailPageFlight> {
     );
   }
 
-  /// "1 bag"/"2 bags", or '' (renders as "-" via [InfoField]'s orDash)
-  /// when Duffel's offer didn't carry a baggage allowance for this fare.
   String _bagLabel(int? qty) => qty == null ? '' : (qty == 1 ? '1 bag' : '$qty bags');
 
   List<Widget> _detailsContent() {
@@ -345,11 +293,6 @@ class _DetailPageFlightState extends State<DetailPageFlight> {
     ];
   }
 
-  /// Builds the one real sentence Duffel's conditions block supports for
-  /// "change" or "refund" — `allowed == null` means Duffel itself didn't
-  /// return fare-rule data for this offer, in which case there's nothing
-  /// honest to say and the caller leaves the row out entirely, rather
-  /// than guessing "allowed" or "not allowed".
   String? _conditionText({required bool? allowed, required String verb, required String? amount, required String? currency}) {
     if (allowed == null) return null;
     if (allowed == false) return 'Not $verb';

@@ -10,22 +10,13 @@ import '../../services/stripe_service.dart';
 import '../../theme.dart';
 import '../shared/nice_dialog.dart';
 import 'insurance_widgets.dart';
+import '../../services/verification_service.dart';
+import '../auth/otp_verification_page.dart';
 
-// ---------------------------------------------------------------------
-// Payment method selection
-// ---------------------------------------------------------------------
 class PaymentMethodPage extends StatefulWidget {
   final InsurancePlan plan;
   final int travellerCount;
-  // See [InsurancePlanCard.tripId] — when set, the confirmed purchase is
-  // also written onto `trips/{tripId}.insurance` so the trip's Overview
-  // tab immediately reflects a real bought plan instead of staying stuck
-  // on "no insurance yet".
   final String? tripId;
-  // The real travel period captured on TravellerDetailsPage — required so
-  // InsuranceRepository.recordPurchase can store it, which is what later
-  // lets a refund request be checked against the real trip dates instead
-  // of trusting whatever the rider claims at refund time.
   final DateTime travelStart;
   final DateTime travelEnd;
   const PaymentMethodPage({
@@ -154,14 +145,11 @@ class _PaymentMethodPageState extends State<PaymentMethodPage> {
     final uid = user?.uid;
     if (uid == null) return;
 
+    // FR04 step-up: a payment needs the 6-digit code emailed to the traveller.
+    if (!await confirmWithEmailCode(context, CodePurpose.payment)) return;
+    if (!mounted) return;
     setState(() => _paying = true);
 
-    // Real Stripe sandbox charge — same payWithSheet() used by flight/hotel
-    // checkout (see BookingPaymentPage._confirmPayment). Previously this
-    // page did no charge at all: it just wrote a Firestore record with a
-    // policy number fabricated from a timestamp. Now the policy number is
-    // derived from the real PaymentIntent id, so it's a genuine,
-    // transaction-linked reference.
     final String paymentRef;
     try {
       paymentRef = await StripeService.instance.payWithSheet(
@@ -181,25 +169,11 @@ class _PaymentMethodPageState extends State<PaymentMethodPage> {
 
     try {
       final policyNumber = 'INS-$paymentRef';
-      // A purchase made from inside a trip (widget.tripId set) carries that
-      // trip's real destination into the transaction record, so reports
-      // like the admin/partner console's "Top Destinations" reflect where
-      // the policy was actually for instead of showing "Unspecified" on a
-      // transaction that clearly has real money against it. Bought
-      // standalone (no trip), there genuinely is no destination to record,
-      // so this stays empty — that case is a legitimate "Unspecified", not
-      // a bug.
       String purchaseDestination = '';
       if (widget.tripId != null && widget.tripId!.isNotEmpty) {
         final trip = await TripRepository.instance.getTrip(widget.tripId!, uid);
         purchaseDestination = trip?.destination ?? '';
       }
-      // Also lands in the partner console's Transactions list (see
-      // InsuranceRepository.recordPurchase) so a purchase made here is
-      // visible on the business side too, not just the rider's own
-      // booking history. The returned id is what links this booking's
-      // History row (and, inside a trip, the trip's own insurance card)
-      // back to the real transaction for a later Claim/Refund.
       final transactionId = await InsuranceRepository.instance.recordPurchase(
         plan: widget.plan,
         buyerId: uid,

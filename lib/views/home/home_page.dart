@@ -49,14 +49,6 @@ class HomePage extends StatelessWidget {
     );
   }
 
-  // ---------------- Header ----------------
-  // The greeting used to be a hardcoded "Hi, Teoh" regardless of who was
-  // signed in - this now reads the real signed-in user's own name
-  // (users/{uid}.name, the same AppUser.name every other screen with a
-  // profile already uses), live, so it updates the moment they change
-  // their name in Account Settings. Falls back to a name-less greeting
-  // for a signed-out session or before the profile has loaded, rather
-  // than showing someone else's name or a loading flicker of "Teoh".
   Widget _buildHeader(BuildContext context) {
     final uid = AuthService.instance.currentUser?.uid;
     return Padding(
@@ -103,10 +95,6 @@ class HomePage extends StatelessWidget {
     );
   }
 
-  // Real inbox behind the bell — used to be a dead icon that just showed
-  // "No new notifications" with no notification system behind it at all.
-  // The red dot reflects actual unread `users/{uid}/notifications` docs
-  // (a pending friend request, for now).
   Widget _notificationsBell(BuildContext context) {
     final uid = AuthService.instance.currentUser?.uid;
     return Stack(
@@ -146,11 +134,6 @@ class HomePage extends StatelessWidget {
     );
   }
 
-  // ---------------- Adventure card ----------------
-  // The signed-in person's own real soonest-upcoming trip (not yet ended),
-  // picked from their actual `trips/{tripId}` docs — this used to be a
-  // fixed "New York, 25 May - 7 June 2026" shown to literally everyone
-  // regardless of who was signed in or what trips they actually had.
   Widget _buildAdventureCard() {
     final uid = AuthService.instance.currentUser?.uid;
     if (uid == null) return _adventureCardShell(child: _adventureCardMessage('Sign in to see your next trip'));
@@ -174,11 +157,6 @@ class HomePage extends StatelessWidget {
     );
   }
 
-  /// The card's background/gradient/rounding/tap target — shared by the
-  /// real-content state and the "sign in" / "no upcoming trip" states so
-  /// all three look like the same card rather than two different widgets.
-  /// Uses the trip's own real cover photo (see TripRepository.createTrip
-  /// / PlacesApiService.destinationPhoto) once there is a trip to show.
   Widget _adventureCardShell({Trip? trip, required Widget child}) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -258,10 +236,6 @@ class HomePage extends StatelessWidget {
                         style: const TextStyle(color: Colors.white, fontSize: 10),
                       )
                     else ...[
-                      // Date range and "X days Y nights" on their own
-                      // lines — previously one line with both joined by
-                      // "·", which squeezed the nights count out under
-                      // the ellipsis on anything but a very short date range.
                       Text(
                         trip.dateOnlyLabel,
                         maxLines: 1,
@@ -319,14 +293,6 @@ class HomePage extends StatelessWidget {
                 _verticalDivider(),
                 _cardInfoTile(Icons.bed_outlined, 'Hotel', trip.hotelStays.isNotEmpty ? trip.hotelStays.first.name : '-'),
                 _verticalDivider(),
-                // Real weather for the destination, via Open-Meteo — free
-                // and keyless, same convention as PlacesApiService's
-                // Nominatim geocoding/Overpass POIs (see
-                // weather_service.dart). Shows the forecast for the trip's
-                // start date when that's within Open-Meteo's ~15-day
-                // forecast horizon, or today's actual reading once the
-                // trip has started; _WeatherTile shows '-' rather than a
-                // fabricated reading when neither is available yet.
                 _WeatherTile(
                   destination: trip.destination.isNotEmpty ? trip.destination : trip.name,
                   forDate: trip.startDate == null ? null : DateTime(trip.startDate!.year, trip.startDate!.month, trip.startDate!.day),
@@ -550,10 +516,6 @@ class HomePage extends StatelessWidget {
     );
   }
 
-  // ---------------- Insurance section ----------------
-  // Moved here from the Explore page — insurance isn't something people
-  // browse for alongside flights/hotels, it belongs with the rest of the
-  // trip-planning shortcuts on Home.
   Widget _buildInsuranceHeader(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -606,10 +568,6 @@ class HomePage extends StatelessWidget {
   }
 }
 
-/// One of the three small white tiles at the bottom of the "Next
-/// Adventure" card (Flight / Hotel / Weather) — a plain top-level
-/// function rather than a HomePage method so [_WeatherTile] below can
-/// build the exact same look once its own async weather value resolves.
 Widget _cardInfoTile(IconData icon, String label, String value) {
   return Expanded(
     child: Column(
@@ -629,14 +587,6 @@ Widget _cardInfoTile(IconData icon, String label, String value) {
   );
 }
 
-/// The "Weather" tile on Home's "Next Adventure" card — real data from
-/// [WeatherService] (Open-Meteo, free and keyless), fetched once per
-/// destination/date rather than on every rebuild (Home's trip stream can
-/// emit often; WeatherService's own short cache also protects against
-/// hammering the API if several widgets ask for the same destination at
-/// once). Shows '-' rather than a fabricated reading whenever the
-/// destination can't be geocoded, the date is beyond Open-Meteo's
-/// forecast horizon, or the request fails for any reason.
 class _WeatherTile extends StatefulWidget {
   final String destination;
   final DateTime? forDate;

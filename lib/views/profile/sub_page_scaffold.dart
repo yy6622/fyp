@@ -2,9 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../../theme.dart';
 
-// ---------------------------------------------------------------------
-// Shared page shell for the simple Profile sub-pages
-// ---------------------------------------------------------------------
 class SubPageScaffold extends StatelessWidget {
   final String title;
   final Widget body;
@@ -23,14 +20,6 @@ class SubPageScaffold extends StatelessWidget {
 }
 
 Widget profileNavRow(String label, String value, {VoidCallback? onTap}) {
-  // Spacer() + Flexible(value) used to split the leftover space 50/50 (both
-  // default to flex:1), so the value text only filled part of its own
-  // loosely-fit box and the chevron — placed right after it in the Row —
-  // ended up wherever that text happened to end, not at a fixed right edge.
-  // That's why the chevrons drifted left/right with the value's length.
-  // Expanded on the label instead soaks up all the leftover space, so
-  // value+gap+chevron are always packed as one tight group flush against
-  // the row's true right edge, regardless of how long the value text is.
   return InkWell(
     onTap: onTap,
     child: Container(

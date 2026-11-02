@@ -1,14 +1,3 @@
-/// Malaysia's airports with commercial passenger service, used by
-/// [LocationService] to suggest the nearest one as a Home Airport (see
-/// `account_setting_page.dart`) instead of always assuming
-/// [kDefaultHomeAirport] (KUL) — e.g. someone in Penang should be
-/// offered PEN, not sent across the country to KUL.
-///
-/// This app assumes a Malaysia-based traveller throughout (see the doc
-/// comment on `kDefaultHomeAirport` in `popular_destinations.dart`), so
-/// this list is domestic-only rather than a global airport database —
-/// nearest-airport-in-Malaysia is the question that actually matters
-/// here. Coordinates are each airport's approximate terminal location.
 class MalaysiaAirport {
   final String iataCode;
   final String name;

@@ -8,21 +8,6 @@ import '../auth/auth_widgets.dart';
 import '../shared/bottom_nav.dart';
 import '../shared/phone_input_field.dart';
 
-// ---------------------------------------------------------------------
-// Post-registration onboarding — Avatar / Phone / Region & Country /
-// Currency / Add Friend, one page at a time (same step-wizard shape as
-// [CreatePlanWizard]: header + progress bar + IndexedStack). Shown once
-// right after email verification (see OtpVerificationPage). Every step,
-// and the wizard as a whole, can be skipped — nothing collected here is
-// required to use the app.
-//
-// SETUP REQUIRED for the Avatar step to actually work: this project has no
-// image-upload package wired in yet. Run
-//   flutter pub add image_picker firebase_storage
-// then deploy the new storage.rules:
-//   firebase deploy --only storage
-// Until both are done, this file won't compile.
-// ---------------------------------------------------------------------
 class OnboardingWizardPage extends StatefulWidget {
   const OnboardingWizardPage({super.key});
 
@@ -300,7 +285,6 @@ class _OnboardingWizardPageState extends State<OnboardingWizardPage> {
     );
   }
 
-  // ================= Step 5: Add a friend =================
   Widget _addFriendStep() {
     return Column(
       children: [

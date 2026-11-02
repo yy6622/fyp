@@ -122,11 +122,6 @@ class _CreatePlanWizardState extends State<CreatePlanWizard> {
     );
   }
 
-  // Nothing stopped an empty trip name (or destination/dates) from reaching
-  // Create Trip before — these are exactly the fields _createPlan hands
-  // straight to TripRepository, so a blank one meant a blank/garbage trip.
-  // Caught here (like _confirmPayment's checks) so the message says
-  // exactly what's missing instead of silently letting it through.
   void _continueFromBasicInfo() {
     if (controller.tripNameController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please enter a trip name.')));
@@ -279,16 +274,7 @@ class _CreatePlanWizardState extends State<CreatePlanWizard> {
     );
   }
 
-  // Both the "Start Date" and "End Date" fields open this same range
-  // picker (pre-filled with whichever of the two is already set) so the
-  // person can pick both ends of the trip in one flow instead of two
-  // separate dialogs chained together.
   Future<void> _pickDateRange() async {
-    // DateTime.now() is already the device's own local clock (whatever
-    // timezone the phone is set to) — never a fixed/US timezone — so
-    // "today" here always means today where the user actually is.
-    // `today` truncates the time component so the picker's earliest
-    // selectable day is genuinely today, not yesterday.
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final range = await showVoyaDateRangePicker(
@@ -522,12 +508,6 @@ class _CreatePlanWizardState extends State<CreatePlanWizard> {
 
   Future<void> _pickDestination() async {
     final searchController = TextEditingController();
-    // Set once a country with real [kCountryAreas] entries is tapped —
-    // switches this same sheet to a second "pick a specific area (or
-    // just use the country)" step instead of closing right away. Left
-    // null the whole time for a country with no areas list (e.g.
-    // Singapore), which keeps the original one-tap behaviour exactly as
-    // it was before this existed.
     String? areaStepCountry;
     await showModalBottomSheet<void>(
       context: context,
@@ -645,8 +625,6 @@ class _CreatePlanWizardState extends State<CreatePlanWizard> {
                                 onTap: () {
                                   final areas = kCountryAreas[c.name.toLowerCase()];
                                   if (areas == null || areas.isEmpty) {
-                                    // No real areas list for this country (e.g.
-                                    // Singapore) — same one-tap behaviour as before.
                                     controller.setDestination(c.name);
                                     Navigator.of(sheetContext).pop();
                                   } else {

@@ -3,10 +3,6 @@ import 'package:flutter/material.dart';
 import '../../theme.dart';
 import 'detail_widgets.dart';
 
-// ---------------------------------------------------------------------
-// Full review list — reached via "View All" from a Reviews preview
-// section (Hotel/Restaurant detail pages show only the top 3 there).
-// ---------------------------------------------------------------------
 class AllReviewsPage extends StatelessWidget {
   final String title;
   final String ratingSummary;

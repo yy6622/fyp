@@ -1,34 +1,3 @@
-// Voya's own schedule optimiser. No AI model and no external service: fixed rules plus Voya's
-// place knowledge base (planner/gazetteer.json and the group's saved places). Pure functions,
-// testable with node (ml/discussion_summary/test_optimise.js).
-//
-// Input : plan {day: [{id, time, label, location, icon}]}, mode "day" | "whole", onlyDay,
-//         logistics window from logistics.js, and optionally the trip's destination, saved places,
-//         flights, hotel stays and days (for typed-in flights and hotel check-in / check-out).
-// Output: { update: [{label, from_day, day, time, reason}], window, notes: [string] }
-//
-// Algorithm
-//  1. Profile every activity. Flights and timed hotel check-ins / check-outs are FIXED.
-//     A place Voya knows (gazetteer or saved list) brings its visit length, its district and when it
-//     is best (morning / afternoon / evening only, full day); otherwise words in the label decide
-//     (breakfast / lunch / dinner / supper, sunrise / sunset / night market ...).
-//  2. Booked flights and hotel stays (planner/logistics_plan.js) give each day its start and end
-//     (landing + 90 min, 3 h before the flight home) and busy slots (check-in 15:00, check-out 11:00).
-//  3. mode "whole" only, in this order:
-//     a. a full-day place (theme park) gets the day to itself; the other sights go to other days;
-//     b. a day that is too short for its activities (arrival / departure day) hands the extra ones
-//        to the day with the most free time, and a museum / garden that would only get an evening
-//        slot moves to a day where it fits in daylight;
-//     c. same district: an activity moves to the day that already has places in its district;
-//     d. balancing: while the busiest day has 2+ more sights than the lightest, a whole same-district
-//        group moves to the lightest day (a group is only split when its day has more than 3 sights).
-//  4. Every touched day is re-timed: fixed items and busy slots stay; meals at meal times, evening
-//     places in the evening; others in order of their best time, places in the same district next to
-//     each other; each activity lasts its visit length, 15 min to walk to a place in the same
-//     district, 30 min to another district; nothing overlaps; nothing before the day starts or after
-//     it ends.
-//  5. Only items whose day or time changed are returned, each with the reason; what still does not
-//     fit (a full day in mode "day") comes back as a note.
 
 const SLOT = { breakfast: 8 * 60, morning: 9 * 60 + 30, lunch: 12 * 60 + 30, afternoon: 14 * 60 + 30, snack: 15 * 60 + 30,
   sunset: 17 * 60 + 30, dinner: 19 * 60, night: 20 * 60 + 30, sunrise: 5 * 60 + 45 };
@@ -37,7 +6,7 @@ const DAY_START = 9 * 60;
 const DAY_END = 23 * 60;
 const SAME_AREA_GAP = 15;
 const OTHER_AREA_GAP = 30;
-const MAX_SIGHTS = 3;           // a day with more sights than this is split even if they share a district
+const MAX_SIGHTS = 3;
 
 const { estimateTravelMinutes } = require("./maps_service");
 
@@ -54,7 +23,6 @@ function toHHMM(min) {
 }
 const round15 = (n) => Math.ceil(n / 15) * 15;
 
-/** kind, preferred minute of the day, and whether the item may move at all - from the icon and label words. */
 function classify(item) {
   const t = lower(item.label);
   const icon = item.icon || "activity";
@@ -73,7 +41,6 @@ function classify(item) {
     if (has(t, ["supper", "宵夜", "night market", "夜市", "pasar malam"])) return { kind: "food", pref: SLOT.night, meal: true };
     if (has(t, ["dinner", "晚餐", "晚饭", "makan malam", "bbq", "steamboat", "火锅", "hotpot"])) return { kind: "food", pref: SLOT.dinner, meal: true };
     if (has(t, ["cafe", "café", "coffee", "咖啡", "dessert", "甜品", "bakery", "tea house", "茶"])) return { kind: "food", pref: SLOT.snack, meal: true };
-    // otherwise the meal closest to when the group put it
     const c = cur ?? SLOT.lunch;
     const pref = c < 10 * 60 + 30 ? SLOT.breakfast : c < 16 * 60 ? SLOT.lunch : c < 21 * 60 + 30 ? SLOT.dinner : SLOT.night;
     return { kind: "food", pref, meal: true };
@@ -82,17 +49,14 @@ function classify(item) {
     return { kind: icon, pref: SLOT.night, why: "evening" };
   }
   if (icon === "shopping") return { kind: "shopping", pref: cur !== null && cur >= 17 * 60 ? SLOT.night - 60 : SLOT.afternoon };
-  // places / activities: keep morning vs afternoon as the group had it
   return { kind: icon, pref: cur !== null && cur >= 13 * 60 ? SLOT.afternoon : SLOT.morning };
 }
 
 const locKey = (it) => lower(it.location).replace(/[^a-z0-9一-鿿]+/g, " ").trim();
 const MEAL_WORD = /breakfast|brunch|lunch|dinner|supper|早餐|早点|午餐|午饭|晚餐|晚饭|宵夜|sarapan|makan/;
 
-/** classify() plus what Voya knows about the place: visit length, district, best time of day. */
 function profile(item, known) {
   const c = classify(item);
-  // the area it is in: the item's own location if that names an area (not a street address, not the city)
   const { districtOf } = require("./planner/places");
   const p = { ...c, dur: DURATION[c.kind] || 90, group: lower(districtOf({ location: item.location })), place: null };
   if (!c.fixed && item.icon !== "hotel" && item.icon !== "flight" && known && known.places.length) {
@@ -133,53 +97,32 @@ function profile(item, known) {
     }
   }
   p.timeBound = Boolean(p.meal) || [SLOT.sunrise, SLOT.sunset, SLOT.night].includes(p.pref);
-  // a museum / garden / temple closes in the evening: it should start by 17:00
   p.daytimeOnly = !p.meal && !p.fixed && !p.timeBound && !p.fullDay && (p.place
     ? !/[EN]/.test(p.place.slots || "")
     : /museum|temple|garden|zoo|aquarium|palace|博物馆|美术馆|寺|庙|园|宫|muzium|kuil|taman/.test(lower(item.label)));
   return p;
 }
 
-// ---------------------------------------------------------------------
-// Utility formula (FYP documentation's Optimised Itinerary Generation
-// Algorithm): utility = recommendationScore - travelTimePenalty -
-// waitingTimePenalty - costPenalty. Every term is normalised to
-// roughly [0, 1] so the subtraction means something regardless of the
-// raw rating/minutes/price scale it came from.
-//
-// recommendationScore and costPenalty are a property of the PLACE
-// itself, not of the order it's visited in — so between two orderings
-// of the very same set of places, both terms add up to the same total
-// either way and cancel out of the comparison. Only travelTimePenalty
-// and waitingTimePenalty, which genuinely depend on sequence, actually
-// decide which ordering the two-opt pass below prefers. That's the
-// correct, intended behaviour of a utility-based objective (constant
-// terms don't change an argmax), not a shortcut around the formula —
-// and the moment a factor varies by position (a time-of-day price
-// change, say), the formula is already there to react to it.
-// ---------------------------------------------------------------------
 function recommendationScoreOf(inf) {
   const r = inf.place && inf.place.rating != null ? parseFloat(inf.place.rating) : NaN;
-  if (!Number.isFinite(r)) return 0.5; // unrated / unknown place - neutral, not punished
+  if (!Number.isFinite(r)) return 0.5;
   return Math.max(0, Math.min(1, r / 5));
 }
 function costPenaltyOf(inf) {
   const price = inf.place && inf.place.price != null ? String(inf.place.price) : "";
   if (!price || /free/i.test(price)) return 0;
   const n = parseFloat(price.replace(/[^0-9.]/g, ""));
-  if (!Number.isFinite(n)) return 0.2; // priced but unparseable - a small default, not free
+  if (!Number.isFinite(n)) return 0.2;
   return Math.max(0, Math.min(1, n / 200));
 }
 function travelTimePenaltyOf(minutes) {
-  if (minutes == null) return 0.3; // transition this run couldn't estimate at all
+  if (minutes == null) return 0.3;
   return Math.max(0, Math.min(1, minutes / 60));
 }
 function waitingTimePenaltyOf(minutes) {
   return Math.max(0, Math.min(1, Math.max(0, minutes) / 120));
 }
 
-/** The {lat, lng, district} point for a block (see toBlocks below) — the first member that
- * actually has coordinates, falling back to the block's own group name as a district. */
 function pointOf(block, info) {
   for (const it of block) {
     const inf = info.get(it.id);
@@ -190,10 +133,6 @@ function pointOf(block, info) {
   return { district: info.get(block[0].id).group || "" };
 }
 
-/** Splits `ordered` into blocks: a maximal run of consecutive items sharing one non-empty,
- * non-time-bound, non-full-day group (the grouping loop above already keeps a group's items
- * consecutive), or a lone item otherwise (fixed-feeling anchors: meals, sunrise/sunset, a
- * full-day place, or anything ungrouped). */
 function toBlocks(ordered, info) {
   const blocks = [];
   for (const it of ordered) {
@@ -212,17 +151,6 @@ const isAnchorBlock = (block, info) => {
   return inf.timeBound || inf.fullDay;
 };
 
-/**
- * Two-opt local-improvement pass: reorders the movable blocks between
- * each pair of anchors (a meal/sunrise/sunset slot, or a full-day
- * place — none of which this ever moves) to maximise the utility
- * formula above. In practice this means minimising total estimated
- * travel time between consecutive blocks (see that formula's own doc
- * comment for why recommendationScore/costPenalty don't change the
- * winner). Runs each maximal anchor-to-anchor run of movable blocks
- * independently, bounded (200 passes) so a busy day can never make
- * this expensive.
- */
 function twoOptReorder(ordered, info) {
   const blocks = toBlocks(ordered, info);
   if (blocks.length < 3) return ordered;
@@ -276,8 +204,6 @@ function twoOptReorder(ordered, info) {
     return order;
   });
 
-  // Re-stitch: walk `blocks` again, pulling each run's (possibly
-  // reordered) blocks back out left to right; anchors are untouched.
   const flatOptimised = optimisedRuns.flat();
   let ri = 0;
   const final = [];
@@ -288,19 +214,13 @@ function twoOptReorder(ordered, info) {
   return final.flat();
 }
 
-/**
- * Lay out one day's items. Returns Map(id -> minute).
- * prof: Map(id -> profile)   busy: extra [start, end] minutes that must stay free (booked check-in ...)
- */
 function scheduleDay(items, { start = DAY_START, end = DAY_END, prof = null, busy: extraBusy = [] } = {}) {
   const info = prof || new Map(items.map((it) => [it.id, profile(it, null)]));
   const fixed = items.filter((it) => info.get(it.id).fixed);
   const flex = items.filter((it) => !info.get(it.id).fixed);
-  // a timed hotel check-in starts the day
   for (const it of fixed) if (info.get(it.id).checkin) start = Math.max(start, toMin(it.time) + DURATION.hotel);
   const fullDayHere = flex.some((it) => info.get(it.id).fullDay);
 
-  // order: by preferred slot; items in the same district are pulled next to the first of them
   flex.sort((a, b) => info.get(a.id).pref - info.get(b.id).pref || a.label.localeCompare(b.label));
   const ordered = [];
   const used = new Set();
@@ -318,10 +238,6 @@ function scheduleDay(items, { start = DAY_START, end = DAY_END, prof = null, bus
     }
   }
 
-  // Optimised Itinerary Generation Algorithm (FYP documentation) — the
-  // two-opt pass can only improve on the district-pulling order above,
-  // never move an anchor, so it's always safe to apply here before the
-  // time-placement loop below consumes `ordered`.
   const travelOrdered = twoOptReorder(ordered, info);
 
   const busy = [...fixed.map((it) => [toMin(it.time), toMin(it.time) + (DURATION[info.get(it.id).kind] || 60)]), ...extraBusy];
@@ -332,7 +248,6 @@ function scheduleDay(items, { start = DAY_START, end = DAY_END, prof = null, bus
   const place = (it) => {
     const inf = info.get(it.id);
     const dur = inf.dur;
-    // a meal on a theme-park day is eaten in the park: it keeps its meal time and blocks nothing
     const inPark = fullDayHere && inf.meal;
     const gap = lastGroup && inf.group && inf.group === lastGroup ? 0 : (lastGroup ? OTHER_AREA_GAP - SAME_AREA_GAP : 0);
     let s;
@@ -342,7 +257,7 @@ function scheduleDay(items, { start = DAY_START, end = DAY_END, prof = null, bus
     else s = Math.max(cursor + gap, start);
     s = round15(s);
     if (!inPark) while (clashes(s, s + dur) && s < end) s += 15;
-    if (s + 15 > end) s = Math.max(start, end - dur);   // squeezed: keep it inside the day
+    if (s + 15 > end) s = Math.max(start, end - dur);
     out.set(it.id, s);
     if (!inPark) {
       busy.push([s, s + dur]);
@@ -354,7 +269,6 @@ function scheduleDay(items, { start = DAY_START, end = DAY_END, prof = null, bus
   while (queue.length) {
     const it = queue.shift();
     const inf = info.get(it.id);
-    // a sight that would run more than 30 min into the next meal waits until after that meal
     if (!inf.timeBound && !inf.fullDay && !fullDayHere) {
       const meal = queue.find((o) => info.get(o.id).meal && info.get(o.id).pref !== SLOT.snack);
       if (meal && Math.max(cursor, start) + inf.dur > info.get(meal.id).pref + 30 && cursor < info.get(meal.id).pref + 30) {
@@ -372,17 +286,8 @@ function mealName(pref) {
     : pref === SLOT.dinner ? "Dinner time" : "Supper time";
 }
 
-/**
- * plan, { mode, onlyDay, window, destination, saved, catalog, flights, hotelStays, days }
- * days: [{day, date}] (only needed for typed-in flights / hotel stays)
- */
-// kmBetween now lives in maps_service.js (the "Maps service" abstraction) — re-exported
-// locally under its old name so every existing call site below needed no further changes.
 const { kmBetween } = require("./maps_service");
 
-/**
- * groupByArea: the group's choice in the app (Optimise sheet). true = keep places of one area on one day.
- */
 function optimisePlan(plan, { mode, onlyDay = null, window = { floor: null, ceil: null }, destination = "", saved = [],
   catalog = [], flights = [], hotelStays = [], days: dayList = null, groupByArea = true } = {}) {
   const { knownPlaces } = require("./planner/places");
@@ -399,8 +304,7 @@ function optimisePlan(plan, { mode, onlyDay = null, window = { floor: null, ceil
       prof.set(it.id, profile(it, known));
     }
   }
-  const why = new Map();                      // id -> reason for a day move
-  // places with only coordinates (from the catalog): one within 2.5 km of another shares its area
+  const why = new Map();
   const geo = [...byId.values()].filter((it) => prof.get(it.id).place && Number.isFinite(prof.get(it.id).place.lat));
   for (const it of geo) {
     const p = prof.get(it.id);
@@ -409,7 +313,6 @@ function optimisePlan(plan, { mode, onlyDay = null, window = { floor: null, ceil
     p.group = near ? prof.get(near.id).group : `near:${it.id}`;
   }
 
-  // booked flights / hotel stays: each day's start, end and busy slots
   const lp = tripLogistics({ flights, hotelStays, days: dayList || days.map((d) => ({ day: d, date: "" })),
     window: window || { floor: null, ceil: null } });
   const win = lp.window;
@@ -422,7 +325,6 @@ function optimisePlan(plan, { mode, onlyDay = null, window = { floor: null, ceil
     const busy = [];
     for (const f of lp.fixed) {
       if (f.day !== d || f.kind !== "hotel") continue;
-      // already in the plan as an item: that item is the fixed one
       const inPlan = [...byId.values()].some((it) => where.get(it.id) === d && it.icon === "hotel" &&
         Math.abs((toMin(it.time) ?? -999) - toMin(f.time)) < 60);
       if (!inPlan) busy.push([toMin(f.time), toMin(f.time) + DURATION.hotel]);
@@ -437,7 +339,6 @@ function optimisePlan(plan, { mode, onlyDay = null, window = { floor: null, ceil
     return { start, end, busy, startWhy };
   };
 
-  // what does not fit the day once it is laid out: a daytime place pushed past 17:30, or past the day's end
   const lateOn = (d) => {
     const items = [...byId.values()].filter((it) => where.get(it.id) === d);
     if (!items.length) return [];
@@ -460,7 +361,6 @@ function optimisePlan(plan, { mode, onlyDay = null, window = { floor: null, ceil
       const used = onDay(d).reduce((n, it) => n + (prof.get(it.id).fixed ? 0 : prof.get(it.id).dur + SAME_AREA_GAP), 0);
       return b.end - b.start - b.busy.reduce((n, [a, e]) => n + e - a, 0) - used;
     };
-    // the best other day for an activity: no theme park there, then its district, then the most free time
     const bestDay = (it, exclude) => {
       const p = prof.get(it.id);
       const cands = days.filter((d) => !exclude.includes(d) && !isFullDay(d) && freeMinutes(d) >= p.dur);
@@ -470,7 +370,6 @@ function optimisePlan(plan, { mode, onlyDay = null, window = { floor: null, ceil
       return pool.sort((a, b) => score(b) - score(a) || a - b)[0];
     };
 
-    // a. a full-day place gets its day to itself
     for (const d of days) {
       const parks = sights(d).filter((it) => prof.get(it.id).fullDay);
       for (const it of parks.slice(1)) {
@@ -483,7 +382,6 @@ function optimisePlan(plan, { mode, onlyDay = null, window = { floor: null, ceil
         if (to) { where.set(it.id, to); why.set(it.id, `${parks[0].label} takes the whole of Day ${d}`); }
       }
     }
-    // b. a day too short for what is on it (flight / check-in) hands activities to the freest day
     for (const d of days) {
       for (let guard = 0; guard < 20 && freeMinutes(d) < 0; guard++) {
         const extra = sights(d).filter((it) => !prof.get(it.id).fullDay).sort((a, b) => prof.get(b.id).pref - prof.get(a.id).pref)[0];
@@ -495,7 +393,6 @@ function optimisePlan(plan, { mode, onlyDay = null, window = { floor: null, ceil
           ? `Day ${d} is short because of your flight` : `Not enough time on Day ${d}`);
       }
     }
-    // b2. a museum / garden pushed into the evening (or past the end of the day) goes to a day with room
     const fixLate = () => {
       for (const d of days) {
         for (let guard = 0; guard < 10; guard++) {
@@ -514,9 +411,6 @@ function optimisePlan(plan, { mode, onlyDay = null, window = { floor: null, ceil
       }
     };
     fixLate();
-    // c. one area on one day (when the group wants that): every area spread over several days is
-    //    brought to one day - the day that already has most of it, else the one with the fewest places
-    //    of other areas - if that day has the time; bigger areas first
     if (groupByArea) {
       const areas = new Map();
       for (const it of byId.values()) {
@@ -539,7 +433,7 @@ function optimisePlan(plan, { mode, onlyDay = null, window = { floor: null, ceil
           const anchor = here(d)[0] || list.find((it) => !moving.includes(it)) || null;
           const was = new Map(moving.map((it) => [it.id, where.get(it.id)]));
           for (const it of moving) where.set(it.id, d);
-          if (lateOn(d).length) {                       // does not really fit once laid out: undo
+          if (lateOn(d).length) {
             for (const it of moving) where.set(it.id, was.get(it.id));
             continue;
           }
@@ -548,7 +442,6 @@ function optimisePlan(plan, { mode, onlyDay = null, window = { floor: null, ceil
         }
       }
     }
-    // d. balancing: move whole same-district groups (never split a group if a whole one fits)
     for (let guard = 0; guard < 50; guard++) {
       const open = days.filter((d) => !isFullDay(d));
       if (open.length < 2) break;
@@ -572,7 +465,6 @@ function optimisePlan(plan, { mode, onlyDay = null, window = { floor: null, ceil
         if (!best || newDiff < best.diff || (newDiff === best.diff && g.length < best.g.length)) best = { g, diff: newDiff };
       }
       if (!best) {
-        // only big groups left: split one only when the day is really too full (more than 3 sights)
         const g = [...groups.values()].sort((x, y) => y.length - x.length)[0];
         if (!g || hc <= MAX_SIGHTS) break;
         const one = g.sort((x, y) => prof.get(y.id).pref - prof.get(x.id).pref)[0];
@@ -616,7 +508,6 @@ function optimisePlan(plan, { mode, onlyDay = null, window = { floor: null, ceil
       else if (min === round15(b.start) && b.startWhy === "checkin") reason = "After hotel check-in";
       else if (p.why === "morning") reason = "Best in the morning";
       else {
-        // the stop just before it, if any
         const before = items.filter((o) => o.id !== it.id && times.get(o.id) < min)
           .sort((x, y) => times.get(y.id) - times.get(x.id))[0];
         if (!before) reason = `Starts the day (about ${Math.round(p.dur / 30) / 2} h there)`;

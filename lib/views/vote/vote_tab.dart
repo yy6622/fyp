@@ -8,19 +8,6 @@ import '../../theme.dart';
 import '../shared/nice_dialog.dart';
 import 'saved_item_picker_sheet.dart';
 
-// ---------------------------------------------------------------------
-// Vote tab — lives inside GroupTripPage. Shows every real poll created for
-// this trip (`trips/{tripId}/votes`) — hotel picks, attraction picks,
-// anything a member created via Create Vote.
-//
-// Each poll is a collapsible card (tap the header to fold/unfold), and
-// each of its options is its own card: an option picked "From Saved" in
-// Create Vote is matched back to the real hotel/attraction/restaurant/
-// flight behind it (via VoteTabController) and shown with its real image,
-// rating, location and price, not just its label text. An option typed
-// by hand instead just shows its text — still styled the same way, it
-// simply has nothing more than that to show.
-// ---------------------------------------------------------------------
 class VoteTab extends StatefulWidget {
   final String tripId;
   const VoteTab({super.key, required this.tripId});
@@ -32,23 +19,12 @@ class VoteTab extends StatefulWidget {
 class _VoteTabState extends State<VoteTab> {
   late final VoteTabController controller = VoteTabController(tripId: widget.tripId);
 
-  /// A poll's collapsed state, once the person has tapped its header to
-  /// fold/unfold it themselves — overrides [_defaultCollapsed] for that
-  /// poll id for the rest of this screen's lifetime. A poll id absent
-  /// from this map just uses the default: a closed poll starts folded
-  /// (it doesn't need anyone's vote any more), and among open polls only
-  /// the newest starts unfolded — if there are several open polls at
-  /// once, the rest start folded too rather than filling the screen with
-  /// every one of them expanded.
   final Map<String, bool> _collapsedOverride = {};
 
   bool _defaultCollapsed(TripVote vote) {
     if (vote.isClosed) return true;
     final openVotes = controller.votes.where((v) => !v.isClosed);
     if (openVotes.isEmpty) return false;
-    // controller.votes is already newest-first (TripRepository.watchVotes
-    // orders by createdAt descending), so the first open poll found is
-    // the latest one.
     return vote.id != openVotes.first.id;
   }
 
@@ -88,7 +64,6 @@ class _VoteTabState extends State<VoteTab> {
     );
   }
 
-  // ---------------- Poll card (collapsible header + its option cards) ----------------
   Widget _voteCard(TripVote vote) {
     final collapsed = _isCollapsed(vote);
     return Container(
@@ -152,10 +127,6 @@ class _VoteTabState extends State<VoteTab> {
     );
   }
 
-  /// Shown under a poll's option cards only when its creator turned on
-  /// "Allow members to add options" and the poll is still open — the
-  /// control [TripVote.allowAddOptions] actually enables now, after
-  /// previously being stored on the vote but read nowhere.
   Widget _addOptionRow(TripVote vote) {
     return Padding(
       padding: const EdgeInsets.only(top: 10),
@@ -224,14 +195,6 @@ class _VoteTabState extends State<VoteTab> {
     }
   }
 
-  /// Dedupe keys ('<kind>:<id>') for whatever this vote's current options
-  /// already match back to in the trip's saved list — matched the exact
-  /// same way [VoteTab] renders each option's card (hotelFor/
-  /// attractionFor/restaurantFor/flightFor), since an option already on
-  /// the poll is stored as plain label text, not a catalog id, so there's
-  /// no dedupe key of its own to read directly. Lets the picker grey out
-  /// a saved listing that's already an option here, same as Create
-  /// Vote's own "From Saved" button does for its draft list.
   Set<String> _alreadyAddedKeys(TripVote vote) {
     final keys = <String>{};
     for (final o in vote.options) {
@@ -247,12 +210,6 @@ class _VoteTabState extends State<VoteTab> {
     return keys;
   }
 
-  /// "From Saved" counterpart to [_promptAddOption] — same picker sheet
-  /// Create Vote uses, just adding straight onto an already-created poll
-  /// via [VoteTabController.addOption] (which only takes a label; an
-  /// existing option is matched back to its real catalog listing by name
-  /// alone, the same way a Create-Vote-time "From Saved" pick already is
-  /// — see hotelFor/attractionFor/restaurantFor/flightFor above).
   Future<void> _addFromSaved(TripVote vote) async {
     final picked = await showSavedItemPicker(context, tripId: widget.tripId, alreadyAdded: _alreadyAddedKeys(vote));
     if (picked == null || picked.isEmpty || !mounted) return;
@@ -270,11 +227,6 @@ class _VoteTabState extends State<VoteTab> {
     return vote.isClosed ? 'Voting closed $when' : 'Closes $when';
   }
 
-  // Casts a vote inside the Group Voting Algorithm's transaction (see
-  // TripRepository.castVote). Any rejection the transaction raises
-  // (session closed, no longer a member, option removed, or already
-  // voted) comes back as a message string here, which we surface as a
-  // SnackBar instead of silently failing.
   Future<void> _castVote(TripVote vote, String optionId) async {
     final error = await controller.castVote(vote, optionId);
     if (!mounted || error == null) return;
@@ -283,10 +235,6 @@ class _VoteTabState extends State<VoteTab> {
     );
   }
 
-  // ---------------- Option card ----------------
-  // Dispatches to whichever saved-item shape (if any) this option's label
-  // matches, each rendered as its own real-looking card; falls back to a
-  // plain label card for a freely-typed option that matches nothing saved.
   Widget _optionCard(TripVote vote, VoteOption option) {
     final mineVoted = controller.votedByMe(option);
     final hotel = controller.hotelFor(option);
@@ -296,10 +244,6 @@ class _VoteTabState extends State<VoteTab> {
 
     final canVote = controller.canVote(vote, option);
     return GestureDetector(
-      // Once a member has voted, the Group Voting Algorithm no longer lets
-      // them withdraw or change it by tapping again — canVote already
-      // reflects that (and whether the poll is closed), so there's nothing
-      // left to disable separately here.
       onTap: !canVote ? null : () => _castVote(vote, option.id),
       child: Container(
         margin: const EdgeInsets.only(top: 10),
@@ -399,8 +343,6 @@ class _VoteTabState extends State<VoteTab> {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // No thumbnail for restaurants — see explore_page.dart's restaurant
-        // cards for why (no image-shaped UI at all, not even a placeholder).
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -453,11 +395,6 @@ class _VoteTabState extends State<VoteTab> {
     );
   }
 
-  /// Fallback for an option that doesn't match anything saved for this
-  /// trip — typically one typed by hand in Create Vote rather than
-  /// picked "From Saved". Still a full card (border, padding, the same
-  /// voted-state styling and footer), just without the image/rating/
-  /// location/price a matched listing has to show.
   Widget _plainBody(VoteOption option) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -515,10 +452,6 @@ class _VoteTabState extends State<VoteTab> {
     );
   }
 
-  /// The avatar stack + "voted/total" fraction shown under every option
-  /// card, real photos included — [UserAvatar] already fetches each
-  /// voter's current profile photo live by uid (see theme.dart), same as
-  /// the Friends list does.
   Widget _footerRow(VoteOption option) {
     return Padding(
       padding: const EdgeInsets.only(top: 10),

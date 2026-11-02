@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import 'repositories/user_repository.dart';
 
-/// Shared color palette for the whole app, pulled from the Figma design.
 class AppColors {
   // Main Color
   static const primary = Color(0xFF104259);
@@ -29,11 +28,6 @@ class AppColors {
   static const divider = Color(0xFFE7E9EE);
 }
 
-/// The standard sub-page header used across the app: white background, a
-/// centered bold navy title, a navy back arrow, and a thin divider line
-/// along the bottom edge (matches the Figma reference for pages like
-/// Insurance, History, Group Setting, etc.). Pass the same `title`/`actions`
-/// you would give a plain [AppBar] — this just adds the shared chrome.
 class VoyaAppBar extends StatelessWidget implements PreferredSizeWidget {
   final Widget? title;
   final List<Widget>? actions;
@@ -71,13 +65,6 @@ class VoyaAppBar extends StatelessWidget implements PreferredSizeWidget {
   }
 }
 
-/// The top-right circular icon button used in every top-level page's
-/// header (Home/Explore/Plan/Profile) — a solid navy circle with a small
-/// white icon centered in it. Pulled out as one shared widget so the four
-/// pages can't quietly drift back to different sizes: before this, Home
-/// had no circle at all (just a bare 29x29 image), Plan's circle was 44px
-/// with a default-size (24px) icon, and Explore/Profile already matched
-/// each other at 40px/18px — this is that matching size, now shared.
 class HeaderIconButton extends StatelessWidget {
   final IconData icon;
   final VoidCallback onTap;
@@ -98,24 +85,12 @@ class HeaderIconButton extends StatelessWidget {
   }
 }
 
-/// One tab's label + icon for [PillTabBar].
 class PillTab {
   final String label;
   final IconData icon;
   const PillTab(this.label, this.icon);
 }
 
-/// The full-width, icon-plus-label tab row used on Group Trip's Plan/Chat/
-/// Expenses/Vote bar — pulled out as a shared widget so every other tabbed
-/// page (Community post detail's Itinerary/Review, History's Flight/Hotel/
-/// Insurance, a past booking's Detail/People/Documents/Review) can use the
-/// exact same look instead of each rolling its own plain text-underline
-/// tabs. Matches the Figma tab bar exactly: each tab is a white pill whose
-/// TOP corners are square and BOTTOM corners are rounded (10px), so its 2px
-/// bottom border traces a little upward curve at each end instead of a flat
-/// line. Only the selected tab's bottom border is navy; the others have an
-/// (invisible) white bottom border of the same width, so the curved shape
-/// is there for all of them but only the selected one's curve is visible.
 class PillTabBar extends StatelessWidget {
   final List<PillTab> tabs;
   final int selectedIndex;
@@ -143,15 +118,6 @@ class PillTabBar extends StatelessWidget {
                   borderRadius: const BorderRadius.only(bottomLeft: Radius.circular(10), bottomRight: Radius.circular(10)),
                   border: Border(bottom: BorderSide(color: selected ? AppColors.primary : Colors.white, width: 2)),
                 ),
-                // A longer label (e.g. "Rating & Review") plus the icon
-                // could add up to more than this pill's share of the row
-                // once there are 3-4 tabs — mainAxisSize.min here used to
-                // let the Row size itself to its children's natural width
-                // regardless of how little space the pill actually had,
-                // which overflowed instead of shrinking. The label now
-                // sizes to whatever's left after the icon and ellipsizes
-                // if it still doesn't fit, rather than spilling outside
-                // the pill.
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
@@ -176,8 +142,6 @@ class PillTabBar extends StatelessWidget {
   }
 }
 
-/// Drop-in replacement for `Image.asset` that shows a neutral placeholder
-/// instead of a raw exception overlay if the asset ever fails to decode.
 class AppImage extends StatelessWidget {
   final String asset;
   final double? width;
@@ -204,20 +168,12 @@ class AppImage extends StatelessWidget {
   }
 }
 
-/// A circular avatar that falls back to [fallbackIcon] both when there's no
-/// [imageUrl] yet and when loading one fails (a dead link, Storage object
-/// removed, offline, ...) — `CircleAvatar.backgroundImage` alone has no
-/// such fallback: a failed load just reports an uncaught image-decode
-/// error and leaves a blank circle, it doesn't fall through to [child] the
-/// way an empty/null backgroundImage does.
 class AppAvatar extends StatefulWidget {
   final String? imageUrl;
   final double radius;
   final Color backgroundColor;
   final IconData fallbackIcon;
   final double? iconSize;
-  /// Shown instead of the fallback icon while this is non-null (e.g. an
-  /// upload-in-progress spinner) — same spot [CircleAvatar.child] takes.
   final Widget? child;
 
   const AppAvatar({
@@ -240,9 +196,6 @@ class _AppAvatarState extends State<AppAvatar> {
   @override
   void didUpdateWidget(covariant AppAvatar oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // A new URL (e.g. just finished uploading a replacement photo)
-    // deserves its own fresh attempt rather than staying stuck on the
-    // previous URL's failure.
     if (oldWidget.imageUrl != widget.imageUrl) _failed = false;
   }
 
@@ -263,15 +216,6 @@ class _AppAvatarState extends State<AppAvatar> {
   }
 }
 
-/// Shows someone's current avatar from just their uid — a thin
-/// [StreamBuilder] wrapper around [AppAvatar] for the many spots (a
-/// friend row, a pending-request row, an invite picker, a blocked-user
-/// row) that only ever have a uid on hand, not a full loaded [AppUser].
-/// Previously every one of these just showed a flat grey circle with no
-/// image at all, since nothing there ever looked the photo up. Reads
-/// `users/{uid}` live, so it also stays correct if that person changes
-/// their photo later, instead of freezing whatever was true the moment a
-/// friendship/membership was created.
 class UserAvatar extends StatelessWidget {
   final String uid;
   final double radius;

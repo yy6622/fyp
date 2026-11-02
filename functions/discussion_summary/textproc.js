@@ -1,5 +1,3 @@
-// Port of ml/discussion_summary/features.py - keep the two identical.
-// (Checked by ml/discussion_summary/test_parity.py.)
 
 const URL_RE = /https?:\/\/[^ ]+/gu;
 const SPACE_RE = /\s+/gu;
@@ -19,7 +17,6 @@ const DATE_RE = new RegExp(
   "|(school holiday|cuti sekolah|weekend|long weekend|public holiday|假期|周末)", "u");
 const QUESTION_RE = /[?？]|(^| )(how about|what about|apa kata|nak tak|boleh tak|ok tak)( |$)|要不要|怎么样|好不好|吗/u;
 
-/** Lower-case, NFKC (full-width -> half-width), URLs out, spaces collapsed. */
 function normalize(text) {
   const t = String(text).normalize("NFKC").toLowerCase().replace(URL_RE, " ");
   return t.replace(SPACE_RE, " ").trim();
@@ -33,7 +30,6 @@ function tags(norm) {
   return out;
 }
 
-/** The exact string the vectoriser sees. */
 function prepare(text, withTags = true) {
   let t = normalize(text);
   if (withTags) {

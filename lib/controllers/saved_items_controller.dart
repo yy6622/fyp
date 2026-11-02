@@ -5,11 +5,6 @@ import 'package:flutter/material.dart';
 import '../repositories/catalog_repository.dart';
 import '../services/auth_service.dart';
 
-/// Controller for [SavedItemsPage] — streams the
-/// flights/hotels/attractions/restaurants the signed-in user saved *for one
-/// specific trip* (see
-/// [CatalogRepository]'s class doc on why saves are trip-scoped rather than
-/// one global list).
 class SavedItemsController extends ChangeNotifier {
   final String tripId;
 

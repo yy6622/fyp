@@ -7,16 +7,6 @@ import '../../services/auth_service.dart';
 import '../../services/discussion_summary_service.dart';
 import '../../theme.dart';
 
-/// "Decide now" for everything the group chat left undecided.
-///
-/// For each undecided item the group can:
-///  - Agree   -> it counts as decided; a place / activity can be added to the plan right away
-///  - Skip    -> turned down
-///  - Vote    -> a poll in the Vote tab (competing options of the same kind go into one poll)
-///  - Split   -> only the members who want it get it in their plan ("Who is this for"),
-///               everyone else keeps their own plan for that time
-/// Decisions are stored on the trip (see discussion_decisions.dart) and the summary /
-/// AI Summarise treat them as final.
 Future<void> showDecideNowSheet(BuildContext context, GroupTripController controller, DiscussionSummary summary) {
   return showModalBottomSheet<void>(
     context: context,
@@ -48,7 +38,6 @@ class _DecideNowSheet extends StatefulWidget {
 }
 
 class _DecideNowSheetState extends State<_DecideNowSheet> {
-  /// messageId -> what was just decided here (so the row updates without a reload)
   final Map<String, String> _done = {};
   String? _busy;
   String? _error;
@@ -58,7 +47,6 @@ class _DecideNowSheetState extends State<_DecideNowSheet> {
   String get _uid => AuthService.instance.currentUser?.uid ?? '';
   String get _myName => trip?.memberNames[_uid] ?? AuthService.instance.currentUser?.displayName ?? 'Someone';
 
-  /// Chat names -> member uids (chat sender names are the members' display names).
   Set<String> _uidsFor(List<String> names) {
     final byName = <String, String>{};
     trip?.memberNames.forEach((uid, name) => byName[name.trim().toLowerCase()] = uid);
@@ -115,7 +103,6 @@ class _DecideNowSheetState extends State<_DecideNowSheet> {
       });
 
   Future<void> _vote(DiscussionItem it) => _run(it, () async {
-        // competing undecided options of the same kind go into one poll
         final rivals = widget.summary.pending
             .where((p) => p.category == it.category && !_done.containsKey(p.messageId) && p.decided == null)
             .toList();
@@ -139,7 +126,6 @@ class _DecideNowSheetState extends State<_DecideNowSheet> {
         return 'In poll';
       });
 
-  /// Add-to-plan dialog. Returns the members it was added for (empty = everyone), or null if cancelled.
   Future<Set<String>?> _planDialog(DiscussionItem it, {required bool split}) async {
     final t = trip;
     if (t == null || c.days.isEmpty) return null;
@@ -335,7 +321,6 @@ class _DecideNowSheetState extends State<_DecideNowSheet> {
 
   @override
   void dispose() {
-    // Re-read the chat + decisions so the summary card shows the new state.
     DiscussionSummaryService.instance.start(c.tripId);
     super.dispose();
   }

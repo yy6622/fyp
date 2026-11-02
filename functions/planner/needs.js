@@ -1,20 +1,6 @@
-// Things the group wants without naming a place: "a museum", "café with a city view",
-// "brunch place", "本帮菜", "夜市", "泰式按摩". When the group agrees on one, the planner fills it, in
-// this order:
-//   1. a place of that kind in the group's SAVED LIST (category / cuisine tags / name);
-//   2. a place of that kind Voya knows in the trip's city (the app's catalog, then the gazetteer),
-//      e.g. "night market" in Bangkok -> Jodd Fairs Night Market;
-//   3. Firestore catalog_places, then OpenStreetMap (osm_places.js; what is found is saved to
-//      catalog_places for the next trip);
-//   4. otherwise the wish itself goes into the plan as a time block at the right time of day
-//      ("Night market" in the evening), to be swapped for a real place later.
-// `slots` / `hours` / `icon` are used for that time block (same codes as gazetteer.json:
-// B breakfast, M morning, L lunch, A afternoon, D dinner, E evening, N night).
 
 const { norm } = require("./places");
 
-// words: how people say it in the chat; fits: what a saved place's name / category / cuisine looks like
-// "local food" depends on where the trip is
 const LOCAL_CUISINE = {
   China: /shanghainese|本帮|上海菜|chinese restaurant|中餐|jiangsu|zhejiang|cantonese|sichuan/i,
   Thailand: /thai|泰|pad thai|tom yum|som tam|isaan|boat noodle/i,
@@ -55,17 +41,14 @@ const NEEDS = [
 ];
 const CONDITIONAL = /(如果|万一|要是|假如|下雨|雨天|if it rains|in case|if it'?s raining|rainy|backup|备选|备用|plan b)/i;
 
-/** The kinds of place a message asks for, outside any place it already names (`skip` = [start, end] spans). */
 function findNeeds(text, skip = []) {
   let t = norm(text);
   for (const [s, e] of skip) t = t.slice(0, s) + " ".repeat(Math.max(0, e - s)) + t.slice(e);
   return NEEDS.filter((n) => n.words.test(t)).map((n) => ({ ...n, conditional: CONDITIONAL.test(t) }));
 }
 
-/** Does this place satisfy that need? (name, category, cuisine tags, icon). city: "Bangkok, Thailand" */
 function placeFits(place, need, city = "") {
   if (!place) return false;
-  // a museum never answers "本帮菜", a café never "museum"; a night market can be either
   if (need.food !== null && need.food !== undefined && need.food !== (place.icon === "food")) return false;
   const text = [place.name, ...(place.tags || []), ...(place.aliases || [])].join(" ");
   if (need.local) {
@@ -73,18 +56,10 @@ function placeFits(place, need, city = "") {
     const re = LOCAL_CUISINE[country] || (/shanghai/i.test(city) ? LOCAL_CUISINE.China : null);
     if (re && re.test(text)) return true;
   }
-  // "商场": any shopping place Voya knows that is not a market or a shopping street
   if (need.kind === "mall" && place.icon === "shopping" && !/market|street|road|bazaar|路|街|市场|夜市/i.test(text)) return true;
   return need.fits.test(text);
 }
 
-// Dietary preference matching (Group Setting > Travel Preferences > Food Preference) - same
-// best-effort "a Halal place probably says so somewhere in its tags/name" approach as
-// LOCAL_CUISINE above. This is only ever a soft tie-break among SEVERAL places that already
-// satisfy placeFits() for a food need (findNeeds) - never a hard filter, so a trip whose
-// preference doesn't match any candidate still gets whatever fits the need, same as before this
-// existed. "No restrictions" (or anything with no pattern below) never prefers one place over
-// another.
 const DIETARY = {
   Halal: /halal|muslim.?friendly|清真/i,
   Vegetarian: /vegetarian|素食|veg\b/i,
@@ -93,8 +68,6 @@ const DIETARY = {
   "Gluten-free": /gluten.?free|无麸质/i,
 };
 
-/** Does [place] look like it fits [foodPreference] ("Halal", "Vegetarian", ...), per its name/
- * tags/aliases? false for "No restrictions", "" or anything with no pattern above. */
 function matchesFoodPreference(place, foodPreference) {
   const re = DIETARY[String(foodPreference || "").trim()];
   if (!re || !place) return false;
@@ -102,7 +75,6 @@ function matchesFoodPreference(place, foodPreference) {
   return re.test(text);
 }
 
-/** The time block for a wish nobody has picked a place for: placed like a place of that kind. */
 function genericPlace(need) {
   const food = need.food === true || need.icon === "food";
   return {

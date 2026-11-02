@@ -3,12 +3,6 @@ import 'dart:io';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
 
-/// Picks and uploads a travel document photo (e-ticket, boarding pass,
-/// passport scan, ...) for a flight already on a trip's plan — same shape
-/// as [ReceiptService], with its own path
-/// (`flight_documents/{tripId}/{flightId}/{docType}_{timestamp}.jpg`) so
-/// every upload gets its own file and a re-upload doesn't clobber an
-/// earlier one before the new download URL is saved.
 class FlightDocumentService {
   FlightDocumentService._();
   static final FlightDocumentService instance = FlightDocumentService._();

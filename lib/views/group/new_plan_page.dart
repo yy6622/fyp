@@ -5,9 +5,6 @@ import '../create_plan/create_plan_wizard.dart';
 import 'join_trip_page.dart';
 import 'scan_qr_page.dart';
 
-// ---------------------------------------------------------------------
-// New Plan chooser (reached from the Plan tab's "+" button)
-// ---------------------------------------------------------------------
 class NewPlanPage extends StatelessWidget {
   const NewPlanPage({super.key});
 

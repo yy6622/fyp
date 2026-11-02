@@ -6,25 +6,18 @@ import 'package:http/http.dart' as http;
 import '../config/secrets.dart';
 import '../repositories/catalog_repository.dart';
 
-/// One turn in the conversation, in the shape OpenAI's Chat Completions
-/// API wants ("user" or "assistant").
 class ChatTurn {
   final String role;
   final String text;
   const ChatTurn({required this.role, required this.text});
 }
 
-/// What the model handed back for one reply — the natural-language text
-/// to show, plus which of the real candidate attractions (by id) it's
-/// actually recommending in this reply, if any.
 class AttractionChatReply {
   final String reply;
   final List<String> suggestedIds;
   const AttractionChatReply({required this.reply, required this.suggestedIds});
 }
 
-/// Thrown with a message that is safe to show to the user as-is (same
-/// pattern as ItineraryAiException in itinerary_ai_service.dart).
 class AttractionChatException implements Exception {
   final String message;
   const AttractionChatException(this.message);
@@ -32,35 +25,14 @@ class AttractionChatException implements Exception {
   String toString() => message;
 }
 
-/// Powers the Attraction Assistant chatbot (Explore > Attractions > "Ask
-/// AI for attraction ideas") via OpenAI's Chat Completions API — a
-/// separate provider from the rest of this app's AI features (Gemini,
-/// used for live translation and the group AI-itinerary feature) because
-/// the person explicitly asked for OpenAI here specifically.
-///
-/// Every reply is grounded to a real, already-loaded list of
-/// [CatalogAttraction]s for whatever destination Explore is currently
-/// showing (see AttractionChatController) — the model is only ever shown
-/// those candidates and told to recommend exclusively from them, never to
-/// invent a place that isn't in the list, same "don't fabricate" rule
-/// every other real-data feature in this app follows. If none of the
-/// candidates fit what the person asked for, the model is told to say so
-/// honestly rather than making something up.
 class AttractionChatService {
   AttractionChatService._();
   static final AttractionChatService instance = AttractionChatService._();
 
   static const String _endpoint = 'https://api.openai.com/v1/chat/completions';
 
-  /// Cost-efficient chat model — plenty for "pick a few of these real
-  /// places and explain why", not a reasoning-heavy task.
   static const String _model = 'gpt-4o-mini';
 
-  /// Shown to the person for every failure mode (bad key, out of quota,
-  /// rate limited, network error, malformed reply, ...) — the specific
-  /// reason is logged to the terminal via debugPrint instead, since it's
-  /// only actionable by whoever is running the app in dev, not by someone
-  /// just chatting with the assistant.
   static const String _genericBusyMessage =
       'The attraction assistant is busy right now — please try again in a moment.';
 
@@ -104,11 +76,6 @@ class AttractionChatService {
         'recommending anything yet, e.g. you\'re asking a clarifying question).';
   }
 
-  /// Sends the full conversation so far (see [ChatTurn]) plus a new user
-  /// message, grounded to [candidates] for [destination]. Throws
-  /// [AttractionChatException] with a message safe to show as-is for
-  /// every failure mode (not configured, network error, bad response) —
-  /// the UI turns that into an error bubble rather than crashing.
   Future<AttractionChatReply> sendMessage({
     required String destination,
     required List<CatalogAttraction> candidates,
@@ -147,10 +114,6 @@ class AttractionChatService {
       }
       final decoded = jsonDecode(res.body) as Map<String, dynamic>;
       final choices = decoded['choices'] as List?;
-      // Parenthesized around the `as String?` cast — written as a bare
-      // `cond ? expr as String? : null` ternary, Dart's parser reads the
-      // '?' that makes the cast target nullable as the start of a second,
-      // nested ternary instead, and fails with "Expected to find ':'."
       final content = (choices != null && choices.isNotEmpty) ? ((choices.first as Map)['message']?['content'] as String?) : null;
       if (content == null || content.trim().isEmpty) {
         debugPrint('[AttractionChatService] empty/null content in OpenAI response: ${res.body}');
@@ -165,13 +128,6 @@ class AttractionChatService {
     }
   }
 
-  /// Turns a non-200 response into a specific diagnosis for the terminal
-  /// only (never shown in the app) — OpenAI's error body is
-  /// `{"error": {"message", "type", "code"}}`, and a bare "HTTP 429" tells
-  /// whoever is reading the logs nothing about which of several very
-  /// different problems it actually is (out of credits vs. a plan that
-  /// doesn't cover this model vs. genuinely sending requests too fast), so
-  /// this reads `error.code`/`error.message` when present.
   String _messageForError(int statusCode, String body) {
     String? code;
     String? apiMessage;
@@ -181,8 +137,6 @@ class AttractionChatService {
       code = error?['code'] as String?;
       apiMessage = error?['message'] as String?;
     } catch (_) {
-      // Body wasn't JSON (or wasn't shaped as expected) — fall through to
-      // the generic, status-code-only messages below.
     }
     if (statusCode == 401) {
       return 'OpenAI rejected the API key in secrets.dart — check it\'s valid.';
@@ -192,11 +146,6 @@ class AttractionChatService {
         return 'The OpenAI account behind this key is out of quota/credit — add a payment method or '
             'top up credit at platform.openai.com/account/billing, then try again.';
       }
-      // Any other 429 on a first call (code like "rate_limit_exceeded",
-      // or no code at all) is almost always the same root cause for a
-      // freshly-created key: no billing set up yet, not actually sending
-      // too many requests — OpenAI returns 429 for both, so this stays
-      // the practical answer rather than guessing "slow down".
       return 'OpenAI returned "too many requests" (429)${apiMessage != null ? ': $apiMessage' : ''}. '
           'For a key that has never been billed yet, this almost always means no payment method / '
           'available credit on the OpenAI account, not actual rate limiting — check '
@@ -206,10 +155,6 @@ class AttractionChatService {
         '${apiMessage != null ? ': $apiMessage' : ''}. Try again in a moment.';
   }
 
-  /// The model is asked for strict JSON, but is parsed defensively rather
-  /// than trusted blindly: a malformed/non-JSON reply is shown to the
-  /// person as plain text with no suggestions, instead of the whole
-  /// message failing outright.
   AttractionChatReply _parseReply(String content, List<CatalogAttraction> candidates) {
     final validIds = candidates.map((c) => c.id).toSet();
     try {

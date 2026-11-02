@@ -1,4 +1,3 @@
-// Loads model.json once per server instance (shared by summariseDiscussion and generateItinerary).
 const fs = require("fs");
 const path = require("path");
 
