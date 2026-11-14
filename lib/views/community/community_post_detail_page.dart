@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:video_player/video_player.dart';
 
 import '../../controllers/community_controller.dart';
@@ -254,15 +255,22 @@ class _CommunityPostDetailPageState extends State<CommunityPostDetailPage> {
                 ),
               ],
               const SizedBox(height: 14),
-              post.hasVideo ? _videoPlayer(post) : _photoCarousel(post),
-              if (!post.hasVideo && post.images.length > 1) ...[
-                const SizedBox(height: 8),
-                _photoDots(post),
+              if (post.hasVideo) ...[
+                _videoPlayer(post),
+                const SizedBox(height: 16),
+              ] else if (post.images.isNotEmpty) ...[
+                _photoCarousel(post),
+                if (post.images.length > 1) ...[
+                  const SizedBox(height: 8),
+                  _photoDots(post),
+                ],
+                const SizedBox(height: 16),
               ],
-              const SizedBox(height: 16),
-              _tabs(post),
-              const SizedBox(height: 14),
-              post.tab == CommunityPostTab.itinerary ? _fullItinerary(post) : _fullReviews(post),
+              if (post.itinerary.isNotEmpty) ...[
+                _tabs(post),
+                const SizedBox(height: 14),
+              ],
+              post.itinerary.isNotEmpty && post.tab == CommunityPostTab.itinerary ? _fullItinerary(post) : _fullReviews(post),
             ],
           );
         },
@@ -333,14 +341,15 @@ class _CommunityPostDetailPageState extends State<CommunityPostDetailPage> {
               controller: _photoController,
               onPageChanged: (i) => setState(() => _photoIndex = i),
               itemCount: post.images.length,
-              itemBuilder: (context, i) => Image.network(
-                post.images[i],
+              itemBuilder: (context, i) => CachedNetworkImage(
+                imageUrl: post.images[i],
                 fit: BoxFit.cover,
                 width: double.infinity,
-                errorBuilder: (c, e, s) => Container(
+                placeholder: (c, u) => Container(color: AppColors.chipGrey),
+                errorWidget: (c, u, e) => Container(
                   color: AppColors.chipGrey,
                   alignment: Alignment.center,
-                  child: const Icon(Icons.image_outlined, color: AppColors.textGrey),
+                  child: const Icon(Icons.photo_camera_outlined, color: AppColors.textGrey),
                 ),
               ),
             ),
@@ -436,23 +445,32 @@ class _CommunityPostDetailPageState extends State<CommunityPostDetailPage> {
       context: context,
       backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(18))),
+      isScrollControlled: true,
       builder: (sheetCtx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Padding(
-              padding: EdgeInsets.fromLTRB(20, 18, 20, 6),
-              child: Text('Add to which trip?', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.navy)),
-            ),
-            ...trips.map((t) => ListTile(
-                  leading: const Icon(Icons.card_travel, color: AppColors.primary),
-                  title: Text(t.name, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600)),
-                  subtitle: Text(t.destination, style: const TextStyle(fontSize: 11.5, color: AppColors.textGrey)),
-                  onTap: () => Navigator.of(sheetCtx).pop(t),
-                )),
-            const SizedBox(height: 8),
-          ],
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: MediaQuery.of(sheetCtx).size.height * 0.7),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Padding(
+                padding: EdgeInsets.fromLTRB(20, 18, 20, 6),
+                child: Text('Add to which trip?', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.navy)),
+              ),
+              Flexible(
+                child: ListView(
+                  shrinkWrap: true,
+                  children: trips.map((t) => ListTile(
+                        leading: const Icon(Icons.card_travel, color: AppColors.primary),
+                        title: Text(t.name, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600)),
+                        subtitle: Text(t.destination, style: const TextStyle(fontSize: 11.5, color: AppColors.textGrey)),
+                        onTap: () => Navigator.of(sheetCtx).pop(t),
+                      )).toList(),
+                ),
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
         ),
       ),
     );

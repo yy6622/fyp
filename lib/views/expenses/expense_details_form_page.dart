@@ -8,6 +8,8 @@ import '../shared/nice_dialog.dart';
 import 'itemized_split_page.dart';
 import 'split_friends_page.dart';
 
+const _categories = ['Food & Drinks', 'Transport', 'Accommodation', 'Activities', 'Shopping', 'Other'];
+
 class ExpenseDetailsFormPage extends StatefulWidget {
   final AddExpenseController controller;
   const ExpenseDetailsFormPage({super.key, required this.controller});
@@ -136,27 +138,33 @@ class _ExpenseDetailsFormPageState extends State<ExpenseDetailsFormPage> {
                         onTap: _editAmount)
                   else
                     _row('Amount', 'RM ${widget.controller.amount.toStringAsFixed(2)} (from ${widget.controller.items.length} item${widget.controller.items.length == 1 ? '' : 's'})'),
-                  _editableRow('Category', widget.controller.category, onTap: () => _editField('Category', widget.controller.category, widget.controller.setCategory)),
+                  _editableRow('Category', widget.controller.category, onTap: _chooseCategory),
                   _editableRow('Note', widget.controller.noteController.text.isEmpty ? 'Tap to add a note (e.g. dinner at Mei Seafood)' : widget.controller.noteController.text,
                       onTap: () => _editField('Note', widget.controller.noteController.text, widget.controller.setNote)),
-                  _editableRow(
-                    'Split Method',
-                    widget.controller.splitEqually
-                        ? 'Equally · ${widget.controller.selectedUids.length} people'
-                        : 'Itemized · ${widget.controller.items.length} items',
-                    onTap: _chooseSplitMethod,
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: Color(0xFFE4E4E4)))),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text('Reminder', style: TextStyle(fontSize: 13, color: AppColors.textGrey)),
-                        Switch(value: widget.controller.reminder, activeColor: AppColors.primary, onChanged: widget.controller.setReminder),
-                      ],
+                  // Solo trip -- nobody else to split this with or remind,
+                  // so there's nothing to decide here (same reasoning as
+                  // the Groups/Personal toggle on expenses_tab.dart and
+                  // the Generate Report sheet skipping its own prompt).
+                  if (widget.controller.trip.memberIds.length > 1) ...[
+                    _editableRow(
+                      'Split Method',
+                      widget.controller.splitEqually
+                          ? 'Equally · ${widget.controller.selectedUids.length} people'
+                          : 'Itemized · ${widget.controller.items.length} items',
+                      onTap: _chooseSplitMethod,
                     ),
-                  ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: Color(0xFFE4E4E4)))),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text('Reminder', style: TextStyle(fontSize: 13, color: AppColors.textGrey)),
+                          Switch(value: widget.controller.reminder, activeColor: AppColors.primary, onChanged: widget.controller.setReminder),
+                        ],
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -193,6 +201,43 @@ class _ExpenseDetailsFormPageState extends State<ExpenseDetailsFormPage> {
       if (c.items.any((i) => i.assigneeUids.isEmpty)) return 'Every item needs someone to pay for it';
     }
     return 'Add an amount and who to split with';
+  }
+
+  Future<void> _chooseCategory() async {
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Category', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.navy)),
+              const SizedBox(height: 14),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final c in {..._categories, widget.controller.category})
+                    ChoiceChip(
+                      label: Text(c, style: TextStyle(fontSize: 12, color: c == widget.controller.category ? Colors.white : AppColors.navy)),
+                      selected: c == widget.controller.category,
+                      selectedColor: AppColors.primary,
+                      backgroundColor: AppColors.chipGrey,
+                      showCheckmark: false,
+                      onSelected: (_) => Navigator.of(ctx).pop(c),
+                    ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (choice != null) widget.controller.setCategory(choice);
   }
 
   Future<void> _chooseSplitMethod() async {

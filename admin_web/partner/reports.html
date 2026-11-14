@@ -17,7 +17,7 @@
 <div class="shell">
   <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
   <aside class="sidebar" id="sidebar">
-    <div class="sidebar-brand">Voya</div>
+    <img class="sidebar-brand" src="../img/voya-logo-white.png" alt="Voya" />
     <div class="sidebar-user">
       <div class="name" id="sbUserName">Loading…</div>
       <div class="role" id="sbUserRole">Partner workspace</div>
@@ -40,11 +40,13 @@
     </div>
 
     <div class="filter-bar">
-      <select class="select" id="rangeFilter">
-        <option value="6">Last 6 months</option>
-        <option value="12">Last 12 months</option>
-      </select>
-      <p class="small muted" id="asOfLabel" style="margin-left:auto;"></p>
+      <div class="inline-flex" style="gap:8px;align-items:center;">
+        <label class="small muted" for="rangeStart">From</label>
+        <input type="date" class="input" id="rangeStart" style="width:150px;" />
+        <label class="small muted" for="rangeEnd">To</label>
+        <input type="date" class="input" id="rangeEnd" style="width:150px;" />
+      </div>
+      <p class="small muted" id="rangeHint" style="margin-left:auto;"></p>
     </div>
 
     <div class="stat-grid" id="statGrid"><div class="skeleton" style="height:90px;grid-column:1/-1;"></div></div>
@@ -79,11 +81,14 @@
 </div>
 
 <script type="module">
-import { requireRole } from "../js/auth-guard.js?v=20261021";
-import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261021";
-import { mountIcons } from "../js/icons.js?v=20261021";
-import { listTransactions, listClaims, listRefunds, listPlans } from "../js/data.js?v=20261021";
-import { money, moneyExact, number, escapeHtml, renderComparisonBars, trendDelta, pointDelta, sumInMonth, countInMonth, countBefore, monthBounds, rateOf } from "../js/ui.js?v=20261021";
+import { requireRole } from "../js/auth-guard.js?v=20261106b";
+import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261114a";
+import { mountIcons } from "../js/icons.js?v=20261106c";
+import { listTransactions, listClaims, listRefunds, listPlans } from "../js/data.js?v=20261114c";
+import {
+  money, moneyExact, number, escapeHtml, renderComparisonBars, trendDelta, pointDelta,
+  sumInMonth, countInMonth, countBefore, monthBounds, rateOf, monthsBetween, inRange, wireDateRangeBar,
+} from "../js/ui.js?v=20261113a";
 import { exportReportPdf, exportReportExcel } from "../js/report-export.js?v=20261007e";
 
 mountSidebarNav({ role: "partner", active: "reports" });
@@ -92,9 +97,7 @@ let data = null; // last computed report model, for export
 
 if (session) {
   setSidebarUser({ displayName: session.profile.companyName || "Partner", roleLabel: `${session.profile.companyName || "Insurance"} · Insurance Partner` });
-  document.getElementById("asOfLabel").textContent = `As of ${new Date().toLocaleDateString("en-MY", { day: "numeric", month: "long", year: "numeric" })}`;
-  await load();
-  document.getElementById("rangeFilter").addEventListener("change", load);
+  wireDateRangeBar("rangeStart", "rangeEnd", "rangeHint", { defaultStart: monthBounds(5).start }, load);
 }
 
 function statCard(label, value, icon, delta) {
@@ -102,8 +105,8 @@ function statCard(label, value, icon, delta) {
   return `<div class="card stat-card"><div class="stat-top"><div class="stat-icon"><span data-icon="${icon}"></span></div><div class="stat-label">${label}</div></div><div class="stat-value">${value}</div>${deltaHtml}</div>`;
 }
 
-function plainCard(label, value) {
-  return `<div class="card stat-card"><div class="stat-label">${label}</div><div class="stat-value">${value}</div></div>`;
+function plainCard(label, value, icon) {
+  return `<div class="card stat-card"><div class="stat-top"><div class="stat-icon"><span data-icon="${icon}"></span></div><div class="stat-label">${label}</div></div><div class="stat-value">${value}</div></div>`;
 }
 
 /** Matches a transaction/claim/refund to a plan: by planId when the record
@@ -137,52 +140,51 @@ function avgProcessingDays(items) {
 
 const STATUS_ROWS = [["new", "Pending"], ["under_review", "In Progress"], ["approved", "Approved"], ["rejected", "Rejected"]];
 
-async function load() {
-  const months = Number(document.getElementById("rangeFilter").value);
+async function load(start, end) {
   const [txns, claims, refunds, plans] = await Promise.all([
     listTransactions(session.uid), listClaims(session.uid), listRefunds(session.uid), listPlans(session.uid),
   ]);
-  const paid = txns.filter((t) => t.status === "paid");
-  const value = paid.reduce((s, t) => s + (Number(t.premium) || 0), 0);
-  const activePlans = plans.filter((p) => p.status === "active");
-  const pendingClaims = claims.filter((c) => c.status === "new" || c.status === "under_review").length;
-  const pendingRefunds = refunds.filter((r) => r.status === "new" || r.status === "under_review").length;
+  const activePlans = plans.filter((p) => p.status === "active" && (!p.createdAt?.toDate || p.createdAt.toDate() <= end));
+  const paidInRange = txns.filter((t) => t.status === "paid" && inRange(t, "createdAt", start, end));
+  const claimsInRange = claims.filter((c) => inRange(c, "createdAt", start, end));
+  const refundsInRange = refunds.filter((r) => inRange(r, "createdAt", start, end));
+  const value = paidInRange.reduce((s, t) => s + (Number(t.premium) || 0), 0);
+  const pendingClaims = claimsInRange.filter((c) => c.status === "new" || c.status === "under_review").length;
+  const pendingRefunds = refundsInRange.filter((r) => r.status === "new" || r.status === "under_review").length;
 
+  // Real month-over-month deltas — always "this calendar month vs last",
+  // computed from the full, unwindowed data, independent of the selected
+  // reporting window above (same split as admin/reports.html's Insurance
+  // Operations tab).
   const { start: reportsThisMonthStart } = monthBounds(0);
+  const allPaid = txns.filter((t) => t.status === "paid");
   const activePlansDelta = trendDelta(activePlans.length, countBefore(activePlans, "createdAt", reportsThisMonthStart));
-  const purchasesDelta = trendDelta(countInMonth(paid, "createdAt", 0), countInMonth(paid, "createdAt", 1));
+  const purchasesDelta = trendDelta(countInMonth(allPaid, "createdAt", 0), countInMonth(allPaid, "createdAt", 1));
   const valueDelta = trendDelta(
-    sumInMonth(paid, "createdAt", (t) => Number(t.premium) || 0, 0),
-    sumInMonth(paid, "createdAt", (t) => Number(t.premium) || 0, 1),
+    sumInMonth(allPaid, "createdAt", (t) => Number(t.premium) || 0, 0),
+    sumInMonth(allPaid, "createdAt", (t) => Number(t.premium) || 0, 1),
   );
+  // Pending claims/refunds are a live queue size, not a monthly flow, so
+  // they get no honest delta (plainCard) — same treatment as every other
+  // "Pending …" card across the console.
   document.getElementById("statGrid").innerHTML = [
     statCard("Active plans", number(activePlans.length), "shield-check", activePlansDelta),
-    statCard("Total purchases", number(paid.length), "swap", purchasesDelta),
+    statCard("Total purchases", number(paidInRange.length), "swap", purchasesDelta),
     statCard("Transaction value", money(value), "coin", valueDelta),
-    plainCard("Pending claims", number(pendingClaims)),
-    plainCard("Pending refunds", number(pendingRefunds)),
   ].join("");
 
   // Monthly plan purchases — purchase COUNT per month, not revenue.
-  const monthList = [];
-  const now = new Date();
-  for (let i = months - 1; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    monthList.push({ label: d.toLocaleDateString("en-MY", { month: "short" }), key: `${d.getFullYear()}-${d.getMonth()}`, count: 0 });
-  }
-  paid.forEach((t) => {
-    if (!t.createdAt?.toDate) return;
-    const d = t.createdAt.toDate();
-    const m = monthList.find((m) => m.key === `${d.getFullYear()}-${d.getMonth()}`);
-    if (m) m.count++;
-  });
+  const monthList = monthsBetween(start, end).map((m) => ({
+    ...m,
+    count: allPaid.filter((t) => t.createdAt?.toDate && t.createdAt.toDate() >= m.start && t.createdAt.toDate() < m.end).length,
+  }));
   const maxCount = Math.max(1, ...monthList.map((m) => m.count));
-  document.getElementById("purchaseBars").innerHTML = monthList.map((m, i) => `<div class="bar-col"><div class="bar${i % 2 ? " alt" : ""}" style="height:${Math.max(6, (m.count / maxCount) * 100)}%"></div></div>`).join("");
-  document.getElementById("purchaseLabels").innerHTML = monthList.map((m) => `<span>${m.label}</span>`).join("");
+  document.getElementById("purchaseBars").innerHTML = monthList.map((m, i) => `<div class="bar-col" data-tooltip="${m.label}: ${number(m.count)} purchase${m.count === 1 ? "" : "s"}"><div class="bar${i % 2 ? " alt" : ""}" style="height:${Math.max(6, (m.count / maxCount) * 100)}%"></div></div>`).join("");
+  document.getElementById("purchaseLabels").innerHTML = monthList.map((m) => `<span>${m.label.split(" ")[0]}</span>`).join("");
 
   // Claim/refund status distribution
-  const claimCounts = STATUS_ROWS.map(([k]) => claims.filter((c) => c.status === k).length);
-  const refundCounts = STATUS_ROWS.map(([k]) => refunds.filter((r) => r.status === k).length);
+  const claimCounts = STATUS_ROWS.map(([k]) => claimsInRange.filter((c) => c.status === k).length);
+  const refundCounts = STATUS_ROWS.map(([k]) => refundsInRange.filter((r) => r.status === k).length);
   renderComparisonBars("statusChart", STATUS_ROWS.map(([, label], i) => ({ label, values: [claimCounts[i], refundCounts[i]] })), [
     { label: "Claims", color: "var(--teal-600)" },
     { label: "Refunds", color: "var(--accent-indigo)" },
@@ -190,9 +192,9 @@ async function load() {
 
   // Insurance Plan Performance
   const planRows = plans.map((p) => {
-    const planTxns = paid.filter((t) => belongsToPlan(t, p));
-    const planClaims = claims.filter((c) => belongsToPlan(c, p));
-    const planRefunds = refunds.filter((r) => belongsToPlan(r, p));
+    const planTxns = paidInRange.filter((t) => belongsToPlan(t, p));
+    const planClaims = claimsInRange.filter((c) => belongsToPlan(c, p));
+    const planRefunds = refundsInRange.filter((r) => belongsToPlan(r, p));
     return {
       name: p.name || "—",
       state: p.status || "—",
@@ -203,6 +205,7 @@ async function load() {
       avgDays: avgProcessingDays([...planClaims, ...planRefunds]),
     };
   });
+  planRows.sort((a, b) => b.value - a.value); // highest premium value first
   document.getElementById("planBody").innerHTML = planRows.length
     ? planRows.map((r) => `
         <tr>
@@ -217,29 +220,29 @@ async function load() {
     : `<tr><td colspan="7" class="muted" style="text-align:center;padding:24px 0;">No plans yet.</td></tr>`;
 
   // Partner performance summary — claim/refund approval rates per spec:
-  // approved / (approved + rejected), excluding still-open cases.
+  // approved / (approved + rejected), excluding still-open cases. Scoped
+  // to the selected reporting period, like everything else on this page.
   const approvalRate = (items) => {
     const approved = items.filter((i) => i.status === "approved").length;
     const rejected = items.filter((i) => i.status === "rejected").length;
     return approved + rejected ? Math.round((approved / (approved + rejected)) * 1000) / 10 : null;
   };
-  const claimRate = approvalRate(claims);
-  const refundRate = approvalRate(refunds);
+  const claimRate = approvalRate(claimsInRange);
+  const refundRate = approvalRate(refundsInRange);
   document.getElementById("summaryGrid").innerHTML = [
-    plainCard("Total claims", number(claims.length)),
-    plainCard("Total refunds", number(refunds.length)),
-    plainCard("Claim approval rate", claimRate === null ? "—" : `${claimRate}%`),
-    plainCard("Refund approval rate", refundRate === null ? "—" : `${refundRate}%`),
+    plainCard("Total claims", number(claimsInRange.length), "doc-text"),
+    plainCard("Total refunds", number(refundsInRange.length), "undo"),
+    plainCard("Claim approval rate", claimRate === null ? "—" : `${claimRate}%`, "percent"),
+    plainCard("Refund approval rate", refundRate === null ? "—" : `${refundRate}%`, "percent"),
   ].join("");
 
   mountIcons(document);
 
-  const periodStart = new Date(now.getFullYear(), now.getMonth() - (months - 1), 1);
   data = {
-    statGrid: { activePlans: activePlans.length, purchases: paid.length, value, pendingClaims, pendingRefunds },
-    monthList, claims, refunds, planRows, claimRate, refundRate,
+    statGrid: { activePlans: activePlans.length, purchases: paidInRange.length, value, pendingClaims, pendingRefunds },
+    monthList, claims: claimsInRange, refunds: refundsInRange, planRows, claimRate, refundRate,
     claimStatusCounts: claimCounts,
-    period: { start: periodStart, end: now },
+    period: { start, end },
   };
 }
 

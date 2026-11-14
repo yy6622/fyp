@@ -6,8 +6,8 @@
 <title>Insurance Management — Voya Admin</title>
 <link rel="stylesheet" href="../css/tokens.css?v=20261006b" />
 <link rel="stylesheet" href="../css/base.css?v=20261006b" />
-<link rel="stylesheet" href="../css/layout.css?v=20261021" />
-<link rel="stylesheet" href="../css/components.css?v=20261021c" />
+<link rel="stylesheet" href="../css/layout.css?v=20261111a" />
+<link rel="stylesheet" href="../css/components.css?v=20261106g" />
 <style>.ref-link{background:none;border:none;padding:0;font:inherit;color:var(--teal-600);cursor:pointer;text-decoration:underline;font-weight:700;}</style>
 </head>
 <body>
@@ -28,41 +28,121 @@
       <div>
         <button class="menu-toggle" id="menuToggle"><span data-icon="menu"></span></button>
         <h1 class="h1">Insurance Management</h1>
-        <p class="subtitle">Monitor all insurance transactions</p>
+        <p class="subtitle">Monitor insurance transactions and manage insurance partners</p>
       </div>
       <button class="btn btn-primary" id="exportBtn"><span data-icon="download"></span>Export</button>
     </div>
 
+    <div class="tabs" id="insuranceTabs">
+      <button class="tab-btn active" data-tab="transactions">Transactions</button>
+      <button class="tab-btn" data-tab="partners">Partners<span class="tab-alert-dot" id="partnersTabDot" style="display:none;" title="New partner requests"></span></button>
+      <button class="tab-btn" data-tab="plans">Plans</button>
+    </div>
+
     <div class="stat-grid" id="statGrid"><div class="skeleton" style="height:90px;grid-column:1/-1;"></div></div>
 
-    <div class="card card-pad" id="partnersCard" style="margin-bottom:20px;">
-      <div class="skeleton" style="height:90px;"></div>
-    </div>
+    <!-- ==================== Transactions tab ==================== -->
+    <div id="txnSection">
+      <div class="filter-bar">
+        <div class="search-input-wrap"><span data-icon="search"></span><input class="input" id="txnSearchInput" placeholder="Search reference, customer, provider…" /></div>
+        <select class="select" id="txnStatusFilter">
+          <option value="">All status</option>
+          <option value="paid">Paid</option>
+        </select>
+        <select class="select" id="txnPartnerFilter">
+          <option value="">All partners</option>
+        </select>
+        <div class="inline-flex" style="gap:6px;">
+          <input type="date" class="input" id="txnDateFrom" style="width:150px;" title="Purchased from" />
+          <span class="muted small">to</span>
+          <input type="date" class="input" id="txnDateTo" style="width:150px;" title="Purchased to" />
+        </div>
+        <select class="select" id="txnSortFilter">
+          <option value="date_desc">Newest first</option>
+          <option value="date_asc">Oldest first</option>
+          <option value="price_desc">Premium: high to low</option>
+          <option value="price_asc">Premium: low to high</option>
+        </select>
+      </div>
 
-    <div class="filter-bar">
-      <div class="search-input-wrap"><span data-icon="search"></span><input class="input" id="searchInput" placeholder="Search…" /></div>
-      <select class="select" id="statusFilter">
-        <option value="">All status</option>
-        <option value="paid">Paid</option>
-        <option value="pending">Pending</option>
-        <option value="rejected">Rejected</option>
-      </select>
-    </div>
-
-    <div class="table-wrap scroll-x">
-      <table class="data-table">
-        <thead><tr><th>Reference</th><th>Customer</th><th>Provider</th><th>Premium</th><th>Status</th></tr></thead>
-        <tbody id="tableBody"><tr><td colspan="5"><div class="skeleton" style="height:40px;"></div></td></tr></tbody>
-      </table>
-      <div class="empty-state" id="emptyState" style="display:none;">
-        <span data-icon="swap" class="icon-lg"></span>
-        <div class="h3">No transactions yet</div>
-        <p class="small">Real purchases from partners will appear here.</p>
+      <div class="table-wrap scroll-x">
+        <table class="data-table">
+          <thead><tr><th>Reference</th><th>Customer</th><th>Provider</th><th>Premium</th><th>Status</th></tr></thead>
+          <tbody id="txnTableBody"><tr><td colspan="5"><div class="skeleton" style="height:40px;"></div></td></tr></tbody>
+        </table>
+        <div class="empty-state" id="txnEmptyState" style="display:none;">
+          <span data-icon="swap" class="icon-lg"></span>
+          <div class="h3">No transactions yet</div>
+          <p class="small">Real purchases from partners will appear here.</p>
+        </div>
+      </div>
+      <div class="table-foot">
+        <p class="small muted" id="txnResultsLabel"></p>
+        <div class="pagination" id="txnPagination"></div>
       </div>
     </div>
-    <div class="table-foot">
-      <p class="small muted" id="resultsLabel"></p>
-      <div class="pagination" id="pagination"></div>
+
+    <!-- ==================== Partners tab ==================== -->
+    <div id="partnerSection" style="display:none;">
+      <div class="filter-bar">
+        <div class="search-input-wrap"><span data-icon="search"></span><input class="input" id="partnerSearchInput" placeholder="Search by organization or email…" /></div>
+        <select class="select" id="partnerStatusFilter">
+          <option value="">All status</option>
+          <option value="pending">Pending</option>
+          <option value="approved">Approved</option>
+          <option value="suspended">Suspended</option>
+          <option value="rejected">Rejected</option>
+        </select>
+      </div>
+
+      <div class="table-wrap scroll-x">
+        <table class="data-table">
+          <thead><tr><th></th><th>Organization</th><th>Email</th><th>Registered</th><th>Status</th><th></th></tr></thead>
+          <tbody id="partnerTableBody"><tr><td colspan="6"><div class="skeleton" style="height:40px;"></div></td></tr></tbody>
+        </table>
+        <div class="empty-state" id="partnerEmptyState" style="display:none;">
+          <span data-icon="building" class="icon-lg"></span>
+          <div class="h3">No partners found</div>
+          <p class="small">Try a different search or status filter.</p>
+        </div>
+      </div>
+      <div class="table-foot">
+        <p class="small muted" id="partnerResultsLabel"></p>
+        <div class="pagination" id="partnerPagination"></div>
+      </div>
+    </div>
+
+    <!-- ==================== Plans tab ==================== -->
+    <div id="planSection" style="display:none;">
+      <div class="filter-bar">
+        <div class="search-input-wrap"><span data-icon="search"></span><input class="input" id="planSearchInput" placeholder="Search plan name or partner…" /></div>
+        <select class="select" id="planStatusFilter">
+          <option value="">All status</option>
+          <option value="active">Active</option>
+          <option value="inactive">Inactive</option>
+          <option value="suspended">Suspended</option>
+          <option value="draft">Draft</option>
+        </select>
+        <select class="select" id="planPartnerFilter">
+          <option value="">All partners</option>
+        </select>
+      </div>
+
+      <div class="table-wrap scroll-x">
+        <table class="data-table">
+          <thead><tr><th>Plan name</th><th>Partner</th><th>Trip type</th><th>Premium</th><th>Status</th><th></th></tr></thead>
+          <tbody id="planTableBody"><tr><td colspan="6"><div class="skeleton" style="height:40px;"></div></td></tr></tbody>
+        </table>
+        <div class="empty-state" id="planEmptyState" style="display:none;">
+          <span data-icon="briefcase" class="icon-lg"></span>
+          <div class="h3">No plans found</div>
+          <p class="small">Try a different search or status filter.</p>
+        </div>
+      </div>
+      <div class="table-foot">
+        <p class="small muted" id="planResultsLabel"></p>
+        <div class="pagination" id="planPagination"></div>
+      </div>
     </div>
   </main>
 </div>
@@ -75,21 +155,37 @@
 </div>
 
 <script type="module">
-import { requireRole } from "../js/auth-guard.js?v=20261021";
-import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261021";
-import { mountIcons } from "../js/icons.js?v=20261021";
-import { listTransactions, listClaims, listPartners, setPartnerStatus } from "../js/data.js?v=20261021";
+import { requireRole } from "../js/auth-guard.js?v=20261106b";
+import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261114a";
+import { mountIcons } from "../js/icons.js?v=20261106c";
+import { listTransactions, listClaims, listPartners, setPartnerStatus, listPlans, setPlanStatus } from "../js/data.js?v=20261114c";
 import {
   money, moneyExact, number, statusBadge, escapeHtml, paginate, renderPager, toast, setBusy,
-  fullDate, confirmDialog, promptDialog, detailDialog, openModal, closeModal, wireModalDismiss,
+  fullDate, timeAgo, confirmDialog, promptDialog, detailDialog, openModal, closeModal, wireModalDismiss,
   statCard, plainCard, trendDelta, pointDelta, sumInMonth, countInMonth, monthBounds, rateOf,
-} from "../js/ui.js?v=20261021";
+} from "../js/ui.js?v=20261113a";
 
 mountSidebarNav({ role: "admin", active: "insurance" });
 const session = await requireRole("admin", "login.html");
-let txns = [], filtered = [], page = 1;
-let insurancePartners = [];
+
+let txns = [], claims = [], insurancePartners = [], plans = [];
+let txnFiltered = [], txnPage = 1;
+let partnerFiltered = [], partnerPage = 1;
+let planFiltered = [], planPage = 1;
 const PAGE_SIZE = 8;
+
+// Same tab pattern as admin/attractions.html's Places Management
+// (Attractions / Restaurants / Place Suggestions) — one page, ?tab=
+// deep-linkable, instead of a separate "full directory" page you could
+// only reach via a "View all" link buried in a card.
+const requestedTab = new URLSearchParams(location.search).get("tab");
+let activeTab = requestedTab === "partners" ? "partners" : requestedTab === "plans" ? "plans" : "transactions";
+// Deep link from admin/notifications.html (?tab=partners&focus=<id>) --
+// same pattern as attractions.html/content-moderation.html's own
+// ?focus= handling -- so a partner request/decision notice always lands
+// here and opens the real detail dialog, instead of deciding anything
+// from the notification feed itself.
+const requestedFocus = new URLSearchParams(location.search).get("focus");
 
 if (session) {
   setSidebarUser({ displayName: session.profile.name || "Admin", roleLabel: "Administrator" });
@@ -98,163 +194,143 @@ if (session) {
 }
 
 async function load() {
-  const [transactions, claims, partnersList] = await Promise.all([listTransactions(), listClaims(), listPartners()]);
+  const [transactions, claimsList, partnersList, plansList] = await Promise.all([listTransactions(), listClaims(), listPartners(), listPlans()]);
   txns = transactions;
+  claims = claimsList;
   insurancePartners = partnersList;
+  plans = plansList;
+  populateTxnPartnerFilter();
+  populatePlanPartnerFilter();
+  const pendingCount = insurancePartners.filter((p) => p.status === "pending" || !p.status).length;
+  document.getElementById("partnersTabDot").style.display = pendingCount ? "" : "none";
+  showTab(activeTab);
+  if (requestedFocus && activeTab === "partners") openPartnerDetail(requestedFocus);
+}
 
-  const paid = txns.filter((t) => t.status === "paid");
-  const gross = paid.reduce((s, t) => s + (Number(t.premium) || 0), 0);
-  const pendingClaims = claims.filter((c) => c.status === "new" || c.status === "under_review").length;
-  const approvedCount = claims.filter((c) => c.status === "approved").length;
-  const approvalRate = claims.length ? Math.round((approvedCount / claims.length) * 1000) / 10 : 0;
+function showTab(tab) {
+  activeTab = tab;
+  document.querySelectorAll("#insuranceTabs .tab-btn").forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
+  document.getElementById("txnSection").style.display = tab === "transactions" ? "" : "none";
+  document.getElementById("partnerSection").style.display = tab === "partners" ? "" : "none";
+  document.getElementById("planSection").style.display = tab === "plans" ? "" : "none";
+  document.getElementById("exportBtn").style.display = tab === "transactions" ? "" : "none";
+  renderStats();
+  if (tab === "transactions") applyTxnFilters();
+  else if (tab === "partners") applyPartnerFilters();
+  else applyPlanFilters();
+}
 
-  // Real month-over-month deltas (js/ui.js). Pending claims is a live
-  // queue size, not a monthly flow, so it gets no honest delta and renders
-  // as a plainCard — same treatment as every other "Pending …" card
-  // across the console (see admin/reports.html's Insurance Operations tab).
-  const grossDelta = trendDelta(
-    sumInMonth(paid, "createdAt", (t) => Number(t.premium) || 0, 0),
-    sumInMonth(paid, "createdAt", (t) => Number(t.premium) || 0, 1),
-  );
-  const soldDelta = trendDelta(countInMonth(paid, "createdAt", 0), countInMonth(paid, "createdAt", 1));
-  const { start: thisMonthStart } = monthBounds(0);
-  const { start: lastMonthStart, end: lastMonthEnd } = monthBounds(1);
-  const claimDateOf = (c) => (c.createdAt?.toDate ? c.createdAt.toDate() : null);
-  const claimsThisMonth = claims.filter((c) => { const d = claimDateOf(c); return d && d >= thisMonthStart; });
-  const claimsLastMonth = claims.filter((c) => { const d = claimDateOf(c); return d && d >= lastMonthStart && d < lastMonthEnd; });
-  const approvalRateDelta = pointDelta(rateOf(claimsThisMonth, (c) => c.status === "approved"), rateOf(claimsLastMonth, (c) => c.status === "approved"));
+document.querySelectorAll("#insuranceTabs .tab-btn").forEach((b) => b.addEventListener("click", () => {
+  if (b.dataset.tab === activeTab) return;
+  const url = new URL(location.href);
+  url.searchParams.set("tab", b.dataset.tab);
+  history.replaceState(null, "", url);
+  showTab(b.dataset.tab);
+}));
 
-  document.getElementById("statGrid").innerHTML = [
-    statCard("Gross premium", money(gross), "coin", grossDelta),
-    statCard("Policies sold", number(paid.length), "shield-check", soldDelta),
-    plainCard("Pending claims", number(pendingClaims)),
-    statCard("Approval rate", `${approvalRate}%`, "percent", approvalRateDelta),
-  ].join("");
-  renderPartners();
-  applyFilters();
+function renderStats() {
+  if (activeTab === "transactions") {
+    const paid = txns.filter((t) => t.status === "paid");
+    const gross = paid.reduce((s, t) => s + (Number(t.premium) || 0), 0);
+    const pendingClaims = claims.filter((c) => c.status === "new" || c.status === "under_review").length;
+    const approvedCount = claims.filter((c) => c.status === "approved").length;
+    const approvalRate = claims.length ? Math.round((approvedCount / claims.length) * 1000) / 10 : 0;
+
+    // Real month-over-month deltas (js/ui.js). Pending claims is a live
+    // queue size, not a monthly flow, so it gets no honest delta and
+    // renders as a plainCard — same treatment as every other "Pending …"
+    // card across the console (see admin/reports.html's Insurance
+    // Operations tab).
+    const grossDelta = trendDelta(
+      sumInMonth(paid, "createdAt", (t) => Number(t.premium) || 0, 0),
+      sumInMonth(paid, "createdAt", (t) => Number(t.premium) || 0, 1),
+    );
+    const soldDelta = trendDelta(countInMonth(paid, "createdAt", 0), countInMonth(paid, "createdAt", 1));
+    const { start: thisMonthStart } = monthBounds(0);
+    const { start: lastMonthStart, end: lastMonthEnd } = monthBounds(1);
+    const claimDateOf = (c) => (c.createdAt?.toDate ? c.createdAt.toDate() : null);
+    const claimsThisMonth = claims.filter((c) => { const d = claimDateOf(c); return d && d >= thisMonthStart; });
+    const claimsLastMonth = claims.filter((c) => { const d = claimDateOf(c); return d && d >= lastMonthStart && d < lastMonthEnd; });
+    const approvalRateDelta = pointDelta(rateOf(claimsThisMonth, (c) => c.status === "approved"), rateOf(claimsLastMonth, (c) => c.status === "approved"));
+
+    document.getElementById("statGrid").innerHTML = [
+      statCard("Gross premium", money(gross), "coin", grossDelta),
+      statCard("Policies sold", number(paid.length), "shield-check", soldDelta),
+      plainCard("Pending claims", number(pendingClaims), "clock"),
+      statCard("Approval rate", `${approvalRate}%`, "percent", approvalRateDelta),
+    ].join("");
+  } else if (activeTab === "partners") {
+    const pending = insurancePartners.filter((p) => p.status === "pending" || !p.status).length;
+    const approved = insurancePartners.filter((p) => p.status === "approved").length;
+    const suspended = insurancePartners.filter((p) => p.status === "suspended").length;
+    document.getElementById("statGrid").innerHTML = [
+      statCard("Total partners", number(insurancePartners.length), "building", null),
+      plainCard("Pending", number(pending), "clock"),
+      statCard("Approved", number(approved), "shield-check", null),
+      plainCard("Suspended", number(suspended), "x-circle"),
+    ].join("");
+  } else {
+    const active = plans.filter((p) => p.status === "active" || p.status === "published").length;
+    const inactive = plans.filter((p) => p.status === "inactive").length;
+    const suspended = plans.filter((p) => p.status === "suspended").length;
+    document.getElementById("statGrid").innerHTML = [
+      statCard("Total plans", number(plans.length), "briefcase", null),
+      statCard("Active", number(active), "shield-check", null),
+      plainCard("Inactive", number(inactive), "pause"),
+      plainCard("Suspended", number(suspended), "x-circle"),
+    ].join("");
+  }
   mountIcons(document);
 }
 
-// "Insurance partners" here is a pending-requests inbox, not the full
-// partner directory — it only shows up when something actually needs a
-// decision. The full list (every partner, every status, Approve/Suspend/
-// Reject/Re-approve) lives on its own page, admin/insurance-partners.html.
-function renderPartners() {
-  const card = document.getElementById("partnersCard");
-  if (!card) return;
-  const pending = insurancePartners.filter((p) => p.status === "pending" || !p.status);
-  if (!pending.length) {
-    card.innerHTML = `
-      <div class="section-head">
-        <h3 class="h3">Insurance partners</h3>
-        <a class="btn btn-outline btn-sm" href="insurance-partners.html"><span data-icon="building" data-icon-size="14"></span>View all</a>
-      </div>
-      <p class="subtitle" style="margin-bottom:0;">No new partner requests right now.</p>`;
-    mountIcons(card);
-    return;
-  }
-  card.innerHTML = `
-    <div class="section-head"><h3 class="h3">Insurance partners</h3></div>
-    <p class="subtitle" style="margin-bottom:16px;">New insurance partners land here as "Pending" until you approve them — approval is required before they can publish plans or handle claims.</p>
-    <div class="table-wrap scroll-x">
-      <table class="data-table">
-        <thead><tr><th>Organization</th><th>Email</th><th>Registered</th><th>Status</th><th></th></tr></thead>
-        <tbody id="partnersBody">${pending.map((p) => `
-          <tr style="cursor:pointer;" data-open-partner="${p.id}">
-            <td class="cell-strong">${escapeHtml(p.companyName || "—")}</td>
-            <td class="muted">${escapeHtml(p.email || "—")}</td>
-            <td class="muted">${fullDate(p.createdAt)}</td>
-            <td>${statusBadge("pending")}</td>
-            <td>
-              <div class="row-actions">
-                <button class="btn btn-primary btn-sm" data-approve="${p.id}">Approve</button>
-                <button class="btn btn-danger-outline btn-sm" data-reject="${p.id}">Reject</button>
-              </div>
-            </td>
-          </tr>`).join("")}</tbody>
-      </table>
-    </div>`;
-  card.querySelectorAll("[data-open-partner]").forEach((row) => row.addEventListener("click", (e) => {
-    if (e.target.closest(".row-actions")) return;
-    openPartnerDetail(row.dataset.openPartner);
-  }));
-  card.querySelectorAll("[data-approve]").forEach((b) => b.addEventListener("click", (e) => { e.stopPropagation(); setPartnerStatusUi(b.dataset.approve, "approved", b); }));
-  card.querySelectorAll("[data-reject]").forEach((b) => b.addEventListener("click", (e) => { e.stopPropagation(); setPartnerStatusUi(b.dataset.reject, "rejected", b); }));
-  mountIcons(card);
+// ==================== Transactions ====================
+
+function populateTxnPartnerFilter() {
+  const select = document.getElementById("txnPartnerFilter");
+  const partnerNames = [...new Set(txns.map((t) => (t.providerName || "").trim()).filter(Boolean))].sort();
+  const current = select.value;
+  select.innerHTML = '<option value="">All partners</option>' + partnerNames.map((p) => `<option value="${escapeHtml(p)}">${escapeHtml(p)}</option>`).join("");
+  select.value = partnerNames.includes(current) ? current : "";
 }
 
-// Read-only popup with the partner's full registration info — so an admin
-// can actually review who they're approving/rejecting instead of judging
-// off just org name + email + date in the table row.
-function openPartnerDetail(uid) {
-  const p = insurancePartners.find((x) => x.id === uid);
-  if (!p) return;
-  detailDialog({
-    title: p.companyName || "—",
-    subtitle: "Pending insurance partner application",
-    rows: [
-      { label: "Registration no.", value: escapeHtml(p.registrationNumber) },
-      { label: "Email", value: escapeHtml(p.email) },
-      { label: "Phone", value: escapeHtml(p.phone) },
-      { label: "Contact person", value: escapeHtml(p.contact?.fullName) },
-      { label: "Contact designation", value: escapeHtml(p.contact?.designation) },
-      { label: "Contact email", value: escapeHtml(p.contact?.email) },
-      { label: "Contact phone", value: escapeHtml(p.contact?.phone) },
-      {
-        label: "Address",
-        value: [p.address?.line1, p.address?.city, p.address?.state, p.address?.postalCode].filter(Boolean).map(escapeHtml).join(", "),
-      },
-      { label: "Registered", value: fullDate(p.createdAt) },
-      { label: "Status", value: statusBadge(p.status || "pending") },
-    ],
-    actions: [
-      { text: "Reject", className: "btn-danger-outline", onClick: () => setPartnerStatusUi(uid, "rejected") },
-      { text: "Approve", className: "btn-primary", onClick: () => setPartnerStatusUi(uid, "approved") },
-    ],
+function sortTxns(list, sort) {
+  const sorted = [...list];
+  const dateOf = (t) => (t.createdAt?.toDate ? t.createdAt.toDate().getTime() : 0);
+  if (sort === "price_desc") sorted.sort((a, b) => (Number(b.premium) || 0) - (Number(a.premium) || 0));
+  else if (sort === "price_asc") sorted.sort((a, b) => (Number(a.premium) || 0) - (Number(b.premium) || 0));
+  else if (sort === "date_asc") sorted.sort((a, b) => dateOf(a) - dateOf(b));
+  else sorted.sort((a, b) => dateOf(b) - dateOf(a)); // date_desc, and the default
+  return sorted;
+}
+
+function applyTxnFilters() {
+  const q = document.getElementById("txnSearchInput").value.trim().toLowerCase();
+  const status = document.getElementById("txnStatusFilter").value;
+  const partner = document.getElementById("txnPartnerFilter").value;
+  const from = document.getElementById("txnDateFrom").value ? new Date(document.getElementById("txnDateFrom").value) : null;
+  const to = document.getElementById("txnDateTo").value ? new Date(document.getElementById("txnDateTo").value + "T23:59:59") : null;
+  const sort = document.getElementById("txnSortFilter").value;
+  txnFiltered = txns.filter((t) => {
+    // Matches the same fallback the Reference column itself displays
+    // (t.txnRef || t.id) -- see partner/transactions.html's matching
+    // comment for why.
+    const matchesQ = !q || (t.customerName || "").toLowerCase().includes(q) || (t.txnRef || t.id || "").toLowerCase().includes(q) || (t.providerName || "").toLowerCase().includes(q);
+    const matchesStatus = !status || t.status === status;
+    const matchesPartner = !partner || (t.providerName || "").trim() === partner;
+    const purchasedAt = t.createdAt?.toDate ? t.createdAt.toDate() : null;
+    const matchesFrom = !from || (purchasedAt && purchasedAt >= from);
+    const matchesTo = !to || (purchasedAt && purchasedAt <= to);
+    return matchesQ && matchesStatus && matchesPartner && matchesFrom && matchesTo;
   });
+  txnFiltered = sortTxns(txnFiltered, sort);
+  txnPage = 1;
+  renderTxnTable();
 }
 
-async function setPartnerStatusUi(uid, status, btn) {
-  let rejectionReason = "";
-  if (status === "rejected") {
-    const result = await promptDialog({
-      title: "Reject this application?",
-      body: "They won't be able to publish plans or handle claims. We'll let them know why, and their account will be automatically blocked if this isn't resolved within 30 days. This can be undone later by approving them.",
-      label: "Reason (shown to the partner)",
-      placeholder: "e.g. Registration number couldn't be verified — please re-submit with supporting documents.",
-      confirmText: "Reject", danger: true,
-    });
-    if (!result.confirmed) return;
-    rejectionReason = result.value;
-  }
-  setBusy(btn, true, "Working…");
-  try {
-    await setPartnerStatus(uid, status, status === "rejected" ? { rejectionReason } : {});
-    const p = insurancePartners.find((x) => x.id === uid);
-    if (p) { p.status = status; if (status === "rejected") p.rejectionReason = rejectionReason; }
-    renderPartners();
-    toast(status === "approved" ? "Partner approved." : "Partner application rejected.", "success");
-  } catch (err) {
-    toast(err.message || "Couldn't update partner.", "error");
-    setBusy(btn, false);
-  }
-}
-
-function applyFilters() {
-  const q = document.getElementById("searchInput").value.trim().toLowerCase();
-  const status = document.getElementById("statusFilter").value;
-  filtered = txns.filter((t) => {
-    const matchesQ = !q || (t.customerName || "").toLowerCase().includes(q) || (t.txnRef || "").toLowerCase().includes(q) || (t.providerName || "").toLowerCase().includes(q);
-    return matchesQ && (!status || t.status === status);
-  });
-  page = 1;
-  renderTable();
-}
-
-function renderTable() {
-  const { pageItems, pages, total } = paginate(filtered, page, PAGE_SIZE);
-  const body = document.getElementById("tableBody");
-  const empty = document.getElementById("emptyState");
+function renderTxnTable() {
+  const { pageItems, pages, total } = paginate(txnFiltered, txnPage, PAGE_SIZE);
+  const body = document.getElementById("txnTableBody");
+  const empty = document.getElementById("txnEmptyState");
   if (!pageItems.length) { body.innerHTML = ""; empty.style.display = "block"; }
   else {
     empty.style.display = "none";
@@ -268,20 +344,25 @@ function renderTable() {
       </tr>`).join("");
     body.querySelectorAll("[data-open-txn]").forEach((row) => row.addEventListener("click", () => openTxnDetail(row.dataset.openTxn)));
   }
-  document.getElementById("resultsLabel").textContent = total
-    ? `Showing ${(page - 1) * PAGE_SIZE + 1} to ${Math.min(page * PAGE_SIZE, total)} of ${total} results` : "No results";
-  renderPager("pagination", { page, pages }, (n) => { page = n; renderTable(); });
+  document.getElementById("txnResultsLabel").textContent = total
+    ? `Showing ${(txnPage - 1) * PAGE_SIZE + 1} to ${Math.min(txnPage * PAGE_SIZE, total)} of ${total} results` : "No results";
+  renderPager("txnPagination", { page: txnPage, pages }, (n) => { txnPage = n; renderTxnTable(); });
   mountIcons(document);
 }
 
 /** Shows everything we actually know about one transaction — the table
  * only has room for Reference/Customer/Provider/Premium/Status, but a
  * real insurance_transactions doc also carries the plan, destination,
- * sales channel and purchase date — see js/data.js and
- * lib/repositories/insurance_repository.dart. Channel already says how the
- * sale happened ("Mobile App" vs a manually-logged channel), so we don't
- * also show a separate buyerId-derived row — that was just repeating the
- * same yes/no in more confusing words. */
+ * sales channel, purchase date, policy number and the actual insured
+ * traveller's own details — see js/data.js and
+ * lib/repositories/insurance_repository.dart. "Customer" is whoever's
+ * Voya account paid (who can file a claim/refund); "Traveller" is who
+ * the policy actually covers, collected separately at checkout — the two
+ * can differ (e.g. buying insurance for someone else), so both are shown
+ * rather than assuming they're the same person. Channel already says how
+ * the sale happened ("Mobile App" vs a manually-logged channel), so we
+ * don't also show a separate buyerId-derived row — that was just
+ * repeating the same yes/no in more confusing words. */
 function openTxnDetail(id) {
   const t = txns.find((x) => x.id === id);
   if (!t) return;
@@ -290,10 +371,16 @@ function openTxnDetail(id) {
     <div class="form-grid">
       ${row("Reference", escapeHtml(t.txnRef || t.id))}
       ${row("Status", statusBadge(t.status))}
-      ${row("Customer", escapeHtml(t.customerName || "—"))}
+      ${row("Policy number", escapeHtml(t.policyNumber || "—"))}
+      ${row("Customer (buyer)", escapeHtml(t.customerName || "—"))}
       ${row("Customer email", escapeHtml(t.customerEmail || "—"))}
+      ${row("Traveller", escapeHtml(t.travellerName || "—"))}
+      ${row("Traveller passport/ID", escapeHtml(t.travellerIdNumber || "—"))}
+      ${row("Traveller email", escapeHtml(t.travellerEmail || "—"))}
+      ${row("Traveller phone", escapeHtml(t.travellerPhone || "—"))}
       ${row("Provider", escapeHtml(t.providerName || "—"))}
       ${row("Plan", escapeHtml(t.planName || "—"))}
+      ${row("Coverage", escapeHtml(t.coverage || "—"))}
       ${row("Premium", moneyExact(t.premium))}
       ${row("Destination", escapeHtml(t.destination || "—"))}
       ${row("Channel", escapeHtml(t.channel || "—"))}
@@ -304,13 +391,17 @@ function openTxnDetail(id) {
   openModal("txnModal");
 }
 
-document.getElementById("searchInput").addEventListener("input", applyFilters);
-document.getElementById("statusFilter").addEventListener("change", applyFilters);
+document.getElementById("txnSearchInput").addEventListener("input", applyTxnFilters);
+document.getElementById("txnStatusFilter").addEventListener("change", applyTxnFilters);
+document.getElementById("txnPartnerFilter").addEventListener("change", applyTxnFilters);
+document.getElementById("txnDateFrom").addEventListener("change", applyTxnFilters);
+document.getElementById("txnDateTo").addEventListener("change", applyTxnFilters);
+document.getElementById("txnSortFilter").addEventListener("change", applyTxnFilters);
 
 document.getElementById("exportBtn").addEventListener("click", () => {
-  if (!filtered.length) { toast("Nothing to export."); return; }
+  if (!txnFiltered.length) { toast("Nothing to export."); return; }
   const rows = [["Reference", "Customer", "Provider", "Premium (RM)", "Status"]];
-  filtered.forEach((t) => rows.push([t.txnRef || t.id, t.customerName || "", t.providerName || "", (Number(t.premium) || 0).toFixed(2), t.status || ""]));
+  txnFiltered.forEach((t) => rows.push([t.txnRef || t.id, t.customerName || "", t.providerName || "", (Number(t.premium) || 0).toFixed(2), t.status || ""]));
   const csv = rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
@@ -320,6 +411,297 @@ document.getElementById("exportBtn").addEventListener("click", () => {
   a.click();
   URL.revokeObjectURL(url);
 });
+
+// ==================== Partners ====================
+
+function applyPartnerFilters() {
+  const q = document.getElementById("partnerSearchInput").value.trim().toLowerCase();
+  const status = document.getElementById("partnerStatusFilter").value;
+  partnerFiltered = insurancePartners.filter((p) => {
+    const matchesQ = !q || (p.companyName || "").toLowerCase().includes(q) || (p.email || "").toLowerCase().includes(q);
+    const effectiveStatus = p.status || "pending";
+    return matchesQ && (!status || effectiveStatus === status);
+  });
+  partnerPage = 1;
+  renderPartnerTable();
+}
+
+/** Small round avatar for the org's uploaded logo (admin_web/partner/
+ * organization.html), falling back to an initial badge when they haven't
+ * uploaded one yet. */
+function partnerAvatar(p) {
+  const initial = escapeHtml((p.companyName || "?").trim().charAt(0).toUpperCase() || "?");
+  const style = "width:30px;height:30px;border-radius:50%;flex:none;";
+  return p.logoUrl
+    ? `<img src="${escapeHtml(p.logoUrl)}" alt="" style="${style}object-fit:cover;border:1px solid var(--border);" onerror="this.outerHTML='<div style=&quot;${style}background:var(--teal-100);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;color:var(--teal-600);&quot;>${initial}</div>';" />`
+    : `<div style="${style}background:var(--teal-100);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;color:var(--teal-600);">${initial}</div>`;
+}
+
+function renderPartnerTable() {
+  const { pageItems, pages, total } = paginate(partnerFiltered, partnerPage, PAGE_SIZE);
+  const body = document.getElementById("partnerTableBody");
+  const empty = document.getElementById("partnerEmptyState");
+  if (!pageItems.length) { body.innerHTML = ""; empty.style.display = "block"; }
+  else {
+    empty.style.display = "none";
+    body.innerHTML = pageItems.map((p) => `
+      <tr style="cursor:pointer;" data-open-partner="${p.id}">
+        <td>${partnerAvatar(p)}</td>
+        <td class="cell-strong">${escapeHtml(p.companyName || "—")}</td>
+        <td class="muted">${escapeHtml(p.email || "—")}</td>
+        <td class="muted">${fullDate(p.createdAt)}</td>
+        <td>${statusBadge(p.status === "approved" ? "active" : (p.status || "pending"))}</td>
+        <td>
+          <div class="row-actions">
+            ${p.status === "pending" || !p.status
+              ? `<button class="btn btn-primary btn-sm" data-approve="${p.id}">Approve</button><button class="btn btn-danger-outline btn-sm" data-reject="${p.id}">Reject</button>`
+              : p.status === "approved"
+                ? `<button class="btn btn-danger-outline btn-sm" data-suspend="${p.id}">Suspend</button>`
+                : p.status === "suspended" || p.status === "rejected"
+                  ? `<button class="btn btn-primary btn-sm" data-approve="${p.id}">Re-approve</button>`
+                  : ""}
+          </div>
+        </td>
+      </tr>`).join("");
+    body.querySelectorAll("[data-open-partner]").forEach((row) => row.addEventListener("click", (e) => {
+      if (e.target.closest(".row-actions")) return;
+      openPartnerDetail(row.dataset.openPartner);
+    }));
+    body.querySelectorAll("[data-approve]").forEach((b) => b.addEventListener("click", (e) => { e.stopPropagation(); setPartnerStatusUi(b.dataset.approve, "approved", b); }));
+    body.querySelectorAll("[data-suspend]").forEach((b) => b.addEventListener("click", (e) => { e.stopPropagation(); setPartnerStatusUi(b.dataset.suspend, "suspended", b); }));
+    body.querySelectorAll("[data-reject]").forEach((b) => b.addEventListener("click", (e) => { e.stopPropagation(); setPartnerStatusUi(b.dataset.reject, "rejected", b); }));
+  }
+  document.getElementById("partnerResultsLabel").textContent = total
+    ? `Showing ${(partnerPage - 1) * PAGE_SIZE + 1} to ${Math.min(partnerPage * PAGE_SIZE, total)} of ${total} results` : "No results";
+  renderPager("partnerPagination", { page: partnerPage, pages }, (n) => { partnerPage = n; renderPartnerTable(); });
+  mountIcons(document);
+}
+
+// Read-only popup with the partner's full registration info, plus the
+// right action button(s) for whatever their current status is — so
+// reviewing and acting can happen from one place instead of hunting back
+// down to the row. Covers every status (pending, approved, suspended,
+// rejected).
+function openPartnerDetail(uid) {
+  const p = insurancePartners.find((x) => x.id === uid);
+  if (!p) return;
+  const status = p.status || "pending";
+  const rows = [
+    { label: "Registration no.", value: escapeHtml(p.registrationNumber) },
+    { label: "License no.", value: p.licenseNumber ? escapeHtml(p.licenseNumber) : "<span class=\"muted\">Not provided</span>" },
+    { label: "Country of registration", value: p.countryOfRegistration ? escapeHtml(p.countryOfRegistration) : "<span class=\"muted\">Not provided</span>" },
+    { label: "Website", value: p.website ? `<a href="${escapeHtml(p.website)}" target="_blank" rel="noopener">${escapeHtml(p.website)}</a>` : "<span class=\"muted\">Not provided</span>" },
+    { label: "Email", value: escapeHtml(p.email) },
+    { label: "Phone", value: escapeHtml(p.phone) },
+    { label: "Contact person", value: escapeHtml(p.contact?.fullName) },
+    { label: "Contact designation", value: escapeHtml(p.contact?.designation) },
+    { label: "Contact email", value: escapeHtml(p.contact?.email) },
+    { label: "Contact phone", value: escapeHtml(p.contact?.phone) },
+    {
+      label: "Address",
+      value: [p.address?.line1, p.address?.city, p.address?.state, p.address?.postalCode].filter(Boolean).map(escapeHtml).join(", "),
+    },
+    { label: "Registered", value: fullDate(p.createdAt) },
+    { label: "Status", value: statusBadge(status === "approved" ? "active" : status) },
+  ];
+  if (status === "rejected") {
+    rows.push({ label: "Rejection reason", value: p.rejectionReason ? escapeHtml(p.rejectionReason) : "<span class=\"muted\">No reason given</span>" });
+    rows.push({ label: "Rejected", value: p.rejectedAt ? `${fullDate(p.rejectedAt)} (${timeAgo(p.rejectedAt)})` : "—" });
+  }
+
+  const actions = [];
+  if (status === "pending") {
+    actions.push({ text: "Reject", className: "btn-danger-outline", onClick: () => setPartnerStatusUi(uid, "rejected") });
+    actions.push({ text: "Approve", className: "btn-primary", onClick: () => setPartnerStatusUi(uid, "approved") });
+  } else if (status === "approved") {
+    actions.push({ text: "Suspend", className: "btn-danger-outline", onClick: () => setPartnerStatusUi(uid, "suspended") });
+  } else if (status === "suspended" || status === "rejected") {
+    actions.push({ text: "Re-approve", className: "btn-primary", onClick: () => setPartnerStatusUi(uid, "approved") });
+  }
+
+  detailDialog({ title: p.companyName || "—", subtitle: `Insurance partner — ${status}`, rows, actions });
+}
+
+async function setPartnerStatusUi(uid, status, btn) {
+  let rejectionReason = "";
+  if (status === "suspended") {
+    const ok = await confirmDialog({ title: "Suspend this partner?", body: "They'll lose access to publish plans or handle claims until re-approved.", confirmText: "Suspend", danger: true });
+    if (!ok) return;
+  }
+  if (status === "rejected") {
+    const result = await promptDialog({
+      title: "Reject this application?",
+      body: "They won't be able to publish plans or handle claims. We'll let them know why. This can be undone later by approving them.",
+      label: "Reason (shown to the partner)",
+      placeholder: "e.g. Registration number couldn't be verified — please re-submit with supporting documents.",
+      confirmText: "Reject", danger: true, required: true,
+    });
+    if (!result.confirmed) return;
+    rejectionReason = result.value;
+  }
+  setBusy(btn, true, "Working…");
+  try {
+    await setPartnerStatus(uid, status, status === "rejected" ? { rejectionReason } : {});
+    const p = insurancePartners.find((x) => x.id === uid);
+    if (p) { p.status = status; if (status === "rejected") p.rejectionReason = rejectionReason; }
+    const pendingCount = insurancePartners.filter((x) => x.status === "pending" || !x.status).length;
+    document.getElementById("partnersTabDot").style.display = pendingCount ? "" : "none";
+    renderStats();
+    applyPartnerFilters();
+    toast(status === "approved" ? "Partner approved." : status === "rejected" ? "Partner application rejected." : "Partner suspended.", "success");
+  } catch (err) {
+    toast(err.message || "Couldn't update partner.", "error");
+    setBusy(btn, false);
+  }
+}
+
+document.getElementById("partnerSearchInput").addEventListener("input", applyPartnerFilters);
+document.getElementById("partnerStatusFilter").addEventListener("change", applyPartnerFilters);
+
+// ==================== Plans ====================
+// Per-PLAN moderation -- distinct from the Partners tab above, which
+// approves the ORGANIZATION itself. A partner fully controls their own
+// plan's status between "active" (InsuranceRepository.watchPlans() reads
+// this) and "inactive" -- there's no admin approval queue here. What
+// this tab does: suspend any plan (active or inactive) at any time as a
+// moderation action, and reactivate one a partner can't bring back
+// themselves (firestore.rules' insurance_plans rule blocks a partner
+// from changing their own suspended plan's status at all).
+
+function populatePlanPartnerFilter() {
+  const select = document.getElementById("planPartnerFilter");
+  const names = [...new Set(plans.map((p) => (p.providerName || "").trim()).filter(Boolean))].sort();
+  const current = select.value;
+  select.innerHTML = '<option value="">All partners</option>' + names.map((n) => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join("");
+  select.value = names.includes(current) ? current : "";
+}
+
+function planPremiumUnit(tripType) {
+  return tripType === "Annual" ? "/traveller/yr" : "/traveller/day";
+}
+
+function applyPlanFilters() {
+  const q = document.getElementById("planSearchInput").value.trim().toLowerCase();
+  const status = document.getElementById("planStatusFilter").value;
+  const partner = document.getElementById("planPartnerFilter").value;
+  planFiltered = plans.filter((p) => {
+    const matchesQ = !q || (p.name || "").toLowerCase().includes(q) || (p.providerName || "").toLowerCase().includes(q);
+    const effectiveStatus = p.status || "draft";
+    const matchesStatus = !status || effectiveStatus === status;
+    const matchesPartner = !partner || (p.providerName || "").trim() === partner;
+    return matchesQ && matchesStatus && matchesPartner;
+  });
+  planPage = 1;
+  renderPlanTable();
+}
+
+/** Row actions for whatever state a plan is currently in -- mirrors
+ * renderPartnerTable()'s own status-aware button set above. Suspend is a
+ * moderation action an admin can take on an active OR inactive plan;
+ * once suspended, only an admin can lift it (Activate) -- the partner's
+ * own active/inactive toggle lives in partner/plan-form.html, not here.
+ * A plan that's still a "draft" has nothing an admin can do yet (it's a
+ * one-off chat-quote plan), so it shows no action at all here. */
+function planRowActions(p) {
+  const status = p.status || "draft";
+  if (status === "active" || status === "inactive" || status === "published") {
+    return `<button class="btn btn-danger-outline btn-sm" data-suspend="${p.id}">Suspend</button>`;
+  }
+  if (status === "suspended") {
+    return `<button class="btn btn-primary btn-sm" data-activate="${p.id}">Activate</button>`;
+  }
+  return "";
+}
+
+function renderPlanTable() {
+  const { pageItems, pages, total } = paginate(planFiltered, planPage, PAGE_SIZE);
+  const body = document.getElementById("planTableBody");
+  const empty = document.getElementById("planEmptyState");
+  if (!pageItems.length) { body.innerHTML = ""; empty.style.display = "block"; }
+  else {
+    empty.style.display = "none";
+    body.innerHTML = pageItems.map((p) => `
+      <tr style="cursor:pointer;" data-open-plan="${p.id}">
+        <td class="cell-strong">${escapeHtml(p.name || "—")}</td>
+        <td class="muted">${escapeHtml(p.providerName || "—")}</td>
+        <td class="muted">${escapeHtml(p.tripType || "—")}</td>
+        <td class="muted">${moneyExact(p.premium)} <span class="small">${planPremiumUnit(p.tripType)}</span></td>
+        <td>${statusBadge(p.status || "draft")}</td>
+        <td><div class="row-actions">${planRowActions(p)}</div></td>
+      </tr>`).join("");
+    body.querySelectorAll("[data-open-plan]").forEach((row) => row.addEventListener("click", (e) => {
+      if (e.target.closest(".row-actions")) return;
+      openPlanDetail(row.dataset.openPlan);
+    }));
+    body.querySelectorAll("[data-activate]").forEach((b) => b.addEventListener("click", (e) => { e.stopPropagation(); setPlanStatusUi(b.dataset.activate, "active", b); }));
+    body.querySelectorAll("[data-suspend]").forEach((b) => b.addEventListener("click", (e) => { e.stopPropagation(); setPlanStatusUi(b.dataset.suspend, "suspended", b); }));
+  }
+  document.getElementById("planResultsLabel").textContent = total
+    ? `Showing ${(planPage - 1) * PAGE_SIZE + 1} to ${Math.min(planPage * PAGE_SIZE, total)} of ${total} results` : "No results";
+  renderPager("planPagination", { page: planPage, pages }, (n) => { planPage = n; renderPlanTable(); });
+  mountIcons(document);
+}
+
+/** Read-only popup with everything a reviewer needs to actually decide --
+ * eligibility rules included, since "does this plan's age/residence/
+ * destination coverage make sense" is exactly what review is for, not
+ * just "does the premium look reasonable". */
+function openPlanDetail(id) {
+  const p = plans.find((x) => x.id === id);
+  if (!p) return;
+  const status = p.status || "draft";
+  const coverageHtml = (p.coverageItems || []).length
+    ? p.coverageItems.map((it) => `
+        <div style="display:flex;justify-content:space-between;gap:12px;padding:4px 0;">
+          <span>${escapeHtml(it.label)}</span>
+          <span class="cell-strong" style="flex:none;">${moneyExact(it.amount)}</span>
+        </div>`).join("")
+    : "—";
+  const ageRange = (p.minAge || p.maxAge) ? `${p.minAge ?? "0"}–${p.maxAge ?? "no max"}` : "No restriction";
+  const durationRange = (p.minTripDurationDays || p.maxTripDurationDays)
+    ? `${p.minTripDurationDays ?? "0"}–${p.maxTripDurationDays ?? "no max"} day(s)` : "No restriction";
+  const rows = [
+    { label: "Partner", value: escapeHtml(p.providerName) },
+    { label: "Trip type", value: escapeHtml(p.tripType) },
+    { label: "Premium", value: `${moneyExact(p.premium)} ${planPremiumUnit(p.tripType)}` },
+    { label: "Key coverage", value: coverageHtml, block: true },
+    { label: "Destinations covered", value: (p.eligibleDestinations || []).map(escapeHtml).join(", ") || "—" },
+    { label: "Eligible nationalities", value: (p.eligibleCountries || []).map(escapeHtml).join(", ") || "Any" },
+    { label: "Age eligibility", value: ageRange },
+    { label: "Trip duration eligibility", value: durationRange },
+    { label: "Status", value: statusBadge(status) },
+  ];
+  const actions = [];
+  if (status === "active" || status === "inactive" || status === "published") {
+    actions.push({ text: "Suspend", className: "btn-danger-outline", onClick: () => setPlanStatusUi(id, "suspended") });
+  } else if (status === "suspended") {
+    actions.push({ text: "Activate", className: "btn-primary", onClick: () => setPlanStatusUi(id, "active") });
+  }
+  detailDialog({ title: p.name || "Untitled plan", subtitle: `${p.providerName || "—"} · ${status}`, rows, actions });
+}
+
+async function setPlanStatusUi(id, status, btn) {
+  if (status === "suspended") {
+    const ok = await confirmDialog({ title: "Suspend this plan?", body: "Travellers won't be able to buy it until an admin reactivates it.", confirmText: "Suspend", danger: true });
+    if (!ok) return;
+  }
+  setBusy(btn, true, "Working…");
+  try {
+    await setPlanStatus(id, status, {});
+    const p = plans.find((x) => x.id === id);
+    if (p) { p.status = status; }
+    renderStats();
+    applyPlanFilters();
+    toast(status === "active" ? "Plan activated." : "Plan suspended.", "success");
+  } catch (err) {
+    toast(err.message || "Couldn't update plan.", "error");
+    if (btn) setBusy(btn, false);
+  }
+}
+
+document.getElementById("planSearchInput").addEventListener("input", applyPlanFilters);
+document.getElementById("planStatusFilter").addEventListener("change", applyPlanFilters);
+document.getElementById("planPartnerFilter").addEventListener("change", applyPlanFilters);
 </script>
 </body>
 </html>

@@ -5,6 +5,7 @@ import '../../repositories/discussion_decisions.dart';
 import '../../repositories/trip_repository.dart';
 import '../../services/auth_service.dart';
 import '../../services/discussion_summary_service.dart';
+import '../../services/vote_resolution_service.dart';
 import '../../theme.dart';
 
 Future<void> showDecideNowSheet(BuildContext context, GroupTripController controller, DiscussionSummary summary) {
@@ -54,7 +55,7 @@ class _DecideNowSheetState extends State<_DecideNowSheet> {
   }
 
   Future<void> _record(DiscussionItem it, String status,
-      {List<String> memberUids = const [], String voteTitle = ''}) {
+      {List<String> memberUids = const [], String voteTitle = '', String voteId = ''}) {
     return TripRepository.instance.recordDiscussionDecision(
       c.tripId,
       it.messageId,
@@ -64,6 +65,7 @@ class _DecideNowSheetState extends State<_DecideNowSheet> {
       memberUids: memberUids,
       memberNames: [for (final u in memberUids) trip?.memberNames[u] ?? u],
       voteTitle: voteTitle,
+      voteId: voteId,
     );
   }
 
@@ -111,7 +113,7 @@ class _DecideNowSheetState extends State<_DecideNowSheet> {
         final options = group.length >= 2
             ? [for (final g in group) _short(g.display, 60)]
             : ['Yes, ${_short(it.display, 40)}', 'No, skip it'];
-        await TripRepository.instance.createVote(
+        final voteId = await TripRepository.instance.createVote(
           c.tripId,
           title: title,
           options: options,
@@ -120,11 +122,60 @@ class _DecideNowSheetState extends State<_DecideNowSheet> {
           createdBy: _uid,
         );
         for (final g in group) {
-          await _record(g, 'voting', voteTitle: title);
+          await _record(g, 'voting', voteTitle: title, voteId: voteId);
           if (g != it) _done[g.messageId] = 'In poll';
         }
         return 'In poll';
       });
+
+  // Shared with VoteResolutionService, which runs this same check whenever
+  // the discussion summary refreshes (not just while this sheet is open) so
+  // a poll that nobody reopens Decide Now for still gets applied.
+  bool? _pollVerdict(DiscussionItem it, TripVote vote) => VoteResolutionService.instance.pollVerdict(it, vote);
+
+  bool? _chatLean(DiscussionItem it) => VoteResolutionService.instance.chatLean(it);
+
+  /// Reads the poll's result against this item's own chat sentiment and, when
+  /// they agree (or the chat never had a clear lean), finalizes the decision
+  /// automatically — except a plan-affecting item (attraction/transport)
+  /// that the poll says to go with still needs a day and time, which only a
+  /// person can pick, so that case is left for a manual "Agree" tap instead
+  /// of being silently confirmed with no slot. When the poll is tied, or
+  /// disagrees with how the chat leaned, this does nothing — Agree / Skip
+  /// stay on screen so a person makes the call themselves.
+  void _maybeAutoResolve(DiscussionItem it, TripVote vote) {
+    if (_done.containsKey(it.messageId) || _busy != null) return;
+    final pollAgrees = _pollVerdict(it, vote);
+    if (pollAgrees == null) return;
+    final chatAgrees = _chatLean(it);
+    if (chatAgrees != null && chatAgrees != pollAgrees) return;
+    if (pollAgrees && _planCategories.contains(it.category)) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_done.containsKey(it.messageId)) return;
+      _run(it, () async {
+        await _record(it, pollAgrees ? 'confirmed' : 'rejected', voteId: vote.id);
+        return pollAgrees ? 'Agreed (poll)' : 'Skipped (poll)';
+      });
+    });
+  }
+
+  /// null = nothing worth flagging yet. Otherwise one line: either a
+  /// conflict (poll vs. chat, or a tie) that needs a person to pick, or —
+  /// for a plan-affecting item the poll already says to go with — a nudge
+  /// that it's just waiting on a day and time via the Agree button.
+  String? _pollHint(DiscussionItem it, TripVote vote) {
+    if (vote.isTie) return "Poll's tied — pick one below.";
+    final pollAgrees = _pollVerdict(it, vote);
+    if (pollAgrees == null) return null;
+    final chatAgrees = _chatLean(it);
+    if (chatAgrees != null && chatAgrees != pollAgrees) {
+      return 'Poll leans "${vote.leading!.label}" but the chat leaned the other way — pick below.';
+    }
+    if (pollAgrees && _planCategories.contains(it.category)) {
+      return 'Poll says go for it — tap Agree to give it a day & time.';
+    }
+    return null;
+  }
 
   Future<Set<String>?> _planDialog(DiscussionItem it, {required bool split}) async {
     final t = trip;
@@ -266,8 +317,25 @@ class _DecideNowSheetState extends State<_DecideNowSheet> {
   }
 
   Widget _row(DiscussionItem it) {
+    final voteId = it.decided?.voteId ?? '';
+    if (it.decided?.status == 'voting' && voteId.isNotEmpty) {
+      return StreamBuilder<TripVote?>(
+        stream: TripRepository.instance.watchVoteById(c.tripId, voteId),
+        builder: (_, snap) {
+          final vote = snap.data;
+          if (vote != null) _maybeAutoResolve(it, vote);
+          return _rowBody(it, vote);
+        },
+      );
+    }
+    return _rowBody(it, null);
+  }
+
+  Widget _rowBody(DiscussionItem it, TripVote? vote) {
     final done = _done[it.messageId] ?? (it.decided?.status == 'voting' ? 'In poll' : null);
     final busy = _busy == it.messageId;
+    final hint = vote != null ? _pollHint(it, vote) : null;
+    final isConflict = hint != null && (hint.contains('tied') || hint.contains("Poll leans"));
     final who = [
       'by ${it.proposer}',
       if (it.support.length > 1) 'for: ${it.support.join(', ')}',
@@ -289,7 +357,19 @@ class _DecideNowSheetState extends State<_DecideNowSheet> {
             spacing: 6,
             runSpacing: 6,
             children: [
-              if (done == 'In poll')
+              if (hint != null)
+                Padding(
+                  padding: const EdgeInsets.only(right: 4, top: 6),
+                  child: Text(
+                    isConflict ? '⚠️ $hint' : '🗳️ $hint',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: isConflict ? Colors.redAccent : const Color(0xFF2E9E5B),
+                    ),
+                  ),
+                )
+              else if (done == 'In poll')
                 const Padding(
                   padding: EdgeInsets.only(right: 4, top: 6),
                   child: Text('In a poll · ', style: TextStyle(fontSize: 12, color: AppColors.orange)),

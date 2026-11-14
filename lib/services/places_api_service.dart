@@ -41,6 +41,7 @@ class PlacesApiService {
         'format': 'json',
         'limit': '1',
         'addressdetails': '1',
+        'accept-language': 'en',
       });
       final res = await http.get(uri, headers: {'User-Agent': _userAgent}).timeout(const Duration(seconds: 12));
       if (res.statusCode != 200) return null;
@@ -74,6 +75,7 @@ class PlacesApiService {
         'format': 'json',
         'zoom': '18',
         'addressdetails': '1',
+        'accept-language': 'en',
       });
       final res = await http.get(uri, headers: {'User-Agent': _userAgent}).timeout(const Duration(seconds: 12));
       if (res.statusCode != 200) return null;

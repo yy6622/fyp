@@ -167,6 +167,11 @@ class GroupTripController extends ChangeNotifier {
     return TripRepository.instance.updateActivityTime(tripId, dayIndex, itemId, time, actorUid: _uid);
   }
 
+  Future<void> moveActivityToDay(int fromDayIndex, String itemId, int toDayIndex, String time) {
+    return TripRepository.instance.moveActivityToDay(tripId, fromDayIndex, itemId, toDayIndex, time, actorUid: _uid);
+  }
+
+
   Future<void> addFlight(TripFlight flight) => TripRepository.instance.addFlight(tripId, flight, actorUid: _uid);
   Future<void> removeFlight(String flightId) => TripRepository.instance.removeFlight(tripId, flightId);
   Future<void> addHotelStay(TripHotelStay stay) => TripRepository.instance.addHotelStay(tripId, stay, actorUid: _uid);

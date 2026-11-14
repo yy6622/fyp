@@ -6,8 +6,8 @@
 <title>Places Management — Voya Admin</title>
 <link rel="stylesheet" href="../css/tokens.css?v=20261022" />
 <link rel="stylesheet" href="../css/base.css?v=20261022" />
-<link rel="stylesheet" href="../css/layout.css?v=20261022" />
-<link rel="stylesheet" href="../css/components.css?v=20261022" />
+<link rel="stylesheet" href="../css/layout.css?v=20261111a" />
+<link rel="stylesheet" href="../css/components.css?v=20261106g" />
 </head>
 <body>
 <div class="shell">
@@ -37,17 +37,27 @@
     <div class="tabs" id="placesTabs">
       <button class="tab-btn active" data-tab="attractions">Attractions</button>
       <button class="tab-btn" data-tab="restaurants">Restaurants</button>
+      <button class="tab-btn" data-tab="suggestions">Place Suggestions<span class="tab-alert-dot" id="suggestionsTabDot" style="display:none;" title="Suggestions pending review"></span></button>
     </div>
 
     <div class="stat-grid" id="statGrid"><div class="skeleton" style="height:90px;grid-column:1/-1;"></div></div>
 
     <div class="filter-bar">
-      <div class="search-input-wrap"><span data-icon="search"></span><input class="input" id="searchInput" placeholder="Search…" /></div>
+      <div class="search-input-wrap"><span data-icon="search"></span><input class="input" id="searchInput" placeholder="Search name or location…" /></div>
       <select class="select" id="statusFilter">
         <option value="">All status</option>
         <option value="active">Active</option>
-        <option value="pending">Pending</option>
-        <option value="suspended">Suspended</option>
+        <option value="inactive">Inactive</option>
+      </select>
+      <select class="select" id="countryFilter">
+        <option value="">All countries</option>
+      </select>
+      <select class="select" id="categoryFilter">
+        <option value="">All categories</option>
+      </select>
+      <select class="select" id="sortFilter">
+        <option value="updated_desc">Updated: newest first</option>
+        <option value="updated_asc">Updated: oldest first</option>
       </select>
     </div>
 
@@ -62,9 +72,21 @@
         <p class="small">Add one, or try a different search.</p>
       </div>
     </div>
-    <div class="table-foot">
+    <div class="table-foot" id="tableFoot">
       <p class="small muted" id="resultsLabel"></p>
       <div class="pagination" id="pagination"></div>
+    </div>
+
+    <div id="suggestionsPanel" style="display:none;">
+      <div class="filter-bar">
+        <div class="search-input-wrap"><span data-icon="search"></span><input class="input" id="suggestionSearchInput" placeholder="Search suggested places…" /></div>
+      </div>
+      <div id="suggestionList"><div class="card" style="padding:20px;"><div class="skeleton" style="height:80px;"></div></div></div>
+      <div class="empty-state" id="suggestionEmptyState" style="display:none;">
+        <span data-icon="map-pin" class="icon-lg"></span>
+        <div class="h3">Nothing to review</div>
+        <p class="small">New places travellers suggest from the app will show up here.</p>
+      </div>
     </div>
   </main>
 </div>
@@ -76,15 +98,26 @@
   </div>
 </div>
 
+<div class="modal-backdrop" id="suggestionDetailModal">
+  <div class="modal" style="max-width:600px;">
+    <div class="modal-head"><h3 class="h2">Suggested place</h3><button class="modal-close" data-close><span data-icon="x"></span></button></div>
+    <div id="suggestionDetailBody"></div>
+  </div>
+</div>
+
 <script type="module">
-import { requireRole } from "../js/auth-guard.js?v=20261022";
-import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261022";
-import { mountIcons } from "../js/icons.js?v=20261022";
-import { listAttractions, deleteAttraction, listAllRestaurants, deleteRestaurant } from "../js/data.js?v=20261022";
+import { requireRole } from "../js/auth-guard.js?v=20261106b";
+import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261114a";
+import { mountIcons } from "../js/icons.js?v=20261106c";
 import {
-  number, shortDate, fullDate, statusBadge, escapeHtml, paginate, renderPager, toast, confirmDialog,
-  statCard, plainCard, trendDelta, countBefore, monthBounds, openModal, closeModal, wireModalDismiss,
-} from "../js/ui.js?v=20261022";
+  listAttractions, deleteAttraction, listAllRestaurants, deleteRestaurant,
+  listPlaceSuggestions, rejectPlaceSuggestion, logModerationAction, countModerationToday, countModerationYesterday,
+  countPlaceSuggestions,
+} from "../js/data.js?v=20261114c";
+import {
+  number, shortDate, fullDate, timeAgo, statusBadge, escapeHtml, paginate, renderPager, toast, confirmDialog, setBusy,
+  statCard, plainCard, trendDelta, openModal, closeModal, wireModalDismiss,
+} from "../js/ui.js?v=20261113a";
 
 mountSidebarNav({ role: "admin", active: "attractions" });
 const session = await requireRole("admin", "login.html");
@@ -92,11 +125,13 @@ const session = await requireRole("admin", "login.html");
 // redirects back to "attractions.html?tab=restaurants" after saving, so
 // adding/editing a restaurant doesn't dump you back on the Attractions tab.
 const requestedTab = new URLSearchParams(location.search).get("tab");
-let activeTab = requestedTab === "restaurants" ? "restaurants" : "attractions";
+const requestedFocus = new URLSearchParams(location.search).get("focus");
+let activeTab = requestedTab === "restaurants" ? "restaurants" : requestedTab === "suggestions" ? "suggestions" : "attractions";
 let filtered = [], page = 1;
 const PAGE_SIZE = 8;
 // Cache per tab so switching back and forth doesn't re-fetch every time.
 const cache = {};
+let placeSuggestions = [];
 
 // catalog_restaurants carries docs from two different writers with two
 // different field conventions (camelCase live-refresh vs. snake_case bulk
@@ -104,17 +139,34 @@ const cache = {};
 // this). These read-only display helpers mirror that same fallback logic
 // so this table shows real data regardless of which writer wrote a given
 // restaurant doc, without changing anything on disk.
+// The Location column already shows "City, Country" (or just one of
+// those) as free text — reusing that exact string for the Country filter
+// keeps the filter's values consistent with what's on screen, instead of
+// introducing a second, differently-formatted country field (catalog docs
+// carry a few: a bare ISO code on some writers, nothing at all on others).
+function countryFromLocation(location) {
+  const parts = (location || "").split(",").map((s) => s.trim()).filter(Boolean);
+  return parts.length ? parts[parts.length - 1] : "";
+}
+
+function restaurantCuisineTags(r) {
+  return Array.isArray(r.cuisineTags) && r.cuisineTags.length
+    ? r.cuisineTags
+    : Array.isArray(r.cuisine)
+      ? r.cuisine
+      : typeof r.cuisine === "string" && r.cuisine
+        ? [r.cuisine]
+        : [];
+}
+
 function restaurantCuisineLabel(r) {
-  const tags = Array.isArray(r.cuisineTags) && r.cuisineTags.length ? r.cuisineTags : (Array.isArray(r.cuisine) ? r.cuisine : (typeof r.cuisine === "string" && r.cuisine ? [r.cuisine] : []));
+  const tags = restaurantCuisineTags(r);
   return tags.length ? tags.slice(0, 2).join(", ") : "—";
 }
 function restaurantLocationLabel(r) {
   if (typeof r.location === "string" && r.location) return r.location;
   if (r.city && r.country) return `${r.city}, ${r.country}`;
   return r.city || r.country || "—";
-}
-function restaurantImageUrl(r) {
-  return r.image || r.image_url || "";
 }
 function restaurantPriceRange(r) {
   return r.priceRange || r.price_range || "—";
@@ -147,18 +199,25 @@ const TABS = {
         <td>${statusBadge(a.status)}</td>`;
     },
     matches(a, q) { return (a.name || "").toLowerCase().includes(q) || (a.location || "").toLowerCase().includes(q); },
+    countryOf(a) { return countryFromLocation(a.location); },
+    categoryLabel: "category",
+    categoryOf(a) { return a.category ? [a.category] : []; },
     stats(items) {
       const active = items.filter((a) => a.status === "active");
-      const pending = items.filter((a) => a.status === "pending").length;
-      const suspended = items.filter((a) => a.status === "suspended").length;
-      const { start: thisMonthStart } = monthBounds(0);
-      const totalDelta = trendDelta(items.length, countBefore(items, "createdAt", thisMonthStart));
-      const activeDelta = trendDelta(active.length, countBefore(active, "createdAt", thisMonthStart));
+      const inactive = items.filter((a) => a.status === "inactive").length;
+      // No trend line on Attractions/Active (Nov 2026): these are almost
+      // entirely seeded by the Flutter app's OpenStreetMap refresh
+      // (CatalogRepository._refreshAttractionsFromOsm), which never
+      // writes a createdAt — so a "vs last month" comparison always had
+      // nothing to compare against and silently claimed "New this
+      // month" on every single load, which was actively misleading
+      // rather than merely empty. Same resolution as the User
+      // Management Suspended card: no honest baseline, so no delta,
+      // rather than a fake one.
       return [
-        statCard("Attractions", number(items.length), "map-pin", totalDelta),
-        statCard("Active", number(active.length), "sparkle", activeDelta),
-        plainCard("Pending", number(pending)),
-        plainCard("Suspended", number(suspended)),
+        plainCard("Attractions", number(items.length), "map-pin"),
+        plainCard("Active", number(active.length), "sparkle"),
+        plainCard("Inactive", number(inactive), "x-circle"),
       ];
     },
     detail(a) {
@@ -199,36 +258,52 @@ const TABS = {
     noun: "restaurant", nounCap: "Restaurant", icon: "coin",
     href: "restaurant-form.html",
     subtitle: "Manage restaurant details shown in the app's Explore catalogue.",
-    async list() { return listAllRestaurants(); },
-    hasStatus: false,
-    columns: ["Restaurant", "Cuisine", "Location", "Updated", ""],
+    async list() {
+      const items = await listAllRestaurants();
+      items.forEach((r) => (r.status = r.status || "active"));
+      return items;
+    },
+    hasStatus: true,
+    columns: ["Restaurant", "Cuisine", "Location", "Updated", "Status", ""],
     row(r) {
       return `
         <td class="cell-strong">${escapeHtml(r.name || "—")}</td>
         <td class="muted">${escapeHtml(restaurantCuisineLabel(r))}</td>
         <td class="muted">${escapeHtml(restaurantLocationLabel(r))}</td>
-        <td class="muted">${shortDate(r.updatedAt)}</td>`;
+        <td class="muted">${shortDate(r.updatedAt)}</td>
+        <td>${statusBadge(r.status)}</td>`;
     },
     matches(r, q) { return (r.name || "").toLowerCase().includes(q) || restaurantLocationLabel(r).toLowerCase().includes(q); },
+    countryOf(r) { return countryFromLocation(restaurantLocationLabel(r)); },
+    categoryLabel: "cuisine",
+    categoryOf(r) { return restaurantCuisineTags(r); },
     stats(items) {
-      const { start: thisMonthStart } = monthBounds(0);
-      const totalDelta = trendDelta(items.length, countBefore(items, "createdAt", thisMonthStart));
-      // Mirrors Attractions' Active/Pending/Suspended breakdown — three
-      // buckets that sum to the total, instead of three counts that all
-      // land on roughly the same number. Almost every restaurant has
-      // *an* image (from the bulk-import enrichment pipeline), so "with
-      // a photo" told the admin nothing useful; whether that image is
-      // really a photo of that restaurant is the actually meaningful
-      // split, and `image_is_actual_place` is the honest-provenance flag
-      // the OSM-refresh/bulk-import pipelines already write.
-      const noPhoto = items.filter((r) => !restaurantImageUrl(r)).length;
-      const realPhoto = items.filter((r) => restaurantImageUrl(r) && r.image_is_actual_place === true).length;
-      const genericPhoto = items.length - noPhoto - realPhoto;
+      // No trend line on Restaurants, for the same reason as Attractions'
+      // stats() above — catalog_restaurants is seeded the same
+      // OSM-refresh way and never gets a createdAt either.
+      // Real/Generic/No-photo used to live here, but "No photo" sits at 0
+      // in practice (the bulk-import enrichment pipeline backfills *an*
+      // image for almost everything), so it told the admin nothing — a
+      // permanently-dead stat. Catalog breadth (how many cuisines/cities
+      // are actually covered) and data completeness (rows missing the
+      // cuisine/location a traveller would actually want to see) are the
+      // genuinely actionable numbers for a 3,700+-row auto-imported
+      // catalogue, so those replace it.
+      const cuisineSet = new Set();
+      const destSet = new Set();
+      let missingDetails = 0;
+      items.forEach((r) => {
+        const cuisine = restaurantCuisineLabel(r);
+        const dest = restaurantLocationLabel(r);
+        if (cuisine !== "—") cuisine.split(", ").forEach((c) => cuisineSet.add(c));
+        if (dest !== "—") destSet.add(dest);
+        if (cuisine === "—" || dest === "—") missingDetails++;
+      });
       return [
-        statCard("Restaurants", number(items.length), "coin", totalDelta),
-        plainCard("Real photo", number(realPhoto)),
-        plainCard("Generic photo", number(genericPhoto)),
-        plainCard("No photo", number(noPhoto)),
+        plainCard("Restaurants", number(items.length), "coin"),
+        plainCard("Cuisines covered", number(cuisineSet.size), "flag"),
+        plainCard("Destinations covered", number(destSet.size), "map-pin"),
+        plainCard("Missing details", number(missingDetails), "alert-triangle"),
       ];
     },
     detail(r) {
@@ -241,6 +316,7 @@ const TABS = {
       return `
         <div class="form-grid">
           ${row("Name", escapeHtml(r.name || "—"))}
+          ${row("Status", statusBadge(r.status))}
           ${row("Cuisine", escapeHtml(restaurantCuisineLabel(r)))}
           ${row("Location", escapeHtml(restaurantLocationLabel(r)))}
           ${row("Full address", escapeHtml(r.address || "—"))}
@@ -264,8 +340,50 @@ if (session) {
   setSidebarUser({ displayName: session.profile.name || "Admin", roleLabel: "Administrator" });
   wireModalDismiss();
   document.querySelectorAll("#placesTabs .tab-btn").forEach((t) => t.classList.toggle("active", t.dataset.tab === activeTab));
-  applyTabChrome();
-  await load();
+  if (activeTab === "suggestions") {
+    showSuggestionsView();
+    await loadSuggestions();
+    if (requestedFocus) openSuggestionDetail(requestedFocus);
+  } else {
+    applyTabChrome();
+    await load();
+    refreshSuggestionsTabDot();
+  }
+}
+
+/** Lights up the Place Suggestions tab with a red dot whenever there's
+ * at least one suggestion waiting on a decision — visible from whichever
+ * tab the admin is actually on, not just after clicking into Suggestions. */
+async function refreshSuggestionsTabDot() {
+  try {
+    const n = await countPlaceSuggestions();
+    document.getElementById("suggestionsTabDot").style.display = n > 0 ? "" : "none";
+  } catch (err) {
+    // Leave the dot as-is (hidden) rather than showing a false alarm
+    // for what's most likely the same reviews-style permission issue
+    // logged elsewhere in this console, not an actual pending count.
+  }
+}
+
+/** Swaps the standard table view (filter bar + table + pagination + the
+ * per-tab "Add …" button) for the Place Suggestions card list — these two
+ * views don't share markup, unlike Attractions/Restaurants which share
+ * the same table shape via TABS[] config. */
+function showSuggestionsView() {
+  document.getElementById("addBtn").style.display = "none";
+  document.querySelector(".filter-bar").style.display = "none";
+  document.getElementById("statGrid").style.display = "none";
+  document.querySelector(".table-wrap").style.display = "none";
+  document.getElementById("tableFoot").style.display = "none";
+  document.getElementById("suggestionsPanel").style.display = "";
+}
+function showTableView() {
+  document.getElementById("addBtn").style.display = "";
+  document.querySelector(".filter-bar").style.display = "";
+  document.getElementById("statGrid").style.display = "";
+  document.querySelector(".table-wrap").style.display = "";
+  document.getElementById("tableFoot").style.display = "";
+  document.getElementById("suggestionsPanel").style.display = "none";
 }
 
 function applyTabChrome() {
@@ -273,6 +391,8 @@ function applyTabChrome() {
   document.getElementById("pageSubtitle").textContent = cfg.subtitle;
   document.getElementById("addBtn").innerHTML = `<span data-icon="plus"></span>Add ${cfg.noun}`;
   document.getElementById("statusFilter").style.display = cfg.hasStatus ? "" : "none";
+  document.getElementById("categoryFilter").innerHTML = `<option value="">All ${cfg.categoryLabel}s</option>`;
+  document.getElementById("countryFilter").value = "";
   document.getElementById("tableHead").innerHTML = `<tr>${cfg.columns.map((c) => `<th>${c}</th>`).join("")}</tr>`;
   document.getElementById("emptyTitle").textContent = `No ${cfg.noun}s found`;
   mountIcons(document);
@@ -286,7 +406,25 @@ async function load() {
     cache[activeTab] = await cfg.list();
   }
   renderStats();
+  populateDynamicFilters();
   applyFilters();
+}
+
+function populateDynamicFilters() {
+  const cfg = TABS[activeTab];
+  const items = cache[activeTab];
+
+  const countrySelect = document.getElementById("countryFilter");
+  const countries = [...new Set(items.map((item) => cfg.countryOf(item)).filter(Boolean))].sort();
+  const currentCountry = countrySelect.value;
+  countrySelect.innerHTML = '<option value="">All countries</option>' + countries.map((c) => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("");
+  countrySelect.value = countries.includes(currentCountry) ? currentCountry : "";
+
+  const categorySelect = document.getElementById("categoryFilter");
+  const categories = [...new Set(items.flatMap((item) => cfg.categoryOf(item)).filter(Boolean))].sort();
+  const currentCategory = categorySelect.value;
+  categorySelect.innerHTML = `<option value="">All ${cfg.categoryLabel}s</option>` + categories.map((c) => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("");
+  categorySelect.value = categories.includes(currentCategory) ? currentCategory : "";
 }
 
 function renderStats() {
@@ -299,10 +437,18 @@ function applyFilters() {
   const cfg = TABS[activeTab];
   const q = document.getElementById("searchInput").value.trim().toLowerCase();
   const status = cfg.hasStatus ? document.getElementById("statusFilter").value : "";
+  const country = document.getElementById("countryFilter").value;
+  const category = document.getElementById("categoryFilter").value;
+  const sort = document.getElementById("sortFilter").value;
   filtered = cache[activeTab].filter((item) => {
     const matchesQ = !q || cfg.matches(item, q);
-    return matchesQ && (!status || item.status === status);
+    const matchesStatus = !status || item.status === status;
+    const matchesCountry = !country || cfg.countryOf(item) === country;
+    const matchesCategory = !category || cfg.categoryOf(item).includes(category);
+    return matchesQ && matchesStatus && matchesCountry && matchesCategory;
   });
+  const updatedAtOf = (item) => (item.updatedAt?.toDate ? item.updatedAt.toDate().getTime() : 0);
+  filtered.sort((a, b) => (sort === "updated_asc" ? updatedAtOf(a) - updatedAtOf(b) : updatedAtOf(b) - updatedAtOf(a)));
   page = 1;
   renderTable();
 }
@@ -382,14 +528,149 @@ document.querySelectorAll("#placesTabs .tab-btn").forEach((b) => b.addEventListe
   if (b.dataset.tab === activeTab) return;
   activeTab = b.dataset.tab;
   document.querySelectorAll("#placesTabs .tab-btn").forEach((t) => t.classList.toggle("active", t === b));
-  document.getElementById("searchInput").value = "";
-  applyTabChrome();
-  await load();
+  if (activeTab === "suggestions") {
+    showSuggestionsView();
+    await loadSuggestions();
+  } else {
+    showTableView();
+    document.getElementById("searchInput").value = "";
+    applyTabChrome();
+    await load();
+    refreshSuggestionsTabDot();
+  }
 }));
+
+// ==================== Place Suggestions tab ====================
+// Not part of TABS[] above — a suggestion isn't an attraction or
+// restaurant yet, just a traveller's raw submission (name/location/photo/
+// description) waiting on a decision, so it gets its own card-list view
+// instead of forcing it into the shared data-table shape. "Accepting"
+// hands the submitted details to attraction-form.html/restaurant-form.html
+// (via sessionStorage) so the admin finishes it on that form normally —
+// js/data.js's markPlaceSuggestionAdded() is what actually closes out the
+// suggestion, called once that new record is actually saved, so a
+// suggestion the admin opened but backed out of stays pending here.
+async function loadSuggestions() {
+  let items, addedToday, rejectedToday, addedYesterday, rejectedYesterday;
+  try {
+    [items, addedToday, rejectedToday, addedYesterday, rejectedYesterday] = await Promise.all([
+      listPlaceSuggestions(), countModerationToday("suggestion_added"), countModerationToday("suggestion_rejected"),
+      countModerationYesterday("suggestion_added"), countModerationYesterday("suggestion_rejected"),
+    ]);
+  } catch (err) {
+    document.getElementById("suggestionList").innerHTML = `<p class="muted small" style="padding:20px 0;">Couldn't load this — ${escapeHtml(err.message || "missing or insufficient permissions")}.</p>`;
+    return;
+  }
+  placeSuggestions = items;
+  document.getElementById("suggestionsTabDot").style.display = placeSuggestions.length > 0 ? "" : "none";
+  document.getElementById("statGrid").innerHTML = [
+    plainCard("Pending review", number(placeSuggestions.length), "clock"),
+    statCard("Added today", number(addedToday), "file-check", trendDelta(addedToday, addedYesterday, "yesterday")),
+    statCard("Rejected today", number(rejectedToday), "file-x", trendDelta(rejectedToday, rejectedYesterday, "yesterday")),
+  ].join("");
+  document.getElementById("statGrid").style.display = "";
+  renderSuggestionList();
+  mountIcons(document);
+}
+
+function renderSuggestionList() {
+  const q = document.getElementById("suggestionSearchInput").value.trim().toLowerCase();
+  const filtered2 = placeSuggestions.filter((s) =>
+    !q || (s.name || "").toLowerCase().includes(q) || (s.location || "").toLowerCase().includes(q) || (s.authorName || "").toLowerCase().includes(q));
+  const list = document.getElementById("suggestionList");
+  const empty = document.getElementById("suggestionEmptyState");
+  if (!filtered2.length) {
+    list.innerHTML = "";
+    empty.style.display = "block";
+    return;
+  }
+  empty.style.display = "none";
+  list.innerHTML = filtered2.map((s) => `
+    <div class="card report-card" style="margin-bottom:16px;cursor:pointer;" data-open-suggestion="${s.id}">
+      <div class="report-thumb" style="${s.photoUrl ? `background-image:url('${s.photoUrl}');background-size:cover;background-position:center;` : ""}"></div>
+      <div class="report-body">
+        <div class="report-title">${escapeHtml(s.name || "Untitled place")}</div>
+        <div class="report-meta">Suggested by ${escapeHtml(s.authorName || "a traveller")} · ${timeAgo(s.createdAt)} · ${escapeHtml(s.location || "No location given")}</div>
+        <div class="report-desc">${escapeHtml(s.description || "No description given.")}</div>
+      </div>
+      <div class="report-actions">
+        <button class="btn btn-outline btn-sm" data-view-suggestion="${s.id}"><span data-icon="eye" data-icon-size="14"></span>View</button>
+        <button class="btn btn-danger-outline btn-sm" data-reject-suggestion="${s.id}"><span data-icon="x" data-icon-size="14"></span>Reject</button>
+      </div>
+    </div>`).join("");
+  mountIcons(document);
+  list.querySelectorAll("[data-open-suggestion]").forEach((card) => card.addEventListener("click", (e) => {
+    if (e.target.closest(".report-actions")) return;
+    openSuggestionDetail(card.dataset.openSuggestion);
+  }));
+  list.querySelectorAll("[data-view-suggestion]").forEach((b) => b.addEventListener("click", () => openSuggestionDetail(b.dataset.viewSuggestion)));
+  list.querySelectorAll("[data-reject-suggestion]").forEach((b) => b.addEventListener("click", () => actOnSuggestion("reject", b.dataset.rejectSuggestion, b)));
+}
+
+function openSuggestionDetail(id) {
+  const s = placeSuggestions.find((x) => x.id === id);
+  if (!s) return;
+  document.getElementById("suggestionDetailBody").innerHTML = `
+    ${s.photoUrl ? `<img src="${s.photoUrl}" style="width:100%;border-radius:12px;margin-bottom:16px;max-height:220px;object-fit:cover;" />` : ""}
+    <p class="h3" style="margin-bottom:6px;">${escapeHtml(s.name || "Untitled place")}</p>
+    <p class="muted small" style="margin-bottom:14px;">Suggested by ${escapeHtml(s.authorName || "a traveller")} · ${escapeHtml(s.location || "No location given")}</p>
+    <p style="font-size:14px;line-height:1.6;color:var(--text-700);margin-bottom:18px;">${escapeHtml(s.description || "No description given.")}</p>
+    <div class="card-pad" style="background:var(--teal-100);border-radius:12px;margin-bottom:18px;">
+      <p class="small" style="color:var(--navy-800);font-weight:700;">Accepting turns this into a real listing</p>
+      <p class="small" style="color:var(--text-700);">Pick which kind of place this is — you'll land on the normal add-place form with the name, location and photo already filled in, ready to finish and save.</p>
+    </div>
+    <div class="form-actions">
+      <button class="btn btn-danger-outline" data-modal-reject-suggestion="${s.id}"><span data-icon="x" data-icon-size="14"></span>Reject</button>
+      <button class="btn btn-outline" data-accept-restaurant="${s.id}"><span data-icon="coin" data-icon-size="14"></span>Add as Restaurant</button>
+      <button class="btn btn-primary" data-accept-attraction="${s.id}"><span data-icon="map-pin" data-icon-size="14"></span>Add as Attraction</button>
+    </div>`;
+  mountIcons(document.getElementById("suggestionDetailBody"));
+  document.getElementById("suggestionDetailBody").querySelector("[data-modal-reject-suggestion]").onclick = (e) => { closeModal("suggestionDetailModal"); actOnSuggestion("reject", id, e.target); };
+  document.getElementById("suggestionDetailBody").querySelector("[data-accept-attraction]").onclick = () => acceptSuggestion("attraction", id);
+  document.getElementById("suggestionDetailBody").querySelector("[data-accept-restaurant]").onclick = () => acceptSuggestion("restaurant", id);
+  openModal("suggestionDetailModal");
+}
+
+function acceptSuggestion(kind, id) {
+  const s = placeSuggestions.find((x) => x.id === id);
+  if (!s) return;
+  sessionStorage.setItem("voya_suggestion_prefill", JSON.stringify({
+    reportId: s.id, name: s.name || "", location: s.location || "", description: s.description || "", photoUrl: s.photoUrl || "",
+  }));
+  location.href = kind === "attraction" ? "attraction-form.html?fromSuggestion=1" : "restaurant-form.html?fromSuggestion=1";
+}
+
+async function actOnSuggestion(kind, id, btn) {
+  if (kind === "reject") {
+    const ok = await confirmDialog({
+      title: "Reject this suggestion?",
+      body: "The traveller's submission stays on record, just marked as declined — nothing is added to the app.",
+      confirmText: "Reject", danger: true,
+    });
+    if (!ok) return;
+  }
+  setBusy(btn, true, "Working…");
+  try {
+    await rejectPlaceSuggestion(id);
+    await logModerationAction("suggestion_rejected", id, session.uid);
+    placeSuggestions = placeSuggestions.filter((x) => x.id !== id);
+    closeModal("suggestionDetailModal");
+    toast("Suggestion rejected.", "success");
+    await loadSuggestions();
+  } catch (err) {
+    toast(err.message || "Something went wrong.", "error");
+    setBusy(btn, false);
+  }
+}
+
+document.getElementById("suggestionSearchInput").addEventListener("input", renderSuggestionList);
 
 document.getElementById("addBtn").addEventListener("click", () => { location.href = TABS[activeTab].href; });
 document.getElementById("searchInput").addEventListener("input", applyFilters);
 document.getElementById("statusFilter").addEventListener("change", applyFilters);
+document.getElementById("countryFilter").addEventListener("change", applyFilters);
+document.getElementById("categoryFilter").addEventListener("change", applyFilters);
+document.getElementById("sortFilter").addEventListener("change", applyFilters);
 </script>
 </body>
 </html>

@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 
 import '../../models/day_plan_models.dart';
@@ -11,10 +9,6 @@ const double _rulerWidth = 56.0;
 const int _minutesPerDay = 24 * 60;
 const int _snapMinutes = 5;
 const int _maxMinutes = _minutesPerDay - _snapMinutes;
-
-const double _autoScrollEdge = 64.0;
-const double _autoScrollMaxSpeed = 14.0;
-const Duration _autoScrollTick = Duration(milliseconds: 16);
 
 double _minutesToY(int minutes) => minutes / 60 * _hourHeight;
 
@@ -45,16 +39,50 @@ String _formatTime12h(int minutes) {
   return '$h:${m.toString().padLeft(2, '0')} $suffix';
 }
 
+// Public wrappers so GroupTripPage can turn a drag-drop's raw screen
+// position into a time-of-day using this view's own hour-grid math,
+// without duplicating the constants/rounding above.
+int timelineYToMinutes(double y) => _snap(_yToMinutes(y));
+
+String timelineMinutesToHHMM(int minutes) => _minutesToHHMM(minutes);
+
 class DayTimelineView extends StatefulWidget {
   final List<ActivityItem> items;
-  final void Function(ActivityItem item, String newTime24) onTimeChanged;
   final void Function(ActivityItem item) onDelete;
+
+  // Shown centered over the (still-mounted) scrollable viewport when
+  // [items] is empty, instead of the caller swapping this whole widget
+  // out for a plain placeholder -- that swap used to unmount the
+  // SingleChildScrollView keyed by [viewportKey], which silently broke
+  // every drop onto an empty day (GroupTripPage's hit-testing had
+  // nothing to find). Null hides it.
+  final String? emptyHint;
+
+  // The viewport key + scroll controller are owned by the parent (not
+  // created here) so they stay the same object across a day switch: a
+  // LongPressDraggable's drag session lives on past the widget that
+  // started it (Flutter keeps its recognizer alive while a drag is
+  // active even if that widget is removed from the tree), so when the
+  // parent swaps which day is on screen mid-drag, it still needs a
+  // stable handle on "whichever timeline viewport is mounted right now"
+  // to translate the drop position into a time slot.
+  final GlobalKey viewportKey;
+  final ScrollController scrollController;
+
+  final void Function(ActivityItem item)? onItemDragStarted;
+  final void Function(Offset globalPosition)? onItemDragUpdate;
+  final void Function(ActivityItem item)? onItemDragEnd;
 
   const DayTimelineView({
     super.key,
     required this.items,
-    required this.onTimeChanged,
     required this.onDelete,
+    required this.viewportKey,
+    required this.scrollController,
+    this.emptyHint,
+    this.onItemDragStarted,
+    this.onItemDragUpdate,
+    this.onItemDragEnd,
   });
 
   @override
@@ -62,26 +90,17 @@ class DayTimelineView extends StatefulWidget {
 }
 
 class _DayTimelineViewState extends State<DayTimelineView> {
-  final ScrollController _scroll = ScrollController();
-  final GlobalKey _viewportKey = GlobalKey();
-
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!_scroll.hasClients) return;
+      if (!widget.scrollController.hasClients) return;
       final earliest = widget.items.isEmpty
           ? 8 * 60
           : widget.items.map((it) => _hhmmToMinutes(it.time)).reduce((a, b) => a < b ? a : b);
       final target = _minutesToY((earliest - 60).clamp(0, _maxMinutes));
-      _scroll.jumpTo(target.clamp(0, _scroll.position.maxScrollExtent));
+      widget.scrollController.jumpTo(target.clamp(0, widget.scrollController.position.maxScrollExtent));
     });
-  }
-
-  @override
-  void dispose() {
-    _scroll.dispose();
-    super.dispose();
   }
 
   @override
@@ -93,32 +112,51 @@ class _DayTimelineViewState extends State<DayTimelineView> {
         const Padding(
           padding: EdgeInsets.only(bottom: 8),
           child: Text(
-            'Drag an activity to change its time',
+            'Long-press an activity to drag it to a new time — hold near the left/right edge of the screen to move it to another day.',
             style: TextStyle(fontSize: 11.5, color: AppColors.textGrey, fontStyle: FontStyle.italic),
           ),
         ),
         Expanded(
-          child: SingleChildScrollView(
-            key: _viewportKey,
-            controller: _scroll,
-            child: SizedBox(
-              height: totalHeight,
-              child: Stack(
-                children: [
-                  for (var h = 0; h < 24; h++) _hourRow(h),
-                  for (final item in widget.items)
-                    _TimelineChip(
-                      key: ValueKey(item.id),
-                      item: item,
-                      minutes: _hhmmToMinutes(item.time),
-                      scrollController: _scroll,
-                      viewportKey: _viewportKey,
-                      onCommit: (minutes) => widget.onTimeChanged(item, _minutesToHHMM(minutes)),
-                      onDelete: () => widget.onDelete(item),
-                    ),
-                ],
+          child: Stack(
+            children: [
+              SingleChildScrollView(
+                key: widget.viewportKey,
+                controller: widget.scrollController,
+                child: SizedBox(
+                  height: totalHeight,
+                  child: Stack(
+                    children: [
+                      for (var h = 0; h < 24; h++) _hourRow(h),
+                      for (final item in widget.items)
+                        _TimelineChip(
+                          key: ValueKey(item.id),
+                          item: item,
+                          minutes: _hhmmToMinutes(item.time),
+                          onDelete: () => widget.onDelete(item),
+                          onDragStarted: () => widget.onItemDragStarted?.call(item),
+                          onDragUpdate: (pos) => widget.onItemDragUpdate?.call(pos),
+                          onDragEnd: () => widget.onItemDragEnd?.call(item),
+                        ),
+                    ],
+                  ),
+                ),
               ),
-            ),
+              if (widget.emptyHint != null)
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: Center(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 40),
+                        child: Text(
+                          widget.emptyHint!,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(color: AppColors.textGrey),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
           ),
         ),
       ],
@@ -159,173 +197,107 @@ class _DayTimelineViewState extends State<DayTimelineView> {
   }
 }
 
-class _TimelineChip extends StatefulWidget {
+class _TimelineChip extends StatelessWidget {
   final ActivityItem item;
   final int minutes;
-  final ScrollController scrollController;
-  final GlobalKey viewportKey;
-  final void Function(int minutes) onCommit;
   final VoidCallback onDelete;
+  final VoidCallback? onDragStarted;
+  final void Function(Offset globalPosition)? onDragUpdate;
+  final VoidCallback? onDragEnd;
 
   const _TimelineChip({
     super.key,
     required this.item,
     required this.minutes,
-    required this.scrollController,
-    required this.viewportKey,
-    required this.onCommit,
     required this.onDelete,
+    this.onDragStarted,
+    this.onDragUpdate,
+    this.onDragEnd,
   });
 
   @override
-  State<_TimelineChip> createState() => _TimelineChipState();
-}
-
-class _TimelineChipState extends State<_TimelineChip> {
-  double? _dragTop;
-
-  double _autoScrollDelta = 0;
-  Timer? _autoScrollTimer;
-
-  double get _canonicalTop => _minutesToY(widget.minutes);
-  double get _effectiveTop => _dragTop ?? _canonicalTop;
-  bool get _dragging => _dragTop != null;
-
-  @override
-  void dispose() {
-    _autoScrollTimer?.cancel();
-    super.dispose();
-  }
-
-  void _updateAutoScroll(Offset globalPosition) {
-    final viewportBox = widget.viewportKey.currentContext?.findRenderObject() as RenderBox?;
-    if (viewportBox == null || !viewportBox.attached) {
-      _stopAutoScroll();
-      return;
-    }
-    final local = viewportBox.globalToLocal(globalPosition);
-    final height = viewportBox.size.height;
-    double delta = 0;
-    if (local.dy < _autoScrollEdge) {
-      final strength = ((_autoScrollEdge - local.dy) / _autoScrollEdge).clamp(0.0, 1.0);
-      delta = -_autoScrollMaxSpeed * strength;
-    } else if (local.dy > height - _autoScrollEdge) {
-      final strength = ((local.dy - (height - _autoScrollEdge)) / _autoScrollEdge).clamp(0.0, 1.0);
-      delta = _autoScrollMaxSpeed * strength;
-    }
-    _autoScrollDelta = delta;
-    if (delta != 0) {
-      _autoScrollTimer ??= Timer.periodic(_autoScrollTick, (_) => _tickAutoScroll());
-    } else {
-      _autoScrollTimer?.cancel();
-      _autoScrollTimer = null;
-    }
-  }
-
-  void _tickAutoScroll() {
-    if (!_dragging || _autoScrollDelta == 0 || !widget.scrollController.hasClients) return;
-    final position = widget.scrollController.position;
-    final newOffset = (position.pixels + _autoScrollDelta).clamp(0.0, position.maxScrollExtent);
-    final actualDelta = newOffset - position.pixels;
-    if (actualDelta == 0) return;
-    widget.scrollController.jumpTo(newOffset);
-    setState(() {
-      _dragTop = (_dragTop! + actualDelta).clamp(0.0, _minutesToY(_maxMinutes));
-    });
-  }
-
-  void _stopAutoScroll() {
-    _autoScrollTimer?.cancel();
-    _autoScrollTimer = null;
-    _autoScrollDelta = 0;
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final liveMinutes = _dragging ? _snap(_yToMinutes(_dragTop!)) : widget.minutes;
+    // GroupTripPage resolves every drop (same-day re-time, or a move to
+    // another day) itself from the raw drag position, via onDragEnd —
+    // this chip just reports drag lifecycle events upward and renders.
     return Positioned(
-      top: _effectiveTop,
+      top: _minutesToY(minutes),
       left: _rulerWidth + 8,
       right: 0,
-      child: GestureDetector(
-        onVerticalDragStart: (details) {
-          setState(() => _dragTop = _canonicalTop);
-          _updateAutoScroll(details.globalPosition);
-        },
-        onVerticalDragUpdate: (details) {
-          setState(() => _dragTop = (_dragTop! + details.delta.dy).clamp(0.0, _minutesToY(_maxMinutes)));
-          _updateAutoScroll(details.globalPosition);
-        },
-        onVerticalDragEnd: (_) {
-          _stopAutoScroll();
-          final newMinutes = _snap(_yToMinutes(_dragTop!));
-          setState(() => _dragTop = null);
-          if (newMinutes != widget.minutes) widget.onCommit(newMinutes);
-        },
-        onVerticalDragCancel: () {
-          _stopAutoScroll();
-          setState(() => _dragTop = null);
-        },
-        child: Material(
-          elevation: _dragging ? 6 : 0,
-          shadowColor: Colors.black38,
+      child: LongPressDraggable<String>(
+        data: item.id,
+        hapticFeedbackOnStart: true,
+        feedback: _chipCard(dragging: true),
+        childWhenDragging: Opacity(opacity: 0.3, child: _chipCard(dragging: false)),
+        onDragStarted: onDragStarted,
+        onDragUpdate: (details) => onDragUpdate?.call(details.globalPosition),
+        onDragEnd: (_) => onDragEnd?.call(),
+        child: _chipCard(dragging: false),
+      ),
+    );
+  }
+
+  Widget _chipCard({required bool dragging}) {
+    return Material(
+      elevation: dragging ? 6 : 0,
+      shadowColor: Colors.black38,
+      borderRadius: BorderRadius.circular(14),
+      color: Colors.transparent,
+      child: Container(
+        width: dragging ? 240 : null,
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: dragging ? Colors.white : AppColors.divider,
           borderRadius: BorderRadius.circular(14),
-          color: Colors.transparent,
-          child: Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: _dragging ? Colors.white : AppColors.divider,
-              borderRadius: BorderRadius.circular(14),
-              border: _dragging ? Border.all(color: AppColors.primary, width: 1.4) : null,
+          border: dragging ? Border.all(color: AppColors.primary, width: 1.4) : null,
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: const BoxDecoration(color: AppColors.chipGrey, shape: BoxShape.circle),
+              child: Icon(item.icon, size: 16, color: AppColors.navy),
             ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  width: 36,
-                  height: 36,
-                  decoration: const BoxDecoration(color: AppColors.chipGrey, shape: BoxShape.circle),
-                  child: Icon(widget.item.icon, size: 16, color: AppColors.navy),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        _formatTime12h(liveMinutes),
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                          color: _dragging ? AppColors.primary : AppColors.textGrey,
-                        ),
-                      ),
-                      Text(
-                        widget.item.label,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: AppColors.navy),
-                      ),
-                      if (widget.item.location.isNotEmpty)
-                        Text(
-                          widget.item.location,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 10.5, color: AppColors.textGrey),
-                        ),
-                    ],
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _formatTime12h(minutes),
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: dragging ? AppColors.primary : AppColors.textGrey,
+                    ),
                   ),
-                ),
-                GestureDetector(
-                  onTap: widget.onDelete,
-                  child: const Padding(
-                    padding: EdgeInsets.only(left: 6, top: 2),
-                    child: Icon(Icons.delete_outline, size: 18, color: Colors.redAccent),
+                  Text(
+                    item.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: AppColors.navy),
                   ),
-                ),
-              ],
+                  if (item.location.isNotEmpty)
+                    Text(
+                      item.location,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 10.5, color: AppColors.textGrey),
+                    ),
+                ],
+              ),
             ),
-          ),
+            if (!dragging)
+              GestureDetector(
+                onTap: onDelete,
+                child: const Padding(
+                  padding: EdgeInsets.only(left: 6, top: 2),
+                  child: Icon(Icons.delete_outline, size: 18, color: Colors.redAccent),
+                ),
+              ),
+          ],
         ),
       ),
     );

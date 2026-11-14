@@ -62,7 +62,7 @@
 .filter-bar .grow { flex: 1; min-width: 220px; }
 .input, .select {
   width: 100%; border: 1px solid var(--border-strong); border-radius: var(--radius-md);
-  padding: 11px 14px; background: #fff; color: var(--text-900); outline: none;
+  padding: 11px 14px; background: #fff; color: var(--text-900); outline: none; font-size: 14px;
 }
 .input:focus, .select:focus { border-color: var(--teal-600); box-shadow: 0 0 0 3px var(--teal-100); }
 .input[readonly], .input:disabled { background: #f3f5f6; color: var(--text-500); cursor: default; }
@@ -87,6 +87,37 @@
 .search-input-wrap .icon { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); stroke: var(--text-400); }
 .search-input-wrap input { padding-left: 40px; }
 
+/* Show/hide toggle sitting inside a password field (login, register, and
+   anywhere else a password is typed) — same positioned-icon idea as
+   .search-input-wrap above, mirrored to the right edge since a password
+   field has no leading icon of its own. */
+.password-input-wrap { position: relative; }
+.password-input-wrap input { padding-right: 42px; }
+.password-toggle-btn {
+  position: absolute; right: 2px; top: 50%; transform: translateY(-50%);
+  width: 34px; height: 34px; display: flex; align-items: center; justify-content: center;
+  background: none; border: none; border-radius: 8px; cursor: pointer; color: var(--text-400);
+  transition: color .15s ease, background .15s ease;
+}
+.password-toggle-btn:hover { color: var(--text-700); background: #f0f2f4; }
+
+/* Country-code + number phone field (partner register's phone field) --
+   a dial-code <select> sized to just fit "+971" etc, sitting flush
+   against a number <input> that takes the rest of the row, so it reads
+   as one control rather than two separate fields stacked oddly. */
+.phone-input-wrap { display: flex; gap: 8px; }
+.phone-input-wrap .select { width: 108px; flex: 0 0 108px; padding-right: 30px; background-position: right 8px center; }
+.phone-input-wrap input { flex: 1; min-width: 0; }
+
+/* Live password-rule checklist shown below a password field (mirrors the
+   Flutter traveller signup page's "Password must:" list exactly) --
+   used on partner register and the admin/partner change-password
+   pages. Colors are set inline per-rule by wirePasswordRules() in
+   js/ui.js since each line's color depends on whether that one rule is
+   currently met. */
+.password-rules { margin: 6px 0 0; padding: 0; }
+.password-rules li { list-style: none; font-size: 12.5px; line-height: 1.6; }
+
 /* ---------------- Table ---------------- */
 .table-wrap { border-radius: var(--radius-lg); overflow: hidden; border: 1px solid var(--border); background: #fff; }
 table.data-table { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 640px; }
@@ -110,7 +141,18 @@ table.data-table { width: 100%; border-collapse: collapse; font-size: 14px; min-
 .page-btn:disabled { opacity: .4; }
 
 .empty-state { padding: 60px 20px; text-align: center; color: var(--text-500); }
-.empty-state .icon-lg { margin: 0 auto 14px; width: 34px; height: 34px; stroke: var(--text-400); }
+/* The injected icon is an <svg class="icon">, and base.css's ".icon" rule
+   hardcodes it to 18px + display:block — that beats anything this class
+   alone tries to set on the wrapping <span>, and a block-level child
+   inside an inline <span> stops this parent's text-align:center from
+   centering it at all (the browser splits it into an anonymous block
+   instead of a normal centered inline box). Fixed by making the wrapper
+   itself inline-block (so text-align:center on .empty-state centers the
+   whole box normally) and overriding the actual icon's size via the
+   ".icon-lg .icon" descendant rule, which is more specific than base.css's
+   plain ".icon" and so actually wins. */
+.empty-state .icon-lg { display: inline-block; margin-bottom: 14px; }
+.empty-state .icon-lg .icon { width: 34px; height: 34px; stroke: var(--text-400); }
 .empty-state .h3 { margin-bottom: 6px; }
 
 /* ---------------- Badges / status pills ---------------- */
@@ -137,9 +179,21 @@ table.data-table { width: 100%; border-collapse: collapse; font-size: 14px; min-
 
 /* ---------------- Bars (simple css chart) ---------------- */
 .bars { display: flex; align-items: flex-end; gap: 14px; height: 220px; padding-top: 10px; }
-.bars .bar-col { flex: 1; display: flex; align-items: flex-end; justify-content: center; height: 100%; }
+.bars .bar-col { position: relative; flex: 1; display: flex; align-items: flex-end; justify-content: center; height: 100%; cursor: default; }
 .bars .bar { width: 60%; max-width: 34px; border-radius: 6px 6px 0 0; background: var(--teal-600); transition: height .4s ease; }
 .bars .bar.alt { background: var(--accent-indigo); }
+/* Hover tooltip showing a bar's exact value — the hover target is the
+   whole column (.bar-col fills the chart's full height), not just the
+   bar itself, so a near-zero bar is still easy to hover. Pure CSS,
+   driven by a data-tooltip attribute every .bar-col chart sets. */
+.bars .bar-col[data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%);
+  background: var(--navy-800); color: #fff; font-size: 11.5px; font-weight: 700;
+  padding: 4px 9px; border-radius: 6px; white-space: nowrap;
+  opacity: 0; pointer-events: none; transition: opacity .12s ease; z-index: 5;
+}
+.bars .bar-col[data-tooltip]:hover::after { opacity: 1; }
 .bars-labels { display: flex; gap: 14px; margin-top: 8px; }
 .bars-labels span { flex: 1; text-align: center; font-size: 11.5px; color: var(--text-500); }
 
@@ -157,6 +211,7 @@ table.data-table { width: 100%; border-collapse: collapse; font-size: 14px; min-
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px 24px; }
 @media (max-width: 700px) { .form-grid { grid-template-columns: 1fr; } }
 .field label { display: block; font-size: 13px; font-weight: 700; color: var(--text-700); margin-bottom: 7px; }
+.field label .req { color: var(--red-text); margin-left: 2px; }
 .hint { font-size: 12px; color: var(--text-400); margin-top: 6px; }
 .form-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 24px; }
 .form-actions.split { justify-content: space-between; }
@@ -198,12 +253,23 @@ table.data-table { width: 100%; border-collapse: collapse; font-size: 14px; min-
 /* ---------------- Tabs ---------------- */
 .tabs { display: flex; gap: 6px; border-bottom: 1px solid var(--border); margin-bottom: 22px; }
 .tab-btn {
+  position: relative;
   padding: 12px 6px; margin-right: 20px; font-weight: 700; font-size: 14px; color: var(--text-500);
   background: none; border: none; border-radius: 0; border-bottom: 2px solid transparent;
   cursor: pointer; transition: color .15s ease, border-color .15s ease;
 }
 .tab-btn:hover { color: var(--navy-800); }
 .tab-btn.active { color: var(--navy-800); border-color: var(--teal-600); }
+/* A tab whose content needs the admin's attention (e.g. Place
+   Suggestions with items pending review) — same red-dot language as
+   .bell-dot above, sized for sitting on a text tab instead of a
+   button. Hidden by default; JS shows it once it knows there's
+   something to act on. */
+.tab-alert-dot {
+  position: absolute; top: 8px; right: -4px;
+  width: 8px; height: 8px; border-radius: 50%;
+  background: #ff4d4f; border: 2px solid #fff;
+}
 
 /* ---------------- Misc ---------------- */
 .avatar-fallback {
@@ -239,8 +305,23 @@ table.data-table { width: 100%; border-collapse: collapse; font-size: 14px; min-
 }
 .tag-input-box:focus-within { border-color: var(--teal-600); box-shadow: 0 0 0 3px var(--teal-100); }
 .tag-input-box input {
-  border: none; outline: none; flex: 1; min-width: 120px; padding: 4px 2px; font-size: 13.5px; background: transparent;
+  border: none; outline: none; flex: 1; min-width: 120px; padding: 4px 2px; font-size: 14px; background: transparent;
 }
+
+/* ---------------- Preset chip picker (click to toggle, e.g. cuisine tags) ---------------- */
+.chip-picker { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip-toggle {
+  display: inline-flex; align-items: center; border: 1px solid var(--border-strong); border-radius: var(--radius-pill);
+  padding: 7px 14px; font-size: 13px; font-weight: 600; background: #fff; color: var(--text-700); cursor: pointer;
+}
+.chip-toggle:hover { border-color: var(--teal-600); }
+.chip-toggle.active { background: var(--teal-100); border-color: var(--teal-600); color: var(--navy-800); }
+.chip-picker-add {
+  display: inline-flex; align-items: center; border: 1px dashed var(--border-strong); border-radius: var(--radius-pill);
+  padding: 7px 14px; min-width: 150px;
+}
+.chip-picker-add input { border: none; outline: none; background: transparent; font-size: 13px; width: 100%; color: var(--text-700); }
+.chip-picker-add:focus-within { border-color: var(--teal-600); }
 .chip {
   display: inline-flex; align-items: center; gap: 6px; background: var(--teal-100); color: var(--navy-800);
   border-radius: var(--radius-pill); padding: 5px 8px 5px 12px; font-size: 12.5px; font-weight: 700; white-space: nowrap;

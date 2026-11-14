@@ -144,7 +144,7 @@ class _CreatePlanWizardState extends State<CreatePlanWizard> {
         Expanded(
           child: _stepBody(
             title: "Who's travelling?",
-            subtitle: 'Add your companions and preferences',
+            subtitle: 'Add anyone else joining this trip',
             children: [
               const Text('Travellers', style: TextStyle(fontSize: 12.5, color: AppColors.textGrey)),
               const SizedBox(height: 8),

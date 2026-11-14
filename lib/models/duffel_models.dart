@@ -1,5 +1,52 @@
 library;
 
+/// One entry from Duffel's `/places/suggestions` -- either a `city`
+/// (an IATA metropolitan area covering several airports, e.g. "London"
+/// for LHR/LGW/STN/...) or a single `airport`. Powers the From/To
+/// route search added to the flight Filter sheet (filter_page.dart) --
+/// previously this same endpoint was only ever used internally
+/// (DuffelApiService.resolveDestinationCode/_resolveViaPlacesSuggestions)
+/// to silently guess one best match; this exposes the real suggestion
+/// list to the UI instead, the way Skyscanner's own From/To fields work.
+class DuffelPlace {
+  final String id;
+  final String type; // 'city' | 'airport'
+  final String name;
+  final String iataCode;
+  final String? cityName;
+  final String? iataCountryCode;
+  const DuffelPlace({
+    required this.id,
+    required this.type,
+    required this.name,
+    required this.iataCode,
+    this.cityName,
+    this.iataCountryCode,
+  });
+
+  /// "Heathrow (LHR)" / "London (LON)" -- the code shown is the airport's
+  /// own IATA code for an `airport`, or the metro area's own IATA city
+  /// code for a `city` (covers every airport in it, same as Skyscanner's
+  /// "(Any)" option for a multi-airport city).
+  String get displayLabel => '$name ($iataCode)';
+
+  /// Secondary line under the name in a suggestions list -- the city an
+  /// airport belongs to, or the country a city is in. Null when Duffel
+  /// didn't send one (nothing useful to add under the name then).
+  String? get subtitle => type == 'airport' ? cityName : iataCountryCode;
+
+  factory DuffelPlace.fromJson(Map<String, dynamic> json) {
+    return DuffelPlace(
+      id: (json['id'] as String?) ?? '',
+      type: (json['type'] as String?) ?? '',
+      name: (json['name'] as String?) ?? '',
+      iataCode: (json['iata_code'] as String?) ?? '',
+      cityName: json['city_name'] as String?,
+      iataCountryCode: json['iata_country_code'] as String?,
+    );
+  }
+}
+
 class DuffelFlightOffer {
   final String id;
   final String airlineName;

@@ -79,6 +79,22 @@ class CurrencyService {
     return amount / fromRate * toRate;
   }
 
+  /// Same as [convert], but for a caller that needs a real number no
+  /// matter what -- not just a display string -- such as the actual
+  /// amount charged to a card. Falls back to [amount] unchanged (still
+  /// denominated in [from]) when [to] is missing or rates aren't loaded
+  /// yet, rather than handing back null and forcing every call site to
+  /// repeat that fallback itself.
+  double convertOrSame(double amount, {required String from, String? to}) {
+    if (to == null || to.isEmpty) return amount;
+    return convert(amount, from: from, to: to) ?? amount;
+  }
+
+  /// The short symbol/code [format] would show for [code] on its own,
+  /// for a caller building up its own composite price string (e.g. "RM
+  /// 12.00/day x 3 day(s)") instead of converting one whole amount.
+  String displayLabel(String code) => _displayLabel(code);
+
   String _displayLabel(String code) {
     switch (code.toUpperCase()) {
       case 'MYR':

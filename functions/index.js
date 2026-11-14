@@ -20,14 +20,9 @@ exports.createPaymentIntent = onCall({ secrets: [stripeSecretKey] }, async (requ
     throw new HttpsError("invalid-argument", "currency must be a 3-letter ISO code, e.g. 'myr'.");
   }
 
-  // FR04 step-up: a payment needs an email code confirmed in the last 10 minutes
-  // (verifyCode with purpose "payment" writes step_up/{uid}.payment).
-  const { getFirestore } = require("firebase-admin/firestore");
-  const stepUp = (await getFirestore().collection("step_up").doc(request.auth.uid).get()).data() || {};
-  if (!(typeof stepUp.payment === "number" && stepUp.payment > Date.now())) {
-    throw new HttpsError("failed-precondition", "Confirm the payment with the code sent to your email first.");
-  }
-
+  // FR04 is login-only 2FA (see functions/email_code.js) -- a payment
+  // itself never needs its own extra email code, so this just creates
+  // the PaymentIntent directly.
   const stripe = new Stripe(stripeSecretKey.value());
   let paymentIntent;
   try {
@@ -55,3 +50,17 @@ exports.summariseDiscussion = require("./discussion_summary").summariseDiscussio
 const emailCode = require("./email_code");
 exports.sendVerificationCode = emailCode.sendVerificationCode;
 exports.verifyCode = emailCode.verifyCode;
+
+exports.remindUnpaidExpenses = require("./expense_reminders").remindUnpaidExpenses;
+
+exports.cleanupReadNotifications = require("./notification_cleanup").cleanupReadNotifications;
+
+exports.sendPolicyEmail = require("./policy_email").sendPolicyEmail;
+
+exports.notifyPostRejected = require("./post_rejected_email").notifyPostRejected;
+
+exports.moderateText = require("./content_moderation").moderateText;
+
+const paypal = require("./paypal");
+exports.createPaypalOrder = paypal.createPaypalOrder;
+exports.capturePaypalOrder = paypal.capturePaypalOrder;

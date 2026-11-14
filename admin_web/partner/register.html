@@ -6,8 +6,8 @@
 <title>Register — Voya Insurance Partner</title>
 <link rel="stylesheet" href="../css/tokens.css?v=20261006b" />
 <link rel="stylesheet" href="../css/base.css?v=20261006b" />
-<link rel="stylesheet" href="../css/components.css?v=20261021c" />
-<link rel="stylesheet" href="../css/auth.css?v=20261006b" />
+<link rel="stylesheet" href="../css/components.css?v=20261106g" />
+<link rel="stylesheet" href="../css/auth.css?v=20261111a" />
 <style>.auth-card{max-width:520px;}</style>
 </head>
 <body>
@@ -38,8 +38,23 @@
           <input class="input" id="registrationNumber" placeholder="Company registration number" required />
         </div>
         <div class="auth-field">
+          <label for="licenseNumber">Insurance license number</label>
+          <input class="input" id="licenseNumber" placeholder="Your regulator-issued license number" required />
+        </div>
+        <div class="auth-field">
+          <label for="countryOfRegistration">Country of registration</label>
+          <select class="select" id="countryOfRegistration" required><option value="">Select a country…</option></select>
+        </div>
+        <div class="auth-field">
+          <label for="website">Official website <span class="muted small">(optional)</span></label>
+          <input class="input" id="website" type="url" placeholder="https://www.yourcompany.com" />
+        </div>
+        <div class="auth-field">
           <label for="phone">Phone</label>
-          <input class="input" id="phone" placeholder="Company phone" required />
+          <div class="phone-input-wrap">
+            <select class="select" id="phoneDialCode"></select>
+            <input class="input" id="phone" placeholder="Company phone number" required />
+          </div>
         </div>
         <div class="auth-field">
           <label for="email">Work email</label>
@@ -47,11 +62,18 @@
         </div>
         <div class="auth-field">
           <label for="password">Password</label>
-          <input class="input" type="password" id="password" placeholder="At least 8 characters" required autocomplete="new-password" minlength="8" />
+          <div class="password-input-wrap">
+            <input class="input" type="password" id="password" placeholder="Create a password" required autocomplete="new-password" />
+            <button type="button" class="password-toggle-btn" id="togglePassword" tabindex="-1" aria-label="Show password"><span data-icon="eye" data-icon-size="18"></span></button>
+          </div>
+          <ul class="password-rules" id="passwordRules"></ul>
         </div>
         <div class="auth-field">
           <label for="confirmPassword">Confirm password</label>
-          <input class="input" type="password" id="confirmPassword" placeholder="Re-enter your password" required autocomplete="new-password" minlength="8" />
+          <div class="password-input-wrap">
+            <input class="input" type="password" id="confirmPassword" placeholder="Re-enter your password" required autocomplete="new-password" minlength="8" />
+            <button type="button" class="password-toggle-btn" id="toggleConfirmPassword" tabindex="-1" aria-label="Show password"><span data-icon="eye" data-icon-size="18"></span></button>
+          </div>
         </div>
         <button class="btn btn-primary btn-block" type="submit" id="submitBtn">Create partner account</button>
       </form>
@@ -61,11 +83,20 @@
 </div>
 
 <script type="module">
-import { mountIcons } from "../js/icons.js?v=20261021";
-import { registerWithRole, authErrorMessage } from "../js/auth-guard.js?v=20261021";
-import { setBusy } from "../js/ui.js?v=20261021";
+import { mountIcons } from "../js/icons.js?v=20261106c";
+import { COUNTRY_OPTIONS } from "../js/countries.js?v=20261113a";
+import { DIAL_CODES, DEFAULT_DIAL_CODE } from "../js/dial_codes.js?v=20261114a";
+import { registerWithRole, authErrorMessage } from "../js/auth-guard.js?v=20261106b";
+import { setBusy, isValidEmail, wirePasswordToggle, wirePasswordRules } from "../js/ui.js?v=20261114a";
 
 mountIcons(document);
+document.getElementById("countryOfRegistration").innerHTML =
+  '<option value="">Select a country…</option>' + COUNTRY_OPTIONS.map((c) => `<option>${c}</option>`).join("");
+document.getElementById("phoneDialCode").innerHTML =
+  DIAL_CODES.map((d) => `<option value="${d.code}"${d.code === DEFAULT_DIAL_CODE ? " selected" : ""}>${d.code} ${d.name}</option>`).join("");
+wirePasswordToggle("password", "togglePassword");
+wirePasswordToggle("confirmPassword", "toggleConfirmPassword");
+const { isPasswordValid } = wirePasswordRules("password", "passwordRules");
 const errBox = document.getElementById("authError");
 
 document.getElementById("regForm").addEventListener("submit", async (e) => {
@@ -73,12 +104,42 @@ document.getElementById("regForm").addEventListener("submit", async (e) => {
   errBox.classList.remove("show");
   const companyName = document.getElementById("companyName").value.trim();
   const registrationNumber = document.getElementById("registrationNumber").value.trim();
-  const phone = document.getElementById("phone").value.trim();
+  const licenseNumber = document.getElementById("licenseNumber").value.trim();
+  const countryOfRegistration = document.getElementById("countryOfRegistration").value;
+  const website = document.getElementById("website").value.trim();
+  const phoneDialCode = document.getElementById("phoneDialCode").value;
+  const phoneNumber = document.getElementById("phone").value.trim();
+  const phone = phoneNumber ? `${phoneDialCode} ${phoneNumber}` : "";
   const email = document.getElementById("email").value;
   const password = document.getElementById("password").value;
   const confirmPassword = document.getElementById("confirmPassword").value;
-  if (password.length < 8) {
-    errBox.textContent = "Password must be at least 8 characters.";
+  if (!licenseNumber) {
+    errBox.textContent = "Your insurance license number is required.";
+    errBox.classList.add("show");
+    return;
+  }
+  if (!countryOfRegistration) {
+    errBox.textContent = "Please select your country of registration.";
+    errBox.classList.add("show");
+    return;
+  }
+  if (website && !/^https?:\/\/.+\..+/i.test(website)) {
+    errBox.textContent = "That website URL doesn't look valid -- include https://.";
+    errBox.classList.add("show");
+    return;
+  }
+  if (!/\d/.test(phoneNumber)) {
+    errBox.textContent = "Please enter a phone number.";
+    errBox.classList.add("show");
+    return;
+  }
+  if (!isValidEmail(email)) {
+    errBox.textContent = "That email address doesn't look valid.";
+    errBox.classList.add("show");
+    return;
+  }
+  if (!isPasswordValid()) {
+    errBox.textContent = "Please meet all the password requirements below.";
     errBox.classList.add("show");
     return;
   }
@@ -94,11 +155,22 @@ document.getElementById("regForm").addEventListener("submit", async (e) => {
       companyName,
       providerId: companyName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, ""),
       registrationNumber,
+      licenseNumber,
+      countryOfRegistration,
+      website,
       phone,
       supportEmail: email.trim().toLowerCase(),
       logoUrl: "",
       address: { line1: "", city: "", state: "", postalCode: "" },
-      contact: { fullName: "", designation: "", email: email.trim().toLowerCase(), phone },
+      // All four primary-contact fields start genuinely blank, not
+        // pre-filled from the account's own email/phone -- a partner who
+        // hasn't designated a specific contact person yet should see that
+        // honestly reflected as "not set" everywhere (organization.html's
+        // own Primary Contact section, and the admin's partner detail
+        // popup), not have email/phone silently duplicated from the
+        // account while fullName/designation stay blank, which looked
+        // like real, distinct contact info that was never actually given.
+        contact: { fullName: "", designation: "", email: "", phone: "" },
       status: "pending",
     });
     location.href = "dashboard.html?welcome=1";

@@ -6,8 +6,8 @@
 <title>Notifications — Voya Insurance Partner</title>
 <link rel="stylesheet" href="../css/tokens.css?v=20261021" />
 <link rel="stylesheet" href="../css/base.css?v=20261021" />
-<link rel="stylesheet" href="../css/layout.css?v=20261021" />
-<link rel="stylesheet" href="../css/components.css?v=20261021c" />
+<link rel="stylesheet" href="../css/layout.css?v=20261111a" />
+<link rel="stylesheet" href="../css/components.css?v=20261106g" />
 </head>
 <body>
 <div class="shell">
@@ -35,17 +35,22 @@
     <div id="statusCard" class="card card-pad">
       <div class="skeleton" style="height:90px;"></div>
     </div>
+
+    <div class="card card-pad" id="activitySection" style="margin-top:18px;display:none;">
+      <div id="activityList" style="display:flex;flex-direction:column;gap:10px;margin-top:4px;"></div>
+    </div>
   </main>
 </div>
 
 <script type="module">
-import { requireRole, logout } from "../js/auth-guard.js?v=20261021";
-import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261021";
-import { mountIcons } from "../js/icons.js?v=20261021";
-import { fullDate, timeAgo, escapeHtml } from "../js/ui.js?v=20261021";
+import { requireRole, logout } from "../js/auth-guard.js?v=20261106b";
+import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261114a";
+import { mountIcons } from "../js/icons.js?v=20261106c";
+import { listClaims, listRefunds, listPartnerDismissedNoticeKeys, dismissPartnerNotice, listPartnerSeenNoticeKeys, markPartnerNoticeSeen } from "../js/data.js?v=20261114c";
+import { fullDate, timeAgo, escapeHtml, moneyExact, toast, setBusy } from "../js/ui.js?v=20261113a";
 
 // skipStatusGate: true — without it, requireRole() would redirect a
-// rejected/blocked partner back to THIS page in a loop (that redirect is
+// rejected partner back to THIS page in a loop (that redirect is
 // what sends them here in the first place for every OTHER partner page).
 // An approved/pending/suspended partner reaches this page normally too —
 // not via a permanent "Notifications" nav tab (removed; see
@@ -56,42 +61,161 @@ const session = await requireRole("partner", "login.html", { skipStatusGate: tru
 
 if (session) {
   setSidebarUser({ displayName: session.profile.companyName || "Partner", roleLabel: `${session.profile.companyName || "Insurance"} · Insurance Partner` });
-  // A rejected/blocked partner can't reach the Dashboard at all (they'd
+  // A rejected partner can't reach the Dashboard at all (they'd
   // just get redirected straight back here) — only show the link back
   // for a status that can actually view it.
   if (session.profile.status === "approved" || session.profile.status === "pending" || session.profile.status === "suspended" || !session.profile.status) {
     document.getElementById("backToDashboard").style.display = "";
   }
   render(session.profile);
+  await loadActivity(session.uid);
+  // Same bfcache gotcha as admin/notifications.html -- clicking a notice
+  // navigates away with location.href, and hitting Back afterwards can
+  // restore this exact page from the back/forward cache instead of
+  // re-running this script, so the read state the click just wrote never
+  // shows up. Re-fetch whenever that happens.
+  window.addEventListener("pageshow", (e) => { if (e.persisted) loadActivity(session.uid); });
+}
+
+let activityItems = [];
+let dismissedKeys = new Set();
+let seenKeys = new Map();
+let currentPartnerId = "";
+// Unlike admin/notifications.html, nothing here ever ages out by itself:
+// every row is a claim/refund that's still status "new" (see
+// loadActivity below) -- it naturally drops off this list the moment the
+// partner actually decides it on claim-detail.html/refund-detail.html,
+// so there's no "already read, just historical" bucket to auto-expire.
+// "Seen" here only drives the read/unread look, same as the admin side.
+
+// Row style/layout matches admin/notifications.html's own notice feed
+// exactly (bordered box, icon circle, title/subtitle, dismiss button) --
+// the admin side calls it "Notifications (N)" with an "All caught up"
+// empty state, so this does too, instead of the plain list it used to be.
+async function loadActivity(partnerId) {
+  currentPartnerId = partnerId;
+  const [claims, refunds, dismissed, seen] = await Promise.all([
+    listClaims(partnerId).catch(() => []),
+    listRefunds(partnerId).catch(() => []),
+    listPartnerDismissedNoticeKeys(partnerId).catch(() => new Set()),
+    listPartnerSeenNoticeKeys(partnerId).catch(() => new Map()),
+  ]);
+  dismissedKeys = dismissed;
+  seenKeys = seen;
+  activityItems = [
+    ...claims.filter((c) => c.status === "new").map((c) => ({ kind: "claim", id: c.id, data: c })),
+    ...refunds.filter((r) => r.status === "new").map((r) => ({ kind: "refund", id: r.id, data: r })),
+  ].sort((a, b) => (b.data.createdAt?.seconds || 0) - (a.data.createdAt?.seconds || 0));
+
+  document.getElementById("activitySection").style.display = "";
+  renderActivity();
+}
+
+function renderActivity() {
+  const list = document.getElementById("activityList");
+  const items = activityItems.filter((it) => !dismissedKeys.has(`${it.kind}:${it.id}`));
+  if (!items.length) {
+    list.innerHTML = `
+      <div class="inline-flex" style="gap:14px;align-items:center;">
+        <span data-icon="check-circle" style="color:var(--teal-600);" data-icon-size="22"></span>
+        <div>
+          <h3 class="h3" style="margin-bottom:2px;">All caught up</h3>
+          <p class="muted small">Nothing needs your attention right now.</p>
+        </div>
+      </div>`;
+    mountIcons(list);
+    return;
+  }
+  list.innerHTML = `
+    <div class="section-head"><h3 class="h3">Notifications (${items.length})</h3></div>
+    <div style="display:flex;flex-direction:column;gap:10px;margin-top:4px;">
+      ${ items.map(renderActivityRow).join("") }
+    </div>`;
+  wireActivityRows(list);
+  mountIcons(list);
+}
+
+// Read/unread shown purely by the icon's color -- blue while unseen,
+// grey once opened -- same convention as admin/notifications.html, not
+// a tinted row background (that just made every row the same wash with
+// no real signal).
+function renderActivityRow(it) {
+  const d = it.data;
+  const ref = it.kind === "claim" ? d.claimRef : d.refundRef;
+  const noun = it.kind === "claim" ? "claim" : "refund";
+  const key = `${it.kind}:${it.id}`;
+  const unseen = !seenKeys.has(key);
+  const iconBg = unseen ? "var(--blue-bg)" : "#F3F3F3";
+  const iconColor = unseen ? "var(--blue-text)" : "var(--text-500)";
+  return `
+    <div class="inline-flex" style="justify-content:space-between;gap:12px;padding:14px;border:1px solid #ECECEC;border-radius:12px;cursor:pointer;" data-notice="${key}">
+      <div class="inline-flex" style="gap:12px;">
+        <div style="width:38px;height:38px;border-radius:10px;background:${iconBg};display:flex;align-items:center;justify-content:center;flex:none;">
+          <span data-icon="doc-text" style="color:${iconColor};"></span>
+        </div>
+        <div>
+          <div style="font-weight:700;font-size:13.5px;">New ${noun} — ${escapeHtml(d.planName || "—")} (${escapeHtml(ref || "—")})</div>
+          <div class="muted small">${moneyExact(d.amount)} · ${timeAgo(d.createdAt)}</div>
+        </div>
+      </div>
+      <div class="row-actions" style="flex:none;display:flex;align-items:center;gap:8px;">
+        <button class="btn btn-outline btn-sm" data-dismiss="${key}" title="Dismiss this notification"><span data-icon="x" data-icon-size="14"></span></button>
+      </div>
+    </div>`;
+}
+
+function wireActivityRows(list) {
+  list.querySelectorAll("[data-notice]").forEach((row) => {
+    row.addEventListener("click", async () => {
+      const key = row.dataset.notice;
+      const [kind, id] = key.split(":");
+      try { await markPartnerNoticeSeen(currentPartnerId, key); } catch { /* best-effort, never blocks navigation */ }
+      location.href = kind === "claim" ? `claim-detail.html?id=${id}` : `refund-detail.html?id=${id}`;
+    });
+  });
+  list.querySelectorAll("[data-dismiss]").forEach((b) => b.addEventListener("click", async (e) => {
+    e.stopPropagation();
+    const key = b.dataset.dismiss;
+    setBusy(b, true);
+    try {
+      await dismissPartnerNotice(currentPartnerId, key);
+      dismissedKeys.add(key);
+      renderActivity();
+    } catch (err) {
+      toast(err.message || "Couldn't dismiss this notification.", "error");
+      setBusy(b, false);
+    }
+  }));
 }
 
 function render(profile) {
-  const { status, companyName, rejectionReason, rejectedAt, approvedAt, blockedAt, createdAt } = profile;
+  const { status, companyName, rejectionReason, rejectedAt, createdAt } = profile;
   const card = document.getElementById("statusCard");
   const org = companyName ? escapeHtml(companyName) : "Your organization";
 
+  // An approved partner has nothing to act on here — the Dashboard
+  // already says nothing extra for "approved" (its own status bar only
+  // shows for suspended/pending, see partner/dashboard.html's
+  // showStatusBar()), so this page matches that instead of repeating a
+  // "You're all set" message that isn't a notification at all. Only the
+  // genuinely actionable statuses (pending/suspended/rejected) still get
+  // a card here, same as before.
   if (status === "approved") {
-    card.innerHTML = notice("check-circle", "green", "You're all set", `
-      <p class="muted" style="line-height:1.6;">${org} is an approved Voya insurance partner${approvedAt ? ` since ${fullDate(approvedAt)}` : ""}. You have full access to publish plans and handle claims — no new notifications right now.</p>`);
+    card.style.display = "none";
+    return;
   } else if (status === "suspended") {
     card.innerHTML = notice("alert-triangle", "amber", "Account suspended", `
       <p class="muted" style="line-height:1.6;">${org}'s account has been suspended by an admin. You won't be able to publish new plans or handle claims until an admin re-approves your account. Please contact Voya support if you have questions about why.</p>`);
   } else if (status === "rejected") {
-    const blockDate = rejectedAt?.toDate ? new Date(rejectedAt.toDate().getTime() + 30 * 24 * 60 * 60 * 1000) : null;
     card.innerHTML = notice("x-circle", "red", "Application rejected", `
       <p class="muted" style="line-height:1.6;margin-bottom:12px;">${org}'s application to become a Voya insurance partner was not approved.</p>
       ${rejectionReason
         ? `<div class="auth-error show" style="background:var(--red-bg);color:var(--red-text);">${escapeHtml(rejectionReason)}</div>`
         : `<p class="muted small" style="margin-bottom:12px;">No specific reason was given.</p>`}
       <p class="small muted" style="line-height:1.6;margin-top:12px;">
-        ${rejectedAt ? `Rejected ${fullDate(rejectedAt)} (${timeAgo(rejectedAt)}). ` : ""}
-        ${blockDate ? `If this isn't resolved, your account will be automatically blocked on <strong>${fullDate(blockDate)}</strong>.` : ""}
+        ${rejectedAt ? `Rejected ${fullDate(rejectedAt)} (${timeAgo(rejectedAt)}).` : ""}
       </p>
       <p class="small muted" style="line-height:1.6;margin-top:10px;">If you believe this was a mistake or can address the reason above, please contact Voya support to have your application reconsidered.</p>`);
-  } else if (status === "blocked") {
-    card.innerHTML = notice("x-circle", "red", "Account blocked", `
-      <p class="muted" style="line-height:1.6;">${org}'s partner account has been blocked. This happened automatically because your application's rejection was never resolved within 30 days${blockedAt ? ` (blocked ${fullDate(blockedAt)})` : ""}. You no longer have access to the Insurance Partner Console.</p>
-      <p class="small muted" style="line-height:1.6;margin-top:10px;">Please contact Voya support if you'd like to appeal this and have your account reinstated.</p>`);
   } else {
     // pending, or no status at all (shouldn't happen post-registration,
     // but treated the same as pending defensively)

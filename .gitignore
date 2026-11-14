@@ -50,3 +50,5 @@ app.*.map.json
 # Test runs (run_tests.ps1)
 test_results/
 tests/node_modules/
+
+nul

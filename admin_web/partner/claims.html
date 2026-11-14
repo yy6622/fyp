@@ -6,8 +6,8 @@
 <title>Refunds & Claims — Voya Insurance Partner</title>
 <link rel="stylesheet" href="../css/tokens.css?v=20261006b" />
 <link rel="stylesheet" href="../css/base.css?v=20261006b" />
-<link rel="stylesheet" href="../css/layout.css?v=20261021" />
-<link rel="stylesheet" href="../css/components.css?v=20261021c" />
+<link rel="stylesheet" href="../css/layout.css?v=20261111a" />
+<link rel="stylesheet" href="../css/components.css?v=20261106g" />
 </head>
 <body>
 <div class="shell">
@@ -27,10 +27,7 @@
       <div>
         <button class="menu-toggle" id="menuToggle"><span data-icon="menu"></span></button>
         <h1 class="h1">Refunds & Claims</h1>
-        <p class="subtitle">Manage and review claim and refund submissions</p>
-      </div>
-      <div class="inline-flex">
-        <button class="btn btn-primary" id="newBtn"><span data-icon="plus"></span>New claim</button>
+        <p class="subtitle">Review claims and refunds filed by travellers</p>
       </div>
     </div>
 
@@ -42,13 +39,27 @@
     <div class="stat-grid" id="statGrid"><div class="skeleton" style="height:90px;grid-column:1/-1;"></div></div>
 
     <div class="filter-bar">
-      <div class="search-input-wrap"><span data-icon="search"></span><input class="input" id="searchInput" placeholder="Search…" /></div>
+      <div class="search-input-wrap"><span data-icon="search"></span><input class="input" id="searchInput" placeholder="Search policyholder or reference…" /></div>
       <select class="select" id="statusFilter">
         <option value="">All status</option>
         <option value="new">New</option>
         <option value="under_review">Under review</option>
         <option value="approved">Approved</option>
         <option value="rejected">Rejected</option>
+      </select>
+      <select class="select" id="planFilter">
+        <option value="">All plans</option>
+      </select>
+      <div class="inline-flex" style="gap:6px;">
+        <input type="date" class="input" id="filedFrom" style="width:150px;" title="Filed from" />
+        <span class="muted small">to</span>
+        <input type="date" class="input" id="filedTo" style="width:150px;" title="Filed to" />
+      </div>
+      <select class="select" id="sortFilter">
+        <option value="date_desc">Newest first</option>
+        <option value="date_asc">Oldest first</option>
+        <option value="amount_desc">Amount: high to low</option>
+        <option value="amount_asc">Amount: low to high</option>
       </select>
     </div>
 
@@ -70,50 +81,21 @@
   </main>
 </div>
 
-<div class="modal-backdrop" id="newModal">
-  <div class="modal">
-    <div class="modal-head"><h3 class="h2" id="newModalTitle">New claim</h3><button class="modal-close" data-close><span data-icon="x"></span></button></div>
-    <p class="muted small" id="newModalHint" style="margin-bottom:18px;">The mobile app doesn't have a claim-submission flow yet, so file one here on a policyholder's behalf (e.g. when they call or email support).</p>
-    <div class="form-grid">
-      <div class="field"><label>Policyholder name</label><input class="input" id="nName" /></div>
-      <div class="field"><label>Policyholder email</label><input class="input" id="nEmail" type="email" /></div>
-      <div class="field"><label>Plan</label><input class="input" id="nPlan" placeholder="e.g. Health Shield Gold" /></div>
-      <div class="field"><label id="nCategoryLabel">Category</label>
-        <select class="select" id="nCategory"></select>
-      </div>
-      <div class="field" style="grid-column:1/-1;"><label id="nAmountLabel">Amount claimed (RM)</label><input class="input" id="nAmount" type="number" /></div>
-    </div>
-    <div class="form-actions">
-      <button class="btn btn-outline" data-close>Cancel</button>
-      <button class="btn btn-primary" id="saveNewBtn">Submit claim</button>
-    </div>
-  </div>
-</div>
-
 <script type="module">
-import { requireRole } from "../js/auth-guard.js?v=20261021";
-import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261021";
-import { mountIcons } from "../js/icons.js?v=20261021";
-import { listClaims, createClaim, listRefunds, createRefund } from "../js/data.js?v=20261021";
-import { number, moneyExact, statusBadge, escapeHtml, paginate, renderPager, toast, setBusy, openModal, closeModal, wireModalDismiss, statCard, trendDelta, countByStatusInMonth } from "../js/ui.js?v=20261021";
-
-const CLAIM_CATEGORIES = ["Medical", "Trip Cancellation", "Baggage Loss", "Flight Delay"];
-const REFUND_CATEGORIES = ["Policy Cancellation", "Duplicate Payment", "Overpayment", "Premium Refund", "Service Not Rendered"];
+import { requireRole } from "../js/auth-guard.js?v=20261106b";
+import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261114a";
+import { mountIcons } from "../js/icons.js?v=20261106c";
+import { listClaims, listRefunds } from "../js/data.js?v=20261114c";
+import { number, moneyExact, statusBadge, escapeHtml, paginate, renderPager, statCard, trendDelta, countByStatusInMonth } from "../js/ui.js?v=20261113a";
 
 mountSidebarNav({ role: "partner", active: "claims" });
 const session = await requireRole("partner", "login.html");
 let items = [], filtered = [], page = 1;
 let type = new URLSearchParams(location.search).get("type") === "refund" ? "refund" : "claim";
 const PAGE_SIZE = 8;
-// Same approval gate as Insurance Plans — firestore.rules' claims/refunds
-// create now also checks the partner's own status, this just keeps the
-// button from offering an action that would fail.
-const isApproved = session?.profile.status === "approved";
 
 if (session) {
   setSidebarUser({ displayName: session.profile.companyName || "Partner", roleLabel: `${session.profile.companyName || "Insurance"} · Insurance Partner` });
-  wireModalDismiss();
-  if (!isApproved) document.getElementById("newBtn").style.display = "none";
   setTab(type);
   await load();
 }
@@ -123,7 +105,6 @@ function setTab(nextType) {
   document.querySelectorAll(".tab-btn").forEach((b) => b.classList.toggle("active", b.dataset.type === type));
   const isClaim = type === "claim";
   document.getElementById("refColHead").textContent = isClaim ? "Claim ID" : "Refund ID";
-  document.getElementById("newBtn").innerHTML = `<span data-icon="plus"></span>New ${isClaim ? "claim" : "refund"}`;
   document.getElementById("emptyTitle").textContent = isClaim ? "No claims yet" : "No refunds yet";
   document.getElementById("emptyBody").textContent = isClaim
     ? "Claims submitted for your plans will show up here."
@@ -156,17 +137,49 @@ async function load() {
     statCard("Approved", number(items.filter((c) => c.status === "approved").length), "check-circle", approvedDelta),
     statCard("Rejected", number(items.filter((c) => c.status === "rejected").length), "x-circle", rejectedDelta),
   ].join("");
+  populatePlanFilter();
   applyFilters();
   mountIcons(document);
+}
+
+function populatePlanFilter() {
+  const select = document.getElementById("planFilter");
+  const plans = [...new Set(items.map((c) => (c.planName || "").trim()).filter(Boolean))].sort();
+  const current = select.value;
+  select.innerHTML = '<option value="">All plans</option>' + plans.map((p) => `<option value="${escapeHtml(p)}">${escapeHtml(p)}</option>`).join("");
+  select.value = current;
 }
 
 function applyFilters() {
   const q = document.getElementById("searchInput").value.trim().toLowerCase();
   const status = document.getElementById("statusFilter").value;
+  const plan = document.getElementById("planFilter").value;
+  const filedFrom = document.getElementById("filedFrom").value ? new Date(document.getElementById("filedFrom").value) : null;
+  const filedTo = document.getElementById("filedTo").value ? new Date(document.getElementById("filedTo").value + "T23:59:59") : null;
+  const sort = document.getElementById("sortFilter").value;
   const refField = type === "claim" ? "claimRef" : "refundRef";
-  filtered = items.filter((c) => (!q || (c.policyholderName || "").toLowerCase().includes(q) || (c[refField] || "").toLowerCase().includes(q)) && (!status || c.status === status));
+  filtered = items.filter((c) => {
+    const matchesQ = !q || (c.policyholderName || "").toLowerCase().includes(q) || (c[refField] || "").toLowerCase().includes(q);
+    const matchesStatus = !status || c.status === status;
+    const matchesPlan = !plan || (c.planName || "").trim() === plan;
+    const filedAt = c.createdAt?.toDate ? c.createdAt.toDate() : null;
+    const matchesFrom = !filedFrom || (filedAt && filedAt >= filedFrom);
+    const matchesTo = !filedTo || (filedAt && filedAt <= filedTo);
+    return matchesQ && matchesStatus && matchesPlan && matchesFrom && matchesTo;
+  });
+  filtered = sortClaims(filtered, sort);
   page = 1;
   renderTable();
+}
+
+function sortClaims(list, sort) {
+  const sorted = [...list];
+  const dateOf = (c) => (c.createdAt?.toDate ? c.createdAt.toDate().getTime() : 0);
+  if (sort === "amount_desc") sorted.sort((a, b) => (Number(b.amount) || 0) - (Number(a.amount) || 0));
+  else if (sort === "amount_asc") sorted.sort((a, b) => (Number(a.amount) || 0) - (Number(b.amount) || 0));
+  else if (sort === "date_asc") sorted.sort((a, b) => dateOf(a) - dateOf(b));
+  else sorted.sort((a, b) => dateOf(b) - dateOf(a)); // date_desc, and the default
+  return sorted;
 }
 
 function renderTable() {
@@ -196,54 +209,10 @@ function renderTable() {
 
 document.getElementById("searchInput").addEventListener("input", applyFilters);
 document.getElementById("statusFilter").addEventListener("change", applyFilters);
-
-document.getElementById("newBtn").addEventListener("click", () => {
-  const isClaim = type === "claim";
-  document.getElementById("newModalTitle").textContent = isClaim ? "New claim" : "New refund";
-  document.getElementById("newModalHint").textContent = isClaim
-    ? "The mobile app doesn't have a claim-submission flow yet, so file one here on a policyholder's behalf (e.g. when they call or email support)."
-    : "File a refund here on a policyholder's behalf (e.g. a cancelled policy or a duplicate payment).";
-  document.getElementById("nCategoryLabel").textContent = isClaim ? "Category" : "Reason";
-  document.getElementById("nAmountLabel").textContent = isClaim ? "Amount claimed (RM)" : "Amount to refund (RM)";
-  const options = isClaim ? CLAIM_CATEGORIES : REFUND_CATEGORIES;
-  document.getElementById("nCategory").innerHTML = options.map((c) => `<option>${escapeHtml(c)}</option>`).join("");
-  document.getElementById("saveNewBtn").textContent = isClaim ? "Submit claim" : "Submit refund";
-  document.getElementById("nName").value = "";
-  document.getElementById("nEmail").value = "";
-  document.getElementById("nPlan").value = "";
-  document.getElementById("nAmount").value = "";
-  openModal("newModal");
-});
-
-document.getElementById("saveNewBtn").addEventListener("click", async () => {
-  const policyholderName = document.getElementById("nName").value.trim();
-  if (!policyholderName) { toast("Policyholder name is required.", "error"); return; }
-  const isClaim = type === "claim";
-  const btn = document.getElementById("saveNewBtn");
-  setBusy(btn, true, isClaim ? "Submitting…" : "Saving…");
-  try {
-    const payload = {
-      partnerId: session.uid,
-      providerName: session.profile.companyName || "Partner",
-      policyholderName,
-      policyholderEmail: document.getElementById("nEmail").value.trim(),
-      planName: document.getElementById("nPlan").value.trim(),
-      category: document.getElementById("nCategory").value,
-      amount: Number(document.getElementById("nAmount").value) || 0,
-      documents: [],
-      assignee: { name: session.profile.contact?.fullName || "Unassigned", role: isClaim ? "Claims Officer" : "Refunds Officer" },
-      status: "new",
-    };
-    if (isClaim) await createClaim(payload); else await createRefund(payload);
-    closeModal("newModal");
-    toast(isClaim ? "Claim submitted." : "Refund submitted.", "success");
-    await load();
-  } catch (err) {
-    toast(err.message || "Couldn't save.", "error");
-  } finally {
-    setBusy(btn, false);
-  }
-});
+document.getElementById("planFilter").addEventListener("change", applyFilters);
+document.getElementById("filedFrom").addEventListener("change", applyFilters);
+document.getElementById("filedTo").addEventListener("change", applyFilters);
+document.getElementById("sortFilter").addEventListener("change", applyFilters);
 
 </script>
 </body>

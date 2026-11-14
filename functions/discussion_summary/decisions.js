@@ -14,7 +14,7 @@ function applyToSummary(result, decisions) {
       const d = decisions[it.messageId];
       if (!d) continue;
       it.status = effectiveStatus(d, it.status);
-      it.decided = { status: d.status, byName: d.byName || "", memberNames: d.memberNames || [], voteTitle: d.voteTitle || "" };
+      it.decided = { status: d.status, byName: d.byName || "", memberNames: d.memberNames || [], voteTitle: d.voteTitle || "", voteId: d.voteId || "" };
     }
     sec.items.sort((a, b) => order[a.status] - order[b.status]);
   }

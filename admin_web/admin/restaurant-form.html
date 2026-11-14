@@ -6,8 +6,8 @@
 <title>Add Restaurant — Voya Admin</title>
 <link rel="stylesheet" href="../css/tokens.css?v=20261022" />
 <link rel="stylesheet" href="../css/base.css?v=20261022" />
-<link rel="stylesheet" href="../css/layout.css?v=20261022" />
-<link rel="stylesheet" href="../css/components.css?v=20261022" />
+<link rel="stylesheet" href="../css/layout.css?v=20261111a" />
+<link rel="stylesheet" href="../css/components.css?v=20261106g" />
 </head>
 <body>
 <div class="shell">
@@ -35,39 +35,42 @@
     </div>
 
     <div class="card card-pad">
+      <div id="suggestionBanner" class="card-pad" style="display:none;background:var(--teal-100);border-radius:12px;margin-bottom:18px;">
+        <p class="small" style="color:var(--navy-800);font-weight:700;margin-bottom:2px;">Completing a traveller's suggestion</p>
+        <p class="small" style="color:var(--text-700);">Name, location and description are already filled in from what they submitted — check them, add a cuisine tag, and fill in anything else before saving.</p>
+      </div>
       <div class="form-section">
         <div class="form-section-title"><span data-icon="coin"></span>Basic info</div>
         <div class="form-grid">
-          <div class="field" style="grid-column:1/-1;"><label>Name</label><input class="input" id="fName" placeholder="e.g. Gasthof Krone" /></div>
           <div class="field" style="grid-column:1/-1;">
-            <label>Cuisine tags</label>
-            <div class="tag-input-box" id="cuisineBox"><input placeholder="Type a cuisine and press Enter… e.g. Japanese" /></div>
-            <p class="hint">Shown as the restaurant's cuisine chips (e.g. "Japanese", "Ramen").</p>
+            <label>Name <span class="req">*</span></label>
+            <div style="display:flex;gap:8px;">
+              <input class="input" id="fName" placeholder="e.g. Gasthof Krone — or just type a name/location to search" style="flex:1;" />
+              <button type="button" class="btn btn-outline btn-icon" id="osmFindBtn" title="Find on OpenStreetMap and auto-fill the fields below">
+                <span data-icon="search" data-icon-size="16"></span>
+              </button>
+            </div>
+            <p class="hint" id="osmFindStatus">Type a name or a location, then click the search button to auto-fill the fields below from OpenStreetMap. You can still edit anything afterwards.</p>
           </div>
-          <div class="field"><label>Location</label><input class="input" id="fLocation" placeholder="e.g. Asakusa, Tokyo" /></div>
+          <div class="field" style="grid-column:1/-1;">
+            <label>Cuisine tags <span class="req">*</span></label>
+            <div class="chip-picker" id="cuisineBox"></div>
+            <p class="hint">Pick every cuisine that genuinely fits — travellers use these to filter Explore, and the app uses them to recommend this place to people who like similar food.</p>
+          </div>
+          <div class="field"><label>Location <span class="req">*</span></label><input class="input" id="fLocation" placeholder="e.g. Asakusa, Tokyo" /></div>
+          <div class="field">
+            <label>Status</label>
+            <select class="select" id="fStatus"><option value="active">Active</option><option value="inactive">Inactive</option></select>
+          </div>
           <div class="field"><label>Price range</label><input class="input" id="fPriceRange" placeholder="e.g. RM 20 - RM 40" /></div>
           <div class="field" style="grid-column:1/-1;"><label>Full address</label><input class="input" id="fAddress" placeholder="Full street address" /></div>
         </div>
       </div>
 
       <div class="form-section">
-        <div class="form-section-title"><span data-icon="upload"></span>Photo</div>
-        <div class="form-grid">
-          <div class="field" style="grid-column:1/-1;">
-            <label>Photo URL</label>
-            <input class="input" id="fImage" placeholder="https://… — e.g. a Wikimedia Commons or the restaurant's own photo" />
-            <p class="hint">Pasted as a direct link, not uploaded — same "image" field the app's live OpenStreetMap refresh writes.</p>
-          </div>
-        </div>
-        <div id="imagePreviewWrap" style="margin-top:10px;display:none;">
-          <img id="imagePreview" style="width:100%;max-height:220px;object-fit:cover;border-radius:12px;" />
-        </div>
-      </div>
-
-      <div class="form-section">
         <div class="form-section-title"><span data-icon="clock"></span>Opening hours</div>
         <div class="field"><input class="input" id="fHours" placeholder="e.g. Daily, 11:00 AM - 10:00 PM" /></div>
-        <p class="hint">Leave blank if not known — shown blank rather than a guessed time, same as attractions.</p>
+        <p class="hint">Leave this blank if you don't know the hours — it'll just show as blank rather than a guess.</p>
       </div>
 
       <div class="form-section">
@@ -75,9 +78,8 @@
         <div class="form-grid">
           <div class="field"><label>Phone</label><input class="input" id="fPhone" placeholder="e.g. +81 3-3842-0181" /></div>
           <div class="field"><label>Website</label><input class="input" id="fWebsite" placeholder="https://…" /></div>
-          <div class="field"><label>Rating</label><input class="input" id="fRating" placeholder="e.g. 4.5, or leave blank" /></div>
-          <div class="field"><label>Reviews</label><input class="input" id="fReviews" placeholder="e.g. 128, or leave blank" /></div>
         </div>
+        <p class="hint">Ratings and reviews aren't entered here — they show up automatically once travellers start reviewing this place.</p>
       </div>
 
       <div class="form-section">
@@ -94,20 +96,47 @@
 </div>
 
 <script type="module">
-import { requireRole } from "../js/auth-guard.js?v=20261022";
-import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261022";
-import { mountIcons } from "../js/icons.js?v=20261022";
-import { getRestaurant, newRestaurantRef, createRestaurant, updateRestaurant } from "../js/data.js?v=20261022";
-import { escapeHtml, toast, setBusy } from "../js/ui.js?v=20261022";
+import { requireRole } from "../js/auth-guard.js?v=20261106b";
+import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261114a";
+import { mountIcons } from "../js/icons.js?v=20261106c";
+import { getRestaurant, newRestaurantRef, createRestaurant, updateRestaurant, getTagPresets, addTagPreset, markPlaceSuggestionAdded } from "../js/data.js?v=20261114c";
+import { escapeHtml, toast, setBusy } from "../js/ui.js?v=20261113a";
+import { findAndFillRestaurantFromOsm, hasApiKey } from "../js/places-import.js?v=20261106f";
 
 mountSidebarNav({ role: "admin", active: "attractions" });
 const session = await requireRole("admin", "login.html");
 const editingId = new URLSearchParams(location.search).get("id");
 let cuisineTag;
+let osmSourcePlaceId = null;
+let osmSource = null;
+// Set when this page was opened from Content Moderation's Place
+// Suggestions tab ("Add as Restaurant") — see applySuggestionPrefill()
+// below. markPlaceSuggestionAdded() in the save handler is what actually
+// closes out the suggestion, once this new restaurant is saved (not
+// before — backing out of this form leaves it pending).
+let suggestionId = null;
+// There's deliberately no manual photo field on this form (removed per
+// the admin's own request — see js/data.js's catalog-restaurants comment)
+// so a photo never has a field to show up in; it's still carried through
+// to the saved record automatically, the same way an OSM-found photo
+// already was meant to be, just invisibly. Set by either
+// applySuggestionPrefill() (a traveller's submitted photo) or
+// applyOsmResult() (OpenStreetMap/Wikipedia's photo for this place).
+let prefillImage = null;
+// Hoisted above the bootstrap block below for the same reason as
+// attraction-form.html's equivalent — see that file's comment. Declaring
+// this below (textually next to mountCuisinePicker, where it reads most
+// naturally) threw "Cannot access 'CUISINE_PRESETS' before initialization"
+// on every page load, which silently broke the Save button entirely.
+const CUISINE_PRESETS = [
+  "Japanese", "Chinese", "Malay", "Indian", "Western", "Thai", "Korean", "Italian",
+  "Vietnamese", "Seafood", "Cafe & Dessert", "Fast Food", "Vegetarian", "Halal",
+  "Fusion", "Middle Eastern",
+];
 
 if (session) {
   setSidebarUser({ displayName: session.profile.name || "Admin", roleLabel: "Administrator" });
-  wireImagePreview();
+  wireOsmFind();
 
   if (editingId) {
     document.getElementById("pageTitle").textContent = "Edit restaurant";
@@ -120,60 +149,132 @@ if (session) {
     }
   } else {
     populateForm(null);
+    applySuggestionPrefill();
   }
 }
 
-// ==================== Cuisine tag input (same pattern as attraction-form.html) ====================
-function mountTagInput(boxId, initialTags = []) {
+// ==================== Cuisine picker — starter list + admin-added tags, click to toggle ====================
+// CUISINE_PRESETS (hoisted above) is only the starter list shipped in the
+// code, so the picker is never empty on a brand-new install. On top of
+// that, this loads whatever cuisines admins have added before (from
+// tag_presets/restaurant_cuisine) and lets the admin add a brand new one
+// through the dashed "+ add" box at the end — typed once, saved to that
+// same doc, and from then on it's a normal clickable option for every
+// future restaurant too, not just this one. A legacy tag already on this
+// restaurant that isn't in either list is still kept (appended) so editing
+// an old record never silently drops data.
+function mountCuisinePicker(boxId, initialTags = [], firestoreKey = "restaurant_cuisine") {
   const box = document.getElementById(boxId);
-  const oldInput = box.querySelector("input");
-  const input = oldInput.cloneNode(true);
-  oldInput.replaceWith(input);
-  let tags = [...initialTags];
+  const options = [...CUISINE_PRESETS];
+  initialTags.forEach((t) => { if (!options.includes(t)) options.push(t); });
+  let selected = new Set(initialTags);
 
   function render() {
-    box.querySelectorAll(".chip").forEach((c) => c.remove());
-    tags.forEach((tag, i) => {
-      const chip = document.createElement("span");
-      chip.className = "chip";
-      chip.innerHTML = `${escapeHtml(tag)}<button type="button" data-i="${i}"><span data-icon="x"></span></button>`;
-      box.insertBefore(chip, input);
-    });
-    box.querySelectorAll(".chip button").forEach((btn) =>
-      btn.addEventListener("click", () => { tags.splice(Number(btn.dataset.i), 1); render(); })
+    box.innerHTML = options
+      .map((opt) => `<button type="button" class="chip-toggle${selected.has(opt) ? " active" : ""}" data-tag="${escapeHtml(opt)}">${escapeHtml(opt)}</button>`)
+      .join("") + `<span class="chip-picker-add"><input placeholder="+ Add a new tag…" /></span>`;
+    box.querySelectorAll(".chip-toggle").forEach((btn) =>
+      btn.addEventListener("click", () => {
+        const tag = btn.dataset.tag;
+        if (selected.has(tag)) selected.delete(tag); else selected.add(tag);
+        render();
+      })
     );
-    mountIcons(box);
-  }
-
-  input.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" || e.key === ",") {
+    const addInput = box.querySelector(".chip-picker-add input");
+    addInput.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter") return;
       e.preventDefault();
-      const value = input.value.trim().replace(/,$/, "");
-      if (value && !tags.includes(value)) { tags.push(value); render(); }
-      input.value = "";
-    } else if (e.key === "Backspace" && !input.value && tags.length) {
-      tags.pop();
+      const value = addInput.value.trim();
+      if (!value) return;
+      if (!options.includes(value)) {
+        options.push(value);
+        addTagPreset(firestoreKey, value);
+      }
+      selected.add(value);
       render();
-    }
-  });
+    });
+  }
 
   render();
-  return { getTags: () => tags, setTags: (next) => { tags = [...next]; render(); } };
+  getTagPresets(firestoreKey).then((stored) => {
+    let changed = false;
+    stored.forEach((t) => { if (!options.includes(t)) { options.push(t); changed = true; } });
+    if (changed) render();
+  });
+
+  return {
+    getTags: () => options.filter((o) => selected.has(o)),
+    setTags: (next) => {
+      next.forEach((t) => { if (!options.includes(t)) options.push(t); });
+      selected = new Set(next);
+      render();
+    },
+  };
 }
 
-// ==================== Photo URL preview ====================
-function wireImagePreview() {
-  document.getElementById("fImage").addEventListener("input", refreshImagePreview);
+// ==================== Find on OpenStreetMap (auto-fill) — same pattern as attraction-form.html ====================
+function wireOsmFind() {
+  document.getElementById("osmFindBtn").addEventListener("click", async () => {
+    const btn = document.getElementById("osmFindBtn");
+    const statusEl = document.getElementById("osmFindStatus");
+    const q = document.getElementById("fName").value.trim();
+    if (!q) { toast("Type a name or location first.", "error"); return; }
+    if (!hasApiKey()) {
+      statusEl.textContent = "No Geoapify API key set yet — add one in js/places-config.js, then reload this page.";
+      return;
+    }
+    setBusy(btn, true, "");
+    statusEl.textContent = "Searching OpenStreetMap…";
+    try {
+      const result = await findAndFillRestaurantFromOsm(q);
+      applyOsmResult(result);
+      statusEl.textContent = `Filled in from OpenStreetMap${result.address ? ` — ${result.address}` : ""}. Review and adjust anything before saving.`;
+      toast("Auto-filled from OpenStreetMap.", "success");
+    } catch (err) {
+      statusEl.textContent = err.message || "Couldn't find that on OpenStreetMap.";
+    } finally {
+      setBusy(btn, false);
+    }
+  });
 }
-function refreshImagePreview() {
-  const url = document.getElementById("fImage").value.trim();
-  const wrap = document.getElementById("imagePreviewWrap");
-  if (url) {
-    document.getElementById("imagePreview").src = url;
-    wrap.style.display = "block";
-  } else {
-    wrap.style.display = "none";
+
+function applyOsmResult(result) {
+  if (result.name) document.getElementById("fName").value = result.name;
+  if (result.cuisineTags?.length) {
+    cuisineTag.setTags([...new Set([...cuisineTag.getTags(), ...result.cuisineTags])]);
   }
+  if (result.location) document.getElementById("fLocation").value = result.location;
+  if (result.address) document.getElementById("fAddress").value = result.address;
+  if (result.phone) document.getElementById("fPhone").value = result.phone;
+  if (result.website) document.getElementById("fWebsite").value = result.website;
+  if (result.openingHours) document.getElementById("fHours").value = result.openingHours;
+  if (result.image) prefillImage = result.image;
+  if (result.sourcePlaceId) {
+    osmSourcePlaceId = result.sourcePlaceId;
+    osmSource = result.source || "Geoapify";
+  }
+}
+
+// Fills Name/Location/Description/a cover photo from a traveller's
+// "Report New Attraction" submission (see Content Moderation's Place
+// Suggestions tab) — only the fields that submission actually has.
+// Cuisine tags, hours, price range etc. are left for the admin to fill
+// in normally, same as a blank new restaurant.
+function applySuggestionPrefill() {
+  const params = new URLSearchParams(location.search);
+  if (params.get("fromSuggestion") !== "1") return;
+  let prefill = null;
+  try {
+    prefill = JSON.parse(sessionStorage.getItem("voya_suggestion_prefill") || "null");
+  } catch (e) { /* malformed/missing — just skip prefilling */ }
+  sessionStorage.removeItem("voya_suggestion_prefill");
+  if (!prefill?.reportId) return;
+  suggestionId = prefill.reportId;
+  if (prefill.name) document.getElementById("fName").value = prefill.name;
+  if (prefill.location) document.getElementById("fLocation").value = prefill.location;
+  if (prefill.description) document.getElementById("fDescription").value = prefill.description;
+  if (prefill.photoUrl) prefillImage = prefill.photoUrl;
+  document.getElementById("suggestionBanner").style.display = "block";
 }
 
 // Reads both field conventions catalog_restaurants' two writers use (see
@@ -185,25 +286,27 @@ function populateForm(r) {
   document.getElementById("fName").value = r?.name || "";
   document.getElementById("fLocation").value = (typeof r?.location === "string" ? r.location : "") || (r?.city && r?.country ? `${r.city}, ${r.country}` : "") || r?.city || r?.country || "";
   document.getElementById("fPriceRange").value = r?.priceRange || r?.price_range || "";
+  document.getElementById("fStatus").value = r?.status || "active";
   document.getElementById("fAddress").value = r?.address || "";
-  document.getElementById("fImage").value = r?.image || r?.image_url || "";
   document.getElementById("fHours").value = r?.openingHours || r?.opening_hours || "";
   document.getElementById("fPhone").value = r?.phone || "";
   document.getElementById("fWebsite").value = r?.website || "";
-  document.getElementById("fRating").value = r?.rating || "";
-  document.getElementById("fReviews").value = r?.reviews || "";
   document.getElementById("fDescription").value = r?.description || r?.about || "";
+  osmSourcePlaceId = r?.sourcePlaceId || null;
+  osmSource = r?.source || null;
 
   const cuisineTags = Array.isArray(r?.cuisineTags) && r.cuisineTags.length
     ? r.cuisineTags
     : (Array.isArray(r?.cuisine) ? r.cuisine : (typeof r?.cuisine === "string" && r.cuisine ? [r.cuisine] : []));
-  cuisineTag = mountTagInput("cuisineBox", cuisineTags);
-  refreshImagePreview();
+  cuisineTag = mountCuisinePicker("cuisineBox", cuisineTags);
 }
 
 document.getElementById("saveBtn").addEventListener("click", async () => {
   const name = document.getElementById("fName").value.trim();
   if (!name) { toast("Name is required.", "error"); return; }
+  if (!cuisineTag.getTags().length) { toast("At least one cuisine tag is required.", "error"); return; }
+  const locationValue = document.getElementById("fLocation").value.trim();
+  if (!locationValue) { toast("Location is required.", "error"); return; }
 
   const btn = document.getElementById("saveBtn");
   setBusy(btn, true, "Saving…");
@@ -211,20 +314,33 @@ document.getElementById("saveBtn").addEventListener("click", async () => {
     const data = {
       name,
       cuisineTags: cuisineTag.getTags(),
-      location: document.getElementById("fLocation").value.trim(),
+      location: locationValue,
       priceRange: document.getElementById("fPriceRange").value.trim(),
+      status: document.getElementById("fStatus").value,
       address: document.getElementById("fAddress").value.trim(),
-      image: document.getElementById("fImage").value.trim(),
       openingHours: document.getElementById("fHours").value.trim(),
       phone: document.getElementById("fPhone").value.trim(),
       website: document.getElementById("fWebsite").value.trim(),
-      rating: document.getElementById("fRating").value.trim(),
-      reviews: document.getElementById("fReviews").value.trim(),
       description: document.getElementById("fDescription").value.trim(),
     };
+    if (prefillImage) data.image = prefillImage;
+    if (osmSourcePlaceId) {
+      data.sourcePlaceId = osmSourcePlaceId;
+      data.source = osmSource || "Geoapify";
+    }
 
-    if (editingId) await updateRestaurant(editingId, data);
-    else await createRestaurant(newRestaurantRef(), data);
+    if (editingId) {
+      await updateRestaurant(editingId, data);
+    } else {
+      const ref = newRestaurantRef();
+      await createRestaurant(ref, data);
+      if (suggestionId) {
+        // Best-effort: the restaurant is already saved either way, so a
+        // failure here (e.g. the suggestion was deleted in the meantime)
+        // should never block the admin from moving on.
+        markPlaceSuggestionAdded(suggestionId, { collection: "catalog_restaurants", docId: ref.id }).catch((e) => console.warn("Couldn't mark suggestion as added:", e.message));
+      }
+    }
 
     toast("Restaurant saved — this is live in the app's Explore catalogue.", "success");
     location.href = "attractions.html?tab=restaurants";

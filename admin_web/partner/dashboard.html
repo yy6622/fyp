@@ -6,8 +6,8 @@
 <title>Dashboard — Voya Insurance Partner</title>
 <link rel="stylesheet" href="../css/tokens.css?v=20261006b" />
 <link rel="stylesheet" href="../css/base.css?v=20261006b" />
-<link rel="stylesheet" href="../css/layout.css?v=20261021" />
-<link rel="stylesheet" href="../css/components.css?v=20261021c" />
+<link rel="stylesheet" href="../css/layout.css?v=20261111a" />
+<link rel="stylesheet" href="../css/components.css?v=20261106g" />
 </head>
 <body>
 <div class="shell">
@@ -29,11 +29,13 @@
         <h1 class="h1">Dashboard</h1>
         <p class="subtitle">Your plans, sales, and claims at a glance</p>
       </div>
+      <button class="btn btn-outline bell-btn" id="notifBell" title="Notifications — click to review">
+        <span data-icon="bell"></span><span class="bell-dot" id="notifBellDot" style="display:none;"></span>
+      </button>
     </div>
 
-    <div class="dev-tool-bar" id="pendingBar" style="display:none;align-items:center;justify-content:space-between;gap:12px;">
+    <div class="dev-tool-bar" id="pendingBar" style="display:none;align-items:center;gap:12px;">
       <span id="pendingBarText"><strong>Pending approval.</strong> An admin needs to approve your organization before you can publish plans or handle claims. You can still explore the console.</span>
-      <button class="btn btn-sm btn-outline" id="pendingBarBtn" style="flex:none;">View details</button>
     </div>
     <div class="stat-grid" id="statGrid"><div class="skeleton" style="height:90px;grid-column:1/-1;"></div></div>
 
@@ -52,27 +54,75 @@
 </div>
 
 <script type="module">
-import { requireRole } from "../js/auth-guard.js?v=20261021";
-import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261021";
-import { mountIcons } from "../js/icons.js?v=20261021";
-import { listTransactions, listClaims, listPlans } from "../js/data.js?v=20261021";
-import { money, moneyExact, number, statusBadge, escapeHtml, timeAgo, toast, setBusy, statCard, plainCard, trendDelta, pointDelta, sumInMonth, countInMonth, monthBounds, rateOf } from "../js/ui.js?v=20261021";
+import { requireRole } from "../js/auth-guard.js?v=20261106b";
+import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261114a";
+import { mountIcons } from "../js/icons.js?v=20261106c";
+import { listTransactions, listClaims, listRefunds, listPlans } from "../js/data.js?v=20261114c";
+import { money, moneyExact, number, statusBadge, escapeHtml, timeAgo, toast, setBusy, statCard, plainCard, trendDelta, pointDelta, sumInMonth, countInMonth, monthBounds, rateOf } from "../js/ui.js?v=20261113a";
 
 mountSidebarNav({ role: "partner", active: "dashboard" });
-const session = await requireRole("partner", "login.html");
+const session = await requireRole("partner", "login.html", { allowPending: true });
 
 if (session) {
   setSidebarUser({ displayName: session.profile.companyName || "Partner", roleLabel: `${session.profile.companyName || "Insurance"} · Insurance Partner` });
   showStatusBar(session.profile.status);
   const params = new URLSearchParams(location.search);
   if (params.get("welcome")) toast("Welcome to Voya! Your organization is now in the queue for admin approval.", "success");
-  await load();
+  if (session.profile.status === "pending") {
+    // Confined here (requireRole redirects every other partner page back
+    // to this one while pending) -- so this page shows ONLY the pending
+    // message above, nothing else, rather than real stats/charts/claims
+    // for an organization that isn't approved to operate yet.
+    lockToPendingOnly();
+  } else {
+    await load();
+    loadNotifBell();
+  }
+}
+
+function lockToPendingOnly() {
+  document.getElementById("notifBell").style.display = "none";
+  document.getElementById("statGrid").style.display = "none";
+  const detailGrid = document.querySelector(".detail-grid");
+  if (detailGrid) detailGrid.style.display = "none";
+}
+
+// Same idea as admin/overview.html's bell — a red dot only when
+// something is actually waiting on the partner, here meaning a
+// newly-submitted claim or refund that hasn't been looked at yet
+// (status "new"). A live, independent count rather than reusing load()'s
+// own claims fetch, same fire-and-forget pattern as the admin version.
+function loadNotifBell() {
+  const bell = document.getElementById("notifBell");
+  // Like the admin side's bell: always opens Notifications, not the
+  // underlying list page directly — Notifications is where the new
+  // claims/refunds actually get listed one by one with a link into each,
+  // same as admin's bell -> admin/notifications.html pattern.
+  bell.addEventListener("click", () => { location.href = "notifications.html"; });
+  Promise.all([
+    listClaims(session.uid).catch(() => []),
+    listRefunds(session.uid).catch(() => []),
+  ]).then(([claims, refunds]) => {
+    const newClaims = claims.filter((c) => c.status === "new").length;
+    const newRefunds = refunds.filter((r) => r.status === "new").length;
+    const total = newClaims + newRefunds;
+    const dot = document.getElementById("notifBellDot");
+    dot.style.display = total > 0 ? "" : "none";
+    if (total > 0) {
+      const parts = [];
+      if (newClaims) parts.push(`${newClaims} new claim${newClaims === 1 ? "" : "s"}`);
+      if (newRefunds) parts.push(`${newRefunds} new refund${newRefunds === 1 ? "" : "s"}`);
+      bell.title = `${parts.join(" \u00b7 ")} — click to review`;
+    } else {
+      bell.title = "No new notifications — click to review";
+    }
+  });
 }
 
 // Doubles as this page's "notification button" (the admin side's
 // equivalent is the bell on admin/overview.html) — only an
 // approved/pending/suspended partner ever sees the Dashboard at all (a
-// rejected/blocked one is redirected to Notifications before this runs),
+// rejected one is redirected to Notifications before this runs),
 // so this only ever needs to tell those three apart.
 function showStatusBar(status) {
   if (status === "approved") return;
@@ -81,7 +131,6 @@ function showStatusBar(status) {
     : "<strong>Pending approval.</strong> An admin needs to approve your organization before you can publish plans or handle claims. You can still explore the console.";
   document.getElementById("pendingBarText").innerHTML = text;
   document.getElementById("pendingBar").style.display = "flex";
-  document.getElementById("pendingBarBtn").addEventListener("click", () => { location.href = "notifications.html"; });
 }
 
 async function load() {
@@ -110,7 +159,7 @@ async function load() {
   document.getElementById("statGrid").innerHTML = [
     statCard("Gross premium", money(gross), "coin", grossDelta),
     statCard("Policies sold", number(paid.length), "shield-check", soldDelta),
-    plainCard("Pending claims", number(pending)),
+    plainCard("Pending claims", number(pending), "clock"),
     statCard("Approval rate", `${rate}%`, "percent", rateDelta),
   ].join("");
 

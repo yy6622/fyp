@@ -1,6 +1,7 @@
 // Voya — small shared UI helpers: toasts, a generic confirm/prompt modal,
 // and formatting utilities used across every admin/partner page.
-import { mountIcons } from "./icons.js";
+import { mountIcons, iconMarkup } from "./icons.js?v=20261106c";
+import { sendVerificationCode, verifyEmailCode } from "./data.js?v=20261110c";
 
 let toastStack = null;
 function ensureStack() {
@@ -108,6 +109,110 @@ export function promptDialog({ title, body, label, placeholder = "", confirmText
 }
 
 /**
+ * FR04 step-up: emails a 6-digit code to the signed-in user for `purpose`
+ * ("change_password", "change_email", "delete_account", "payment") and
+ * asks them to enter it before a sensitive action proceeds. Mirrors the
+ * Flutter app's confirmWithEmailCode() so every account on Voya — admin,
+ * insurance partner, or traveller — goes through the same check, not
+ * just a "type your current password" prompt. Resolves true once the
+ * code is verified, false if the admin/partner cancels.
+ */
+export function emailCodeStepUp(purpose, { title = "Confirm it's you", body = "We're emailing a 6-digit code to your account's email address. Enter it below to continue." } = {}) {
+  return new Promise((resolve) => {
+    const backdrop = document.createElement("div");
+    backdrop.className = "modal-backdrop open";
+    backdrop.innerHTML = `
+      <div class="modal" role="dialog" aria-modal="true" style="max-width:400px;">
+        <div class="modal-head">
+          <h3 class="h2">${title}</h3>
+          <button class="modal-close" data-close><span data-icon="x"></span></button>
+        </div>
+        <p class="muted" style="font-size:14px;line-height:1.55;margin-bottom:14px;">${body}</p>
+        <div class="field" style="margin-bottom:6px;">
+          <label>6-digit code</label>
+          <input class="input" id="stepUpCodeInput" inputmode="numeric" maxlength="6" placeholder="000000" style="letter-spacing:6px;font-size:18px;text-align:center;" autocomplete="one-time-code" />
+        </div>
+        <p class="small" id="stepUpError" style="color:var(--red-text,#c0392b);min-height:18px;margin-bottom:4px;"></p>
+        <button type="button" class="btn-link small" id="stepUpResend" style="background:none;border:none;padding:0;color:var(--teal-600);cursor:pointer;font-weight:600;" disabled>Sending code…</button>
+        <div class="form-actions" style="margin-top:16px;">
+          <button class="btn btn-outline" data-cancel>Cancel</button>
+          <button class="btn btn-primary" data-verify>Verify</button>
+        </div>
+      </div>`;
+    document.body.appendChild(backdrop);
+    mountIcons(backdrop);
+    const input = backdrop.querySelector("#stepUpCodeInput");
+    const errorEl = backdrop.querySelector("#stepUpError");
+    const resendBtn = backdrop.querySelector("#stepUpResend");
+    const verifyBtn = backdrop.querySelector("[data-verify]");
+    requestAnimationFrame(() => input.focus());
+
+    const close = (val) => { backdrop.remove(); resolve(val); };
+    backdrop.querySelector("[data-close]").onclick = () => close(false);
+    backdrop.querySelector("[data-cancel]").onclick = () => close(false);
+    backdrop.addEventListener("click", (e) => { if (e.target === backdrop) close(false); });
+
+    function cooldown(seconds) {
+      resendBtn.disabled = true;
+      let left = seconds;
+      resendBtn.textContent = `Resend code (${left}s)`;
+      const timer = setInterval(() => {
+        left -= 1;
+        if (left <= 0) {
+          clearInterval(timer);
+          resendBtn.disabled = false;
+          resendBtn.textContent = "Resend code";
+        } else {
+          resendBtn.textContent = `Resend code (${left}s)`;
+        }
+      }, 1000);
+    }
+
+    // Sends the code — called once right away when the dialog opens, and
+    // again whenever Resend is clicked. A failed send (e.g. a resend
+    // before the 60s cooldown server-side) just surfaces the error and
+    // leaves Resend clickable again, rather than stranding the admin
+    // with no way to ask for a fresh code.
+    async function sendCode({ isResend }) {
+      resendBtn.disabled = true;
+      try {
+        await sendVerificationCode(purpose);
+        errorEl.textContent = "";
+        if (isResend) toast("A new code has been sent.", "success");
+        cooldown(60);
+      } catch (err) {
+        errorEl.textContent = err.message || "Couldn't send the code.";
+        resendBtn.disabled = false;
+        resendBtn.textContent = "Resend code";
+      }
+    }
+    sendCode({ isResend: false });
+    resendBtn.onclick = () => sendCode({ isResend: true });
+
+    verifyBtn.onclick = async () => {
+      const code = input.value.trim();
+      if (!/^\d{6}$/.test(code)) {
+        errorEl.textContent = "Enter the 6-digit code.";
+        input.focus();
+        return;
+      }
+      setBusy(verifyBtn, true, "Verifying…");
+      errorEl.textContent = "";
+      try {
+        await verifyEmailCode(purpose, code);
+        close(true);
+      } catch (err) {
+        errorEl.textContent = err.message || "Couldn't verify that code.";
+        setBusy(verifyBtn, false);
+        input.focus();
+        input.select();
+      }
+    };
+    input.addEventListener("keydown", (e) => { if (e.key === "Enter") verifyBtn.click(); });
+  });
+}
+
+/**
  * Read-only detail popup: a title + a list of {label, value} rows (value
  * can be HTML, e.g. a statusBadge() call), plus optional footer buttons
  * ({ text, className, onClick, close: true }) — close:true closes the
@@ -121,7 +226,13 @@ export function detailDialog({ title, subtitle, rows, actions = [] }) {
     backdrop.className = "modal-backdrop open";
     const rowsHtml = rows
       .filter((r) => r.value !== undefined && r.value !== null && r.value !== "")
-      .map((r) => `
+      .map((r) => r.block
+        ? `
+        <div style="padding:9px 0;border-bottom:1px solid #F0F0F0;">
+          <div class="small muted" style="margin-bottom:7px;">${escapeHtml(r.label)}</div>
+          <div style="font-size:13.5px;line-height:1.5;">${r.value}</div>
+        </div>`
+        : `
         <div style="display:flex;justify-content:space-between;gap:16px;padding:9px 0;border-bottom:1px solid #F0F0F0;">
           <span class="small muted" style="flex:none;width:150px;">${escapeHtml(r.label)}</span>
           <span style="text-align:right;font-size:13.5px;">${r.value}</span>
@@ -136,16 +247,15 @@ export function detailDialog({ title, subtitle, rows, actions = [] }) {
           <button class="modal-close" data-close><span data-icon="x"></span></button>
         </div>
         <div>${rowsHtml || `<p class="muted small">No details on file.</p>`}</div>
+        ${actions.length ? `
         <div class="form-actions" style="margin-top:16px;">
-          <button class="btn btn-outline" data-close-btn>Close</button>
           ${actions.map((a, i) => `<button class="btn ${a.className || "btn-primary"}" data-action="${i}">${escapeHtml(a.text)}</button>`).join("")}
-        </div>
+        </div>` : ""}
       </div>`;
     document.body.appendChild(backdrop);
     mountIcons(backdrop);
     const close = () => { backdrop.remove(); resolve(); };
     backdrop.querySelector("[data-close]").onclick = close;
-    backdrop.querySelector("[data-close-btn]").onclick = close;
     backdrop.addEventListener("click", (e) => { if (e.target === backdrop) close(); });
     actions.forEach((a, i) => {
       backdrop.querySelector(`[data-action="${i}"]`).onclick = () => {
@@ -238,9 +348,10 @@ export function reporterLabel(item) {
 }
 
 const STATUS_BADGE = {
-  active: "green", approved: "green", paid: "green", "in force": "green",
+  active: "green", approved: "green", paid: "green", "in force": "green", confirmed: "green", published: "green",
   pending: "amber", "under review": "amber", "under_review": "amber", draft: "amber", new: "blue",
-  suspended: "red", rejected: "red", removed: "red", blocked: "red",
+  "pending review": "amber",
+  suspended: "red", rejected: "red", removed: "red", cancelled: "red", inactive: "gray", expired: "gray",
 };
 export function statusBadge(status) {
   const key = (status || "").toLowerCase().replace(/_/g, " ");
@@ -253,6 +364,113 @@ export function escapeHtml(str) {
   return String(str ?? "").replace(/[&<>"']/g, (c) => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
   }[c]));
+}
+
+// ==================== Field validation ====================
+// Small, shared format checks for the handful of field types that appear
+// across several admin/partner forms (email addresses, phone/emergency
+// numbers). Kept deliberately loose — these forms cover real numbers from
+// every country Voya operates in, which don't share one digit count or
+// format, so the check is "does this look like a phone number at all"
+// (digits, spaces, +, -, (), x for extensions) rather than a strict
+// country-specific pattern that would reject legitimate real numbers.
+export function isValidEmail(str) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(str || "").trim());
+}
+export function isPlausiblePhone(str) {
+  const s = String(str || "").trim();
+  return /^[0-9+()\-.\sx]{2,}$/i.test(s) && /\d/.test(s);
+}
+
+/** Wires a show/hide eye button next to a password field — click toggles
+ * the input's type between "password" and "text" and swaps the icon to
+ * match. Used on every page a password is typed (admin + partner login,
+ * partner register's password and confirm-password fields). */
+export function wirePasswordToggle(inputId, btnId) {
+  const input = document.getElementById(inputId);
+  const btn = document.getElementById(btnId);
+  if (!input || !btn) return;
+  btn.addEventListener("click", () => {
+    const show = input.type === "password";
+    input.type = show ? "text" : "password";
+    btn.innerHTML = iconMarkup(show ? "eye-off" : "eye", { size: 18 });
+    btn.setAttribute("aria-label", show ? "Hide password" : "Show password");
+  });
+}
+
+// The same four password rules the Flutter traveller signup page enforces
+// (lib/controllers/auth_controller.dart's SignupController) -- mirrored
+// here so every password field across admin_web (partner register,
+// admin/partner change-password) shows the identical live checklist and
+// actually enforces the same rule set, instead of the old weak
+// "length < 8" submit-time-only check.
+export function passwordRuleChecks(password) {
+  const p = password || "";
+  const lengthOk = p.length >= 8 && p.length <= 12;
+  const bothCases = /[a-z]/.test(p) && /[A-Z]/.test(p);
+  const hasNumber = /[0-9]/.test(p);
+  const hasSpecial = /[-!@#$%^&*]/.test(p);
+  return {
+    lengthOk,
+    bothCases,
+    hasNumber,
+    hasSpecial,
+    allOk: lengthOk && bothCases && hasNumber && hasSpecial,
+  };
+}
+
+const PASSWORD_RULE_LABELS = [
+  ["lengthOk", "Contain 8 to 12 characters"],
+  ["bothCases", "Contain both lower and uppercase letters"],
+  ["hasNumber", "Contain 1 number"],
+  ["hasSpecial", "Contain 1 special character '-!@#$%^&*'"],
+];
+
+/** Wires a live ✓/✕ password-rule checklist below a password field,
+ * matching the Flutter signup page's wording and rules exactly. Renders
+ * the checklist into listEl on every keystroke and returns a
+ * isPasswordValid() function the caller's submit handler should check
+ * instead of any ad-hoc length test. */
+export function wirePasswordRules(inputId, listId) {
+  const input = document.getElementById(inputId);
+  const list = document.getElementById(listId);
+  if (!input || !list) return { isPasswordValid: () => true };
+
+  function render() {
+    const checks = passwordRuleChecks(input.value);
+    list.innerHTML = PASSWORD_RULE_LABELS.map(([key, label]) => {
+      const met = checks[key];
+      const color = met ? "var(--green-text)" : "var(--red-text)";
+      const mark = met ? "✓" : "✕";
+      return `<li style="color:${color};list-style:none;font-size:12.5px;line-height:1.6;">${mark} ${label}</li>`;
+    }).join("");
+    return checks.allOk;
+  }
+
+  input.addEventListener("input", render);
+  render();
+
+  return { isPasswordValid: () => passwordRuleChecks(input.value).allOk };
+}
+
+// The <input accept="image/*"> attribute only filters what the OS's own
+// file-picker dialog shows — it does nothing once a file is actually
+// selected, so a renamed file, a drag-and-drop, or the dialog's own
+// "All files" option can still hand back a .csv (or anything else) for a
+// "photo" field with nothing catching it. This checks the browser-
+// sniffed MIME type instead (which a renamed extension can't fake) plus
+// a size cap, and every photo/logo upload flow in admin_web calls it
+// before accepting a picked file.
+const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
+export function isValidImageFile(file, maxSizeMB = 8) {
+  if (!file) return { ok: false, reason: "No file selected." };
+  if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+    return { ok: false, reason: `"${file.name}" isn't a JPEG, PNG or WebP image.` };
+  }
+  if (file.size > maxSizeMB * 1024 * 1024) {
+    return { ok: false, reason: `"${file.name}" is larger than ${maxSizeMB}MB.` };
+  }
+  return { ok: true };
 }
 
 /** Very small client-side paginator for an already-loaded array. */
@@ -400,11 +618,12 @@ export function statCard(label, value, icon, delta) {
   const deltaHtml = delta ? `<div class="stat-delta${delta.up === false ? " down" : ""}">${delta.text}</div>` : "";
   return `<div class="card stat-card"><div class="stat-top"><div class="stat-icon"><span data-icon="${icon}"></span></div><div class="stat-label">${label}</div></div><div class="stat-value">${value}</div>${deltaHtml}</div>`;
 }
-/** Stat card with no delta line at all — for a metric with no honest
- * baseline to compare against (a "pending" queue, a status with no real
- * temporal correlation, e.g. "Suspended"). */
-export function plainCard(label, value) {
-  return `<div class="card stat-card"><div class="stat-label">${label}</div><div class="stat-value">${value}</div></div>`;
+/** Stat card with no delta line — for a metric with no honest baseline
+ * to compare against (a "pending" queue, a status with no real temporal
+ * correlation, e.g. "Suspended"). Still carries an icon like statCard()
+ * so every stat card in the row looks the same shape. */
+export function plainCard(label, value, icon) {
+  return `<div class="card stat-card"><div class="stat-top"><div class="stat-icon"><span data-icon="${icon}"></span></div><div class="stat-label">${label}</div></div><div class="stat-value">${value}</div></div>`;
 }
 
 export function renderComparisonBars(containerId, rows, series) {
@@ -431,4 +650,96 @@ export function renderComparisonBars(containerId, rows, series) {
         </div>`).join("")}
     </div>`).join("");
   el.innerHTML = `<div style="display:flex;gap:16px;margin-bottom:14px;font-size:12px;">${legend}</div>${body}`;
+}
+
+// ==================== Shared report date-range picker ====================
+// Used by every "From ... To ..." report (admin/reports.html's three
+// tabs, partner/reports.html) so picking a reporting period looks and
+// behaves identically everywhere, instead of each report page carrying
+// its own slightly-different copy.
+
+/** Earliest date any report's range can start from (Aug 2026 is as far
+ * back as a report is meant to go — the admin asked for this directly,
+ * Nov 2026) and the latest it can end at (today — a report can't cover
+ * days that haven't happened yet). wireDateRangeBar applies both as a
+ * real <input min/max> (blocks the native date picker from offering an
+ * out-of-range day) and as a JS clamp on every change (covers a date
+ * typed in by hand, which min/max alone doesn't always catch
+ * consistently across browsers). */
+export const REPORT_MIN_DATE = new Date(2026, 7, 1);
+export function reportMaxDate() {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+/** One {label, start, end} entry per calendar month touched by [start,
+ * end] — the shared x-axis for every report tab's monthly chart. A month
+ * is included if any part of it falls inside the selected range, so a
+ * partial first/last month still gets its own labeled column. */
+export function monthsBetween(start, end) {
+  const months = [];
+  let cursor = new Date(start.getFullYear(), start.getMonth(), 1);
+  const last = new Date(end.getFullYear(), end.getMonth(), 1);
+  while (cursor <= last) {
+    const mStart = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
+    const mEnd = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1);
+    months.push({ label: mStart.toLocaleDateString("en-MY", { month: "short", year: "numeric" }), start: mStart, end: mEnd });
+    cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1);
+  }
+  return months;
+}
+
+/** True if a Firestore Timestamp field on `item` falls inside [start, end]
+ * (both inclusive — `end` is always set to 23:59:59.999 on its calendar
+ * day by wireDateRangeBar, so "To 6 Nov 2026" includes everything that
+ * happened on 6 Nov). */
+export function inRange(item, dateField, start, end) {
+  const d = item[dateField]?.toDate ? item[dateField].toDate() : null;
+  return !!d && d >= start && d <= end;
+}
+
+/** Shared "From ... To ..." date-range filter bar. Sets both inputs to
+ * `defaultStart`/`defaultEnd` (clamped into [REPORT_MIN_DATE,
+ * reportMaxDate()]), swaps them back in sync if the admin/partner picks
+ * an end date before the start date, writes a human-readable
+ * "1 Jun 2026 – 6 Nov 2026" hint into `hintId` (if given), and calls
+ * `onChange(start, end)` once immediately and again on every change —
+ * `end` always carries 23:59:59.999 so a same-day range (From and To
+ * both today) still matches today's records. */
+export function wireDateRangeBar(startId, endId, hintId, { defaultStart, defaultEnd = new Date() }, onChange) {
+  const startInput = document.getElementById(startId);
+  const endInput = document.getElementById(endId);
+  const toInputValue = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const maxDate = reportMaxDate();
+  const clamp = (d) => (d < REPORT_MIN_DATE ? REPORT_MIN_DATE : d > maxDate ? maxDate : d);
+  const parseInput = (val, fallback) => {
+    const d = new Date(`${val}T00:00:00`);
+    return isNaN(d) ? fallback : d;
+  };
+  startInput.min = endInput.min = toInputValue(REPORT_MIN_DATE);
+  startInput.max = endInput.max = toInputValue(maxDate);
+  startInput.value = toInputValue(clamp(defaultStart));
+  endInput.value = toInputValue(clamp(defaultEnd));
+  const fire = () => {
+    let start = clamp(parseInput(startInput.value, REPORT_MIN_DATE));
+    let end = clamp(parseInput(endInput.value, maxDate));
+    startInput.value = toInputValue(start);
+    endInput.value = toInputValue(end);
+    if (start > end) {
+      const swap = startInput.value;
+      startInput.value = endInput.value;
+      endInput.value = swap;
+      [start, end] = [end, start];
+    }
+    end.setHours(23, 59, 59, 999);
+    if (hintId) {
+      document.getElementById(hintId).textContent =
+        `${start.toLocaleDateString("en-MY", { day: "numeric", month: "short", year: "numeric" })} \u2013 ${end.toLocaleDateString("en-MY", { day: "numeric", month: "short", year: "numeric" })}`;
+    }
+    onChange(start, end);
+  };
+  startInput.addEventListener("change", fire);
+  endInput.addEventListener("change", fire);
+  fire();
 }

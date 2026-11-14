@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 import '../../controllers/group_trip_controller.dart';
 import '../../models/day_plan_models.dart';
@@ -409,6 +410,12 @@ class _AiItinerarySheetState extends State<_AiItinerarySheet> {
       builder: (context, job, _) {
         final summary = job.status == DiscussionSummaryStatus.ready ? job.result : null;
         final open = summary == null ? 0 : summary.pending.where((p) => p.decided?.status != 'voting').length;
+        // A poll that's tied, or that disagrees with how the chat leaned,
+        // stays at 'voting' with no automatic answer -- that's still
+        // something a traveller needs to tap into Decide Now for, not a
+        // quiet "In a poll" wait, so it counts toward the badge too.
+        final conflicts = summary?.conflictCount ?? 0;
+        final needsAttention = open + conflicts;
         return Padding(
           padding: const EdgeInsets.only(top: 18),
           child: Row(
@@ -434,9 +441,13 @@ class _AiItinerarySheetState extends State<_AiItinerarySheet> {
                 TextButton.icon(
                   onPressed: () => showDecideNowSheet(context, widget.controller, summary),
                   style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
-                  icon: const Icon(Icons.how_to_vote_outlined, size: 16, color: AppColors.orange),
-                  label: Text(open > 0 ? 'Decide now' : 'In a poll',
-                      style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: AppColors.orange)),
+                  icon: Icon(conflicts > 0 ? Icons.warning_amber_rounded : Icons.how_to_vote_outlined,
+                      size: 16, color: conflicts > 0 ? Colors.redAccent : AppColors.orange),
+                  label: Text(needsAttention > 0 ? 'Decide now' : 'In a poll',
+                      style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.bold,
+                          color: conflicts > 0 ? Colors.redAccent : AppColors.orange)),
                 ),
             ],
           ),
@@ -551,7 +562,11 @@ class _AiItinerarySheetState extends State<_AiItinerarySheet> {
   Widget _thumb(AiItineraryAdd a) {
     final probe = ActivityItem(time: a.time, icon: iconForKey(a.iconKey), label: a.label, voted: 0, total: 0);
     final c = widget.controller;
-    final url = c.attractionForActivity(probe)?.image ?? c.restaurantForActivity(probe)?.image ?? c.hotelForActivity(probe)?.image ?? '';
+    // Restaurant photos are deliberately not shown here -- matches the
+    // same decision already applied to the plan's own activity card
+    // (group_trip_page.dart's _activityRestaurantBody has no thumbnail,
+    // unlike the hotel/attraction bodies, which keep theirs).
+    final url = c.attractionForActivity(probe)?.image ?? c.hotelForActivity(probe)?.image ?? '';
     final fallback = Container(
       width: 44,
       height: 44,
@@ -561,7 +576,7 @@ class _AiItinerarySheetState extends State<_AiItinerarySheet> {
     if (url.isEmpty) return fallback;
     return ClipRRect(
       borderRadius: BorderRadius.circular(10),
-      child: Image.network(url, width: 44, height: 44, fit: BoxFit.cover, errorBuilder: (_, __, ___) => fallback),
+      child: CachedNetworkImage(imageUrl: url, width: 44, height: 44, fit: BoxFit.cover, errorWidget: (_, __, ___) => fallback),
     );
   }
 

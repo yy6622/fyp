@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 import '../../controllers/community_controller.dart';
 import '../../models/day_plan_models.dart';
@@ -114,8 +115,9 @@ class _ItinerarySelectPageState extends State<ItinerarySelectPage> {
                       borderRadius: BorderRadius.circular(20),
                       child: trip.coverImage.isEmpty
                           ? Container(width: 40, height: 40, color: AppColors.chipGrey, child: const Icon(Icons.map_outlined, size: 18, color: AppColors.textGrey))
-                          : Image.network(trip.coverImage, width: 40, height: 40, fit: BoxFit.cover,
-                              errorBuilder: (c, e, s) => Container(width: 40, height: 40, color: AppColors.chipGrey)),
+                          : CachedNetworkImage(imageUrl: trip.coverImage, width: 40, height: 40, fit: BoxFit.cover,
+                              placeholder: (c, u) => Container(width: 40, height: 40, color: AppColors.chipGrey),
+                              errorWidget: (c, u, e) => Container(width: 40, height: 40, color: AppColors.chipGrey)),
                     ),
                     const SizedBox(width: 12),
                     Expanded(

@@ -6,8 +6,8 @@
 <title>Voya — Admin bootstrap</title>
 <link rel="stylesheet" href="css/tokens.css?v=20261006b" />
 <link rel="stylesheet" href="css/base.css?v=20261006b" />
-<link rel="stylesheet" href="css/components.css?v=20261021" />
-<link rel="stylesheet" href="css/auth.css?v=20261006b" />
+<link rel="stylesheet" href="css/components.css?v=20261106d" />
+<link rel="stylesheet" href="css/auth.css?v=20261111a" />
 </head>
 <body>
 <div class="auth-shell">
@@ -45,26 +45,36 @@
 
 <script type="module">
 import { registerWithRole, authErrorMessage } from "./js/auth-guard.js?v=20261021";
-import { isFirstAdminNeeded } from "./js/data.js?v=20261021";
-import { setBusy } from "./js/ui.js?v=20261021";
+import { isFirstAdminNeeded } from "./js/data.js?v=20261106d";
+import { setBusy } from "./js/ui.js?v=20261106b";
 import { auth } from "./js/firebase-config.js?v=20261007";
 import { signOut } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
 
 const statusLine = document.getElementById("statusLine");
 const banner = document.getElementById("banner");
+const submitBtn = document.getElementById("submitBtn");
+let firstAdminNeeded = true;
 isFirstAdminNeeded().then((needed) => {
+  firstAdminNeeded = needed;
   if (needed) {
     statusLine.textContent = "No admin account exists yet — create the first one below.";
   } else {
-    statusLine.textContent = "Admin accounts already exist for this project.";
+    // admins/{uid}'s create rule requires isAdmin(), which is false for
+    // anyone but the very first admin — so this form can no longer
+    // actually create a second admin. Disable it outright instead of
+    // letting someone fill it in, create a real (but orphaned) Auth
+    // account, and hit a confusing permission error on submit.
+    statusLine.textContent = "An admin account already exists for this project.";
     banner.style.display = "flex";
-    banner.textContent = "Heads up: this still lets you create another admin account with no login required. Keep this page private.";
+    banner.textContent = "This page only works once — the first admin account already exists. Add any further admins directly in Firebase Console (admins/{uid}).";
+    submitBtn.disabled = true;
   }
 });
 
 const errBox = document.getElementById("authError");
 document.getElementById("setupForm").addEventListener("submit", async (e) => {
   e.preventDefault();
+  if (!firstAdminNeeded) return;
   errBox.classList.remove("show");
   await signOut(auth).catch(() => {});
   const name = document.getElementById("name").value.trim();

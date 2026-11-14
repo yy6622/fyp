@@ -8,11 +8,14 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../repositories/user_repository.dart';
 import 'auth_service.dart';
 
-/// Why a 6-digit email code is being asked for (FR04).
+/// Why a 6-digit email code is being asked for. FR04 itself is
+/// login-only 2FA (signup / new-device login); the other purposes here
+/// are step-up confirmations for sensitive account changes, a related
+/// but separate feature -- payment deliberately has no purpose here at
+/// all, see functions/email_code.js's header comment.
 enum CodePurpose {
   signup('signup', 'Verify Your Email', 'to verify your email address'),
   login('login', 'New Device Sign-in', 'because this is a new device'),
-  payment('payment', 'Confirm Payment', 'to confirm this payment'),
   changePassword('change_password', 'Confirm Password Change', 'to change your password'),
   changeEmail('change_email', 'Confirm Email Change', 'to change your email address'),
   deleteAccount('delete_account', 'Confirm Account Deletion', 'to delete your account');
@@ -31,14 +34,21 @@ enum SignInStep { suspended, verifyEmail, verifyDevice, open }
 
 class VerificationException implements Exception {
   final String message;
-  const VerificationException(this.message);
+  // The raw FirebaseFunctionsException.code (e.g. 'permission-denied',
+  // 'internal'), when this came from a callable. Lets callers tell a
+  // transient server-side hiccup (code was right, something else failed)
+  // apart from an actually-wrong/expired code -- see
+  // VerificationCodeController.verify() in auth_controller.dart.
+  final String code;
+  const VerificationException(this.message, {this.code = ''});
   @override
   String toString() => message;
 }
 
 /// Email-code verification (FR04): sign-up, new-device sign-in, and step-up
-/// confirmation before payments and account changes. Codes are created and
-/// checked by the sendVerificationCode / verifyCode Cloud Functions.
+/// confirmation before changing a password/email or deleting the account.
+/// Codes are created and checked by the sendVerificationCode / verifyCode
+/// Cloud Functions.
 class VerificationService {
   VerificationService._();
   static final VerificationService instance = VerificationService._();
@@ -102,7 +112,7 @@ class VerificationService {
     try {
       await FirebaseFunctions.instance.httpsCallable('sendVerificationCode').call({'purpose': purpose.wire});
     } on FirebaseFunctionsException catch (e) {
-      throw VerificationException(e.message ?? 'Could not send the code (${e.code}).');
+      throw VerificationException(e.message ?? 'Could not send the code (${e.code}).', code: e.code);
     } catch (_) {
       throw const VerificationException('Could not send the code. Check your connection and try again.');
     }
@@ -117,7 +127,7 @@ class VerificationService {
         'deviceName': deviceName,
       });
     } on FirebaseFunctionsException catch (e) {
-      throw VerificationException(e.message ?? 'That code did not work (${e.code}).');
+      throw VerificationException(e.message ?? 'That code did not work (${e.code}).', code: e.code);
     } catch (_) {
       throw const VerificationException('Could not check the code. Check your connection and try again.');
     }

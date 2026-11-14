@@ -6,8 +6,8 @@
 <title>Insurance Plans — Voya Insurance Partner</title>
 <link rel="stylesheet" href="../css/tokens.css?v=20261006b" />
 <link rel="stylesheet" href="../css/base.css?v=20261006b" />
-<link rel="stylesheet" href="../css/layout.css?v=20261021" />
-<link rel="stylesheet" href="../css/components.css?v=20261021c" />
+<link rel="stylesheet" href="../css/layout.css?v=20261111a" />
+<link rel="stylesheet" href="../css/components.css?v=20261106g" />
 </head>
 <body>
 <div class="shell">
@@ -29,7 +29,7 @@
         <h1 class="h1">Insurance Plans</h1>
         <p class="subtitle">Create and manage coverage for every journey</p>
       </div>
-      <button class="btn btn-primary" id="addBtn"><span data-icon="plus"></span>Add plan</button>
+      <a class="btn btn-primary" id="addBtn" href="plan-form.html"><span data-icon="plus"></span>Add plan</a>
     </div>
 
     <div class="dev-tool-bar" id="approvalBar" style="display:none;">
@@ -39,11 +39,28 @@
     <div class="stat-grid" id="statGrid"><div class="skeleton" style="height:90px;grid-column:1/-1;"></div></div>
 
     <div class="filter-bar">
-      <div class="search-input-wrap"><span data-icon="search"></span><input class="input" id="searchInput" placeholder="Search…" /></div>
+      <div class="search-input-wrap"><span data-icon="search"></span><input class="input" id="searchInput" placeholder="Search plan name or partner…" /></div>
       <select class="select" id="statusFilter">
         <option value="">All status</option>
-        <option value="active">Active</option>
         <option value="draft">Draft</option>
+        <option value="active">Active</option>
+        <option value="inactive">Inactive</option>
+        <option value="suspended">Suspended</option>
+      </select>
+      <select class="select" id="tripTypeFilter">
+        <option value="">All trip types</option>
+        <option value="Basic">Basic</option>
+        <option value="Annual">Annual</option>
+      </select>
+      <div class="inline-flex" style="gap:6px;">
+        <input type="number" class="input" id="premiumMin" placeholder="Min premium" style="width:120px;" />
+        <span class="muted small">to</span>
+        <input type="number" class="input" id="premiumMax" placeholder="Max premium" style="width:120px;" />
+      </div>
+      <select class="select" id="sortFilter">
+        <option value="">No sort</option>
+        <option value="premium_desc">Premium: high to low</option>
+        <option value="premium_asc">Premium: low to high</option>
       </select>
     </div>
 
@@ -65,142 +82,17 @@
   </main>
 </div>
 
-<div class="modal-backdrop" id="formModal">
-  <div class="modal">
-    <div class="modal-head"><h3 class="h2" id="formTitle">Add plan</h3><button class="modal-close" data-close><span data-icon="x"></span></button></div>
-    <div class="form-grid">
-      <div class="field" style="grid-column:1/-1;"><label>Plan name</label><input class="input" id="fName" placeholder="e.g. Travel Care Premium" /></div>
-      <div class="field">
-        <label>Trip type</label>
-        <select class="select" id="fType"><option>Single Trip</option><option>Annual</option><option>Family</option></select>
-      </div>
-      <div class="field"><label>Coverage (RM)</label><input class="input" id="fCoverage" type="number" placeholder="10000" /></div>
-      <div class="field"><label>Premium (RM)</label><input class="input" id="fPremium" type="number" placeholder="120" /></div>
-      <div class="field">
-        <label>Status</label>
-        <select class="select" id="fStatus"><option value="active">Active</option><option value="draft">Draft</option></select>
-      </div>
-      <div class="field" style="grid-column:1/-1;">
-        <label>Key coverage (shown on the plan's detail page in the app — label + the real RM amount covered)</label>
-        <p class="small muted" style="margin:0 0 6px;">Quick add a common coverage type, then just fill in the RM amount:</p>
-        <div id="coveragePresetsList" style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px;"></div>
-        <div id="coverageItemsList"></div>
-        <button type="button" class="btn btn-outline btn-sm" id="addCoverageItemBtn" style="margin-top:4px;">+ Add coverage item</button>
-      </div>
-      <div class="field" style="grid-column:1/-1;">
-        <label>Highlights (shown on the plan's detail page as separate badges — add one at a time, e.g. "24/7 Support")</label>
-        <div id="highlightsList"></div>
-        <button type="button" class="btn btn-outline btn-sm" id="addHighlightBtn" style="margin-top:4px;">+ Add highlight</button>
-      </div>
-    </div>
-    <div class="form-actions">
-      <button class="btn btn-outline" data-close>Cancel</button>
-      <button class="btn btn-primary" id="saveBtn">Save plan</button>
-    </div>
-  </div>
-</div>
-
 <script type="module">
-import { requireRole } from "../js/auth-guard.js?v=20261021";
-import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261021";
-import { mountIcons } from "../js/icons.js?v=20261021";
-import { listPlans, listTransactions, createPlan, updatePlan, deletePlan } from "../js/data.js?v=20261021";
-import { moneyExact, number, statusBadge, escapeHtml, paginate, renderPager, toast, setBusy, openModal, closeModal, wireModalDismiss, confirmDialog, statCard, trendDelta, countBefore, monthBounds } from "../js/ui.js?v=20261021";
+import { requireRole } from "../js/auth-guard.js?v=20261106b";
+import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261114a";
+import { mountIcons } from "../js/icons.js?v=20261106c";
+import { listPlans, deletePlan } from "../js/data.js?v=20261114c";
+import { moneyExact, number, statusBadge, escapeHtml, paginate, renderPager, toast, confirmDialog, detailDialog, statCard, plainCard, trendDelta, countBefore, monthBounds } from "../js/ui.js?v=20261113a";
 
 mountSidebarNav({ role: "partner", active: "plans" });
 const session = await requireRole("partner", "login.html");
-let items = [], filtered = [], page = 1, editingId = null;
+let items = [], filtered = [], page = 1;
 const PAGE_SIZE = 8;
-// Draft state for the modal's repeatable "Key coverage" rows — edited in
-// place by renderCoverageItems()'s own listeners, read back into the
-// saved doc's `coverageItems` array on Save. Not kept on `items`/`p`
-// directly since a half-typed row shouldn't show up anywhere until saved.
-let coverageItemsDraft = [];
-// A handful of coverage types almost every travel-insurance plan
-// includes — tapping one in renderCoveragePresets() below just adds
-// that label to coverageItemsDraft so the partner only has to type the
-// RM amount, instead of hand-typing every label from scratch. The
-// "+ Add coverage item" button below still works as before for
-// anything not in this list.
-const COVERAGE_PRESETS = [
-  "Medical Expenses (Overseas)",
-  "Medical Expenses (Malaysia)",
-  "Emergency Medical Evacuation & Repatriation",
-  "Trip Cancellation",
-  "Trip Curtailment",
-  "Travel Delay Compensation",
-  "Baggage Loss or Damage",
-  "Personal Accident (Death & Disablement)",
-  "Loss of Personal Money/Documents",
-  "Personal Liability",
-];
-// Same pattern as coverageItemsDraft, for the repeatable "Highlights" rows
-// — each one is its own badge on the app's plan detail page
-// (InsurancePlan.highlights is a List<String>), so the input is a
-// one-at-a-time list instead of a single comma-separated field that was
-// easy to mistype (a stray comma silently split a highlight in two).
-let highlightsDraft = [];
-
-function renderHighlights() {
-  const list = document.getElementById("highlightsList");
-  list.innerHTML = highlightsDraft.length
-    ? highlightsDraft.map((h, i) => `
-      <div style="display:flex; gap:8px; align-items:center; margin-bottom:8px;">
-        <input class="input" style="flex:1;" placeholder="e.g. 24/7 Support" value="${escapeHtml(h || "")}" data-hl="${i}" />
-        <button type="button" class="btn btn-danger-outline btn-sm" data-hl-remove="${i}"><span data-icon="trash" data-icon-size="14"></span></button>
-      </div>`).join("")
-    : `<p class="small muted">No highlights yet — riders won't see any badges on this plan's detail page until you add at least one.</p>`;
-  list.querySelectorAll("[data-hl]").forEach((el) =>
-    el.addEventListener("input", (e) => { highlightsDraft[Number(el.dataset.hl)] = e.target.value; }));
-  list.querySelectorAll("[data-hl-remove]").forEach((el) =>
-    el.addEventListener("click", () => { highlightsDraft.splice(Number(el.dataset.hlRemove), 1); renderHighlights(); }));
-  mountIcons(list);
-}
-
-document.getElementById("addHighlightBtn").addEventListener("click", () => {
-  highlightsDraft.push("");
-  renderHighlights();
-});
-
-function renderCoverageItems() {
-  const list = document.getElementById("coverageItemsList");
-  list.innerHTML = coverageItemsDraft.length
-    ? coverageItemsDraft.map((item, i) => `
-      <div style="display:flex; gap:8px; align-items:center; margin-bottom:8px;">
-        <input class="input" style="flex:2;" placeholder="e.g. Medical Expenses (Overseas)" value="${escapeHtml(item.label || "")}" data-cov-label="${i}" />
-        <input class="input" type="number" style="flex:1;" placeholder="RM amount" value="${item.amount ?? ""}" data-cov-amount="${i}" />
-        <button type="button" class="btn btn-danger-outline btn-sm" data-cov-remove="${i}"><span data-icon="trash" data-icon-size="14"></span></button>
-      </div>`).join("")
-    : `<p class="small muted">No coverage items yet — riders won't see a "Key Coverage" section until you add at least one.</p>`;
-  list.querySelectorAll("[data-cov-label]").forEach((el) =>
-    el.addEventListener("input", (e) => { coverageItemsDraft[Number(el.dataset.covLabel)].label = e.target.value; }));
-  list.querySelectorAll("[data-cov-amount]").forEach((el) =>
-    el.addEventListener("input", (e) => { coverageItemsDraft[Number(el.dataset.covAmount)].amount = e.target.value; }));
-  list.querySelectorAll("[data-cov-remove]").forEach((el) =>
-    el.addEventListener("click", () => { coverageItemsDraft.splice(Number(el.dataset.covRemove), 1); renderCoverageItems(); }));
-  mountIcons(list);
-  renderCoveragePresets();
-}
-
-function renderCoveragePresets() {
-  const list = document.getElementById("coveragePresetsList");
-  list.innerHTML = COVERAGE_PRESETS.map((label, i) => {
-    const already = coverageItemsDraft.some((it) => (it.label || "").trim().toLowerCase() === label.toLowerCase());
-    return `<button type="button" class="btn btn-outline btn-sm" data-preset="${i}" ${already ? "disabled" : ""} style="${already ? "opacity:.45;" : ""}">+ ${escapeHtml(label)}</button>`;
-  }).join("");
-  list.querySelectorAll("[data-preset]").forEach((el) =>
-    el.addEventListener("click", () => {
-      const label = COVERAGE_PRESETS[Number(el.dataset.preset)];
-      if (coverageItemsDraft.some((it) => (it.label || "").trim().toLowerCase() === label.toLowerCase())) return;
-      coverageItemsDraft.push({ label, amount: "" });
-      renderCoverageItems();
-    }));
-}
-
-document.getElementById("addCoverageItemBtn").addEventListener("click", () => {
-  coverageItemsDraft.push({ label: "", amount: "" });
-  renderCoverageItems();
-});
 
 // Only an approved partner may create/edit/delete a plan — firestore.rules
 // enforces this for real (insurance_plans create/update/delete now check
@@ -210,7 +102,6 @@ const isApproved = session?.profile.status === "approved";
 
 if (session) {
   setSidebarUser({ displayName: session.profile.companyName || "Partner", roleLabel: `${session.profile.companyName || "Insurance"} · Insurance Partner` });
-  wireModalDismiss();
   if (!isApproved) {
     document.getElementById("approvalBar").style.display = "flex";
     document.getElementById("addBtn").style.display = "none";
@@ -219,23 +110,20 @@ if (session) {
 }
 
 async function load() {
-  const [plans, txns] = await Promise.all([listPlans(session.uid), listTransactions(session.uid)]);
-  items = plans;
-  const active = items.filter((p) => p.status === "active");
-  const draft = items.filter((p) => p.status === "draft");
-  // Real paid transactions against this partner's plans — not a count
-  // derived from the plan listings themselves, so it actually answers
-  // "how many did I sell", unlike the old "coverage" card which just
-  // summed each plan's advertised RM payout cap and never meant sales.
-  const paid = txns.filter((t) => t.status === "paid");
+  items = await listPlans(session.uid);
+  const active = items.filter((p) => p.status === "active" || p.status === "published");
+  const inactive = items.filter((p) => p.status === "inactive");
+  const suspended = items.filter((p) => p.status === "suspended");
   const { start: thisMonthStart } = monthBounds(0);
   const activeDelta = trendDelta(active.length, countBefore(active, "createdAt", thisMonthStart));
-  const draftDelta = trendDelta(draft.length, countBefore(draft, "createdAt", thisMonthStart));
-  const soldDelta = trendDelta(paid.length, countBefore(paid, "createdAt", thisMonthStart));
+  // "Policies sold" used to live here too, but it's a sales number, not a
+  // plan-catalogue number — it already has a real home (and a matching
+  // real trend) on the Transactions page, so showing it a second time
+  // here was just duplication (Nov 2026).
   document.getElementById("statGrid").innerHTML = [
     statCard("Active plans", number(active.length), "shield-check", activeDelta),
-    statCard("Drafts", number(draft.length), "doc-text", draftDelta),
-    statCard("Policies sold", number(paid.length), "check-circle", soldDelta),
+    plainCard("Inactive", number(inactive.length), "eye"),
+    plainCard("Suspended", number(suspended.length), "x-circle"),
   ].join("");
   applyFilters();
   mountIcons(document);
@@ -244,9 +132,31 @@ async function load() {
 function applyFilters() {
   const q = document.getElementById("searchInput").value.trim().toLowerCase();
   const status = document.getElementById("statusFilter").value;
-  filtered = items.filter((p) => (!q || (p.name || "").toLowerCase().includes(q)) && (!status || p.status === status));
+  const tripType = document.getElementById("tripTypeFilter").value;
+  const premiumMin = document.getElementById("premiumMin").value !== "" ? Number(document.getElementById("premiumMin").value) : null;
+  const premiumMax = document.getElementById("premiumMax").value !== "" ? Number(document.getElementById("premiumMax").value) : null;
+  const sort = document.getElementById("sortFilter").value;
+  filtered = items.filter((p) => {
+    const matchesQ = !q || (p.name || "").toLowerCase().includes(q);
+    const matchesStatus = !status || p.status === status;
+    const matchesTripType = !tripType || p.tripType === tripType;
+    const premium = Number(p.premium) || 0;
+    const matchesPremiumMin = premiumMin === null || premium >= premiumMin;
+    const matchesPremiumMax = premiumMax === null || premium <= premiumMax;
+    return matchesQ && matchesStatus && matchesTripType && matchesPremiumMin && matchesPremiumMax;
+  });
+  if (sort === "premium_desc") filtered.sort((a, b) => (Number(b.premium) || 0) - (Number(a.premium) || 0));
+  else if (sort === "premium_asc") filtered.sort((a, b) => (Number(a.premium) || 0) - (Number(b.premium) || 0));
   page = 1;
   renderTable();
+}
+
+// Basic plans are priced per traveller per day of the trip (see
+// plan-form.html); Annual is a flat per-traveller yearly price. Shown
+// next to the premium everywhere it's listed so it's never read as a flat
+// total.
+function premiumUnit(tripType) {
+  return tripType === "Annual" ? "/traveller/yr" : "/traveller/day";
 }
 
 function renderTable() {
@@ -257,23 +167,29 @@ function renderTable() {
   else {
     empty.style.display = "none";
     body.innerHTML = pageItems.map((p) => `
-      <tr>
+      <tr style="cursor:pointer;" data-open="${p.id}">
         <td class="cell-strong">${escapeHtml(p.name || "—")}</td>
         <td class="muted">${escapeHtml(p.tripType || "—")}</td>
         <td class="muted">${moneyExact(p.coverage)}</td>
-        <td class="muted">${moneyExact(p.premium)}</td>
-        <td>${statusBadge(p.status)}</td>
+        <td class="muted">${moneyExact(p.premium)} <span class="small">${premiumUnit(p.tripType)}</span></td>
+        <td>${statusBadge(p.status || "draft")}</td>
         <td>
           <div class="row-actions">
             ${isApproved ? `
-            <button class="btn btn-outline btn-sm" data-edit="${p.id}"><span data-icon="edit" data-icon-size="14"></span></button>
+            <a class="btn btn-outline btn-sm" href="plan-form.html?id=${p.id}"><span data-icon="edit" data-icon-size="14"></span></a>
             <button class="btn btn-danger-outline btn-sm" data-del="${p.id}"><span data-icon="trash" data-icon-size="14"></span></button>
             ` : ""}
           </div>
         </td>
       </tr>`).join("");
-    body.querySelectorAll("[data-edit]").forEach((b) => b.addEventListener("click", () => openForm(b.dataset.edit)));
-    body.querySelectorAll("[data-del]").forEach((b) => b.addEventListener("click", () => remove(b.dataset.del)));
+    // Row click opens a read-only detail popup (same convention as every
+    // other table in this console now) — only the pencil icon, or the
+    // popup's own Edit button, actually navigates to the edit form.
+    body.querySelectorAll("[data-open]").forEach((row) => row.addEventListener("click", (e) => {
+      if (e.target.closest(".row-actions")) return;
+      openDetail(row.dataset.open);
+    }));
+    body.querySelectorAll("[data-del]").forEach((b) => b.addEventListener("click", (e) => { e.stopPropagation(); remove(b.dataset.del); }));
   }
   document.getElementById("resultsLabel").textContent = total
     ? `Showing ${(page - 1) * PAGE_SIZE + 1} to ${Math.min(page * PAGE_SIZE, total)} of ${total} results` : "No results";
@@ -281,62 +197,39 @@ function renderTable() {
   mountIcons(document);
 }
 
-function openForm(id) {
-  editingId = id || null;
-  const p = id ? items.find((x) => x.id === id) : null;
-  document.getElementById("formTitle").textContent = id ? "Edit plan" : "Add plan";
-  document.getElementById("fName").value = p?.name || "";
-  document.getElementById("fType").value = p?.tripType || "Single Trip";
-  document.getElementById("fCoverage").value = p?.coverage || "";
-  document.getElementById("fPremium").value = p?.premium || "";
-  document.getElementById("fStatus").value = p?.status || "active";
-  coverageItemsDraft = (p?.coverageItems || []).map((it) => ({ label: it.label || "", amount: it.amount ?? "" }));
-  renderCoverageItems();
-  highlightsDraft = [...(p?.highlights || [])];
-  renderHighlights();
-  openModal("formModal");
+function openDetail(id) {
+  const p = items.find((x) => x.id === id);
+  if (!p) return;
+  // No single "Total coverage" row here on purpose -- real travel
+  // insurance doesn't have one undifferentiated coverage amount. Each
+  // benefit (medical, cancellation, baggage, liability...) has its own
+  // separate limit, because they cover entirely different kinds of
+  // claims that are never paid out together -- summing them into one
+  // number wouldn't mean anything an insurer would actually print on a
+  // policy schedule. This "Key coverage" list already IS that per-benefit
+  // schedule, which is the real, meaningful information.
+  const coverageHtml = (p.coverageItems || []).length
+    ? p.coverageItems.map((it) => `
+        <div style="display:flex;justify-content:space-between;gap:12px;padding:4px 0;">
+          <span>${escapeHtml(it.label)}</span>
+          <span class="cell-strong" style="flex:none;">${moneyExact(it.amount)}</span>
+        </div>`).join("")
+    : "—";
+  const highlightsHtml = (p.highlights || []).length
+    ? `<ul style="margin:0;padding-left:18px;">${p.highlights.map((h) => `<li style="padding:2px 0;">${escapeHtml(h)}</li>`).join("")}</ul>`
+    : "—";
+  const rows = [
+    { label: "Premium", value: `${moneyExact(p.premium)} ${premiumUnit(p.tripType)}` },
+    { label: "Key coverage", value: coverageHtml, block: true },
+    { label: "Highlights", value: highlightsHtml, block: true },
+  ];
+  detailDialog({
+    title: p.name || "Untitled plan",
+    subtitle: `${p.tripType || "Trip type not set"} · ${(p.status || "draft").replace(/_/g, " ")}`,
+    rows,
+    actions: isApproved ? [{ text: "Edit", className: "btn-primary", onClick: () => { location.href = `plan-form.html?id=${id}`; } }] : [],
+  });
 }
-
-document.getElementById("addBtn").addEventListener("click", () => openForm(null));
-
-document.getElementById("saveBtn").addEventListener("click", async () => {
-  const name = document.getElementById("fName").value.trim();
-  if (!name) { toast("Plan name is required.", "error"); return; }
-  const data = {
-    name,
-    tripType: document.getElementById("fType").value,
-    coverage: Number(document.getElementById("fCoverage").value) || 0,
-    premium: Number(document.getElementById("fPremium").value) || 0,
-    status: document.getElementById("fStatus").value,
-    // Real per-plan detail for the app's plan detail page — see
-    // lib/models/insurance_models.dart's InsurancePlan.coverageItems/
-    // highlights doc comment for why these replaced a fixed list there.
-    coverageItems: coverageItemsDraft
-      .map((it) => ({ label: (it.label || "").trim(), amount: Number(it.amount) || 0 }))
-      .filter((it) => it.label),
-    highlights: highlightsDraft.map((h) => (h || "").trim()).filter(Boolean),
-    partnerId: session.uid,
-    providerName: session.profile.companyName || "Partner",
-    // Denormalized from the partner's own profile (Organization Profile
-    // page) so the rider's app can show the real logo on plan cards
-    // without an extra read per plan — see
-    // lib/repositories/insurance_repository.dart's _fromDoc.
-    providerLogoUrl: session.profile.logoUrl || "",
-  };
-  const btn = document.getElementById("saveBtn");
-  setBusy(btn, true, "Saving…");
-  try {
-    if (editingId) await updatePlan(editingId, data);
-    else await createPlan(data);
-    closeModal("formModal");
-    toast("Plan saved.", "success");
-    await load();
-  } catch (err) {
-    toast(err.message || "Couldn't save plan.", "error");
-  } finally {
-    setBusy(btn, false);
-  }
-});
 
 async function remove(id) {
   const p = items.find((x) => x.id === id);
@@ -353,6 +246,10 @@ async function remove(id) {
 
 document.getElementById("searchInput").addEventListener("input", applyFilters);
 document.getElementById("statusFilter").addEventListener("change", applyFilters);
+document.getElementById("tripTypeFilter").addEventListener("change", applyFilters);
+document.getElementById("sortFilter").addEventListener("change", applyFilters);
+document.getElementById("premiumMin").addEventListener("input", applyFilters);
+document.getElementById("premiumMax").addEventListener("input", applyFilters);
 </script>
 </body>
 </html>

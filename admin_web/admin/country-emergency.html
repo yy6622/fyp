@@ -6,8 +6,8 @@
 <title>Country Emergency Info — Voya Admin</title>
 <link rel="stylesheet" href="../css/tokens.css?v=20261020c" />
 <link rel="stylesheet" href="../css/base.css?v=20261020c" />
-<link rel="stylesheet" href="../css/layout.css?v=20261021" />
-<link rel="stylesheet" href="../css/components.css?v=20261021c" />
+<link rel="stylesheet" href="../css/layout.css?v=20261111a" />
+<link rel="stylesheet" href="../css/components.css?v=20261106g" />
 </head>
 <body>
 <div class="shell">
@@ -30,7 +30,6 @@
         <p class="subtitle">Manage the local emergency numbers and consulate details travellers see in the app's Emergency tab.</p>
       </div>
       <div class="inline-flex" style="gap:10px;">
-        <button class="btn btn-outline" id="importDefaultsBtn"><span data-icon="download"></span>Import missing defaults</button>
         <button class="btn btn-primary" id="addBtn"><span data-icon="plus"></span>Add country</button>
       </div>
     </div>
@@ -39,12 +38,6 @@
 
     <div class="filter-bar">
       <div class="search-input-wrap"><span data-icon="search"></span><input class="input" id="searchInput" placeholder="Search countries…" /></div>
-      <select class="select" id="statusFilter">
-        <option value="">All</option>
-        <option value="configured">Numbers configured</option>
-        <option value="default">Using default numbers</option>
-        <option value="noembassy">No embassy on file</option>
-      </select>
     </div>
 
     <div class="table-wrap scroll-x">
@@ -66,17 +59,17 @@
 </div>
 
 <script type="module">
-import { requireRole } from "../js/auth-guard.js?v=20261021";
-import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261021";
-import { mountIcons } from "../js/icons.js?v=20261021";
+import { requireRole } from "../js/auth-guard.js?v=20261106b";
+import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261114a";
+import { mountIcons } from "../js/icons.js?v=20261106c";
 import {
-  listCountryEmergencyInfo, deleteCountryEmergencyInfo, saveCountryEmergencyInfo,
-  listEmbassies, getEmbassy, saveEmbassy,
-} from "../js/data.js?v=20261021";
+  listCountryEmergencyInfo, deleteCountryEmergencyInfo,
+  listEmbassies,
+} from "../js/data.js?v=20261114c";
 import {
-  number, escapeHtml, paginate, renderPager, toast, confirmDialog, statCard, plainCard,
-} from "../js/ui.js?v=20261021";
-import { DEFAULT_EMERGENCY_NUMBERS, DEFAULT_EMBASSIES, titleCase } from "./country-emergency-defaults.js?v=20261020c";
+  number, escapeHtml, paginate, renderPager, toast, confirmDialog, statCard, plainCard, detailDialog,
+} from "../js/ui.js?v=20261113a";
+import { DEFAULT_EMERGENCY_NUMBERS, titleCase } from "./country-emergency-defaults.js?v=20261020c";
 
 mountSidebarNav({ role: "admin", active: "emergency" });
 const session = await requireRole("admin", "login.html");
@@ -128,26 +121,49 @@ function renderStats() {
   const noEmbassy = items.filter((i) => i.embassyCount === 0).length;
   document.getElementById("statGrid").innerHTML = [
     statCard("Countries", number(items.length), "flag", null),
-    plainCard("Numbers configured", number(configured)),
-    plainCard("No embassy on file", number(noEmbassy)),
+    plainCard("Numbers configured", number(configured), "phone"),
+    plainCard("No embassy on file", number(noEmbassy), "alert-triangle"),
   ].join("");
   mountIcons(document);
 }
 
 function applyFilters() {
   const q = document.getElementById("searchInput").value.trim().toLowerCase();
-  const status = document.getElementById("statusFilter").value;
-  filtered = items.filter((i) => {
-    const matchesQ = !q || i.label.toLowerCase().includes(q);
-    const matchesStatus = !status || (
-      status === "configured" ? i.configured :
-      status === "default" ? !i.configured :
-      i.embassyCount === 0
-    );
-    return matchesQ && matchesStatus;
-  });
+  filtered = items.filter((i) => !q || i.label.toLowerCase().includes(q));
   page = 1;
   renderTable();
+}
+
+async function openDetail(key) {
+  const i = items.find((x) => x.key === key);
+  if (!i) return;
+  let embassies = [];
+  try {
+    embassies = await listEmbassies(key);
+  } catch (err) {
+    toast(err.message || "Couldn't load embassies for this country.", "error");
+  }
+  const embassiesHtml = embassies.length
+    ? embassies.map((e) => `
+        <div style="padding:10px 0;border-top:1px solid #ECECEC;">
+          <div style="font-weight:700;">${escapeHtml(e.missionName || titleCase(e.id))} <span class="muted" style="font-weight:500;">— for ${escapeHtml(titleCase(e.id))} travellers</span></div>
+          <div class="muted small" style="margin-top:2px;">${escapeHtml(e.address || "No address on file")}</div>
+          <div class="muted small">${[...(e.officeLines || []), e.emergencyPhone].filter(Boolean).map(escapeHtml).join(" · ") || "No phone on file"}</div>
+        </div>`).join("")
+    : `<p class="muted small">No embassy on file for this country yet.</p>`;
+  detailDialog({
+    title: i.label,
+    subtitle: i.configured ? "Numbers configured by an admin" : "Showing built-in default numbers",
+    rows: [
+      { label: "Police", value: escapeHtml(i.police) },
+      { label: "Ambulance", value: escapeHtml(i.ambulance) },
+      { label: "Fire", value: escapeHtml(i.fire) },
+      { label: `Embassies (${embassies.length})`, value: embassiesHtml },
+    ],
+    actions: [
+      { text: "Edit", className: "btn-primary", onClick: () => { location.href = `country-emergency-form.html?key=${encodeURIComponent(key)}`; } },
+    ],
+  });
 }
 
 function renderTable() {
@@ -173,7 +189,7 @@ function renderTable() {
       </tr>`).join("");
     body.querySelectorAll("[data-open]").forEach((row) => row.addEventListener("click", (e) => {
       if (e.target.closest(".row-actions")) return;
-      location.href = `country-emergency-form.html?key=${encodeURIComponent(row.dataset.open)}`;
+      openDetail(row.dataset.open);
     }));
     body.querySelectorAll("[data-edit]").forEach((b) => b.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -209,77 +225,7 @@ async function remove(key) {
 
 document.getElementById("addBtn").addEventListener("click", () => { location.href = "country-emergency-form.html"; });
 document.getElementById("searchInput").addEventListener("input", applyFilters);
-document.getElementById("statusFilter").addEventListener("change", applyFilters);
 
-document.getElementById("importDefaultsBtn").addEventListener("click", async () => {
-  const missingNumbers = COUNTRY_KEYS.filter((k) => !docsByKey[k]);
-  const embassyKeys = Object.keys(DEFAULT_EMBASSIES);
-  if (!missingNumbers.length && !embassyKeys.length) { toast("Nothing to import.", "info"); return; }
-  const ok = await confirmDialog({
-    title: "Import built-in defaults?",
-    body: `Writes the built-in emergency numbers for ${missingNumbers.length} countr${missingNumbers.length === 1 ? "y" : "ies"} without data yet, and every home country's embassy details that this admin tool has pre-filled (Malaysia, Brunei, Singapore, Indonesia, Thailand — more as research is added) for any (destination, home country) pair that doesn't already have one on file. This never overwrites anything you've already edited.`,
-    confirmText: "Import", danger: false,
-  });
-  if (!ok) return;
-  const btn = document.getElementById("importDefaultsBtn");
-  btn.disabled = true;
-  const failures = []; // { what, err }
-  try {
-    for (const key of missingNumbers) {
-      try {
-        const def = DEFAULT_EMERGENCY_NUMBERS[key];
-        await saveCountryEmergencyInfo(key, { country: titleCase(key), police: def.police || "", ambulance: def.ambulance || "", fire: def.fire || "" });
-      } catch (err) {
-        console.error(`Import: failed to save numbers for "${key}"`, err);
-        failures.push({ what: `${titleCase(key)} numbers`, err });
-      }
-    }
-    let embassiesImported = 0;
-    for (const key of embassyKeys) {
-      for (const [homeKey, def] of Object.entries(DEFAULT_EMBASSIES[key])) {
-        try {
-          const existing = await getEmbassy(key, homeKey);
-          if (existing) continue;
-          await saveEmbassy(key, homeKey, {
-            homeCountry: titleCase(homeKey),
-            missionName: def.missionName || "",
-            address: def.address || "",
-            officeLines: def.officeLines || [],
-            emergencyPhone: def.emergencyPhone || "",
-            email: def.email || "",
-            embassyPhotoUrl: "",
-          });
-          embassiesImported++;
-        } catch (err) {
-          // One bad (destination, home country) pair must never abort the
-          // rest of the batch — that's what previously caused the import
-          // to silently stop after whichever entry threw first, leaving
-          // every destination after it in DEFAULT_EMBASSIES's key order
-          // untouched. Log it, record it, and keep going.
-          console.error(`Import: failed to save embassy "${homeKey}" for "${key}"`, err);
-          failures.push({ what: `${titleCase(homeKey)}'s embassy in ${titleCase(key)}`, err });
-        }
-      }
-    }
-    const summary = `Imported ${missingNumbers.length} countr${missingNumbers.length === 1 ? "y" : "ies"}' numbers and ${embassiesImported} embass${embassiesImported === 1 ? "y" : "ies"}.`;
-    if (failures.length) {
-      console.error("Import: failed items", failures);
-      const sample = failures.slice(0, 3).map((f) => `${f.what} (${f.err?.message || f.err})`).join("; ");
-      toast(`${summary} ${failures.length} item${failures.length === 1 ? "" : "s"} failed and were skipped — ${sample}${failures.length > 3 ? "; …see console for all" : ""}. Already-imported items are safe; re-click Import to retry just the failed ones.`, "error");
-    } else {
-      toast(summary, "success");
-    }
-    await load();
-  } catch (err) {
-    // Should only reach here for something outside the per-item loops
-    // (e.g. load() itself failing) — the loops above no longer let a
-    // single item's error escape and abort the whole import.
-    console.error("Import: unexpected top-level failure", err);
-    toast(err.message || "Import stopped partway — try again, it skips what's already written.", "error");
-  } finally {
-    btn.disabled = false;
-  }
-});
 </script>
 </body>
 </html>

@@ -98,13 +98,15 @@ exports.optimiseItinerary = onCall({ timeoutSeconds: 60, memory: "256MiB" }, asy
   const window = computeLogisticsWindow(trip, dayKeys.length);
   const days = dayKeys.map((k, i) => ({ day: i + 1, weekday: daysRaw[k].weekday || "", date: daysRaw[k].date || "" }));
   const { loadSavedPlaces, loadCatalogPlaces } = require("./itinerary");
-  const [saved, catalog] = await Promise.all([
+  const [saved, catalog, votesSnap] = await Promise.all([
     loadSavedPlaces(db, tripId, trip.memberIds).catch(() => []),
     loadCatalogPlaces(db, trip.destination).catch(() => []),
+    tripRef.collection("votes").get().catch(() => null),
   ]);
+  const votes = votesSnap ? votesSnap.docs.map((d) => d.data()) : [];
   const groupByArea = !(request.data && request.data.groupByArea === false);
   const result = optimisePlan(plan, {
-    mode, onlyDay, window, days, saved, catalog, groupByArea,
+    mode, onlyDay, window, days, saved, catalog, groupByArea, votes,
     destination: trip.destination || "",
     flights: Array.isArray(trip.flights) ? trip.flights : [],
     hotelStays: Array.isArray(trip.hotelStays) ? trip.hotelStays : [],

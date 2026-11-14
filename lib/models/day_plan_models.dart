@@ -34,6 +34,40 @@ class ActivityItem {
 List<String> effectiveActivityMembers(ActivityItem item, List<String> allMemberIds) =>
     item.forMemberUids.isEmpty ? allMemberIds : item.forMemberUids;
 
+// Keyword guess at whether an activity happens indoors, used to decide
+// whether a bad-weather/traffic nudge is even worth showing for a day (no
+// point suggesting a re-optimise for rain when nothing that day is outdoors).
+// Returns true (confidently indoor), false (confidently outdoor), or null
+// (can't tell) — callers should treat null as "not confidently indoor" so a
+// day with unclassifiable activities still gets the nudge as before.
+final RegExp _indoorWords = RegExp(
+  r'(museum|gallery|mall|shopping (centre|center)|department store|supermarket|'
+  r'cinema|movie|theatre|theater|aquarium|planetarium|arcade|bowling|karaoke|'
+  r'spa|massage|indoor|casino|ice rink|restaurant|cafe|café|food court|'
+  r'博物馆|美术馆|商场|购物中心|百货|电影院|水族馆|按摩|室内|咖啡|餐厅)',
+  caseSensitive: false,
+);
+final RegExp _outdoorWords = RegExp(
+  r'(beach|hiking?|trail|park|garden|zoo|safari|mountain|lake|river|'
+  r'waterfall|outdoor|night market|street food|market|viewpoint|cruise|boat|'
+  r'island|cycling|bike|trekking|climbing|ski|surfing|rooftop|walking tour|'
+  r'picnic|sunrise|sunset|海滩|沙滩|爬山|登山|公园|花园|动物园|夜市|海岛|骑车|徒步|日出|日落)',
+  caseSensitive: false,
+);
+
+bool? isLikelyIndoor(String label) {
+  final indoor = _indoorWords.hasMatch(label);
+  final outdoor = _outdoorWords.hasMatch(label);
+  if (indoor && !outdoor) return true;
+  if (outdoor && !indoor) return false;
+  return null; // no match, or both matched (ambiguous) — unknown either way
+}
+
+/// True only when every activity in [items] is confidently indoor — an empty
+/// list is not "all indoor" (nothing to be confident about).
+bool allActivitiesLikelyIndoor(List<ActivityItem> items) =>
+    items.isNotEmpty && items.every((a) => isLikelyIndoor(a.label) == true);
+
 class ScheduleConflict {
   final int day;
   final String time;

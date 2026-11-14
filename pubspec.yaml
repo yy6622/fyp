@@ -82,6 +82,16 @@ dependencies:
   # project's actual Flutter SDK (3.38.8), which 13.0.0 does not require.
   flutter_stripe: ^13.0.0
 
+  # PayPal checkout (second payment option alongside Credit/Debit Card, for
+  # flight/hotel/insurance): PayPal has no official Flutter SDK, so the
+  # standard approach is the WebView-based Orders v2 flow -- the Cloud
+  # Function (functions/paypal.js) creates the order server-side and hands
+  # back a sandbox PayPal approval page, which this WebView opens; see
+  # lib/views/payment/paypal_checkout_page.dart. Kept to an older, longer-
+  # proven release rather than the newest one, same reasoning as the
+  # flutter_stripe pin just above (this project's Flutter SDK is 3.38.8).
+  webview_flutter: ^4.7.0
+
   # HTTP client for the real Flights/Hotels data source (Duffel API) and
   # the OpenStreetMap Nominatim geocoding lookup used to turn a typed
   # destination into coordinates for a Duffel Stays search.
@@ -136,6 +146,18 @@ dependencies:
   # onward (confirmed against the package's own changelog); 1.1.6 predates
   # it and fails to compile against that parameter.
   flutter_svg: ^2.3.0
+
+  # App felt laggy scrolling image-heavy feeds (Explore, Home, Near By,
+  # Community, Plan, insurance partner list) because every Image.network
+  # re-fetched and re-decoded the same URL on every rebuild/scroll-back —
+  # no memory/disk cache at all. cached_network_image swaps those for
+  # CachedNetworkImage, which caches decoded bytes to disk so re-showing
+  # the same image (scrolling back up, revisiting a screen) is instant
+  # instead of a fresh network round-trip. Confirmed ^3.4.1 is the latest
+  # published version on pub.dev as of this pin (checked against
+  # packages.ecosyste.ms, same discipline as flutter_svg's version above)
+  # — run flutter pub get on your machine after pulling this.
+  cached_network_image: ^3.4.1
 
   # Branded PDF export for Expenses > Generate Report (Personal / Group),
   # styled to match admin_web's own generate-report PDFs (navy header +

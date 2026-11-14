@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../controllers/booking_details_controller.dart';
 import '../../repositories/trip_repository.dart';
+import '../../repositories/user_repository.dart';
 import '../../services/auth_service.dart';
 import '../../services/format_utils.dart';
 import '../../theme.dart';
@@ -60,6 +61,7 @@ class _HotelGuestDetailsPageState extends State<HotelGuestDetailsPage> {
 
   Trip? _trip;
   Set<String> _forMemberUids = {};
+  int _phoneFieldVersion = 0;
 
   @override
   void initState() {
@@ -76,6 +78,37 @@ class _HotelGuestDetailsPageState extends State<HotelGuestDetailsPage> {
         });
       });
     }
+    _prefillContactFromAccount();
+  }
+
+  /// The guest contact fields double as the account holder's own details
+  /// most of the time, so default them from the signed-in traveller's
+  /// profile (still fully editable) instead of leaving them blank.
+  Future<void> _prefillContactFromAccount() async {
+    final uid = AuthService.instance.currentUser?.uid;
+    if (uid == null) return;
+    AppUser? profile;
+    try {
+      profile = await UserRepository.instance.fetchProfile(uid);
+    } catch (_) {
+      return;
+    }
+    if (!mounted || profile == null) return;
+    setState(() {
+      if (_nameCtrl.text.trim().isEmpty && profile!.name.trim().isNotEmpty) {
+        _nameCtrl.text = profile.name;
+        controller.setFullName(profile.name);
+      }
+      if (_emailCtrl.text.trim().isEmpty && profile!.email.trim().isNotEmpty) {
+        _emailCtrl.text = profile.email;
+        controller.setEmail(profile.email);
+      }
+      if (_phoneCtrl.text.trim().isEmpty && profile!.phone.trim().isNotEmpty) {
+        _phoneCtrl.text = profile.phone;
+        controller.setPhone(profile.phone);
+        _phoneFieldVersion++;
+      }
+    });
   }
 
   @override
@@ -201,6 +234,7 @@ class _HotelGuestDetailsPageState extends State<HotelGuestDetailsPage> {
                         niceDialogField(_nameCtrl, 'Guest Full Name', icon: Icons.person_outline),
                         niceDialogField(_emailCtrl, 'Email', icon: Icons.email_outlined, keyboardType: TextInputType.emailAddress),
                         PhoneInputField(
+                          key: ValueKey(_phoneFieldVersion),
                           initialValue: _phoneCtrl.text,
                           onChanged: (v) => _phoneCtrl.text = v,
                         ),

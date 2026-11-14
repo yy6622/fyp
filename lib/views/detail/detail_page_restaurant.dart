@@ -59,14 +59,6 @@ class _DetailPageRestaurantState extends State<DetailPageRestaurant> {
                         children: [
                           Text(r.name, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.navy)),
                           const SizedBox(height: 8),
-                          Row(
-                            children: [
-                              const Icon(Icons.star, size: 16, color: AppColors.orange),
-                              const SizedBox(width: 4),
-                              Text('${r.rating} (${r.reviews} reviews)', style: const TextStyle(fontSize: 12.5, color: AppColors.textGrey)),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
                           Wrap(spacing: 6, runSpacing: 6, children: r.cuisineTags.map(tagChip).toList()),
                           const SizedBox(height: 6),
                           Row(
@@ -133,19 +125,9 @@ class _DetailPageRestaurantState extends State<DetailPageRestaurant> {
                       ],
                     ),
                   ),
-                  ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: _saved ? Colors.white : AppColors.primary,
-                      side: _saved ? const BorderSide(color: AppColors.primary) : null,
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                    ),
-                    onPressed: widget.onToggleSave == null ? null : _toggle,
-                    icon: Icon(_saved ? Icons.favorite : Icons.favorite_border, size: 18, color: _saved ? AppColors.primary : Colors.white),
-                    label: Text(
-                      _saved ? 'Saved' : 'Save',
-                      style: TextStyle(color: _saved ? AppColors.primary : Colors.white, fontWeight: FontWeight.w600),
-                    ),
+                  SaveHeartBox(
+                    saved: _saved,
+                    onTap: widget.onToggleSave == null ? null : _toggle,
                   ),
                 ],
               ),

@@ -76,7 +76,14 @@ service cloud.firestore {
           request.resource.data.read == false;
       }
       match /bookings/{bookingId} {
-        allow read, create: if isOwner(uid);
+        // Admin bypass on read: admin_web/admin/transactions.html needs a
+        // platform-wide view of every traveller's flight/hotel purchases
+        // (collectionGroup query, since this is a per-user subcollection
+        // with no top-level mirror) — same reasoning as the admin bypass
+        // on reviews/posts elsewhere in this file. Create stays owner-only;
+        // an admin never books on a traveller's behalf.
+        allow read: if isOwner(uid) || isAdmin();
+        allow create: if isOwner(uid);
         // Only `documents` (attaching an uploaded doc's URL — see
         // BookingRepository.setBookingDocument/BookingDocumentService)
         // can change after creation; every other field is the original
@@ -131,6 +138,67 @@ service cloud.firestore {
       allow read, write: if isSignedIn();
     }
 
+    // Admin-extensible pick-lists behind the chip pickers on
+    // attraction-form.html/restaurant-form.html (cuisine/category/facility
+    // tags) — one doc per list, {tags: string[]}. Each form ships a
+    // hardcoded starter list so it's never empty even before this doc
+    // exists; picking "+ Add a new tag" merges the new one in here too, so
+    // it's offered to every admin from then on instead of being typed fresh
+    // every time. Admin-only, same as the rest of this console's own data.
+    match /tag_presets/{key} {
+      allow read, write: if isAdmin();
+    }
+
+    // Tracks which notices an admin has manually dismissed from
+    // admin/notifications.html's feed (the "delete" button) — the
+    // underlying partner/post/review/suggestion doc the notice is ABOUT is
+    // untouched; this just remembers "don't show this one again". Doc id
+    // is the same "kind:id" key the page already uses to tell notices
+    // apart. Admin-only, same as the rest of this console's own data.
+    match /dismissed_notices/{key} {
+      allow read, write: if isAdmin();
+    }
+
+    // Same idea as dismissed_notices above, but for a partner's own
+    // partner/notifications.html feed -- scoped per-partner (subcollection
+    // under their own uid) so one partner dismissing a notice never hides
+    // it for another partner or for admins. Doc id is the same "kind:id"
+    // key the page uses.
+    match /partner_dismissed_notices/{partnerId}/items/{key} {
+      allow read, write: if isOwner(partnerId);
+    }
+
+    // Tracks which notices an admin has already opened/clicked on
+    // admin/notifications.html's feed -- separate from dismissed_notices
+    // above (that's an explicit "hide this"; this is just "I've seen
+    // this one already"), used to style a notice as read vs. unread and
+    // to let an already-decided partner notice age out after 30 days
+    // (see admin/notifications.html's buildNotices()). Doc id is the
+    // same "kind:id" key. Admin-only, same as dismissed_notices.
+    match /seen_notices/{key} {
+      allow read, write: if isAdmin();
+    }
+
+    // Same idea as seen_notices above, but for partner/notifications.html
+    // -- scoped per-partner, same shape as partner_dismissed_notices.
+    match /partner_seen_notices/{partnerId}/items/{key} {
+      allow read, write: if isOwner(partnerId);
+    }
+
+    // A traveller-submitted "suggest a new place" card, reviewed on
+    // admin/attractions.html's Place Suggestions tab. Any signed-in user
+    // may submit one (the mobile-side submission UI doesn't exist yet, but
+    // the rule is ready for it); only an admin can read the queue or move
+    // a suggestion's status (reject/accept) — see js/data.js's
+    // listPlaceSuggestions/rejectPlaceSuggestion/markPlaceSuggestionAdded.
+    // Never deleted — a decided suggestion just leaves "pending" status.
+    match /place_suggestions/{id} {
+      allow read: if isAdmin();
+      allow create: if isSignedIn();
+      allow update: if isAdmin();
+      allow delete: if false;
+    }
+
     // Monthly aggregate of community-post views — one doc per "YYYY-MM",
     // field viewCount bumped by FieldValue.increment every time
     // CommunityRepository.recordView fires (any post, any viewer). Backs
@@ -157,6 +225,37 @@ service cloud.firestore {
       allow read: if isAdmin();
     }
 
+    // Collection-group counterpart to the four nested
+    // match .../reviews/{reviewId} rules below (posts, catalog_hotels,
+    // catalog_attractions, catalog_restaurants) -- same gap as the
+    // viewers rule right above. admin_web's listFlaggedReviews() /
+    // countFlaggedReviewsTotal() run a collectionGroup("reviews") query
+    // spanning every parent's reviews at once (Content Moderation's
+    // "Reported Reviews" tab), and a nested match alone doesn't
+    // authorize that: it only covers reads scoped to one parent doc's
+    // own subcollection path. Without this, the tab always failed with
+    // "Missing or insufficient permissions" even though the nested
+    // rules looked like they already covered "reviews". Admin-only,
+    // since only that tab ever queries across the whole collection group.
+    match /{path=**}/reviews/{reviewId} {
+      allow read: if isAdmin();
+    }
+
+    // Collection-group counterpart to the nested match
+    // /users/{uid}/bookings/{bookingId} rule above -- same gap as the
+    // viewers/reviews rules above it. admin_web's listAllBookings() runs a
+    // collectionGroup("bookings") query spanning every traveller's flight/
+    // hotel/insurance purchases at once (admin/transactions.html), and a
+    // nested match alone doesn't authorize that: it only covers reads
+    // scoped to one user's own subcollection path. Without this, the page
+    // always failed with "Missing or insufficient permissions" even though
+    // the nested rule looked like it already covered "bookings". Admin-only,
+    // since only that page ever queries across the whole collection group;
+    // a traveller's own read still goes through the nested isOwner(uid) rule.
+    match /{path=**}/bookings/{bookingId} {
+      allow read: if isAdmin();
+    }
+
     // Audit trail for admin/content-moderation.html's approve/reject
     // actions (admin_web/js/data.js logModerationAction/countModerationToday)
     // — had NO rule at all before this, so every read/write silently hit
@@ -179,13 +278,15 @@ service cloud.firestore {
       //  - viewCount/uniqueViewerCount — bumped by
       //    CommunityRepository.recordView every time anyone opens the
       //    post, for the Community Post Analysis Report.
-      //  - reported/reportedBy/reportReason/reportedAt/reportCount —
-      //    bumped by CommunityRepository.reportPost, pinned to the
-      //    reporter's own uid so no one can file a report "as" someone
-      //    else. reportCount persists across moderation actions (unlike
-      //    the other four, which approvePostReport clears) so it stays a
-      //    true lifetime count for the report, even after a report is
-      //    dismissed.
+      //  - reported/reportedBy/reportReason/reportedAt/reportCount/
+      //    reporterIds — bumped by CommunityRepository.reportPost, pinned
+      //    to the reporter's own uid so no one can file a report "as"
+      //    someone else. reportCount and reporterIds persist across
+      //    moderation actions (unlike the other four, which
+      //    approvePostReport clears) so reportCount stays a true
+      //    lifetime count and reporterIds keeps remembering who's ever
+      //    reported this post (CommunityPost.reportedByMe), even after a
+      //    report is dismissed.
       // There used to be a separate savedBy array for a bookmark toggle,
       // but that was dropped in favor of just "like" — old posts may
       // still carry a stale savedBy field, it's just never read or
@@ -195,7 +296,7 @@ service cloud.firestore {
         isAdmin() ||
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likedBy', 'ratings']) ||
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['viewCount', 'uniqueViewerCount']) ||
-        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reported', 'reportedBy', 'reportReason', 'reportedAt', 'reportCount']) &&
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reported', 'reportedBy', 'reportReason', 'reportedAt', 'reportCount', 'reporterIds']) &&
           request.resource.data.reportedBy == request.auth.uid)
       );
       // Admin bypass added for the same reason as update above —
@@ -260,7 +361,7 @@ service cloud.firestore {
     function isSelfJoin() {
       return isSignedIn() &&
         !(request.auth.uid in resource.data.memberIds) &&
-        request.resource.data.memberIds == resource.data.memberIds + [request.auth.uid] &&
+        request.resource.data.memberIds == resource.data.memberIds.concat([request.auth.uid]) &&
         // memberIds alone being an allowed top-level key isn't enough — a
         // crafted write could legitimately append the joiner's own uid
         // there while replacing the whole memberNames map with anything.
@@ -374,7 +475,11 @@ service cloud.firestore {
     match /catalog_attractions/{id} {
       allow read: if isSignedIn();
       allow create, update: if isSignedIn();
-      allow delete: if false;
+      // Was `if false` for everyone — admin-only delete added so
+      // admin/attractions.html's delete button actually works (it calls
+      // deleteAttraction(id), which was being silently denied). Mirrors
+      // the identical catalog_restaurants rule just below.
+      allow delete: if isAdmin();
 
       // Admin bypass on update/delete for admin/content-moderation.html's
       // Reported Reviews tab (approveReview/rejectReview) — see the same
@@ -499,7 +604,14 @@ service cloud.firestore {
       // marker doc); only they or an admin can edit it afterwards (e.g. an
       // admin approving/suspending via setPartnerStatus).
       allow create: if isOwner(uid);
-      allow update: if isOwner(uid) || isAdmin();
+      // The owner edits their own org profile but not the approval-gate
+      // fields setPartnerStatus controls — otherwise a partner could just
+      // write {status:'approved'} to their own doc and self-approve,
+      // bypassing admin review entirely (same pattern as users/{uid}
+      // above, which blocks self-editing role/status the same way).
+      allow update: if (isOwner(uid) && !request.resource.data.diff(resource.data).affectedKeys()
+                          .hasAny(['status', 'approvedAt', 'rejectedAt', 'rejectionReason', 'blockedAt']))
+                    || isAdmin();
       allow delete: if false;
     }
 
@@ -509,15 +621,41 @@ service cloud.firestore {
       // one — a pending or suspended partner's console hides the
       // Add/Edit/Delete actions for this same reason (plans.html), this
       // is the rule that actually enforces it.
+      //
+      // There is no admin approval queue -- a partner fully controls
+      // their own plan's status between 'active' (live, travellers can
+      // see and buy it) and 'inactive' (saved, hidden from travellers),
+      // toggling freely in either direction, any time ('draft' is only
+      // for the one-off chat-quote path,
+      // partner/message-detail.html's "create plan for this traveller",
+      // which never lists publicly anyway). 'suspended' is a THIRD, separate
+      // state that only an admin can set or lift -- moderation, not the
+      // partner's own pause button. An admin can suspend any plan
+      // (active or inactive) at any time; once suspended, a partner can
+      // still edit the plan's content and save it (to fix whatever got
+      // it suspended), that write just can't change status away from
+      // 'suspended' -- only an admin can do that. See
+      // admin_web/admin/insurance.html's Plans tab and
+      // admin_web/partner/plan-form.html.
       allow read: if isSignedIn();
       allow create: if isAdmin() ||
-        (isApprovedInsurancePartner() && request.resource.data.partnerId == request.auth.uid);
+        (isApprovedInsurancePartner() && request.resource.data.partnerId == request.auth.uid &&
+          request.resource.data.status in ['draft', 'active', 'inactive']);
       // update also pins request.resource.data.partnerId to the existing
       // owner, so an owning partner can't reassign a plan to someone else
-      // by editing its partnerId field mid-update.
+      // by editing its partnerId field mid-update. The partner branch
+      // below never lets request.resource.data.status become 'suspended'
+      // (that's admin-only, via the isAdmin() branch), and if the plan is
+      // CURRENTLY 'suspended' the only way for the partner's own branch
+      // to match is for the new status to also be 'suspended' -- i.e.
+      // they can edit content but can't move it out of 'suspended'
+      // themselves.
       allow update: if isAdmin() ||
         (isApprovedInsurancePartner() && resource.data.partnerId == request.auth.uid &&
-          request.resource.data.partnerId == request.auth.uid);
+          request.resource.data.partnerId == request.auth.uid &&
+          (resource.data.status == 'suspended'
+            ? request.resource.data.status == 'suspended'
+            : request.resource.data.status in ['draft', 'active', 'inactive']));
       allow delete: if isAdmin() || (isApprovedInsurancePartner() && resource.data.partnerId == request.auth.uid);
     }
 
@@ -534,10 +672,12 @@ service cloud.firestore {
         (isInsurancePartner() && resource.data.partnerId == request.auth.uid)
       );
       allow create: if isSignedIn() && (
-        request.resource.data.buyerId == request.auth.uid || isAdmin() || isApprovedInsurancePartner()
+        request.resource.data.buyerId == request.auth.uid || isAdmin() ||
+        (isApprovedInsurancePartner() && request.resource.data.partnerId == request.auth.uid)
       );
       allow update: if isAdmin() ||
-        (isApprovedInsurancePartner() && resource.data.partnerId == request.auth.uid);
+        (isApprovedInsurancePartner() && resource.data.partnerId == request.auth.uid &&
+          request.resource.data.partnerId == resource.data.partnerId);
       allow delete: if false;
     }
 
@@ -549,10 +689,12 @@ service cloud.firestore {
         (isInsurancePartner() && resource.data.partnerId == request.auth.uid)
       );
       allow create: if isSignedIn() && (
-        request.resource.data.buyerId == request.auth.uid || isAdmin() || isApprovedInsurancePartner()
+        request.resource.data.buyerId == request.auth.uid || isAdmin() ||
+        (isApprovedInsurancePartner() && request.resource.data.partnerId == request.auth.uid)
       );
       allow update: if isAdmin() ||
-        (isApprovedInsurancePartner() && resource.data.partnerId == request.auth.uid);
+        (isApprovedInsurancePartner() && resource.data.partnerId == request.auth.uid &&
+          request.resource.data.partnerId == resource.data.partnerId);
       allow delete: if false;
     }
 
@@ -566,11 +708,60 @@ service cloud.firestore {
         (isInsurancePartner() && resource.data.partnerId == request.auth.uid)
       );
       allow create: if isSignedIn() && (
-        request.resource.data.buyerId == request.auth.uid || isAdmin() || isApprovedInsurancePartner()
+        request.resource.data.buyerId == request.auth.uid || isAdmin() ||
+        (isApprovedInsurancePartner() && request.resource.data.partnerId == request.auth.uid)
       );
       allow update: if isAdmin() ||
-        (isApprovedInsurancePartner() && resource.data.partnerId == request.auth.uid);
+        (isApprovedInsurancePartner() && resource.data.partnerId == request.auth.uid &&
+          request.resource.data.partnerId == resource.data.partnerId);
       allow delete: if false;
+    }
+
+    // A direct-message thread between one traveller and one insurance
+    // partner — deliberately not tied to any one transaction, so a
+    // traveller can message a partner to ask about a plan before buying,
+    // as well as to discuss an existing policy afterwards. chatId is
+    // deterministic ("<travellerId>_<partnerId>") so both sides always
+    // resolve to the same thread without a lookup query.
+    match /insurance_chats/{chatId} {
+      allow read: if isSignedIn() && (
+        resource.data.travellerId == request.auth.uid || isAdmin() ||
+        (isInsurancePartner() && resource.data.partnerId == request.auth.uid)
+      );
+      allow create: if isSignedIn() &&
+        request.resource.data.travellerId == request.auth.uid &&
+        chatId == (request.resource.data.travellerId + '_' + request.resource.data.partnerId);
+      // Either side may update the thread's summary fields (lastMessage,
+      // lastMessageAt, unread flags) when they send a message, but
+      // neither can reassign the thread to a different traveller/partner.
+      allow update: if isSignedIn() && (
+        resource.data.travellerId == request.auth.uid ||
+        (isInsurancePartner() && resource.data.partnerId == request.auth.uid)
+      ) &&
+        request.resource.data.travellerId == resource.data.travellerId &&
+        request.resource.data.partnerId == resource.data.partnerId;
+      allow delete: if false;
+
+      match /messages/{messageId} {
+        allow read: if isSignedIn() && (
+          get(/databases/$(database)/documents/insurance_chats/$(chatId)).data.travellerId == request.auth.uid ||
+          isAdmin() ||
+          (isInsurancePartner() &&
+            get(/databases/$(database)/documents/insurance_chats/$(chatId)).data.partnerId == request.auth.uid)
+        );
+        // A sender can only post as the role they actually are in this
+        // thread (a traveller can't forge a 'partner' message or vice
+        // versa), and messages are append-only — no edits, no deletes.
+        allow create: if isSignedIn() &&
+          request.resource.data.senderId == request.auth.uid && (
+            (get(/databases/$(database)/documents/insurance_chats/$(chatId)).data.travellerId == request.auth.uid &&
+              request.resource.data.senderRole == 'traveller') ||
+            (isInsurancePartner() &&
+              get(/databases/$(database)/documents/insurance_chats/$(chatId)).data.partnerId == request.auth.uid &&
+              request.resource.data.senderRole == 'partner')
+          );
+        allow update, delete: if false;
+      }
     }
 
     // FR04 email codes (hashed) and step-up confirmations: Cloud Functions only.

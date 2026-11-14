@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../data/emergency_info.dart';
@@ -141,13 +142,13 @@ class _EmbassyPageState extends State<EmbassyPage> {
     );
     if (photoUrl.isEmpty) return placeholder;
     return ClipOval(
-      child: Image.network(
-        photoUrl,
+      child: CachedNetworkImage(
+        imageUrl: photoUrl,
         width: 64,
         height: 64,
         fit: BoxFit.cover,
-        errorBuilder: (_, __, ___) => placeholder,
-        loadingBuilder: (context, child, progress) => progress == null ? child : placeholder,
+        errorWidget: (_, __, ___) => placeholder,
+        placeholder: (context, url) => placeholder,
       ),
     );
   }

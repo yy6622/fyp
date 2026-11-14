@@ -289,11 +289,17 @@ function mealName(pref) {
 const { kmBetween } = require("./maps_service");
 
 function optimisePlan(plan, { mode, onlyDay = null, window = { floor: null, ceil: null }, destination = "", saved = [],
-  catalog = [], flights = [], hotelStays = [], days: dayList = null, groupByArea = true } = {}) {
-  const { knownPlaces } = require("./planner/places");
+  catalog = [], flights = [], hotelStays = [], days: dayList = null, groupByArea = true, votes = [] } = {}) {
+  const { knownPlaces, norm } = require("./planner/places");
   const { tripLogistics } = require("./planner/logistics_plan");
   const days = Object.keys(plan).map(Number).sort((a, b) => a - b);
   const known = knownPlaces({ destination, saved, catalog });
+  // A resolved vote ("第几天去极乐寺" -> "Day 3") is a hard constraint from
+  // the group, not something route-comparison gets to second-guess -- see
+  // planner/vote_days.js. Optimise never reads chat itself; this is the
+  // only "what did the group decide" input it takes.
+  const { voteDayAssignments } = require("./planner/vote_days");
+  const voteDayByPlace = voteDayAssignments({ votes, known, days: dayList || days.map((d) => ({ day: d, date: "" })) });
   const where = new Map();                    // id -> day after moves
   const byId = new Map();
   const prof = new Map();
@@ -305,6 +311,20 @@ function optimisePlan(plan, { mode, onlyDay = null, window = { floor: null, ceil
     }
   }
   const why = new Map();
+  // votedDayById marks items the whole-trip rebalancer below must never
+  // move to a different day (see the `movable` check further down).
+  const votedDayById = new Map();
+  for (const it of byId.values()) {
+    const p = prof.get(it.id);
+    const votedDay = p.place && voteDayByPlace.get(norm(p.place.name));
+    if (votedDay && days.includes(votedDay)) {
+      votedDayById.set(it.id, votedDay);
+      if (where.get(it.id) !== votedDay) {
+        why.set(it.id, "Day " + votedDay + " — the group voted for this");
+        where.set(it.id, votedDay);
+      }
+    }
+  }
   const geo = [...byId.values()].filter((it) => prof.get(it.id).place && Number.isFinite(prof.get(it.id).place.lat));
   for (const it of geo) {
     const p = prof.get(it.id);
@@ -353,7 +373,7 @@ function optimisePlan(plan, { mode, onlyDay = null, window = { floor: null, ceil
 
   if (mode === "whole" && days.length > 1) {
     const onDay = (d) => [...byId.values()].filter((it) => where.get(it.id) === d);
-    const movable = (it) => { const p = prof.get(it.id); return !p.fixed && !p.meal && it.icon !== "hotel" && it.icon !== "flight"; };
+    const movable = (it) => { const p = prof.get(it.id); return !p.fixed && !p.meal && it.icon !== "hotel" && it.icon !== "flight" && !votedDayById.has(it.id); };
     const sights = (d) => onDay(d).filter(movable);
     const isFullDay = (d) => sights(d).some((it) => prof.get(it.id).fullDay);
     const freeMinutes = (d) => {

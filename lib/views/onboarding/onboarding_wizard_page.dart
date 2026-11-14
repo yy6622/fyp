@@ -92,10 +92,15 @@ class _OnboardingWizardPageState extends State<OnboardingWizardPage> {
               ],
             ),
           ),
-          TextButton(
-            onPressed: _finish,
-            child: const Text('Skip for now', style: TextStyle(fontSize: 13, color: AppColors.textGrey, fontWeight: FontWeight.w600)),
-          ),
+          // Phone, country and currency (steps 1-3) are required now, so
+          // there's no "skip the rest of this" escape hatch while one of
+          // them is on screen -- only the avatar step and the optional
+          // add-friend step at the end can be skipped this way.
+          if (controller.step == 0 || controller.step == 4)
+            TextButton(
+              onPressed: _finish,
+              child: const Text('Skip for now', style: TextStyle(fontSize: 13, color: AppColors.textGrey, fontWeight: FontWeight.w600)),
+            ),
         ],
       ),
     );
@@ -114,23 +119,30 @@ class _OnboardingWizardPageState extends State<OnboardingWizardPage> {
     );
   }
 
-  Widget _bottomButtons({required VoidCallback onSkip, required VoidCallback? onContinue, String continueLabel = 'Continue'}) {
+  Widget _bottomButtons({
+    required VoidCallback onSkip,
+    required VoidCallback? onContinue,
+    String continueLabel = 'Continue',
+    bool showSkip = true,
+  }) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
       child: Row(
         children: [
-          Expanded(
-            child: OutlinedButton(
-              style: OutlinedButton.styleFrom(
-                side: const BorderSide(color: Color(0xFFDDDDDD)),
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          if (showSkip) ...[
+            Expanded(
+              child: OutlinedButton(
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: Color(0xFFDDDDDD)),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                ),
+                onPressed: onSkip,
+                child: const Text('Skip', style: TextStyle(color: AppColors.textGrey, fontWeight: FontWeight.w600)),
               ),
-              onPressed: onSkip,
-              child: const Text('Skip', style: TextStyle(color: AppColors.textGrey, fontWeight: FontWeight.w600)),
             ),
-          ),
-          const SizedBox(width: 12),
+            const SizedBox(width: 12),
+          ],
           Expanded(
             flex: 2,
             child: ElevatedButton(
@@ -225,10 +237,18 @@ class _OnboardingWizardPageState extends State<OnboardingWizardPage> {
                 initialValue: controller.phoneController.text,
                 onChanged: (v) => controller.phoneController.text = v,
               ),
+              if (controller.phoneError != null) ...[
+                const SizedBox(height: 10),
+                Text(controller.phoneError!, style: const TextStyle(fontSize: 12, color: Colors.redAccent)),
+              ],
             ],
           ),
         ),
-        _bottomButtons(onSkip: () => controller.next(), onContinue: controller.savingPhone ? null : () => controller.savePhoneAndNext()),
+        _bottomButtons(
+          showSkip: false,
+          onSkip: () => controller.next(),
+          onContinue: controller.savingPhone ? null : () => controller.savePhoneAndNext(),
+        ),
       ],
     );
   }
@@ -241,17 +261,23 @@ class _OnboardingWizardPageState extends State<OnboardingWizardPage> {
           child: _stepBody(
             title: 'Where are you based?',
             subtitle: 'This helps us tailor suggestions to your region.',
-            children: kCountries
-                .map((c) => _pickTile(
-                      label: c.name,
-                      trailing: c.currencyCode,
-                      selected: controller.selectedCountry?.code == c.code,
-                      onTap: () => controller.selectCountry(c),
-                    ))
-                .toList(),
+            children: [
+              ...kCountries.map((c) => _pickTile(
+                    label: c.name,
+                    trailing: c.currencyCode,
+                    selected: controller.selectedCountry?.code == c.code,
+                    onTap: () => controller.selectCountry(c),
+                  )),
+              if (controller.countryError != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4, bottom: 8),
+                  child: Text(controller.countryError!, style: const TextStyle(fontSize: 12, color: Colors.redAccent)),
+                ),
+            ],
           ),
         ),
         _bottomButtons(
+          showSkip: false,
           onSkip: () => controller.next(),
           onContinue: controller.savingCountry ? null : () => controller.saveCountryAndNext(),
         ),
@@ -267,17 +293,23 @@ class _OnboardingWizardPageState extends State<OnboardingWizardPage> {
           child: _stepBody(
             title: 'Preferred currency',
             subtitle: 'Trip budgets and prices will be shown using this.',
-            children: kCurrencies
-                .map((c) => _pickTile(
-                      label: c.code,
-                      trailing: c.symbol,
-                      selected: controller.selectedCurrency == c.code,
-                      onTap: () => controller.selectCurrency(c.code),
-                    ))
-                .toList(),
+            children: [
+              ...kCurrencies.map((c) => _pickTile(
+                    label: c.code,
+                    trailing: c.symbol,
+                    selected: controller.selectedCurrency == c.code,
+                    onTap: () => controller.selectCurrency(c.code),
+                  )),
+              if (controller.currencyError != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4, bottom: 8),
+                  child: Text(controller.currencyError!, style: const TextStyle(fontSize: 12, color: Colors.redAccent)),
+                ),
+            ],
           ),
         ),
         _bottomButtons(
+          showSkip: false,
           onSkip: () => controller.next(),
           onContinue: controller.savingCurrency ? null : () => controller.saveCurrencyAndNext(),
         ),

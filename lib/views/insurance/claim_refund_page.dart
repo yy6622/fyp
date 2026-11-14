@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../models/insurance_models.dart';
 import '../../repositories/insurance_repository.dart';
 import '../../services/auth_service.dart';
+import '../../services/currency_service.dart';
 import '../../theme.dart';
 import '../shared/nice_dialog.dart';
 
@@ -19,7 +20,10 @@ Widget _policySummaryCard(InsuranceTransaction tx) {
         Text(tx.providerName.isNotEmpty ? tx.providerName : 'Insurance Partner',
             style: const TextStyle(fontSize: 12, color: AppColors.textGrey)),
         const SizedBox(height: 4),
-        Text('Premium Paid: RM ${tx.premium.toStringAsFixed(2)}', style: const TextStyle(fontSize: 12, color: AppColors.textGrey)),
+        Text(
+          'Premium Paid: ${CurrencyService.instance.displayLabel(tx.currencyCode.isEmpty ? 'MYR' : tx.currencyCode)} ${tx.premium.toStringAsFixed(2)}',
+          style: const TextStyle(fontSize: 12, color: AppColors.textGrey),
+        ),
       ],
     ),
   );
@@ -104,6 +108,7 @@ class FileClaimPage extends StatefulWidget {
 class _FileClaimPageState extends State<FileClaimPage> {
   bool _loading = true;
   InsuranceTransaction? _transaction;
+  String? _loadError;
   String? _category;
   final TextEditingController _amountCtrl = TextEditingController();
   final TextEditingController _descriptionCtrl = TextEditingController();
@@ -117,14 +122,18 @@ class _FileClaimPageState extends State<FileClaimPage> {
 
   Future<void> _load() async {
     InsuranceTransaction? tx;
+    String? err;
     try {
       tx = await InsuranceRepository.instance.getTransaction(widget.transactionId);
-    } catch (_) {
+      if (tx == null) err = 'No transaction exists with id "${widget.transactionId}".';
+    } catch (e) {
       tx = null;
+      err = e.toString();
     }
     if (!mounted) return;
     setState(() {
       _transaction = tx;
+      _loadError = err;
       _loading = false;
     });
   }
@@ -192,10 +201,21 @@ class _FileClaimPageState extends State<FileClaimPage> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _transaction == null
-              ? const Center(
+              ? Center(
                   child: Padding(
-                    padding: EdgeInsets.all(24),
-                    child: Text("This policy's purchase record couldn't be found.", textAlign: TextAlign.center),
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text("This policy's purchase record couldn't be found.", textAlign: TextAlign.center),
+                        if (_loadError != null) ...[
+                          const SizedBox(height: 10),
+                          Text(_loadError!,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(fontSize: 11.5, color: AppColors.textGrey)),
+                        ],
+                      ],
+                    ),
                   ),
                 )
               : !_isOwner
@@ -210,7 +230,9 @@ class _FileClaimPageState extends State<FileClaimPage> {
                               const SizedBox(height: 20),
                               _categoryPickerField('Claim Category', _category, onTap: _pickCategory),
                               const SizedBox(height: 12),
-                              niceDialogField(_amountCtrl, 'Claim Amount (RM)',
+                              niceDialogField(
+                                  _amountCtrl,
+                                  'Claim Amount (${CurrencyService.instance.displayLabel(_transaction!.currencyCode.isEmpty ? 'MYR' : _transaction!.currencyCode)})',
                                   keyboardType: const TextInputType.numberWithOptions(decimal: true)),
                               niceDialogField(_descriptionCtrl, 'What happened?', maxLines: 4),
                             ],
@@ -250,6 +272,7 @@ class RequestRefundPage extends StatefulWidget {
 class _RequestRefundPageState extends State<RequestRefundPage> {
   bool _loading = true;
   InsuranceTransaction? _transaction;
+  String? _loadError;
   String? _category;
   final TextEditingController _reasonCtrl = TextEditingController();
   bool _submitting = false;
@@ -262,14 +285,18 @@ class _RequestRefundPageState extends State<RequestRefundPage> {
 
   Future<void> _load() async {
     InsuranceTransaction? tx;
+    String? err;
     try {
       tx = await InsuranceRepository.instance.getTransaction(widget.transactionId);
-    } catch (_) {
+      if (tx == null) err = 'No transaction exists with id "${widget.transactionId}".';
+    } catch (e) {
       tx = null;
+      err = e.toString();
     }
     if (!mounted) return;
     setState(() {
       _transaction = tx;
+      _loadError = err;
       _loading = false;
     });
   }
@@ -311,7 +338,8 @@ class _RequestRefundPageState extends State<RequestRefundPage> {
       showNiceInfoDialog(
         context: context,
         title: 'Refund Requested',
-        message: 'Your refund request ($refundRef) for RM ${tx.premium.toStringAsFixed(2)} has been sent to '
+        message: 'Your refund request ($refundRef) for '
+            '${CurrencyService.instance.displayLabel(tx.currencyCode.isEmpty ? 'MYR' : tx.currencyCode)} ${tx.premium.toStringAsFixed(2)} has been sent to '
             '${tx.providerName.isNotEmpty ? tx.providerName : 'your insurer'} for review.',
         onDone: () => Navigator.of(context).pop(),
       );
@@ -336,10 +364,21 @@ class _RequestRefundPageState extends State<RequestRefundPage> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _transaction == null
-              ? const Center(
+              ? Center(
                   child: Padding(
-                    padding: EdgeInsets.all(24),
-                    child: Text("This policy's purchase record couldn't be found.", textAlign: TextAlign.center),
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text("This policy's purchase record couldn't be found.", textAlign: TextAlign.center),
+                        if (_loadError != null) ...[
+                          const SizedBox(height: 10),
+                          Text(_loadError!,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(fontSize: 11.5, color: AppColors.textGrey)),
+                        ],
+                      ],
+                    ),
                   ),
                 )
               : !_isOwner

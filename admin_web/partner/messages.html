@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Messages — Voya Insurance Partner</title>
+<link rel="stylesheet" href="../css/tokens.css?v=20261006b" />
+<link rel="stylesheet" href="../css/base.css?v=20261006b" />
+<link rel="stylesheet" href="../css/layout.css?v=20261111a" />
+<link rel="stylesheet" href="../css/components.css?v=20261106g" />
+</head>
+<body>
+<div class="shell">
+  <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+  <aside class="sidebar" id="sidebar">
+    <img class="sidebar-brand" src="../img/voya-logo-white.png" alt="Voya" />
+    <div class="sidebar-user">
+      <div class="name" id="sbUserName">Loading…</div>
+      <div class="role" id="sbUserRole">Partner workspace</div>
+    </div>
+    <nav class="nav" id="sidebarNav"></nav>
+    <button class="sidebar-logout" id="logoutBtn"><span data-icon="log-out"></span>Log out</button>
+  </aside>
+
+  <main class="content">
+    <div class="topbar">
+      <div>
+        <button class="menu-toggle" id="menuToggle"><span data-icon="menu"></span></button>
+        <h1 class="h1" style="display:inline-flex;align-items:center;gap:10px;">Messages<span id="unreadChip" style="display:none;background:#ff4d4f;color:#fff;font-size:11.5px;font-weight:700;border-radius:999px;padding:3px 10px;"></span></h1>
+        <p class="subtitle">Travellers asking about a plan, or discussing an existing policy</p>
+      </div>
+    </div>
+
+    <div class="filter-bar">
+      <div class="search-input-wrap"><span data-icon="search"></span><input class="input" id="searchInput" placeholder="Search by traveller name…" /></div>
+    </div>
+
+    <div id="chatList" style="display:flex;flex-direction:column;gap:10px;">
+      <div class="skeleton" style="height:66px;border-radius:12px;"></div>
+    </div>
+    <div class="empty-state" id="emptyState" style="display:none;">
+      <span data-icon="mail" class="icon-lg"></span>
+      <div class="h3">No messages yet</div>
+      <p class="small">When a traveller messages you about a plan or policy, it'll show up here.</p>
+    </div>
+  </main>
+</div>
+
+<script type="module">
+import { requireRole } from "../js/auth-guard.js?v=20261106b";
+import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261114a";
+import { mountIcons } from "../js/icons.js?v=20261106c";
+import { listInsuranceChats } from "../js/data.js?v=20261114c";
+import { escapeHtml, timeAgo } from "../js/ui.js?v=20261113a";
+
+mountSidebarNav({ role: "partner", active: "messages" });
+const session = await requireRole("partner", "login.html");
+let chats = [], filtered = [];
+
+if (session) {
+  setSidebarUser({ displayName: session.profile.companyName || "Partner", roleLabel: `${session.profile.companyName || "Insurance"} · Insurance Partner` });
+  await load();
+}
+
+async function load() {
+  chats = await listInsuranceChats(session.uid);
+  applyFilter();
+}
+
+function applyFilter() {
+  const q = document.getElementById("searchInput").value.trim().toLowerCase();
+  filtered = chats
+    .filter((c) => !q || (c.travellerName || "").toLowerCase().includes(q))
+    // Unread conversations first (most recently active among them first),
+    // then everything else by recency -- so a traveller waiting on a reply
+    // never gets buried under already-read chats.
+    .sort((a, b) => {
+      if (!!b.unreadForPartner !== !!a.unreadForPartner) return (b.unreadForPartner ? 1 : 0) - (a.unreadForPartner ? 1 : 0);
+      return (b.lastMessageAt?.seconds || 0) - (a.lastMessageAt?.seconds || 0);
+    });
+  renderTable();
+}
+
+function initialsFor(name) {
+  const words = (name || "").trim().split(/\s+/).filter(Boolean);
+  if (!words.length) return "?";
+  return words.length === 1 ? words[0].slice(0, 1).toUpperCase() : (words[0][0] + words[1][0]).toUpperCase();
+}
+
+function renderTable() {
+  const list = document.getElementById("chatList");
+  const empty = document.getElementById("emptyState");
+  const unreadCount = chats.filter((c) => c.unreadForPartner).length;
+  const chip = document.getElementById("unreadChip");
+  chip.style.display = unreadCount > 0 ? "inline-block" : "none";
+  chip.textContent = `${unreadCount} unread`;
+  if (!filtered.length) {
+    list.innerHTML = "";
+    list.style.display = "none";
+    empty.style.display = "block";
+    return;
+  }
+  list.style.display = "flex";
+  empty.style.display = "none";
+  list.innerHTML = filtered.map((c) => {
+    const unread = !!c.unreadForPartner;
+    return `
+      <a href="message-detail.html?id=${c.id}" style="display:flex;align-items:center;gap:14px;padding:14px 16px;border:1px solid ${unread ? "var(--teal-600)" : "#ECECEC"};background:${unread ? "var(--teal-100)" : "#fff"};border-radius:12px;text-decoration:none;color:inherit;">
+        <div class="avatar-fallback" style="width:42px;height:42px;font-size:14px;flex:none;${unread ? "" : "opacity:.75;"}">${escapeHtml(initialsFor(c.travellerName))}</div>
+        <div style="flex:1;min-width:0;">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:2px;">
+            <span style="font-weight:${unread ? "800" : "700"};font-size:14px;">${escapeHtml(c.travellerName || "—")}</span>
+            <span class="muted small" style="font-weight:600;">· ${escapeHtml(c.planName || "General enquiry")}</span>
+            ${unread ? '<span style="background:#ff4d4f;color:#fff;font-size:9.5px;font-weight:700;border-radius:999px;padding:2px 7px;letter-spacing:.3px;flex:none;">NEW</span>' : ""}
+          </div>
+          <div class="${unread ? "" : "muted"}" style="font-size:12.5px;font-weight:${unread ? "700" : "400"};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${c.lastSenderRole === "partner" ? "You: " : ""}${escapeHtml(c.lastMessage || "No messages yet")}</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;flex:none;">
+          <span class="muted small">${c.lastMessageAt ? timeAgo(c.lastMessageAt) : "—"}</span>
+          <span data-icon="chevron-right" data-icon-size="16" style="color:var(--text-400);"></span>
+        </div>
+      </a>`;
+  }).join("");
+  mountIcons(list);
+}
+
+document.getElementById("searchInput").addEventListener("input", applyFilter);
+</script>
+</body>
+</html>

@@ -19,6 +19,11 @@ class BookingEntry {
   final String checkOut;
   final String coverage;
   final String transactionId;
+  final DateTime? purchasedAt;
+  final String partnerId;
+  final String providerName;
+  final DateTime? travelStart;
+  final DateTime? travelEnd;
   const BookingEntry({
     required this.id,
     required this.type,
@@ -38,6 +43,11 @@ class BookingEntry {
     this.checkOut = '',
     this.coverage = '',
     this.transactionId = '',
+    this.purchasedAt,
+    this.partnerId = '',
+    this.providerName = '',
+    this.travelStart,
+    this.travelEnd,
   });
 }
 
@@ -69,6 +79,11 @@ class BookingRepository {
               checkOut: (d.data()['checkOut'] as String?) ?? '',
               coverage: (d.data()['coverage'] as String?) ?? '',
               transactionId: (d.data()['transactionId'] as String?) ?? '',
+              purchasedAt: (d.data()['createdAt'] as Timestamp?)?.toDate(),
+              partnerId: (d.data()['partnerId'] as String?) ?? '',
+              providerName: (d.data()['providerName'] as String?) ?? '',
+              travelStart: (d.data()['travelStart'] as Timestamp?)?.toDate(),
+              travelEnd: (d.data()['travelEnd'] as Timestamp?)?.toDate(),
             ))
         .where((b) => type == null || b.type == type)
         .toList());
@@ -78,7 +93,8 @@ class BookingRepository {
     return _bookingsOf(uid).doc(bookingId).update({'documents.$docType': url});
   }
 
-  Future<void> addBooking({
+  /// Returns the new booking document's id.
+  Future<String> addBooking({
     required String uid,
     required String type,
     required String title,
@@ -96,8 +112,12 @@ class BookingRepository {
     String checkOut = '',
     String coverage = '',
     String transactionId = '',
-  }) {
-    return _bookingsOf(uid).add({
+    String partnerId = '',
+    String providerName = '',
+    DateTime? travelStart,
+    DateTime? travelEnd,
+  }) async {
+    final ref = await _bookingsOf(uid).add({
       'type': type,
       'title': title,
       'subtitle': subtitle,
@@ -114,7 +134,12 @@ class BookingRepository {
       if (checkOut.isNotEmpty) 'checkOut': checkOut,
       if (coverage.isNotEmpty) 'coverage': coverage,
       if (transactionId.isNotEmpty) 'transactionId': transactionId,
+      if (partnerId.isNotEmpty) 'partnerId': partnerId,
+      if (providerName.isNotEmpty) 'providerName': providerName,
+      if (travelStart != null) 'travelStart': Timestamp.fromDate(travelStart),
+      if (travelEnd != null) 'travelEnd': Timestamp.fromDate(travelEnd),
       'createdAt': FieldValue.serverTimestamp(),
     });
+    return ref.id;
   }
 }

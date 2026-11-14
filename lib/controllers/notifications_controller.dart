@@ -23,6 +23,18 @@ class NotificationsController extends ChangeNotifier {
 
   NotificationsController() {
     _listen();
+    _markAllReadOnOpen();
+  }
+
+  /// Opening the Notifications page counts as reading everything in it.
+  Future<void> _markAllReadOnOpen() async {
+    final uid = AuthService.instance.currentUser?.uid;
+    if (uid == null) return;
+    try {
+      await NotificationsRepository.instance.markAllRead(uid);
+    } catch (_) {
+      // Best-effort — a failed mark-all-read shouldn't block the page.
+    }
   }
 
   void _listen() {

@@ -1,3 +1,4 @@
+import '../models/duffel_models.dart';
 import '../repositories/catalog_repository.dart';
 import 'opening_hours.dart';
 
@@ -116,3 +117,189 @@ class AttractionRecommendation {
     return indexed.map((e) => e.value).toList();
   }
 }
+
+/// Same idea as [RecommendationContext] but for restaurants: cuisine
+/// affinity instead of category affinity, and no open-now/accessible
+/// toggles since the restaurant filter sheet (filter_page.dart's
+/// _restaurantFilters()) never exposes those — only Cuisine and Price.
+class RestaurantRecommendationContext {
+  final bool Function(CatalogRestaurant r) withinBudget;
+
+  final Map<String, int> affinity;
+
+  final DateTime now;
+
+  RestaurantRecommendationContext({
+    required this.withinBudget,
+    required this.affinity,
+    DateTime? now,
+  }) : now = now ?? DateTime.now();
+}
+
+class RestaurantRecommendation {
+  const RestaurantRecommendation._();
+
+  static bool passesMandatoryConstraints(CatalogRestaurant r, RestaurantRecommendationContext ctx) => ctx.withinBudget(r);
+
+  static double preferenceScore(CatalogRestaurant r, Map<String, int> affinity, int maxAffinity) {
+    if (affinity.isEmpty || maxAffinity <= 0) return 0.5;
+    var raw = 0;
+    for (final tag in r.cuisineTags) {
+      raw += affinity[tag] ?? 0;
+    }
+    return (raw / maxAffinity).clamp(0.0, 1.0);
+  }
+
+  /// Every restaurant is seeded with rating 'New' (see catalog_repository's
+  /// OSM import) because there's no reachable UI to ever submit a real
+  /// restaurant review, same root cause as attractions — so this returns
+  /// the neutral 0.5 fallback for every restaurant today. Kept (rather than
+  /// dropped) so the weight wakes up on its own the moment a real review
+  /// pipeline exists, exactly like AttractionRecommendation.ratingScore.
+  static double ratingScore(CatalogRestaurant r) {
+    final rating = double.tryParse(r.rating);
+    if (rating == null) return 0.5;
+    return (rating / 5.0).clamp(0.0, 1.0);
+  }
+
+  static double distanceScore(CatalogRestaurant r) {
+    final km = r.distanceKm;
+    if (km == null) return 0.5;
+    return 1.0 / (1.0 + km / 10.0);
+  }
+
+  static double budgetScore(CatalogRestaurant r, RestaurantRecommendationContext ctx) => ctx.withinBudget(r) ? 1.0 : 0.0;
+
+  /// Soft signal only — there's no "open now" toggle for restaurants to
+  /// hard-gate on, but a currently-open place is still a better suggestion
+  /// than a closed one right now, so it nudges the ranking instead.
+  static double scheduleScore(CatalogRestaurant r, RestaurantRecommendationContext ctx) {
+    final open = isOpenNow(r.openingHours, now: ctx.now);
+    if (open == null) return 0.5;
+    return open ? 1.0 : 0.0;
+  }
+
+  static double score(
+    CatalogRestaurant r,
+    RestaurantRecommendationContext ctx, {
+    int maxAffinity = 0,
+    RecommendationWeights weights = const RecommendationWeights(),
+  }) {
+    return weights.preference * preferenceScore(r, ctx.affinity, maxAffinity) +
+        weights.rating * ratingScore(r) +
+        weights.distance * distanceScore(r) +
+        weights.budget * budgetScore(r, ctx) +
+        weights.schedule * scheduleScore(r, ctx);
+  }
+
+  static List<CatalogRestaurant> rank(
+    List<CatalogRestaurant> candidates,
+    RestaurantRecommendationContext ctx, {
+    RecommendationWeights weights = const RecommendationWeights(),
+  }) {
+    final survivors = candidates.where((r) => passesMandatoryConstraints(r, ctx)).toList();
+    final maxAffinity = ctx.affinity.values.fold<int>(0, (m, v) => v > m ? v : m);
+    final indexed = survivors.asMap().entries.toList()
+      ..sort((x, y) {
+        final sx = score(x.value, ctx, maxAffinity: maxAffinity, weights: weights);
+        final sy = score(y.value, ctx, maxAffinity: maxAffinity, weights: weights);
+        final cmp = sy.compareTo(sx);
+        return cmp != 0 ? cmp : x.key.compareTo(y.key);
+      });
+    return indexed.map((e) => e.value).toList();
+  }
+}
+
+/// Hotels only ever get 3 real signals, so this doesn't reuse
+/// [RecommendationWeights]'s 5-way split:
+/// - preference: amenity affinity, built the same way as attraction
+///   category / restaurant cuisine affinity (bumped on save/view — see
+///   CatalogRepository.recordHotelView / saveDuffelStay).
+/// - rating: real — RollingGo's own guest review score or star rating.
+/// - budget: whether it's within the price range the user actually set in
+///   the filter sheet.
+/// There's no distance (RollingGo's result payload doesn't carry hotel
+/// coordinates, so there's nothing real to compute a distance from) and no
+/// schedule (a hotel isn't "open" or "closed" the way a place you visit for
+/// an hour is) — both are left out rather than wired up as permanently-0.5
+/// filler, which would just be decoration pretending to be a signal.
+class HotelRecommendationWeights {
+  final double preference;
+  final double rating;
+  final double budget;
+
+  const HotelRecommendationWeights({
+    this.preference = 0.40,
+    this.rating = 0.35,
+    this.budget = 0.25,
+  });
+
+  double get sum => preference + rating + budget;
+
+  void validate() {
+    assert((sum - 1.0).abs() < 0.001, 'HotelRecommendationWeights must sum to 1 (got $sum)');
+  }
+}
+
+class HotelRecommendationContext {
+  final bool Function(DuffelStayResult h) withinBudget;
+
+  final Map<String, int> affinity;
+
+  const HotelRecommendationContext({
+    required this.withinBudget,
+    required this.affinity,
+  });
+}
+
+class HotelRecommendation {
+  const HotelRecommendation._();
+
+  static bool passesMandatoryConstraints(DuffelStayResult h, HotelRecommendationContext ctx) => ctx.withinBudget(h);
+
+  static double preferenceScore(DuffelStayResult h, Map<String, int> affinity, int maxAffinity) {
+    if (affinity.isEmpty || maxAffinity <= 0) return 0.5;
+    var raw = 0;
+    for (final tag in h.amenities) {
+      raw += affinity[tag] ?? 0;
+    }
+    return (raw / maxAffinity).clamp(0.0, 1.0);
+  }
+
+  static double ratingScore(DuffelStayResult h) {
+    final effective = h.reviewScore != null ? h.reviewScore! / 2 : h.rating;
+    if (effective == null) return 0.5;
+    return (effective / 5.0).clamp(0.0, 1.0);
+  }
+
+  static double budgetScore(DuffelStayResult h, HotelRecommendationContext ctx) => ctx.withinBudget(h) ? 1.0 : 0.0;
+
+  static double score(
+    DuffelStayResult h,
+    HotelRecommendationContext ctx, {
+    int maxAffinity = 0,
+    HotelRecommendationWeights weights = const HotelRecommendationWeights(),
+  }) {
+    return weights.preference * preferenceScore(h, ctx.affinity, maxAffinity) +
+        weights.rating * ratingScore(h) +
+        weights.budget * budgetScore(h, ctx);
+  }
+
+  static List<DuffelStayResult> rank(
+    List<DuffelStayResult> candidates,
+    HotelRecommendationContext ctx, {
+    HotelRecommendationWeights weights = const HotelRecommendationWeights(),
+  }) {
+    final survivors = candidates.where((h) => passesMandatoryConstraints(h, ctx)).toList();
+    final maxAffinity = ctx.affinity.values.fold<int>(0, (m, v) => v > m ? v : m);
+    final indexed = survivors.asMap().entries.toList()
+      ..sort((x, y) {
+        final sx = score(x.value, ctx, maxAffinity: maxAffinity, weights: weights);
+        final sy = score(y.value, ctx, maxAffinity: maxAffinity, weights: weights);
+        final cmp = sy.compareTo(sx);
+        return cmp != 0 ? cmp : x.key.compareTo(y.key);
+      });
+    return indexed.map((e) => e.value).toList();
+  }
+}
+

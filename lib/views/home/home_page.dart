@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 import '../../models/community_models.dart';
 import '../../models/insurance_models.dart';
 import '../../repositories/community_repository.dart';
+import '../../repositories/insurance_chat_repository.dart';
 import '../../repositories/insurance_repository.dart';
 import '../../repositories/notifications_repository.dart';
 import '../../repositories/trip_repository.dart';
@@ -12,12 +14,14 @@ import '../../services/format_utils.dart';
 import '../../services/weather_service.dart';
 import '../../theme.dart';
 import '../community/community_page.dart';
-import '../create_plan/create_plan_wizard.dart';
+import '../community/my_community_posts_page.dart';
 import '../community/community_post_detail_page.dart';
 import '../group/group_trip_page.dart';
-import '../insurance/insurance_list_page.dart';
-import '../insurance/insurance_widgets.dart';
+import '../insurance/insurance_messages_page.dart';
+import '../insurance/insurance_partner_detail_page.dart';
+import '../insurance/insurance_partner_list_page.dart';
 import '../notifications/notifications_page.dart';
+import '../profile/report_attraction_page.dart';
 
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
@@ -34,7 +38,7 @@ class HomePage extends StatelessWidget {
             const SizedBox(height: 16),
             _buildAdventureCard(),
             const SizedBox(height: 14),
-            _buildAiBanner(context),
+            _buildQuickLinksRow(context),
             const SizedBox(height: 20),
             _buildRecommendedHeader(context),
             const SizedBox(height: 12),
@@ -137,23 +141,98 @@ class HomePage extends StatelessWidget {
   Widget _buildAdventureCard() {
     final uid = AuthService.instance.currentUser?.uid;
     if (uid == null) return _adventureCardShell(child: _adventureCardMessage('Sign in to see your next trip'));
-    return StreamBuilder<List<Trip>>(
-      stream: TripRepository.instance.watchMyTrips(uid),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData) {
-          return _adventureCardShell(
-            child: const Center(child: CircularProgressIndicator(color: Colors.white)),
-          );
-        }
-        final now = DateTime.now();
-        final today = DateTime(now.year, now.month, now.day);
-        final upcoming = snapshot.data!.where((t) => t.endDate != null && !t.endDate!.isBefore(today)).toList()
-          ..sort((a, b) => (a.startDate ?? today).compareTo(b.startDate ?? today));
-        if (upcoming.isEmpty) {
-          return _adventureCardShell(child: _adventureCardMessage("No upcoming trip yet — let's plan one!"));
-        }
-        return _adventureCardShell(trip: upcoming.first, child: _adventureCardContent(context, upcoming.first, today));
+    // Outer stream reads which trip (if any) the traveller pinned via the
+    // card's switcher — see AppUser.pinnedTripId's doc comment.
+    return StreamBuilder<AppUser?>(
+      stream: UserRepository.instance.watchProfile(uid),
+      builder: (context, profileSnap) {
+        final pinnedTripId = profileSnap.data?.pinnedTripId;
+        return StreamBuilder<List<Trip>>(
+          stream: TripRepository.instance.watchMyTrips(uid),
+          builder: (context, snapshot) {
+            if (!snapshot.hasData) {
+              return _adventureCardShell(
+                child: const Center(child: CircularProgressIndicator(color: Colors.white)),
+              );
+            }
+            final now = DateTime.now();
+            final today = DateTime(now.year, now.month, now.day);
+            final upcoming = snapshot.data!.where((t) => t.endDate != null && !t.endDate!.isBefore(today)).toList()
+              ..sort((a, b) => (a.startDate ?? today).compareTo(b.startDate ?? today));
+            if (upcoming.isEmpty) {
+              return _adventureCardShell(child: _adventureCardMessage("No upcoming trip yet — let's plan one!"));
+            }
+            final pinnedMatch = upcoming.where((t) => t.id == pinnedTripId);
+            final trip = pinnedMatch.isNotEmpty ? pinnedMatch.first : upcoming.first;
+            return _adventureCardShell(
+              trip: trip,
+              child: _adventureCardContent(context, trip, today, uid: uid, upcoming: upcoming),
+            );
+          },
+        );
       },
+    );
+  }
+
+  void _showTripSwitcherSheet(BuildContext context, String uid, List<Trip> upcoming, String currentTripId) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Your Upcoming Trips', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.navy)),
+              const SizedBox(height: 4),
+              const Text("Pick one to open — the home card will remember your choice next time.", style: TextStyle(fontSize: 12, color: AppColors.textGrey)),
+              const SizedBox(height: 14),
+              ...upcoming.map((t) => _tripSwitcherRow(sheetContext, uid, t, selected: t.id == currentTripId)),
+              const SizedBox(height: 8),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _tripSwitcherRow(BuildContext sheetContext, String uid, Trip t, {required bool selected}) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: () async {
+        final navigator = Navigator.of(sheetContext);
+        navigator.pop();
+        await UserRepository.instance.setPinnedTripId(uid, t.id);
+        navigator.push(MaterialPageRoute(builder: (_) => GroupTripPage(tripId: t.id)));
+      },
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        decoration: BoxDecoration(
+          color: selected ? AppColors.primary.withOpacity(0.08) : AppColors.chipGrey,
+          borderRadius: BorderRadius.circular(12),
+          border: selected ? Border.all(color: AppColors.primary) : null,
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(t.destination.isNotEmpty ? t.destination : t.name,
+                      maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.navy)),
+                  if (t.dateRangeLabel.isNotEmpty)
+                    Text(t.dateRangeLabel, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11.5, color: AppColors.textGrey)),
+                ],
+              ),
+            ),
+            if (selected) const Icon(Icons.check_circle, color: AppColors.primary, size: 20),
+          ],
+        ),
+      ),
     );
   }
 
@@ -199,12 +278,19 @@ class HomePage extends StatelessWidget {
     );
   }
 
-  Widget _adventureCardContent(BuildContext context, Trip trip, DateTime today) {
+  Widget _adventureCardContent(BuildContext context, Trip trip, DateTime today, {required String uid, required List<Trip> upcoming}) {
     final start = trip.startDate;
     final daysToGo = start == null ? null : start.difference(today).inDays;
     final ongoing = daysToGo != null && daysToGo <= 0;
     return GestureDetector(
-      onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => GroupTripPage(tripId: trip.id))),
+      // One upcoming trip: tapping the card opens it directly, same as
+      // before. More than one: tapping opens the switcher sheet so there
+      // is something to choose between — each row there both pins and
+      // opens the chosen trip (see _tripSwitcherRow), so entering a trip
+      // never needs more than this one tap either way.
+      onTap: () => upcoming.length > 1
+          ? _showTripSwitcherSheet(context, uid, upcoming, trip.id)
+          : Navigator.of(context).push(MaterialPageRoute(builder: (_) => GroupTripPage(tripId: trip.id))),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -310,55 +396,123 @@ class HomePage extends StatelessWidget {
   }
 
   // ---------------- AI banner ----------------
-  Widget _buildAiBanner(BuildContext context) {
-    return GestureDetector(
-      onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const CreatePlanWizard())),
-      child: Padding(
+  // Community Post, Insurance Messages and Report new attraction spot used
+  // to live on the Profile page, which felt like an odd place for them --
+  // moved here, replacing the old "Let AI Plan" banner (Create Plan is
+  // already reachable from the Next Adventure card and the Plan tab).
+  Widget _buildQuickLinksRow(BuildContext context) {
+    final uid = AuthService.instance.currentUser?.uid ?? '';
+    return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(10),
-          gradient: const LinearGradient(
-            colors: [Color(0xFF104259), Color(0xFF379BC9), Color(0xFFA0E1FF)],
-            stops: [0.0, 0.48, 1.0],
-            begin: Alignment.centerLeft,
-            end: Alignment.centerRight,
-          ),
-        ),
-        child: Row(
-          children: [
-            AppImage('assets/images/home_robot.png', width: 42, height: 42),
-            const SizedBox(width: 12),
-            const Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Let AI Plan your perfect trip',
-                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 10),
-                  ),
-                  Text(
-                    'Get a personalized itinerary in seconds',
-                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.w300, fontSize: 7),
-                  ),
-                ],
-              ),
+      child: Row(
+        children: [
+          Expanded(
+            child: _quickLinkCard(
+              context,
+              icon: Icons.dynamic_feed_outlined,
+              label: 'My Post',
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const MyCommunityPostsPage())),
             ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.8),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: const Text(
-                'Plan My Trips',
-                style: TextStyle(color: AppColors.navy, fontSize: 9, fontWeight: FontWeight.w300),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: uid.isEmpty
+                ? _quickLinkCard(
+                    context,
+                    icon: Icons.mail_outline,
+                    label: 'Insurance Messages',
+                    onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const InsuranceMessagesPage())),
+                  )
+                : StreamBuilder<List<InsuranceChatSummary>>(
+                    stream: InsuranceChatRepository.instance.watchChatsForTraveller(uid),
+                    builder: (context, snapshot) {
+                      final hasUnread = (snapshot.data ?? const []).any((c) => c.unreadForTraveller);
+                      return _quickLinkCard(
+                        context,
+                        icon: Icons.mail_outline,
+                        label: 'Insurance Messages',
+                        badge: hasUnread,
+                        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const InsuranceMessagesPage())),
+                      );
+                    },
+                  ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: _quickLinkCard(
+              context,
+              icon: Icons.add_location_alt_outlined,
+              label: 'Report New Attraction',
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ReportAttractionPage())),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _quickLinkCard(
+    BuildContext context, {
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+    bool badge = false,
+  }) {
+    // Shrunk from the original (34px icon circle, 12px vertical padding) --
+    // the row read as three oversized tiles competing with the trip card
+    // above them. Smaller icon + tighter padding reads as a row of compact
+    // quick links instead.
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 9),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFFECECEC)),
+        ),
+        child: Column(
+          children: [
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Container(
+                  width: 26,
+                  height: 26,
+                  decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: 0.1), shape: BoxShape.circle),
+                  child: Icon(icon, size: 13, color: AppColors.primary),
+                ),
+                if (badge)
+                  Positioned(
+                    top: -2,
+                    right: -2,
+                    child: Container(
+                      width: 8,
+                      height: 8,
+                      decoration: const BoxDecoration(color: Colors.redAccent, shape: BoxShape.circle),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 5),
+            // Fixed 2-line height regardless of how many lines this
+            // particular label actually wraps to ('My Post' is one line,
+            // 'Report New Attraction' is two) -- otherwise the three cards
+            // in the row end up visibly different heights.
+            SizedBox(
+              height: 24,
+              child: Center(
+                child: Text(
+                  label,
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.w600, color: AppColors.navy, height: 1.25),
+                ),
               ),
             ),
           ],
         ),
-      ),
       ),
     );
   }
@@ -371,7 +525,7 @@ class HomePage extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           const Text(
-            'Recommend Itinerary',
+            'Community',
             style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black),
           ),
           GestureDetector(
@@ -446,23 +600,24 @@ class HomePage extends StatelessWidget {
                 ClipRRect(
                   borderRadius: const BorderRadius.vertical(top: Radius.circular(5)),
                   child: post.images.isNotEmpty
-                      ? Image.network(
-                          post.images.first,
+                      ? CachedNetworkImage(
+                          imageUrl: post.images.first,
                           height: 100,
                           width: double.infinity,
                           fit: BoxFit.cover,
-                          errorBuilder: (c, e, s) => Container(
+                          placeholder: (c, u) => Container(height: 100, color: AppColors.chipGrey),
+                          errorWidget: (c, u, e) => Container(
                             height: 100,
                             color: AppColors.chipGrey,
                             alignment: Alignment.center,
-                            child: const Icon(Icons.image_outlined, color: AppColors.textGrey),
+                            child: const Icon(Icons.photo_camera_outlined, color: AppColors.textGrey),
                           ),
                         )
                       : Container(
                           height: 100,
                           color: AppColors.chipGrey,
                           alignment: Alignment.center,
-                          child: const Icon(Icons.image_outlined, color: AppColors.textGrey),
+                          child: const Icon(Icons.photo_camera_outlined, color: AppColors.textGrey),
                         ),
                 ),
                 Positioned(
@@ -528,7 +683,7 @@ class HomePage extends StatelessWidget {
           ),
           GestureDetector(
             onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const InsuranceListPage()),
+              MaterialPageRoute(builder: (_) => const InsurancePartnerListPage()),
             ),
             child: const Text(
               'View All',
@@ -540,29 +695,79 @@ class HomePage extends StatelessWidget {
     );
   }
 
+  // Shows insurers, not individual plans -- matches
+  // insurance_partner_list_page.dart's deliberate partner-first design (its
+  // own doc comment: "no 'browse all plans' shortcut... a plan is only ever
+  // shown once a partner has been chosen"). This tile used to stream
+  // InsuranceRepository.watchPlans() straight onto the homepage, which
+  // skipped that flow entirely; now it mirrors the "View All" header right
+  // above, which already pointed at InsurancePartnerListPage.
   Widget _buildInsuranceList() {
     return SizedBox(
       height: 110,
-      child: StreamBuilder<List<InsurancePlan>>(
-        stream: InsuranceRepository.instance.watchPlans(),
+      child: StreamBuilder<List<InsurancePartner>>(
+        stream: InsuranceRepository.instance.watchApprovedPartners(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator(color: AppColors.primary));
           }
-          final plans = snapshot.data ?? const [];
-          if (plans.isEmpty) {
+          final partners = snapshot.data ?? const [];
+          if (partners.isEmpty) {
             return const Center(
-              child: Text('No insurance plans yet', style: TextStyle(fontSize: 12, color: AppColors.textGrey)),
+              child: Text('No insurance partners yet', style: TextStyle(fontSize: 12, color: AppColors.textGrey)),
             );
           }
           return ListView.separated(
             padding: const EdgeInsets.symmetric(horizontal: 20),
             scrollDirection: Axis.horizontal,
-            itemCount: plans.length,
+            itemCount: partners.length,
             separatorBuilder: (_, __) => const SizedBox(width: 10),
-            itemBuilder: (context, index) => InsurancePlanTile(plan: plans[index]),
+            itemBuilder: (context, index) => _InsurancePartnerTile(partner: partners[index]),
           );
         },
+      ),
+    );
+  }
+}
+
+class _InsurancePartnerTile extends StatelessWidget {
+  final InsurancePartner partner;
+  const _InsurancePartnerTile({required this.partner});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => InsurancePartnerDetailPage(partner: partner)),
+      ),
+      child: Container(
+        width: 150,
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: const Color(0xFFECECEC)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            partnerLogo(partner, size: 34),
+            const SizedBox(height: 6),
+            Text(
+              partner.companyName,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: AppColors.navy),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              partner.activePlanCount == 1 ? '1 plan available' : '${partner.activePlanCount} plans available',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 10.5, color: AppColors.textGrey),
+            ),
+          ],
+        ),
       ),
     );
   }

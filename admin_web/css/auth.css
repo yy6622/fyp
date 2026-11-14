@@ -1,10 +1,17 @@
-.auth-shell { min-height: 100vh; display: flex; }
+/* Locked to the viewport's own height (not just min-height) so the
+ * flex row itself never grows taller than the screen -- .auth-main
+ * then scrolls internally when its form is tall, while .auth-side
+ * (branding panel) stays put instead of scrolling out of view with
+ * it. Reset back to normal document flow on mobile (below), where
+ * the two stack vertically and a frozen half-screen panel would just
+ * eat space the form needs. */
+.auth-shell { height: 100vh; display: flex; }
 .auth-side {
   flex: 1; background: linear-gradient(165deg, var(--navy-800), var(--navy-900));
   color: #fff; padding: 56px 48px; display: flex; flex-direction: column; justify-content: center;
-  min-width: 0;
+  min-width: 0; overflow-y: auto;
 }
-.auth-side .brand { display: block; height: 36px; width: auto; align-self: flex-start; margin-bottom: 46px; }
+.auth-side .brand { display: block; height: 56px; width: auto; align-self: flex-start; margin-bottom: 42px; }
 .auth-side h1 { font-size: 38px; font-weight: 800; line-height: 1.15; letter-spacing: -0.01em; max-width: 480px; }
 .auth-side .lede { font-size: 15px; color: rgba(255,255,255,.75); margin-top: 16px; max-width: 420px; line-height: 1.5; }
 .auth-points { margin-top: 40px; display: flex; flex-direction: column; gap: 18px; }
@@ -20,7 +27,7 @@
 }
 .auth-switch .icon { stroke: #fff; }
 
-.auth-main { flex: 1.15; display: flex; align-items: center; justify-content: center; padding: 40px 24px; min-width: 0; }
+.auth-main { flex: 1.15; display: flex; align-items: center; justify-content: center; padding: 40px 24px; min-width: 0; overflow-y: auto; }
 .auth-card { width: 100%; max-width: 440px; background: #fff; border-radius: 22px; box-shadow: var(--shadow-card); padding: 44px 40px; }
 .auth-card h2 { font-size: 26px; font-weight: 800; color: var(--text-900); }
 .auth-card .lede { font-size: 13.5px; color: var(--text-500); margin-top: 8px; margin-bottom: 28px; }
@@ -35,8 +42,8 @@
 .auth-foot-link a { color: var(--teal-600); font-weight: 700; }
 
 @media (max-width: 900px) {
-  .auth-shell { flex-direction: column; }
-  .auth-side { padding: 40px 28px; }
+  .auth-shell { flex-direction: column; height: auto; min-height: 100vh; }
+  .auth-side { padding: 40px 28px; overflow-y: visible; }
   .auth-side h1 { font-size: 28px; }
-  .auth-main { padding: 32px 20px 56px; }
+  .auth-main { padding: 32px 20px 56px; overflow-y: visible; }
 }

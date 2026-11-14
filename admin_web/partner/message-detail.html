@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Message — Voya Insurance Partner</title>
+<link rel="stylesheet" href="../css/tokens.css?v=20261006b" />
+<link rel="stylesheet" href="../css/base.css?v=20261006b" />
+<link rel="stylesheet" href="../css/layout.css?v=20261111a" />
+<link rel="stylesheet" href="../css/components.css?v=20261106g" />
+</head>
+<body>
+<div class="shell">
+  <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+  <aside class="sidebar" id="sidebar">
+    <img class="sidebar-brand" src="../img/voya-logo-white.png" alt="Voya" />
+    <div class="sidebar-user">
+      <div class="name" id="sbUserName">Loading…</div>
+      <div class="role" id="sbUserRole">Partner workspace</div>
+    </div>
+    <nav class="nav" id="sidebarNav"></nav>
+    <button class="sidebar-logout" id="logoutBtn"><span data-icon="log-out"></span>Log out</button>
+  </aside>
+
+  <main class="content">
+    <div class="topbar">
+      <div>
+        <button class="menu-toggle" id="menuToggle"><span data-icon="menu"></span></button>
+        <a href="messages.html" class="inline-flex" style="color:var(--text-500);font-weight:700;font-size:13.5px;margin-bottom:10px;">
+          <span data-icon="arrow-left" data-icon-size="14"></span>Back to messages
+        </a>
+        <div style="display:flex;align-items:center;gap:12px;">
+          <div class="avatar-fallback" id="travellerAvatar" style="width:40px;height:40px;font-size:14px;"></div>
+          <div>
+            <h1 class="h1" id="travellerTitle" style="margin-bottom:2px;">Message</h1>
+            <p class="subtitle" id="planSubtitle" style="margin:0;"></p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="body">
+      <div class="skeleton" style="height:300px;"></div>
+    </div>
+  </main>
+</div>
+
+<div class="modal-backdrop" id="planPickerModal">
+  <div class="modal">
+    <div class="modal-head"><h3 class="h2">Attach a plan</h3><button class="modal-close" data-close><span data-icon="x"></span></button></div>
+    <p class="muted small" style="margin:-4px 0 14px;">The traveller will see this as a card in the chat they can tap to view and buy.</p>
+    <div id="planPickerList" style="display:flex;flex-direction:column;gap:8px;max-height:360px;overflow-y:auto;"></div>
+    <div class="empty-state" id="planPickerEmpty" style="display:none;">
+      <span data-icon="briefcase" class="icon-lg"></span>
+      <div class="h3">No active plans</div>
+      <p class="small">Publish a plan first, then you can send it from here.</p>
+    </div>
+    <a class="btn btn-outline" id="createPlanForChatLink" style="width:100%;justify-content:center;margin-top:12px;">
+      <span data-icon="plus" data-icon-size="14"></span>Create a new plan for this traveller
+    </a>
+  </div>
+</div>
+
+<script type="module">
+import { requireRole } from "../js/auth-guard.js?v=20261106b";
+import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261114a";
+import { mountIcons } from "../js/icons.js?v=20261106c";
+import { getInsuranceChat, listInsuranceChatMessages, sendInsuranceChatMessage, sendInsuranceChatPlan, markInsuranceChatReadByPartner, listPlans, getPlan } from "../js/data.js?v=20261114c";
+import { escapeHtml, timeAgo, moneyExact, toast, setBusy, openModal, closeModal, wireModalDismiss, detailDialog } from "../js/ui.js?v=20261113a";
+
+mountSidebarNav({ role: "partner", active: "messages" });
+const session = await requireRole("partner", "login.html");
+const chatId = new URLSearchParams(location.search).get("id");
+let chat = null;
+let pollTimer = null;
+// attachedPlanId -> plan doc, filled in as cards are rendered so a 5s
+// poll tick doesn't re-fetch a plan it already resolved.
+const planCache = new Map();
+
+if (session) {
+  setSidebarUser({ displayName: session.profile.companyName || "Partner", roleLabel: `${session.profile.companyName || "Insurance"} · Insurance Partner` });
+  wireModalDismiss();
+  const createPlanLink = document.getElementById("createPlanForChatLink");
+  if (createPlanLink) createPlanLink.href = `plan-form.html?returnChatId=${encodeURIComponent(chatId || "")}`;
+  if (!chatId) {
+    document.getElementById("body").innerHTML = `<p class="muted">No conversation selected.</p>`;
+  } else {
+    await load(true);
+    await markInsuranceChatReadByPartner(chatId).catch(() => {});
+    // Light polling so a reply the traveller sends while this page is open
+    // shows up without the partner having to refresh — this console has
+    // no realtime listeners elsewhere, so a short interval keeps this
+    // page consistent with that (simpler than introducing onSnapshot
+    // just for this one page).
+    pollTimer = setInterval(() => load(false), 5000);
+  }
+}
+window.addEventListener("beforeunload", () => { if (pollTimer) clearInterval(pollTimer); });
+
+async function load(firstLoad) {
+  chat = await getInsuranceChat(chatId);
+  if (!chat || chat.partnerId !== session.uid) {
+    document.getElementById("body").innerHTML = `<div class="empty-state"><span data-icon="mail" class="icon-lg"></span><div class="h3">Conversation not found</div></div>`;
+    mountIcons(document);
+    if (pollTimer) clearInterval(pollTimer);
+    return;
+  }
+  document.getElementById("travellerTitle").textContent = chat.travellerName || "Traveller";
+  document.getElementById("planSubtitle").textContent = chat.planName ? `Asking about: ${chat.planName}` : "General enquiry";
+  const words = (chat.travellerName || "").trim().split(/\s+/).filter(Boolean);
+  document.getElementById("travellerAvatar").textContent = !words.length ? "?" : (words.length === 1 ? words[0].slice(0, 1).toUpperCase() : (words[0][0] + words[1][0]).toUpperCase());
+
+  const messages = await listInsuranceChatMessages(chatId);
+  if (firstLoad) {
+    document.getElementById("body").innerHTML = `
+      <div class="card" style="padding:0;overflow:hidden;">
+        <div id="messageList" style="max-height:480px;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:10px;"></div>
+        <div style="border-top:1px solid var(--border);padding:14px 16px;display:flex;gap:10px;align-items:flex-end;">
+          <button class="btn btn-outline btn-icon" id="attachPlanBtn" title="Attach a plan" style="flex-shrink:0;"><span data-icon="briefcase" data-icon-size="14"></span></button>
+          <textarea class="input" id="replyInput" rows="1" placeholder="Type a reply…" style="resize:none;flex:1;"></textarea>
+          <button class="btn btn-primary" id="sendBtn"><span data-icon="send" data-icon-size="14"></span>Send</button>
+        </div>
+      </div>`;
+    document.getElementById("sendBtn").addEventListener("click", send);
+    document.getElementById("attachPlanBtn").addEventListener("click", openPlanPicker);
+    document.getElementById("messageList").addEventListener("click", (e) => {
+      const card = e.target.closest("[data-plan-card]");
+      if (card) viewAttachedPlan(card.dataset.planCard);
+    });
+    document.getElementById("replyInput").addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
+    });
+  }
+  await renderMessages(messages);
+  mountIcons(document);
+}
+
+/** Resolves every attached-plan card's live plan (cached across calls),
+ * then renders — a card always shows the plan's current price/coverage,
+ * not whatever it was when sent (see sendInsuranceChatPlan in js/data.js). */
+async function renderMessages(messages) {
+  const list = document.getElementById("messageList");
+  if (!list) return;
+  const wasNearBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 60;
+  if (!messages.length) {
+    list.innerHTML = `<p class="muted small" style="text-align:center;padding:20px 0;">No messages yet. Say hello to ${escapeHtml(chat.travellerName || "the traveller")}.</p>`;
+    return;
+  }
+  const toResolve = [...new Set(messages.filter((m) => m.attachedPlanId && !planCache.has(m.attachedPlanId)).map((m) => m.attachedPlanId))];
+  await Promise.all(toResolve.map(async (id) => {
+    try { planCache.set(id, await getPlan(id)); } catch (_) { planCache.set(id, null); }
+  }));
+  list.innerHTML = messages.map((m) => {
+    const mine = m.senderRole === "partner";
+    const bubbleColor = mine ? "var(--primary-600,#13507a)" : "var(--surface-200,#f1f3f5)";
+    const textColor = mine ? "#fff" : "#1a1a1a";
+    const radius = `border-radius:14px;${mine ? "border-bottom-right-radius:3px;" : "border-bottom-left-radius:3px;"}`;
+    const body = m.attachedPlanId ? planCardHtml(planCache.get(m.attachedPlanId), mine) : `<p class="value" style="color:inherit;margin:0;white-space:pre-wrap;">${escapeHtml(m.text)}</p>`;
+    return `
+      <div style="align-self:${mine ? "flex-end" : "flex-start"};max-width:78%;">
+        <div style="background:${bubbleColor};color:${textColor};padding:${m.attachedPlanId ? "10px" : "10px 14px"};${radius}">
+          ${body}
+        </div>
+        <p class="muted small" style="margin:4px 2px 0;text-align:${mine ? "right" : "left"};">${timeAgo(m.createdAt)}</p>
+      </div>`;
+  }).join("");
+  if (wasNearBottom) list.scrollTop = list.scrollHeight;
+}
+
+function planCardHtml(plan, mine) {
+  if (!plan) {
+    return `<p class="value" style="color:inherit;margin:0;font-style:italic;opacity:0.85;">This plan is no longer available.</p>`;
+  }
+  const fg = mine ? "#fff" : "#1a1a1a";
+  const sub = mine ? "rgba(255,255,255,0.78)" : "var(--text-500)";
+  return `
+    <div data-plan-card="${plan.id}" style="background:${mine ? "rgba(255,255,255,0.1)" : "#fff"};border-radius:10px;padding:12px;min-width:180px;cursor:pointer;">
+      <div style="display:flex;align-items:center;gap:6px;color:${fg};font-weight:700;font-size:13px;"><span data-icon="briefcase" data-icon-size="14"></span>${escapeHtml(plan.name || "Insurance Plan")}</div>
+      <p style="margin:4px 0 0;font-size:11.5px;color:${sub};">${escapeHtml(plan.tripType || "")}${plan.tripType ? " · " : ""}RM ${(Number(plan.premium) || 0).toLocaleString("en-MY")}</p>
+    </div>
+    <p style="margin:6px 0 0;font-size:10.5px;color:${sub};">Tap the card to view full plan info — the traveller can tap it in the app to view and buy.</p>`;
+}
+
+/** Shows the same read-only plan detail view the partner gets from the
+ * Plans list (plans.html's view()), so tapping a card sent in chat opens
+ * plan info without navigating away from the conversation. */
+function viewAttachedPlan(planId) {
+  const p = planCache.get(planId);
+  if (!p) return;
+  const coverageHtml = (p.coverageItems || []).length
+    ? p.coverageItems.map((it) => `
+        <div style="display:flex;justify-content:space-between;gap:12px;padding:4px 0;">
+          <span>${escapeHtml(it.label)}</span>
+          <span class="cell-strong" style="flex:none;">${moneyExact(it.amount)}</span>
+        </div>`).join("")
+    : "—";
+  const highlightsHtml = (p.highlights || []).length
+    ? `<ul style="margin:0;padding-left:18px;">${p.highlights.map((h) => `<li style="padding:2px 0;">${escapeHtml(h)}</li>`).join("")}</ul>`
+    : "—";
+  detailDialog({
+    title: p.name || "Untitled plan",
+    subtitle: `${p.tripType || "Trip type not set"} · ${p.status === "active" ? "Active" : "Inactive"}`,
+    rows: [
+      { label: "Premium", value: `${moneyExact(p.premium)}` },
+      { label: "Key coverage", value: coverageHtml, block: true },
+      { label: "Highlights", value: highlightsHtml, block: true },
+    ],
+    actions: [{ text: "Edit plan", className: "btn-primary", onClick: () => { location.href = `plan-form.html?id=${planId}&returnChatId=${encodeURIComponent(chatId)}`; } }],
+  });
+}
+
+async function send() {
+  const input = document.getElementById("replyInput");
+  const text = input.value.trim();
+  if (!text) return;
+  const btn = document.getElementById("sendBtn");
+  setBusy(btn, true, "Sending…");
+  try {
+    await sendInsuranceChatMessage(chatId, session.uid, text);
+    input.value = "";
+    await load(false);
+    const list = document.getElementById("messageList");
+    if (list) list.scrollTop = list.scrollHeight;
+  } catch (err) {
+    toast(err.message || "Couldn't send message.", "error");
+  } finally {
+    setBusy(btn, false);
+  }
+}
+
+let plansLoaded = false;
+async function openPlanPicker() {
+  const listEl = document.getElementById("planPickerList");
+  const emptyEl = document.getElementById("planPickerEmpty");
+  if (!plansLoaded) {
+    listEl.innerHTML = `<div class="skeleton" style="height:50px;"></div>`;
+    openModal("planPickerModal");
+    const plans = (await listPlans(session.uid)).filter((p) => p.status === "active");
+    plansLoaded = plans;
+  }
+  const plans = plansLoaded;
+  if (!plans.length) {
+    listEl.innerHTML = "";
+    emptyEl.style.display = "block";
+  } else {
+    emptyEl.style.display = "none";
+    listEl.innerHTML = plans.map((p) => `
+      <button type="button" style="width:100%;background:#fff;text-align:left;cursor:pointer;border:1px solid var(--border);border-radius:10px;padding:12px;display:flex;justify-content:space-between;align-items:center;gap:10px;" data-send-plan="${p.id}">
+        <div>
+          <div class="cell-strong">${escapeHtml(p.name || "Insurance Plan")}</div>
+          <div class="muted small">${escapeHtml(p.tripType || "")}</div>
+        </div>
+        <div class="cell-strong">${moneyExact(p.premium)}</div>
+      </button>`).join("");
+    listEl.querySelectorAll("[data-send-plan]").forEach((btn) => btn.addEventListener("click", () => sendPlan(btn.dataset.sendPlan)));
+  }
+  openModal("planPickerModal");
+  mountIcons(document);
+}
+
+async function sendPlan(planId) {
+  const plan = plansLoaded.find((p) => p.id === planId);
+  if (!plan) return;
+  closeModal("planPickerModal");
+  try {
+    await sendInsuranceChatPlan(chatId, session.uid, plan);
+    await load(false);
+    const list = document.getElementById("messageList");
+    if (list) list.scrollTop = list.scrollHeight;
+  } catch (err) {
+    toast(err.message || "Couldn't send plan.", "error");
+  }
+}
+</script>
+</body>
+</html>

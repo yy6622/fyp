@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 import '../../controllers/saved_items_controller.dart';
 import '../../controllers/vote_controller.dart' show PickedSavedItem;
@@ -288,10 +289,10 @@ class _SavedItemPickerSheetState extends State<_SavedItemPickerSheet> {
         height: 40,
         color: AppColors.chipGrey,
         child: hasUrl
-            ? Image.network(
-                url!,
+            ? CachedNetworkImage(
+                imageUrl: url!,
                 fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => Icon(fallbackIcon, size: 18, color: AppColors.textGrey),
+                errorWidget: (_, __, ___) => Icon(fallbackIcon, size: 18, color: AppColors.textGrey),
               )
             : Icon(fallbackIcon, size: 18, color: AppColors.textGrey),
       ),

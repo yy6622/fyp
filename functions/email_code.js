@@ -4,22 +4,22 @@
 //  - login:   on a device that is not trusted (new phone, or 30 days since the
 //             last code) a code is needed before the app opens. A correct code
 //             trusts that device for 30 days.
-//  - step-up: payment, change password, change email and delete account ask for
-//             a fresh code. A correct code allows that one action for 10 minutes;
-//             createPaymentIntent refuses to charge without it.
+//  - step-up: change password, change email and delete account ask for a
+//             fresh code. A correct code allows that one action for 10
+//             minutes. (Payment deliberately does NOT use this -- FR04 is
+//             login-only 2FA; see the Nov 2026 session doc for why an
+//             earlier version of this app wrongly gated every payment
+//             behind a code too.)
 //
 // Codes are created and checked only here, on the server. Firestore keeps a
 // SHA-256 hash of the code, never the code itself, and the security rules stop
 // the app from reading or writing these documents.
 const crypto = require("crypto");
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
-const { defineSecret } = require("firebase-functions/params");
 const { initializeApp, getApps } = require("firebase-admin/app");
+const { gmailUser, gmailAppPassword, sendMail } = require("./mailer");
 
 if (getApps().length === 0) initializeApp();
-
-const gmailUser = defineSecret("GMAIL_USER");
-const gmailAppPassword = defineSecret("GMAIL_APP_PASSWORD");
 
 const CODE_TTL_MS = 10 * 60 * 1000;          // a code works for 10 minutes
 const RESEND_AFTER_MS = 60 * 1000;           // one email per minute
@@ -27,13 +27,12 @@ const MAX_ATTEMPTS = 5;                      // then a new code is needed
 const TRUST_DEVICE_MS = 30 * 24 * 60 * 60 * 1000;
 const STEP_UP_MS = 10 * 60 * 1000;
 
-const PURPOSES = ["signup", "login", "payment", "change_password", "change_email", "delete_account"];
-const STEP_UP = ["payment", "change_password", "change_email", "delete_account"];
+const PURPOSES = ["signup", "login", "change_password", "change_email", "delete_account"];
+const STEP_UP = ["change_password", "change_email", "delete_account"];
 
 const PURPOSE_TEXT = {
   signup: "verify your email address",
   login: "sign in on a new device",
-  payment: "confirm your payment",
   change_password: "change your password",
   change_email: "change your email address",
   delete_account: "delete your account",
@@ -95,31 +94,49 @@ function makeHandlers({ db, auth, sendMail, now = () => Date.now() }) {
       await ref.delete();
       throw new HttpsError("resource-exhausted", "Too many wrong codes. Tap Resend code for a new one.");
     }
+    // saved.hash should always be a 64-char hex string written by send()
+    // above, but "|| \"\"" keeps Buffer.from from throwing outright if a
+    // record is ever malformed -- that just reads as a wrong code instead
+    // of crashing the whole call as an opaque "internal" error.
     const given = Buffer.from(hashCode(uid, purpose, code));
-    const expected = Buffer.from(saved.hash);
+    const expected = Buffer.from(saved.hash || "");
     if (given.length !== expected.length || !crypto.timingSafeEqual(given, expected)) {
       const left = MAX_ATTEMPTS - saved.attempts - 1;
-      await ref.update({ attempts: saved.attempts + 1 });
+      // set({merge:true}), not update() -- update() throws if this record
+      // was deleted by a concurrent request (expiry, max-attempts, or a
+      // resend racing this same call) in between the get() above and here.
+      await ref.set({ attempts: saved.attempts + 1 }, { merge: true });
       throw new HttpsError("permission-denied", left > 0 ? `Wrong code. ${left} attempt(s) left.` : "Wrong code. Tap Resend code for a new one.");
     }
-    await ref.delete();
 
+    // The code itself was right. Everything below is bookkeeping, not
+    // verification -- if any of it throws, the code record is deliberately
+    // kept (not deleted) so a retry of this same, still-correct code
+    // succeeds once the underlying hiccup clears, instead of leaving the
+    // traveller stuck needing a brand new code for a problem resending
+    // can't fix.
     const device = cleanDeviceId(deviceId);
-    if (purpose === "signup") {
-      await auth.updateUser(uid, { emailVerified: true });
-      await db.collection("users").doc(uid).set({ emailVerified: true }, { merge: true });
+    try {
+      if (purpose === "signup") {
+        await auth.updateUser(uid, { emailVerified: true });
+        await db.collection("users").doc(uid).set({ emailVerified: true }, { merge: true });
+      }
+      if ((purpose === "signup" || purpose === "login") && device) {
+        await db.collection("users").doc(uid).collection("trusted_devices").doc(device).set({
+          name: typeof deviceName === "string" ? deviceName.slice(0, 60) : "Phone",
+          trustedAt: t,
+          trustedUntil: t + TRUST_DEVICE_MS,
+        });
+      }
+      if (STEP_UP.includes(purpose)) {
+        await db.collection("step_up").doc(uid).set({ [purpose]: t + STEP_UP_MS }, { merge: true });
+      }
+    } catch (err) {
+      console.error(`verifyCode: code was correct (uid=${uid}, purpose=${purpose}) but finishing up failed`, err);
+      throw new HttpsError("internal", "Your code was right -- please try again in a moment. You do not need a new code.");
     }
-    if ((purpose === "signup" || purpose === "login") && device) {
-      await db.collection("users").doc(uid).collection("trusted_devices").doc(device).set({
-        name: typeof deviceName === "string" ? deviceName.slice(0, 60) : "Phone",
-        trustedAt: t,
-        trustedUntil: t + TRUST_DEVICE_MS,
-      });
-    }
-    if (STEP_UP.includes(purpose)) {
-      await db.collection("step_up").doc(uid).set({ [purpose]: t + STEP_UP_MS }, { merge: true });
-    }
-    return { verified: true, trustedUntil: device && purpose !== "payment" ? t + TRUST_DEVICE_MS : null };
+    await ref.delete();
+    return { verified: true, trustedUntil: device ? t + TRUST_DEVICE_MS : null };
   }
 
   // Used by createPaymentIntent (and anything else that must not run without a code).
@@ -137,19 +154,7 @@ function liveHandlers() {
   return makeHandlers({
     db: getFirestore(),
     auth: getAuth(),
-    sendMail: async (msg) => {
-      const nodemailer = require("nodemailer");
-      const transporter = nodemailer.createTransport({
-        service: "gmail",
-        auth: { user: gmailUser.value(), pass: gmailAppPassword.value() },
-      });
-      try {
-        await transporter.sendMail({ from: `"Voya" <${gmailUser.value()}>`, ...msg });
-      } catch (err) {
-        console.error("sendMail failed", err.message);
-        throw new HttpsError("unavailable", "Could not send the email. Please try again in a moment.");
-      }
-    },
+    sendMail,
   });
 }
 

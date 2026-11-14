@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 import '../../controllers/community_controller.dart';
 import '../../models/community_models.dart';
@@ -153,17 +154,18 @@ class _AuthorProfilePageState extends State<AuthorProfilePage> {
             ClipRRect(
               borderRadius: BorderRadius.circular(10),
               child: post.images.isNotEmpty
-                  ? Image.network(
-                      post.images.first,
+                  ? CachedNetworkImage(
+                      imageUrl: post.images.first,
                       width: 64,
                       height: 64,
                       fit: BoxFit.cover,
-                      errorBuilder: (c, e, s) => Container(
+                      placeholder: (c, u) => Container(width: 64, height: 64, color: AppColors.chipGrey),
+                      errorWidget: (c, u, e) => Container(
                         width: 64,
                         height: 64,
                         color: AppColors.chipGrey,
                         alignment: Alignment.center,
-                        child: const Icon(Icons.image_outlined, color: AppColors.textGrey),
+                        child: const Icon(Icons.photo_camera_outlined, color: AppColors.textGrey),
                       ),
                     )
                   : Container(
@@ -171,7 +173,7 @@ class _AuthorProfilePageState extends State<AuthorProfilePage> {
                       height: 64,
                       color: AppColors.chipGrey,
                       alignment: Alignment.center,
-                      child: const Icon(Icons.image_outlined, color: AppColors.textGrey),
+                      child: const Icon(Icons.photo_camera_outlined, color: AppColors.textGrey),
                     ),
             ),
             const SizedBox(width: 12),

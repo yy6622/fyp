@@ -7,13 +7,11 @@ import '../../services/auth_service.dart';
 import '../../theme.dart';
 import '../auth/login_page.dart';
 import '../shared/nice_dialog.dart';
-import '../community/my_community_posts_page.dart';
 import 'account_setting_page.dart';
 import 'friends_page.dart';
 import 'help_support_page.dart';
 import 'history_page.dart';
 import 'privacy_security_page.dart';
-import 'report_attraction_page.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -25,13 +23,14 @@ class ProfilePage extends StatefulWidget {
 class _ProfilePageState extends State<ProfilePage> {
   final ProfileController controller = ProfileController();
 
-  late final List<ProfileMenuItem> _menuItems = [
+  // Community Post, Insurance Messages and Report new attraction spot moved
+  // to the homepage (replacing the "Let AI Plan" banner there) -- they sat
+  // oddly among account-settings rows here.
+  List<ProfileMenuItem> get _menuItems => [
     ProfileMenuItem(Icons.person_outline, 'Account Setting', () => _push(const AccountSettingPage())),
     ProfileMenuItem(Icons.history, 'History', () => _push(const HistoryPage())),
-    ProfileMenuItem(Icons.dynamic_feed_outlined, 'Community Post', () => _push(const MyCommunityPostsPage())),
     ProfileMenuItem(Icons.people_outline, 'Friends', () => _push(const FriendsPage())),
     ProfileMenuItem(Icons.privacy_tip_outlined, 'Privacy and Security', () => _push(const PrivacySecurityPage())),
-    ProfileMenuItem(Icons.add_location_alt_outlined, 'Report new attraction spot', () => _push(const ReportAttractionPage())),
     ProfileMenuItem(Icons.help_outline, 'Help and Support', () => _push(const HelpSupportPage())),
   ];
 
@@ -179,9 +178,19 @@ class _ProfilePageState extends State<ProfilePage> {
                 Icon(item.icon, size: 19, color: AppColors.primary),
                 const SizedBox(width: 14),
                 Expanded(
-                  child: Text(
-                    item.label,
-                    style: const TextStyle(fontSize: 13.5, color: AppColors.navy, fontWeight: FontWeight.w500),
+                  child: Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          item.label,
+                          style: const TextStyle(fontSize: 13.5, color: AppColors.navy, fontWeight: FontWeight.w500),
+                        ),
+                      ),
+                      if (item.badge) ...[
+                        const SizedBox(width: 7),
+                        Container(width: 8, height: 8, decoration: const BoxDecoration(color: Colors.redAccent, shape: BoxShape.circle)),
+                      ],
+                    ],
                   ),
                 ),
                 if (item.showChevron) const Icon(Icons.chevron_right, size: 20, color: AppColors.textGrey),

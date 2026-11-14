@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../controllers/community_controller.dart';
@@ -265,24 +266,12 @@ class _CommunityPageState extends State<CommunityPage> {
                   const Text('Share your travel story',
                       style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 4),
+                  // The "Create Post" button that used to sit here was a second,
+                  // redundant way to do exactly what the page's own compose FAB
+                  // (_buildComposeFab) already does -- removed rather than kept
+                  // as decoration.
                   const Text('Inspire others and unlock your first\nhot travel content.',
                       style: TextStyle(color: Colors.white70, fontSize: 11)),
-                  const SizedBox(height: 12),
-                  GestureDetector(
-                    onTap: () => _openCreatePost(),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                      decoration: BoxDecoration(color: const Color(0xFF104259), borderRadius: BorderRadius.circular(20)),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.edit, size: 13, color: Colors.white),
-                          SizedBox(width: 6),
-                          Text('Create Post', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
-                        ],
-                      ),
-                    ),
-                  ),
                 ],
               ),
             ),
@@ -574,11 +563,12 @@ class _CommunityPageState extends State<CommunityPage> {
                                     child: Stack(
                                       fit: StackFit.expand,
                                       children: [
-                                        Image.network(
-                                          post.images[i],
+                                        CachedNetworkImage(
+                                          imageUrl: post.images[i],
                                           fit: BoxFit.cover,
-                                          errorBuilder: (context, error, stackTrace) =>
-                                              Container(color: AppColors.chipGrey, child: const Icon(Icons.image_outlined, color: AppColors.textGrey)),
+                                          placeholder: (context, url) => Container(color: AppColors.chipGrey),
+                                          errorWidget: (context, url, error) =>
+                                              Container(color: AppColors.chipGrey, child: const Icon(Icons.photo_camera_outlined, color: AppColors.textGrey)),
                                         ),
                                         if (isLastVisible)
                                           Container(

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 import '../../controllers/vote_controller.dart';
 import '../../repositories/catalog_repository.dart';
@@ -235,6 +236,16 @@ class _VoteTabState extends State<VoteTab> {
     );
   }
 
+  // Why a tap on a locked option does nothing, so the user isn't left
+  // guessing when their tap silently has no effect.
+  String? _blockedReason(TripVote vote, VoteOption option) {
+    if (vote.isClosed) return 'Voting is closed for this poll.';
+    if (!vote.allowMultipleChoice && controller.hasVotedAny(vote) && !controller.votedByMe(option)) {
+      return "This is a single-choice poll — you've already voted and can't switch.";
+    }
+    return null;
+  }
+
   Widget _optionCard(TripVote vote, VoteOption option) {
     final mineVoted = controller.votedByMe(option);
     final hotel = controller.hotelFor(option);
@@ -244,7 +255,14 @@ class _VoteTabState extends State<VoteTab> {
 
     final canVote = controller.canVote(vote, option);
     return GestureDetector(
-      onTap: !canVote ? null : () => _castVote(vote, option.id),
+      onTap: canVote
+          ? () => _castVote(vote, option.id)
+          : () {
+              final reason = _blockedReason(vote, option);
+              if (reason != null) {
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(reason)));
+              }
+            },
       child: Container(
         margin: const EdgeInsets.only(top: 10),
         decoration: BoxDecoration(
@@ -417,12 +435,13 @@ class _VoteTabState extends State<VoteTab> {
     }
     return ClipRRect(
       borderRadius: BorderRadius.circular(10),
-      child: Image.network(
-        url,
+      child: CachedNetworkImage(
+        imageUrl: url,
         width: 56,
         height: 56,
         fit: BoxFit.cover,
-        errorBuilder: (_, __, ___) => Container(width: 56, height: 56, color: AppColors.chipGrey, child: Icon(icon, color: AppColors.textGrey, size: 22)),
+        placeholder: (_, __) => Container(width: 56, height: 56, color: AppColors.chipGrey),
+        errorWidget: (_, __, ___) => Container(width: 56, height: 56, color: AppColors.chipGrey, child: Icon(icon, color: AppColors.textGrey, size: 22)),
       ),
     );
   }

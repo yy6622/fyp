@@ -35,11 +35,15 @@ class _ExpensesTabState extends State<ExpensesTab> {
           return const Center(child: CircularProgressIndicator(color: AppColors.primary));
         }
         final expenses = controller.visibleExpenses;
+        // A solo trip has no one to split with, so Group vs Personal is a
+        // distinction without a difference — drop the switch rather than
+        // leave a toggle that never changes anything.
+        final soloTrip = (controller.trip?.memberIds.length ?? 2) <= 1;
         return ListView(
           padding: const EdgeInsets.fromLTRB(20, 16, 20, 90),
           children: [
-            _segmentToggle(),
-            const SizedBox(height: 10),
+            if (!soloTrip) _segmentToggle(),
+            if (!soloTrip) const SizedBox(height: 10),
             Align(alignment: Alignment.centerRight, child: _generateReportButton(context)),
             const SizedBox(height: 10),
             controller.personal ? _summaryCard(personal: true) : _summaryCard(personal: false),
@@ -101,8 +105,15 @@ class _ExpensesTabState extends State<ExpensesTab> {
   }
 
   Widget _generateReportButton(BuildContext context) {
+    // Solo trip -- there's no "everyone's bills" vs "just my share"
+    // distinction to ask about (they're the only member, so a Group
+    // Report and a Personal Report would be identical), so this skips
+    // straight to the PDF instead of showing that choice.
+    final soloTrip = (controller.trip?.memberIds.length ?? 2) <= 1;
     return TextButton.icon(
-      onPressed: controller.loading ? null : () => _showGenerateReportSheet(context),
+      onPressed: controller.loading
+          ? null
+          : () => soloTrip ? _generateReport(context, personal: true) : _showGenerateReportSheet(context),
       icon: const Icon(Icons.picture_as_pdf_outlined, size: 16, color: AppColors.primary),
       label: const Text('Generate Report', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: AppColors.primary)),
       style: TextButton.styleFrom(

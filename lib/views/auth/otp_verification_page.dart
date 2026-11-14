@@ -33,8 +33,8 @@ Future<void> openAppAfterSignIn(BuildContext context, {bool newUser = false}) as
   Navigator.of(context).pushAndRemoveUntil(MaterialPageRoute(builder: (_) => target), (route) => false);
 }
 
-/// Asks for a fresh email code before a sensitive action (payment, password,
-/// email or account deletion). Returns true only when the code was right.
+/// Asks for a fresh email code before a sensitive account change (password,
+/// email, or account deletion). Returns true only when the code was right.
 Future<bool> confirmWithEmailCode(BuildContext context, CodePurpose purpose) async {
   final ok = await Navigator.of(context).push<bool>(
     MaterialPageRoute(builder: (_) => VerificationCodePage(purpose: purpose)),

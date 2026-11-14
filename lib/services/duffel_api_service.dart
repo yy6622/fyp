@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:developer' as developer;
 
 import 'package:http/http.dart' as http;
 
@@ -21,11 +22,22 @@ class DuffelApiService {
 
   bool get isConfigured => duffelApiKey.isNotEmpty && duffelApiKey != 'YOUR_DUFFEL_ACCESS_TOKEN_HERE';
 
+  /// [childAges] -- one entry per child, each 0-17 -- are sent to Duffel
+  /// as bare `{'age': n}` passenger objects rather than `{'type':
+  /// 'child', 'age': n}`: Duffel's own docs say to give a passenger
+  /// EITHER age or type, never both, and it infers child/infant fares
+  /// from the age itself. [cabinClass] must be one of Duffel's own
+  /// four values ('economy', 'premium_economy', 'business', 'first') --
+  /// no longer hardcoded to economy now that the Filter sheet's
+  /// Travelers & Cabin picker lets the traveller choose (see
+  /// filter_page.dart's _TravelersCabinSheet).
   Future<List<DuffelFlightOffer>> searchFlights({
     required String origin,
     required String destination,
     required DateTime departureDate,
     int adults = 1,
+    List<int> childAges = const [],
+    String cabinClass = 'economy',
   }) async {
     if (!isConfigured) {
       throw const DuffelApiException('Duffel API key is not set yet — see lib/config/secrets.dart.');
@@ -41,8 +53,11 @@ class DuffelApiService {
             'departure_date': _dateOnly(departureDate),
           }
         ],
-        'passengers': List.generate(adults, (_) => {'type': 'adult'}),
-        'cabin_class': 'economy',
+        'passengers': [
+          ...List.generate(adults, (_) => {'type': 'adult'}),
+          ...childAges.map((age) => {'age': age}),
+        ],
+        'cabin_class': cabinClass,
       }
     };
     final res = await _post('/air/offer_requests?return_offers=true', body);
@@ -62,8 +77,28 @@ class DuffelApiService {
     final viaCountry = kCountryGateways[text.toLowerCase()]?.flightIataCode;
     if (viaCountry != null) return viaCountry;
 
+    // Trip/catalog destinations are stored as "City, Country" (see
+    // country_gateways.dart's hotelPlaceQuery values and trip.destination).
+    // That whole string never matches kCountryGateways' country-only keys,
+    // so also try the part after the last comma before falling back to a
+    // live lookup.
+    if (text.contains(',')) {
+      final countryPart = text.split(',').last.trim().toLowerCase();
+      final viaCountryPart = kCountryGateways[countryPart]?.flightIataCode;
+      if (viaCountryPart != null) return viaCountryPart;
+    }
+
     final viaPlaces = await _resolveViaPlacesSuggestions(text);
     if (viaPlaces != null) return viaPlaces;
+
+    // Some place lookups match a bare city name better than "City, Country".
+    if (text.contains(',')) {
+      final cityPart = text.split(',').first.trim();
+      if (cityPart.isNotEmpty && cityPart != text) {
+        final viaCity = await _resolveViaPlacesSuggestions(cityPart);
+        if (viaCity != null) return viaCity;
+      }
+    }
 
     throw DuffelApiException('Could not find a matching airport for "$freeText" — try a city name instead (e.g. "Tokyo").');
   }
@@ -73,6 +108,20 @@ class DuffelApiService {
   String? _stringField(Map map, String key) {
     final v = map[key];
     return (v is String && v.isNotEmpty) ? v : null;
+  }
+
+  /// The raw suggestion list for a From/To autocomplete field (the
+  /// flight Filter sheet's route search -- see DuffelPlace's doc
+  /// comment). Unlike [resolveDestinationCode]/[_resolveViaPlacesSuggestions]
+  /// below, this doesn't guess a single best match or fall back to
+  /// anything -- it's meant to be called on every keystroke (debounced
+  /// by the caller) and shown as a picklist, so an empty result or a
+  /// thrown error should just mean "no suggestions yet", not block typing.
+  Future<List<DuffelPlace>> searchPlaces(String query) async {
+    final text = query.trim();
+    if (text.length < 2 || !isConfigured) return const [];
+    final places = await _get('/places/suggestions', {'query': text});
+    return places.map(DuffelPlace.fromJson).where((p) => p.iataCode.isNotEmpty).toList();
   }
 
   Future<String?> _resolveViaPlacesSuggestions(String query) async {
@@ -151,7 +200,11 @@ class DuffelApiService {
           .post(Uri.parse('$_base$path'), headers: _headers, body: jsonEncode(body))
           .timeout(const Duration(seconds: 25));
     } catch (e) {
-      throw DuffelApiException('Could not reach Duffel: $e');
+      // Log the real cause for debugging (a CORS block, a timeout, a DNS
+      // failure, ...) but never show it to the user — it leaks internal
+      // URLs and exception class names and reads as a crash, not an error.
+      developer.log('Duffel request failed: $e', name: 'DuffelApiService');
+      throw const DuffelApiException("Couldn't reach the flight search service. Check your connection and try again.");
     }
     if (res.statusCode < 200 || res.statusCode >= 300) {
       throw DuffelApiException(_errorMessageFrom(res));
@@ -169,7 +222,11 @@ class DuffelApiService {
           .get(Uri.parse('$_base$path').replace(queryParameters: query), headers: _headers)
           .timeout(const Duration(seconds: 15));
     } catch (e) {
-      throw DuffelApiException('Could not reach Duffel: $e');
+      // Log the real cause for debugging (a CORS block, a timeout, a DNS
+      // failure, ...) but never show it to the user — it leaks internal
+      // URLs and exception class names and reads as a crash, not an error.
+      developer.log('Duffel request failed: $e', name: 'DuffelApiService');
+      throw const DuffelApiException("Couldn't reach the flight search service. Check your connection and try again.");
     }
     if (res.statusCode < 200 || res.statusCode >= 300) {
       throw DuffelApiException(_errorMessageFrom(res));

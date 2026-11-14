@@ -302,7 +302,12 @@ class VerificationCodeController extends ChangeNotifier {
       return true;
     } on VerificationException catch (e) {
       _error = e.message;
-      codeController.clear();
+      // 'internal' here means the code itself was right but something
+      // else (finishing sign-up/trusting the device) hiccuped -- the
+      // server deliberately kept that code valid for exactly this case, so
+      // keep it on screen too and let Verify just be tapped again, instead
+      // of clearing it and forcing a resend the traveller does not need.
+      if (e.code != 'internal') codeController.clear();
       return false;
     } finally {
       _checking = false;

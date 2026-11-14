@@ -5,10 +5,10 @@ import '../../models/booking_details.dart';
 import '../../repositories/booking_repository.dart';
 import '../../services/auth_service.dart';
 import '../../services/format_utils.dart';
+import '../../services/paypal_service.dart';
 import '../../services/stripe_service.dart';
 import '../../theme.dart';
-import '../../services/verification_service.dart';
-import '../auth/otp_verification_page.dart';
+import '../payment/payment_method_picker.dart';
 
 class BookingConfirmation {
   final String paymentRef;
@@ -114,6 +114,7 @@ class _BookingPaymentPageState extends State<BookingPaymentPage> {
     maxQuantity: widget.quantity,
   );
   bool _paying = false;
+  PaymentMethodOption _method = PaymentMethodOption.card;
 
   @override
   void dispose() {
@@ -210,16 +211,21 @@ class _BookingPaymentPageState extends State<BookingPaymentPage> {
                     _guestSummarySection(),
                   ],
                   const SizedBox(height: 24),
-                  const Text('Payment', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.black)),
+                  const Text('Payment Method', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.black)),
                   const SizedBox(height: 10),
+                  PaymentMethodPicker(
+                    value: _method,
+                    onChanged: (v) => setState(() => _method = v),
+                  ),
+                  const SizedBox(height: 16),
                   const Divider(color: Color(0xFFECECEC)),
                   const SizedBox(height: 4),
                   _summaryRow('${widget.currencyLabel} ${widget.unitPrice.toStringAsFixed(0)} × ${controller.quantity}',
                       '${widget.currencyLabel} ${controller.subtotal.toStringAsFixed(2)}'),
-                  _summaryRow('Service Fee', '${widget.currencyLabel} 0.00'),
+                  _summaryRow('Service Fee', '${widget.currencyLabel} ${BookingPaymentController.serviceFee.toStringAsFixed(2)}'),
                   const SizedBox(height: 8),
                   const Divider(color: Color(0xFFECECEC)),
-                  _summaryRow('Total Amount', '${widget.currencyLabel} ${controller.subtotal.toStringAsFixed(2)}', bold: true),
+                  _summaryRow('Total Amount', '${widget.currencyLabel} ${controller.total.toStringAsFixed(2)}', bold: true),
                 ],
               ),
             ),
@@ -240,7 +246,7 @@ class _BookingPaymentPageState extends State<BookingPaymentPage> {
                           height: 20,
                           child: CircularProgressIndicator(strokeWidth: 2.4, color: Colors.white),
                         )
-                      : Text('Pay ${widget.currencyLabel} ${controller.subtotal.toStringAsFixed(2)}',
+                      : Text('Pay ${widget.currencyLabel} ${controller.total.toStringAsFixed(2)}',
                           style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 15)),
                 ),
               ),
@@ -325,19 +331,29 @@ class _BookingPaymentPageState extends State<BookingPaymentPage> {
 
   Future<void> _confirmPayment() async {
     final user = AuthService.instance.currentUser;
-    // FR04 step-up: a payment needs the 6-digit code emailed to the traveller.
-    if (!await confirmWithEmailCode(context, CodePurpose.payment)) return;
-    if (!mounted) return;
     setState(() => _paying = true);
     final String paymentRef;
     try {
-      paymentRef = await StripeService.instance.payWithSheet(
-        amount: controller.subtotal,
-        currencyCode: _isoCurrency,
-        merchantDisplayName: 'Voya',
-        customerEmail: user?.email,
-      );
+      paymentRef = _method == PaymentMethodOption.paypal
+          ? await PayPalService.instance.payWithPayPal(
+              context,
+              amount: controller.total,
+              currencyCode: _isoCurrency,
+            )
+          : await StripeService.instance.payWithSheet(
+              amount: controller.total,
+              currencyCode: _isoCurrency,
+              merchantDisplayName: 'Voya',
+              customerEmail: user?.email,
+            );
     } on StripePaymentException catch (e) {
+      if (!mounted) return;
+      setState(() => _paying = false);
+      if (e.message != 'Payment cancelled.') {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      }
+      return;
+    } on PayPalPaymentException catch (e) {
       if (!mounted) return;
       setState(() => _paying = false);
       if (e.message != 'Payment cancelled.') {

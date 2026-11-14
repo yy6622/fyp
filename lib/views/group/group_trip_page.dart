@@ -1,9 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../controllers/group_trip_controller.dart';
-import '../../data/airlines.dart';
 import '../../data/countries.dart';
 import '../../data/country_gateways.dart';
 import '../../data/malaysia_airports.dart';
@@ -13,7 +15,6 @@ import '../../repositories/catalog_repository.dart';
 import '../../repositories/trip_repository.dart';
 import '../../services/auth_service.dart';
 import '../../services/currency_service.dart';
-import '../../services/format_utils.dart';
 import '../../services/maps_service.dart';
 import '../../theme.dart';
 import '../detail/detail_page_attraction.dart';
@@ -21,13 +22,15 @@ import '../detail/detail_page_hotel.dart';
 import '../detail/detail_page_restaurant.dart';
 import '../expenses/add_expense_choice_page.dart';
 import '../expenses/expenses_tab.dart';
-import '../insurance/insurance_list_page.dart';
+import '../insurance/insurance_partner_list_page.dart';
 import '../profile/history_detail_pages.dart';
 import '../shared/member_select_section.dart';
 import '../shared/nice_dialog.dart';
 import '../shared/nice_pickers.dart';
 import '../vote/create_vote_page.dart';
 import '../vote/vote_tab.dart';
+import 'add_flight_page.dart';
+import 'add_hotel_page.dart';
 import 'ai_itinerary_sheet.dart';
 import 'day_timeline_view.dart';
 import 'group_info_page.dart';
@@ -35,13 +38,14 @@ import 'live_conditions_card.dart';
 import 'optimise_sheet.dart';
 import 'plan_flight_detail_page.dart';
 import 'plan_hotel_detail_page.dart';
+import 'travel_preferences_page.dart';
 
-final List<String> _flightLocationOptions = [
+final List<String> flightLocationOptions = [
   for (final a in kMalaysiaAirports) '${a.city} – ${a.name} (${a.iataCode})',
   for (final g in kCountryGateways.entries) '${g.value.hotelPlaceQuery} (${g.value.flightIataCode})',
 ];
 
-String _extractAirportCode(String text) {
+String extractAirportCode(String text) {
   final match = RegExp(r'\(([A-Za-z]{2,4})\)\s*$').firstMatch(text.trim());
   return (match?.group(1) ?? text.trim()).toUpperCase();
 }
@@ -65,9 +69,29 @@ class _GroupTripPageState extends State<GroupTripPage> {
   int? _editDayIndex;
   final Map<String, String> _draftTimes = {};
   final Set<String> _draftRemoved = {}; // activity ids to remove
+  // itemId -> the day index it's been dragged onto this session (only set
+  // for items actually moved to a *different* day than they started in).
+  final Map<String, int> _draftMovedTo = {};
   bool _savingDraft = false;
 
-  bool get _hasDraftChanges => _draftTimes.isNotEmpty || _draftRemoved.isNotEmpty;
+  // Shared across every day's DayTimelineView so a drag started on one
+  // day keeps a stable handle on "whichever timeline viewport/scroll
+  // position is on screen right now" even after the day underneath it
+  // changes mid-drag (see the comment on DayTimelineView.viewportKey).
+  final GlobalKey _timelineViewportKey = GlobalKey();
+  final ScrollController _timelineScroll = ScrollController();
+
+  String? _draggingItemId;
+  Offset? _lastDragGlobalPos;
+  Timer? _edgeHoldTimer;
+  bool? _edgeHoldToNext; // true = right edge (next day), false = left edge (prev day)
+
+  static const double _autoVScrollEdge = 64.0;
+  static const double _autoVScrollMaxSpeed = 14.0;
+  Timer? _autoVScrollTimer;
+  double _autoVScrollDelta = 0;
+
+  bool get _hasDraftChanges => _draftTimes.isNotEmpty || _draftRemoved.isNotEmpty || _draftMovedTo.isNotEmpty;
 
   void _startDayEdit() {
     setState(() {
@@ -75,6 +99,7 @@ class _GroupTripPageState extends State<GroupTripPage> {
       _editDayIndex = controller.planIndex;
       _draftTimes.clear();
       _draftRemoved.clear();
+      _draftMovedTo.clear();
     });
   }
 
@@ -84,42 +109,234 @@ class _GroupTripPageState extends State<GroupTripPage> {
       _editDayIndex = null;
       _draftTimes.clear();
       _draftRemoved.clear();
+      _draftMovedTo.clear();
     });
   }
 
-  List<ActivityItem> _draftItems(List<ActivityItem> items) => [
-        for (final it in items)
-          if (!_draftRemoved.contains(it.id))
-            _draftTimes.containsKey(it.id)
-                ? ActivityItem(
-                    id: it.id,
-                    time: _draftTimes[it.id]!,
-                    icon: it.icon,
-                    label: it.label,
-                    location: it.location,
-                    voted: it.voted,
-                    total: it.total,
-                    votedByMe: it.votedByMe,
-                    forMemberUids: it.forMemberUids,
-                  )
-                : it,
-      ];
+  // Builds the draft view of whichever day is currently on screen —
+  // scanning every day's *real* items (not just dayIndex's) because a
+  // dragged-in item from another day only shows up here, not in its
+  // original day.items list.
+  //
+  // The item currently being dragged (_draggingItemId) is included on
+  // EVERY day's list while the drag is active, not just the day it
+  // actually belongs to. This matters because of how Flutter reconciles
+  // a LongPressDraggable mid-drag: paging to another day swaps
+  // DayTimelineView's whole `items` list, and the old per-item widgets
+  // are matched to new ones purely by ValueKey(item.id). If the dragged
+  // item's key is simply missing from the new day's list (as it used to
+  // be, since it still "belongs" to the old day until drop), Flutter
+  // unmounts its chip -- and once that State is unmounted, Draggable's
+  // own onDragEnd callback silently never fires at all when you finally
+  // let go (Flutter checks the State is still mounted before calling
+  // it), so the drop looked like it reverted even though the drag
+  // itself had been working the whole time. Keeping its key present on
+  // every day keeps that one chip's State alive across the page flips.
+  List<ActivityItem> _draftItemsForDay(Trip trip, int dayIndex) {
+    final result = <ActivityItem>[];
+    // Belt-and-suspenders against ValueKey(item.id) collisions in
+    // DayTimelineView's Stack: an item id should only ever live under one
+    // day, but the keep-alive-while-dragging bypass just below means that
+    // if the *same* id is ever found physically stored under more than one
+    // day (stale/duplicated data from somewhere else), it would otherwise
+    // get added here twice and crash the Stack with a "Duplicate keys
+    // found" assertion the instant it's dragged. First occurrence wins.
+    final seenIds = <String>{};
+    for (var di = 0; di < trip.days.length; di++) {
+      for (final it in trip.days[di].items) {
+        if (_draftRemoved.contains(it.id)) continue;
+        final effectiveDay = _draftMovedTo[it.id] ?? di;
+        final isBeingDragged = _draggingItemId != null && _draggingItemId == it.id;
+        if (effectiveDay != dayIndex && !isBeingDragged) continue;
+        if (!seenIds.add(it.id)) continue;
+        final newTime = _draftTimes[it.id];
+        result.add(newTime == null
+            ? it
+            : ActivityItem(
+                id: it.id,
+                time: newTime,
+                icon: it.icon,
+                label: it.label,
+                location: it.location,
+                voted: it.voted,
+                total: it.total,
+                votedByMe: it.votedByMe,
+                forMemberUids: it.forMemberUids,
+              ));
+      }
+    }
+    return result;
+  }
+
+  int? _originalDayIndexOf(Trip trip, String itemId) {
+    for (var i = 0; i < trip.days.length; i++) {
+      if (trip.days[i].items.any((it) => it.id == itemId)) return i;
+    }
+    return null;
+  }
+
+  void _onItemDragStarted(ActivityItem item) {
+    setState(() => _draggingItemId = item.id);
+  }
+
+  void _onItemDragUpdate(Offset globalPosition) {
+    _lastDragGlobalPos = globalPosition;
+    _updateEdgeHold(globalPosition);
+    _updateAutoVScroll(globalPosition);
+  }
+
+  void _updateEdgeHold(Offset globalPosition) {
+    // Wide on purpose: on a real phone a thumb can't reliably get within a
+    // few pixels of the physical bezel, so a narrow zone here reads as
+    // "edge-hold doesn't work" even though the code is fine. 110 logical
+    // px still leaves most of a normal phone width free for ordinary
+    // same-day re-time drags.
+    const edgeZone = 110.0;
+    final width = MediaQuery.of(context).size.width;
+    bool? toNext;
+    if (globalPosition.dx < edgeZone && controller.planIndex > 0) {
+      toNext = false;
+    } else if (globalPosition.dx > width - edgeZone && controller.planIndex < controller.days.length - 1) {
+      toNext = true;
+    }
+    if (toNext == _edgeHoldToNext) return;
+    setState(() => _edgeHoldToNext = toNext);
+    _edgeHoldTimer?.cancel();
+    _edgeHoldTimer = null;
+    if (toNext != null) _armEdgeHoldTimer(toNext);
+  }
+
+  // One-shot timer that re-arms itself: holding at the edge keeps paging
+  // through days every 380ms.
+  void _armEdgeHoldTimer(bool toNext) {
+    _edgeHoldTimer = Timer(const Duration(milliseconds: 380), () {
+      if (_draggingItemId == null || _edgeHoldToNext != toNext) return;
+      final next = controller.planIndex + (toNext ? 1 : -1);
+      if (next < 0 || next >= controller.days.length) {
+        setState(() => _edgeHoldToNext = null);
+        return;
+      }
+      controller.setPlanIndex(next);
+      _armEdgeHoldTimer(toNext);
+    });
+  }
+
+  void _updateAutoVScroll(Offset globalPosition) {
+    final viewportBox = _timelineViewportKey.currentContext?.findRenderObject() as RenderBox?;
+    if (viewportBox == null || !viewportBox.attached) {
+      _stopAutoVScroll();
+      return;
+    }
+    final local = viewportBox.globalToLocal(globalPosition);
+    final height = viewportBox.size.height;
+    double delta = 0;
+    if (local.dy < _autoVScrollEdge) {
+      final strength = ((_autoVScrollEdge - local.dy) / _autoVScrollEdge).clamp(0.0, 1.0);
+      delta = -_autoVScrollMaxSpeed * strength;
+    } else if (local.dy > height - _autoVScrollEdge) {
+      final strength = ((local.dy - (height - _autoVScrollEdge)) / _autoVScrollEdge).clamp(0.0, 1.0);
+      delta = _autoVScrollMaxSpeed * strength;
+    }
+    _autoVScrollDelta = delta;
+    if (delta != 0) {
+      _autoVScrollTimer ??= Timer.periodic(const Duration(milliseconds: 16), (_) => _tickAutoVScroll());
+    } else {
+      _stopAutoVScroll();
+    }
+  }
+
+  void _tickAutoVScroll() {
+    if (_draggingItemId == null || _autoVScrollDelta == 0 || !_timelineScroll.hasClients) return;
+    final position = _timelineScroll.position;
+    final newOffset = (position.pixels + _autoVScrollDelta).clamp(0.0, position.maxScrollExtent);
+    if (newOffset == position.pixels) return;
+    _timelineScroll.jumpTo(newOffset);
+  }
+
+  void _stopAutoVScroll() {
+    _autoVScrollTimer?.cancel();
+    _autoVScrollTimer = null;
+    _autoVScrollDelta = 0;
+  }
+
+  void _onItemDragEnd(ActivityItem item) {
+    _edgeHoldTimer?.cancel();
+    _edgeHoldTimer = null;
+    _stopAutoVScroll();
+    final dropGlobalPos = _lastDragGlobalPos;
+    _lastDragGlobalPos = null;
+    setState(() {
+      _draggingItemId = null;
+      _edgeHoldToNext = null;
+    });
+    if (dropGlobalPos != null) _commitDrop(item, dropGlobalPos);
+  }
+
+  void _commitDrop(ActivityItem item, Offset globalPos) {
+    final trip = controller.trip;
+    final targetDay = controller.planIndex;
+    if (trip == null || targetDay < 0) return;
+    final viewportBox = _timelineViewportKey.currentContext?.findRenderObject() as RenderBox?;
+    if (viewportBox == null || !viewportBox.attached) return;
+    final local = viewportBox.globalToLocal(globalPos);
+    final scrollOffset = _timelineScroll.hasClients ? _timelineScroll.offset : 0.0;
+    final minutes = timelineYToMinutes(local.dy + scrollOffset);
+    final newTime = timelineMinutesToHHMM(minutes);
+    final origin = _originalDayIndexOf(trip, item.id);
+    final originalTime =
+        origin == null ? null : trip.days[origin].items.where((it) => it.id == item.id).map((it) => it.time).firstOrNull;
+    final movedAway = origin != null && origin != targetDay;
+    setState(() {
+      if (!movedAway && newTime == originalTime) {
+        // Dropped back exactly where it started — nothing to save.
+        _draftTimes.remove(item.id);
+        _draftMovedTo.remove(item.id);
+      } else {
+        _draftTimes[item.id] = newTime;
+        if (movedAway) {
+          _draftMovedTo[item.id] = targetDay;
+        } else {
+          _draftMovedTo.remove(item.id);
+        }
+      }
+    });
+  }
 
   Future<bool> _saveDayEdit() async {
-    final dayIndex = _editDayIndex;
-    if (dayIndex == null || !_hasDraftChanges) {
+    if (!_hasDraftChanges) {
       _endDayEdit();
       return true;
     }
-    final changes = _draftTimes.length + _draftRemoved.length;
+    final trip = controller.trip;
+    if (trip == null) {
+      _endDayEdit();
+      return true;
+    }
+    final originalDayOf = <String, int>{};
+    for (var di = 0; di < trip.days.length; di++) {
+      for (final it in trip.days[di].items) {
+        originalDayOf[it.id] = di;
+      }
+    }
+    final changedIds = {..._draftTimes.keys, ..._draftRemoved, ..._draftMovedTo.keys};
+    final changes = changedIds.length;
     setState(() => _savingDraft = true);
     try {
       for (final id in _draftRemoved) {
-        await controller.removeActivity(dayIndex, id);
+        final from = originalDayOf[id];
+        if (from != null) await controller.removeActivity(from, id);
+      }
+      for (final entry in _draftMovedTo.entries) {
+        if (_draftRemoved.contains(entry.key)) continue;
+        final from = originalDayOf[entry.key];
+        if (from == null) continue;
+        final time = _draftTimes[entry.key] ?? '00:00';
+        await controller.moveActivityToDay(from, entry.key, entry.value, time);
       }
       for (final e in _draftTimes.entries) {
-        if (_draftRemoved.contains(e.key)) continue;
-        await controller.updateActivityTime(dayIndex, e.key, e.value);
+        if (_draftRemoved.contains(e.key) || _draftMovedTo.containsKey(e.key)) continue;
+        final from = originalDayOf[e.key];
+        if (from != null) await controller.updateActivityTime(from, e.key, e.value);
       }
     } catch (e) {
       if (mounted) {
@@ -143,7 +360,7 @@ class _GroupTripPageState extends State<GroupTripPage> {
       _endDayEdit();
       return true;
     }
-    final n = _draftTimes.length + _draftRemoved.length;
+    final n = {..._draftTimes.keys, ..._draftRemoved, ..._draftMovedTo.keys}.length;
     final choice = await showDialog<String>(
       context: context,
       builder: (ctx) => Dialog(
@@ -167,7 +384,7 @@ class _GroupTripPageState extends State<GroupTripPage> {
                   style: TextStyle(fontSize: 16.5, fontWeight: FontWeight.bold, color: AppColors.navy)),
               const SizedBox(height: 8),
               Text(
-                'You made $n ${n == 1 ? 'change' : 'changes'} to this day. They are only kept if you save.',
+                'You made $n ${n == 1 ? 'change' : 'changes'} to your plan. They are only kept if you save.',
                 textAlign: TextAlign.center,
                 style: const TextStyle(fontSize: 12.5, color: AppColors.textGrey, height: 1.4),
               ),
@@ -221,6 +438,9 @@ class _GroupTripPageState extends State<GroupTripPage> {
 
   @override
   void dispose() {
+    _edgeHoldTimer?.cancel();
+    _autoVScrollTimer?.cancel();
+    _timelineScroll.dispose();
     controller.dispose();
     super.dispose();
   }
@@ -239,6 +459,16 @@ class _GroupTripPageState extends State<GroupTripPage> {
             appBar: AppBar(backgroundColor: Colors.white, iconTheme: const IconThemeData(color: AppColors.navy)),
             body: const Center(child: Text('This trip no longer exists', style: TextStyle(color: AppColors.textGrey))),
           );
+        }
+        // Solo trips have no one to chat with or vote against, so the Chat
+        // and Vote tabs don't apply — hide them rather than leaving them as
+        // dead UI, and bounce back to Plan if we're already sitting on one
+        // (e.g. the other member just left).
+        final soloTrip = trip.memberIds.length <= 1;
+        if (soloTrip && (controller.tab == GroupTab.chat || controller.tab == GroupTab.vote)) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) controller.setTab(GroupTab.plan);
+          });
         }
         return PopScope(
           canPop: !(_dayEditMode && _hasDraftChanges),
@@ -287,9 +517,9 @@ class _GroupTripPageState extends State<GroupTripPage> {
               child: Row(
                 children: [
                   _tabButton('Plan', Icons.sync_alt, GroupTab.plan),
-                  _tabButton('Chat', Icons.chat_bubble_outline, GroupTab.chat),
+                  if (!soloTrip) _tabButton('Chat', Icons.chat_bubble_outline, GroupTab.chat),
                   _tabButton('Expenses', Icons.account_balance_wallet_outlined, GroupTab.expenses),
-                  _tabButton('Vote', Icons.how_to_vote_outlined, GroupTab.vote),
+                  if (!soloTrip) _tabButton('Vote', Icons.how_to_vote_outlined, GroupTab.vote),
                 ],
               ),
             ),
@@ -309,7 +539,7 @@ class _GroupTripPageState extends State<GroupTripPage> {
                   ),
                   child: const Icon(Icons.add, color: Colors.white),
                 )
-              : controller.tab == GroupTab.vote
+              : (!soloTrip && controller.tab == GroupTab.vote)
                   ? FloatingActionButton(
                       backgroundColor: AppColors.primary,
                       onPressed: () => Navigator.of(context).push(
@@ -344,7 +574,14 @@ class _GroupTripPageState extends State<GroupTripPage> {
               children: [
                 Icon(icon, size: 15, color: selected ? AppColors.primary : AppColors.textGrey),
                 const SizedBox(width: 5),
-                Text(label, style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: selected ? AppColors.primary : AppColors.textGrey)),
+                Flexible(
+                  child: Text(
+                    label,
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                    style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: selected ? AppColors.primary : AppColors.textGrey),
+                  ),
+                ),
               ],
             ),
           ),
@@ -354,29 +591,64 @@ class _GroupTripPageState extends State<GroupTripPage> {
   }
 
   Widget _buildBody(Trip trip) {
+    final soloTrip = trip.memberIds.length <= 1;
     switch (controller.tab) {
       case GroupTab.plan:
         return _buildPlanTab(trip);
       case GroupTab.chat:
-        return _buildChatTab();
+        return soloTrip ? _buildPlanTab(trip) : _buildChatTab();
       case GroupTab.expenses:
         return ExpensesTab(tripId: widget.tripId);
       case GroupTab.vote:
-        return VoteTab(tripId: widget.tripId);
+        return soloTrip ? _buildPlanTab(trip) : VoteTab(tripId: widget.tripId);
     }
   }
 
   // ================= PLAN TAB =================
   Widget _buildPlanTab(Trip trip) {
-    return Column(
+    return Stack(
       children: [
-        Expanded(
-          child: controller.planIndex == -1
-              ? _overviewContent(trip)
-              : _dayContent(trip, controller.days[controller.planIndex]),
+        Column(
+          children: [
+            Expanded(
+              child: controller.planIndex == -1
+                  ? _overviewContent(trip)
+                  : _dayContent(trip, controller.days[controller.planIndex]),
+            ),
+            _planPager(),
+          ],
         ),
-        _planPager(),
+        if (_edgeHoldToNext != null) _edgeHoldIndicator(_edgeHoldToNext!),
       ],
+    );
+  }
+
+  // A soft glow + chevron at whichever screen edge a dragged activity is
+  // currently hovering over, so it's clear why the day underneath is
+  // about to flip (mirrors the page-flip hint on a mobile home screen).
+  Widget _edgeHoldIndicator(bool toNext) {
+    return Positioned(
+      left: toNext ? null : 0,
+      right: toNext ? 0 : null,
+      top: 0,
+      bottom: 56,
+      child: IgnorePointer(
+        child: Container(
+          width: 44,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: toNext ? Alignment.centerRight : Alignment.centerLeft,
+              end: toNext ? Alignment.centerLeft : Alignment.centerRight,
+              colors: [AppColors.primary.withValues(alpha: 0.28), AppColors.primary.withValues(alpha: 0.0)],
+            ),
+          ),
+          alignment: toNext ? Alignment.centerRight : Alignment.centerLeft,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 6),
+            child: Icon(toNext ? Icons.chevron_right : Icons.chevron_left, color: AppColors.primary, size: 26),
+          ),
+        ),
+      ),
     );
   }
 
@@ -391,8 +663,20 @@ class _GroupTripPageState extends State<GroupTripPage> {
         _overviewRow(Icons.place_outlined, trip.destination.isEmpty ? 'No destination set' : trip.destination, null,
             onTap: () => _editDestination(trip)),
         const SizedBox(height: 10),
-        _overviewRow(Icons.savings_outlined, 'RM ${trip.budgetPerPerson.toStringAsFixed(0)} per person',
-            trip.interests.isEmpty ? null : trip.interests.join(' · '), onTap: () => _editBudget(trip)),
+        _overviewRow(Icons.savings_outlined, 'RM ${trip.budgetPerPerson.toStringAsFixed(0)} per person', null, onTap: () => _editBudget(trip)),
+        const SizedBox(height: 10),
+        // Was previously shown as a non-editable second line under the
+        // Budget row -- tapping it opened the budget-only dialog, which
+        // had no way to actually change interests (they're only editable
+        // on TravelPreferencesPage, reachable from Trip Settings). Its own
+        // row now opens that page directly, same as every other Overview
+        // row that's actually tappable to change what it shows.
+        _overviewRow(
+          Icons.favorite_border,
+          trip.interests.isEmpty ? 'No interests set' : trip.interests.join(' · '),
+          null,
+          onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => TravelPreferencesPage(tripId: widget.tripId))),
+        ),
         const SizedBox(height: 10),
         if (trip.flights.isEmpty)
           _addRow(Icons.flight_takeoff, 'Add a flight', onTap: _addFlightOrSelect)
@@ -495,6 +779,16 @@ class _GroupTripPageState extends State<GroupTripPage> {
           amountPaid: insurance.price,
           coverage: insurance.coverage,
           transactionId: insurance.transactionId,
+          travellerName: insurance.travellerName,
+          bookingId: insurance.bookingId,
+          purchasedAt: insurance.purchasedAt,
+          partnerId: insurance.partnerId,
+          providerName: insurance.providerName,
+          travelStart: insurance.travelStart,
+          travelEnd: insurance.travelEnd,
+          travellerIdNumber: insurance.travellerIdNumber,
+          travellerEmail: insurance.travellerEmail,
+          travellerPhone: insurance.travellerPhone,
         ),
       )),
     );
@@ -509,7 +803,7 @@ class _GroupTripPageState extends State<GroupTripPage> {
       icon: Icons.shield_outlined,
     );
     if (!confirmed || !mounted) return;
-    Navigator.of(context).push(MaterialPageRoute(builder: (_) => InsuranceListPage(tripId: trip.id)));
+    Navigator.of(context).push(MaterialPageRoute(builder: (_) => InsurancePartnerListPage(tripId: trip.id)));
   }
 
   Widget _overviewIcon(IconData icon) {
@@ -645,167 +939,6 @@ class _GroupTripPageState extends State<GroupTripPage> {
     );
   }
 
-  Future<void> _addFlightDialog() async {
-    final airline = TextEditingController();
-    final flightNumber = TextEditingController();
-    final fromCode = TextEditingController();
-    final toCode = TextEditingController();
-    final dateText = TextEditingController();
-    final timeText = TextEditingController();
-    final terminal = TextEditingController();
-    final airlineFocusNode = FocusNode();
-    final fromFocusNode = FocusNode();
-    final toFocusNode = FocusNode();
-    DateTime? pickedDate;
-    TimeOfDay? pickedTime;
-
-    final result = await showNiceFormDialog(
-      context: context,
-      title: 'Add Flight',
-      headerIcon: Icons.flight_takeoff,
-      fieldsBuilder: (ctx, setState) => [
-        niceAutocompleteField(airline, 'Airline',
-            options: kAirlines, icon: Icons.flight_outlined, autofocus: true, focusNode: airlineFocusNode),
-        niceDialogField(flightNumber, 'Flight Number', icon: Icons.confirmation_number_outlined),
-        Row(
-          children: [
-            Expanded(
-              child: niceAutocompleteField(fromCode, 'From (city or airport)',
-                  options: _flightLocationOptions, icon: Icons.flight_takeoff, focusNode: fromFocusNode),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: niceAutocompleteField(toCode, 'To (city or airport)',
-                  options: _flightLocationOptions, icon: Icons.flight_land, focusNode: toFocusNode),
-            ),
-          ],
-        ),
-        Row(
-          children: [
-            Expanded(
-              child: niceDialogField(
-                dateText,
-                'Date',
-                icon: Icons.event_outlined,
-                readOnly: true,
-                onTap: () async {
-                  final now = DateTime.now();
-                  final d = await showVoyaDatePicker(
-                    context: ctx,
-                    initialDate: pickedDate ?? now,
-                    firstDate: DateTime(now.year - 1),
-                    lastDate: DateTime(now.year + 5),
-                    title: 'Flight Date',
-                  );
-                  if (d != null) {
-                    pickedDate = d;
-                    dateText.text = formatLongDate(d);
-                  }
-                },
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: niceDialogField(
-                timeText,
-                'Time',
-                icon: Icons.access_time,
-                readOnly: true,
-                onTap: () async {
-                  final t = await showVoyaTimePicker(context: ctx, initialTime: pickedTime ?? TimeOfDay.now(), title: 'Flight Time');
-                  if (t != null) {
-                    pickedTime = t;
-                    timeText.text = '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
-                  }
-                },
-              ),
-            ),
-          ],
-        ),
-        niceDialogField(terminal, 'Terminal (optional)', icon: Icons.meeting_room_outlined),
-      ],
-    );
-    if (result == true && airline.text.trim().isNotEmpty) {
-      final from = fromCode.text.trim().isEmpty ? '' : _extractAirportCode(fromCode.text);
-      final to = toCode.text.trim().isEmpty ? '' : _extractAirportCode(toCode.text);
-      final route = from.isEmpty && to.isEmpty ? '' : '$from → $to';
-      final dateTime = [
-        if (dateText.text.trim().isNotEmpty) dateText.text.trim(),
-        if (timeText.text.trim().isNotEmpty) timeText.text.trim(),
-      ].join(', ');
-      await controller.addFlight(TripFlight(
-        id: '${DateTime.now().microsecondsSinceEpoch}',
-        airline: airline.text.trim(),
-        flightNumber: flightNumber.text.trim(),
-        routeCode: route,
-        routeCities: '',
-        dateTime: dateTime,
-        terminal: terminal.text.trim(),
-        bookingRef: '',
-        status: 'Confirmed',
-      ));
-    }
-  }
-
-  Future<void> _addHotelDialog() async {
-    final name = TextEditingController();
-    final location = TextEditingController();
-    final checkIn = TextEditingController();
-    final checkOut = TextEditingController();
-    DateTime? pickedCheckIn;
-    DateTime? pickedCheckOut;
-
-    Future<void> pickStayDates(BuildContext ctx, StateSetter setState) async {
-      final now = DateTime.now();
-      final range = await showVoyaDateRangePicker(
-        context: ctx,
-        initialStart: pickedCheckIn,
-        initialEnd: pickedCheckOut,
-        firstDate: DateTime(now.year - 1),
-        lastDate: DateTime(now.year + 5),
-        title: 'Check-in & Check-out',
-      );
-      if (range != null) {
-        setState(() {
-          pickedCheckIn = range.start;
-          pickedCheckOut = range.end;
-          checkIn.text = formatLongDate(range.start);
-          checkOut.text = formatLongDate(range.end);
-        });
-      }
-    }
-
-    final result = await showNiceFormDialog(
-      context: context,
-      title: 'Add Hotel Stay',
-      headerIcon: Icons.bed_outlined,
-      fieldsBuilder: (ctx, setState) => [
-        niceDialogField(name, 'Hotel Name', icon: Icons.hotel_outlined, autofocus: true),
-        niceDialogField(location, 'Location', icon: Icons.place_outlined),
-        Row(
-          children: [
-            Expanded(
-              child: niceDialogField(checkIn, 'Check-in', icon: Icons.login, readOnly: true, onTap: () => pickStayDates(ctx, setState)),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: niceDialogField(checkOut, 'Check-out', icon: Icons.logout, readOnly: true, onTap: () => pickStayDates(ctx, setState)),
-            ),
-          ],
-        ),
-      ],
-    );
-    if (result == true && name.text.trim().isNotEmpty) {
-      await controller.addHotelStay(TripHotelStay(
-        id: '${DateTime.now().microsecondsSinceEpoch}',
-        name: name.text.trim(),
-        location: location.text.trim(),
-        checkIn: checkIn.text.trim(),
-        checkOut: checkOut.text.trim(),
-      ));
-    }
-  }
-
   Widget _choiceTile(IconData icon, String label, VoidCallback onTap) {
     return ListTile(
       leading: Icon(icon, color: AppColors.primary),
@@ -842,7 +975,18 @@ class _GroupTripPageState extends State<GroupTripPage> {
     if (!mounted || choice == null) return;
     switch (choice) {
       case 'manual':
-        await _addFlightDialog();
+        final memberNames = controller.trip?.memberNames ?? const <String, String>{};
+        final flight = await Navigator.of(context).push<TripFlight>(
+          MaterialPageRoute(builder: (_) => AddFlightPage(memberNames: memberNames)),
+        );
+        if (flight == null || !mounted) return;
+        try {
+          await controller.addFlight(flight);
+        } catch (e) {
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not add flight: $e')));
+          }
+        }
         break;
       case 'saved':
         await _pickSavedFlight();
@@ -858,7 +1002,18 @@ class _GroupTripPageState extends State<GroupTripPage> {
     if (!mounted || choice == null) return;
     switch (choice) {
       case 'manual':
-        await _addHotelDialog();
+        final memberNames = controller.trip?.memberNames ?? const <String, String>{};
+        final hotel = await Navigator.of(context).push<TripHotelStay>(
+          MaterialPageRoute(builder: (_) => AddHotelPage(memberNames: memberNames)),
+        );
+        if (hotel == null || !mounted) return;
+        try {
+          await controller.addHotelStay(hotel);
+        } catch (e) {
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not add hotel stay: $e')));
+          }
+        }
         break;
       case 'saved':
         await _pickSavedHotel();
@@ -975,8 +1130,15 @@ class _GroupTripPageState extends State<GroupTripPage> {
                           routeCities: '',
                           dateTime: b.subtitle,
                           terminal: '',
-                          bookingRef: '',
-                          status: 'Confirmed',
+                          // Carry the real booking forward instead of discarding it --
+                          // this is an already-paid booking, not a fresh catalog pick,
+                          // so its reference, contact details and status belong on the
+                          // itinerary item too.
+                          bookingRef: b.bookingRef,
+                          status: b.status.isEmpty ? 'Confirmed' : b.status,
+                          contactEmail: b.guestEmail,
+                          contactPhone: b.guestPhone,
+                          documents: b.documents,
                         ));
                       } catch (e) {
                         if (context.mounted) {
@@ -1093,9 +1255,21 @@ class _GroupTripPageState extends State<GroupTripPage> {
                           id: '${DateTime.now().microsecondsSinceEpoch}',
                           name: b.title,
                           location: b.subtitle,
-                          checkIn: '',
-                          checkOut: '',
-                          guestName: '',
+                          // Carry the real booking forward instead of discarding it --
+                          // this is an already-paid booking, not a fresh catalog pick,
+                          // so its stay dates, guest details, reference and status
+                          // belong on the itinerary item too.
+                          checkIn: b.checkIn,
+                          checkOut: b.checkOut,
+                          guestName: b.guestName,
+                          guestEmail: b.guestEmail,
+                          guestPhone: b.guestPhone,
+                          guestIdNumber: b.guestIdNumber,
+                          specialRequests: b.specialRequests,
+                          bookingRef: b.bookingRef,
+                          status: b.status.isEmpty ? 'Confirmed' : b.status,
+                          refId: b.refId,
+                          documents: b.documents,
                         ));
                       } catch (e) {
                         if (context.mounted) {
@@ -1213,7 +1387,11 @@ class _GroupTripPageState extends State<GroupTripPage> {
     );
     if (result != true) return;
     final parsed = double.tryParse(budgetController.text.trim());
-    if (parsed == null || parsed < 0) return;
+    if (parsed == null || parsed < 0) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please enter a valid budget amount.')));
+      return;
+    }
     await controller.setBudget(parsed);
   }
 
@@ -1229,7 +1407,9 @@ class _GroupTripPageState extends State<GroupTripPage> {
             children: [
               Expanded(
                 child: Text(fullDate.isEmpty ? 'Day ${day.day}' : 'Day ${day.day}, $fullDate',
-                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.navy)),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.navy)),
               ),
               if (!_dayEditMode) ...[
                 _dayHeaderIcon(
@@ -1267,32 +1447,50 @@ class _GroupTripPageState extends State<GroupTripPage> {
             dayIndex: dayIndex,
             dayNumber: day.day,
           ),
-          if (day.items.isEmpty)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 40),
-              child: Center(child: Text('No activities planned yet', style: TextStyle(color: AppColors.textGrey))),
-            )
-          else if (_dayEditMode) ...[
-            if (_hasDraftChanges)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8),
+          if (!_dayEditMode && day.items.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 40),
+              child: Center(
                 child: Text(
-                  'Unsaved: ${_draftTimes.length} moved, ${_draftRemoved.length} removed — tap Save to keep them.',
-                  style: const TextStyle(fontSize: 11.5, color: AppColors.orange),
+                  'No activities planned yet',
+                  style: const TextStyle(color: AppColors.textGrey),
                 ),
               ),
+            )
+          else if (_dayEditMode) ...[
+            // Ternary (not an `if`-in-list) on purpose: this keeps the list
+            // the same length whether or not there's an unsaved-changes
+            // banner, so the Expanded(DayTimelineView) below it never
+            // shifts index and Flutter never tears its State down mid-edit
+            // (which used to happen on the very first draft change and
+            // silently reset the in-progress drag/scroll state).
+            _hasDraftChanges
+                ? Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Text(
+                      'Unsaved: ${_draftTimes.length - _draftMovedTo.length} re-timed, '
+                      '${_draftMovedTo.length} moved to another day, ${_draftRemoved.length} removed — tap Save to keep them.',
+                      style: const TextStyle(fontSize: 11.5, color: AppColors.orange),
+                    ),
+                  )
+                : const SizedBox.shrink(),
             Expanded(
               child: DayTimelineView(
-                items: _draftItems(day.items),
-                onTimeChanged: (item, newTime) => setState(() {
-                  final original = day.items.where((it) => it.id == item.id).map((it) => it.time).firstOrNull;
-                  if (original == newTime) {
-                    _draftTimes.remove(item.id);
-                  } else {
-                    _draftTimes[item.id] = newTime;
-                  }
-                }),
+                items: _draftItemsForDay(trip, dayIndex),
+                // DayTimelineView stays mounted even when this day has no
+                // items yet -- it shows this hint itself, over its own
+                // (still-live) viewport, instead of the caller unmounting
+                // the viewport entirely, which used to make a drop onto an
+                // empty day silently do nothing (no viewport to hit-test).
+                emptyHint: _draftItemsForDay(trip, dayIndex).isEmpty
+                    ? 'Nothing here — drag an activity to this day to drop it in'
+                    : null,
+                viewportKey: _timelineViewportKey,
+                scrollController: _timelineScroll,
                 onDelete: (item) => setState(() => _draftRemoved.add(item.id)),
+                onItemDragStarted: _onItemDragStarted,
+                onItemDragUpdate: _onItemDragUpdate,
+                onItemDragEnd: _onItemDragEnd,
               ),
             ),
           ]
@@ -1343,12 +1541,27 @@ class _GroupTripPageState extends State<GroupTripPage> {
     DateTime? pickedDate = trip.dateForDay(dayIndex + 1);
     TimeOfDay? pickedTime;
     ({String name, String location, String iconKey})? selectedSaved;
-    Set<String> selectedMemberUids = trip.memberIds.toSet();
 
     final uid = AuthService.instance.currentUser?.uid ?? '';
     final favKey = '$uid#${trip.id}';
     final firstDate = trip.startDate ?? DateTime.now();
     final lastDate = trip.endDate ?? firstDate.add(const Duration(days: 365));
+
+    // Opened ONCE for the sheet's whole lifetime, not inside the
+    // StatefulBuilder's builder — that builder re-runs on every
+    // setSheetState() call (mode chip, date/time pickers, member
+    // selection, icon pick, text field edits), and calling
+    // CatalogRepository.instance.watchAttractions/watchRestaurants/
+    // watchHotels() fresh each time handed each StreamBuilder a brand-new
+    // Stream, tearing down and re-opening a full-collection listener
+    // (15,000+ attraction docs, 3,700+ restaurant docs) on every single
+    // tap in this dialog — enough churn to trip Firestore's abuse-rate
+    // limiting (resource-exhausted) even on a Blaze-plan project with no
+    // daily cap. favKey doesn't change for the sheet's lifetime, so one
+    // stream per collection, reused across rebuilds, is correct.
+    final attractionsStream = CatalogRepository.instance.watchAttractions(favoritedBy: favKey);
+    final restaurantsStream = CatalogRepository.instance.watchRestaurants(favoritedBy: favKey);
+    final hotelsStream = CatalogRepository.instance.watchHotels(favoritedBy: favKey);
 
     final added = await showModalBottomSheet<bool>(
       context: context,
@@ -1462,7 +1675,7 @@ class _GroupTripPageState extends State<GroupTripPage> {
                           Expanded(
                             child: _pickerField(
                               icon: Icons.schedule,
-                              label: pickedTime == null ? 'Time (optional)' : pickedTime!.format(ctx),
+                              label: pickedTime == null ? 'Time' : pickedTime!.format(ctx),
                               onTap: pickTime,
                             ),
                           ),
@@ -1491,67 +1704,68 @@ class _GroupTripPageState extends State<GroupTripPage> {
                       ] else ...[
                         SizedBox(
                           height: 260,
-                          child: ListView(
-                            children: [
-                              StreamBuilder<List<CatalogAttraction>>(
-                                stream: CatalogRepository.instance.watchAttractions(favoritedBy: favKey),
-                                builder: (ctx2, snap) {
-                                  final items = snap.data ?? const [];
-                                  if (items.isEmpty) return const SizedBox.shrink();
-                                  return Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      const Padding(padding: EdgeInsets.only(bottom: 6), child: Text('Attractions', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: AppColors.textGrey))),
-                                      ...items.map((a) => savedTile(name: a.name, subtitle: a.location, icon: Icons.local_activity_outlined, iconKey2: 'place')),
-                                    ],
-                                  );
-                                },
-                              ),
-                              StreamBuilder<List<CatalogRestaurant>>(
-                                stream: CatalogRepository.instance.watchRestaurants(favoritedBy: favKey),
-                                builder: (ctx2, snap) {
-                                  final items = snap.data ?? const [];
-                                  if (items.isEmpty) return const SizedBox.shrink();
-                                  return Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      const Padding(padding: EdgeInsets.only(bottom: 6, top: 4), child: Text('Restaurants', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: AppColors.textGrey))),
-                                      ...items.map((r) => savedTile(name: r.name, subtitle: r.location, icon: Icons.restaurant_outlined, iconKey2: 'food')),
-                                    ],
-                                  );
-                                },
-                              ),
-                              StreamBuilder<List<CatalogHotel>>(
-                                stream: CatalogRepository.instance.watchHotels(favoritedBy: favKey),
-                                builder: (ctx2, snap) {
-                                  final items = snap.data ?? const [];
-                                  if (items.isEmpty) return const SizedBox.shrink();
-                                  return Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      const Padding(padding: EdgeInsets.only(bottom: 6, top: 4), child: Text('Hotels', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: AppColors.textGrey))),
-                                      ...items.map((h) => savedTile(name: h.name, subtitle: h.location, icon: Icons.hotel_outlined, iconKey2: 'hotel')),
-                                    ],
-                                  );
-                                },
-                              ),
-                              if (uid.isEmpty)
-                                const Padding(
+                          child: uid.isEmpty
+                              ? const Padding(
                                   padding: EdgeInsets.symmetric(vertical: 20),
                                   child: Text('Sign in to see your saved places', style: TextStyle(fontSize: 12, color: AppColors.textGrey)),
+                                )
+                              : StreamBuilder<List<CatalogAttraction>>(
+                                  stream: attractionsStream,
+                                  builder: (ctx2, attractionsSnap) {
+                                    final attractions = attractionsSnap.data ?? const [];
+                                    return StreamBuilder<List<CatalogRestaurant>>(
+                                      stream: restaurantsStream,
+                                      builder: (ctx2, restaurantsSnap) {
+                                        final restaurants = restaurantsSnap.data ?? const [];
+                                        return StreamBuilder<List<CatalogHotel>>(
+                                          stream: hotelsStream,
+                                          builder: (ctx2, hotelsSnap) {
+                                            final hotels = hotelsSnap.data ?? const [];
+                                            final allLoaded = attractionsSnap.hasData && restaurantsSnap.hasData && hotelsSnap.hasData;
+                                            if (allLoaded && attractions.isEmpty && restaurants.isEmpty && hotels.isEmpty) {
+                                              return const Padding(
+                                                padding: EdgeInsets.symmetric(vertical: 20),
+                                                child: Text(
+                                                  "You haven't saved any places yet — favourite an attraction, restaurant or hotel first.",
+                                                  textAlign: TextAlign.center,
+                                                  style: TextStyle(fontSize: 12, color: AppColors.textGrey),
+                                                ),
+                                              );
+                                            }
+                                            return ListView(
+                                              children: [
+                                                if (attractions.isNotEmpty)
+                                                  Column(
+                                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                                    children: [
+                                                      const Padding(padding: EdgeInsets.only(bottom: 6), child: Text('Attractions', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: AppColors.textGrey))),
+                                                      ...attractions.map((a) => savedTile(name: a.name, subtitle: a.location, icon: Icons.local_activity_outlined, iconKey2: 'place')),
+                                                    ],
+                                                  ),
+                                                if (restaurants.isNotEmpty)
+                                                  Column(
+                                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                                    children: [
+                                                      const Padding(padding: EdgeInsets.only(bottom: 6, top: 4), child: Text('Restaurants', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: AppColors.textGrey))),
+                                                      ...restaurants.map((r) => savedTile(name: r.name, subtitle: r.location, icon: Icons.restaurant_outlined, iconKey2: 'food')),
+                                                    ],
+                                                  ),
+                                                if (hotels.isNotEmpty)
+                                                  Column(
+                                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                                    children: [
+                                                      const Padding(padding: EdgeInsets.only(bottom: 6, top: 4), child: Text('Hotels', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: AppColors.textGrey))),
+                                                      ...hotels.map((h) => savedTile(name: h.name, subtitle: h.location, icon: Icons.hotel_outlined, iconKey2: 'hotel')),
+                                                    ],
+                                                  ),
+                                              ],
+                                            );
+                                          },
+                                        );
+                                      },
+                                    );
+                                  },
                                 ),
-                            ],
-                          ),
-                        ),
-                      ],
-                      if (trip.memberIds.length > 1) ...[
-                        const SizedBox(height: 16),
-                        const Divider(height: 1, color: Color(0xFFECECEC)),
-                        const SizedBox(height: 14),
-                        MemberSelectSection(
-                          memberNames: trip.memberNames,
-                          selected: selectedMemberUids,
-                          onChanged: (v) => setSheetState(() => selectedMemberUids = v),
                         ),
                       ],
                       const SizedBox(height: 16),
@@ -1563,7 +1777,25 @@ class _GroupTripPageState extends State<GroupTripPage> {
                             padding: const EdgeInsets.symmetric(vertical: 14),
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                           ),
-                          onPressed: () => Navigator.of(ctx).pop(true),
+                          onPressed: () {
+                            if (pickedTime == null) {
+                              ScaffoldMessenger.of(context)
+                                  .showSnackBar(const SnackBar(content: Text('Please pick a time for this activity.')));
+                              return;
+                            }
+                            if (mode == 'saved') {
+                              if (selectedSaved == null) {
+                                ScaffoldMessenger.of(context)
+                                    .showSnackBar(const SnackBar(content: Text('Please pick a saved place first.')));
+                                return;
+                              }
+                            } else if (label.text.trim().isEmpty) {
+                              ScaffoldMessenger.of(context)
+                                  .showSnackBar(const SnackBar(content: Text('Please say what you\'re doing.')));
+                              return;
+                            }
+                            Navigator.of(ctx).pop(true);
+                          },
                           child: const Text('Add Activity', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
                         ),
                       ),
@@ -1586,7 +1818,6 @@ class _GroupTripPageState extends State<GroupTripPage> {
       if (offset >= 0 && offset < trip.days.length) targetDayIndex = offset;
     }
     final timeText = pickedTime == null ? '' : _formatTimeOfDay24(pickedTime!);
-    final forMemberUids = selectedMemberUids.toList();
     if (mode == 'saved' && selectedSaved != null) {
       await controller.addActivity(
         targetDayIndex,
@@ -1594,7 +1825,6 @@ class _GroupTripPageState extends State<GroupTripPage> {
         label: selectedSaved!.name,
         iconKey: selectedSaved!.iconKey,
         location: selectedSaved!.location,
-        forMemberUids: forMemberUids,
       );
     } else if (label.text.trim().isNotEmpty) {
       await controller.addActivity(
@@ -1603,7 +1833,6 @@ class _GroupTripPageState extends State<GroupTripPage> {
         label: label.text.trim(),
         iconKey: iconKey,
         location: location.text.trim(),
-        forMemberUids: forMemberUids,
       );
     }
   }
@@ -1629,25 +1858,31 @@ class _GroupTripPageState extends State<GroupTripPage> {
   }
 
   Widget _activityCard(ActivityItem item, Trip trip) {
-    final memberNames = trip.memberNames.values.toList();
-    final forLabel = forMembersLabel(item.forMemberUids, trip.memberNames);
     final hotel = controller.hotelForActivity(item);
     final attraction = hotel == null ? controller.attractionForActivity(item) : null;
     final restaurant = hotel == null && attraction == null ? controller.restaurantForActivity(item) : null;
+    // Dragging starts only from inside day-edit mode (DayTimelineView's own
+    // chips) -- a long-press here used to also auto-enter edit mode, but
+    // that meant the pointer the user was already holding (via
+    // _activityCard's own LongPressDraggable) had to hand off to a brand
+    // new, unrelated LongPressDraggable created fresh inside
+    // DayTimelineView for the same item, on the very next frame. The two
+    // never actually hand off cleanly -- the switch is why drops from
+    // that path kept silently reverting with no "Unsaved" state at all.
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: 66,
+            width: 56,
             child: Padding(
               padding: const EdgeInsets.only(top: 12),
               child: Text(_formatTime12h(item.time),
                   maxLines: 1,
                   softWrap: false,
                   overflow: TextOverflow.visible,
-                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.navy)),
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.navy)),
             ),
           ),
           Expanded(
@@ -1657,12 +1892,12 @@ class _GroupTripPageState extends State<GroupTripPage> {
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(color: AppColors.divider, borderRadius: BorderRadius.circular(16)),
                 child: hotel != null
-                    ? _activityHotelBody(item, hotel, forLabel, memberNames)
+                    ? _activityHotelBody(item, hotel)
                     : attraction != null
-                        ? _activityAttractionBody(item, attraction, forLabel, memberNames)
+                        ? _activityAttractionBody(item, attraction)
                         : restaurant != null
-                            ? _activityRestaurantBody(item, restaurant, forLabel, memberNames)
-                            : _activityPlainBody(item, forLabel, memberNames),
+                            ? _activityRestaurantBody(item, restaurant)
+                            : _activityPlainBody(item),
               ),
             ),
           ),
@@ -1794,7 +2029,7 @@ class _GroupTripPageState extends State<GroupTripPage> {
     return null;
   }
 
-  Widget _activityHotelBody(ActivityItem item, CatalogHotel hotel, String forLabel, List<String> memberNames) {
+  Widget _activityHotelBody(ActivityItem item, CatalogHotel hotel) {
     final price = hotel.displayPrice(CurrencyService.instance.lastKnownUserCurrency);
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1814,7 +2049,6 @@ class _GroupTripPageState extends State<GroupTripPage> {
                   padding: const EdgeInsets.only(top: 4),
                   child: Text('$price per night', style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: AppColors.primary)),
                 ),
-              _activityFooter(item, forLabel, memberNames),
             ],
           ),
         ),
@@ -1822,7 +2056,7 @@ class _GroupTripPageState extends State<GroupTripPage> {
     );
   }
 
-  Widget _activityAttractionBody(ActivityItem item, CatalogAttraction attraction, String forLabel, List<String> memberNames) {
+  Widget _activityAttractionBody(ActivityItem item, CatalogAttraction attraction) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1845,7 +2079,6 @@ class _GroupTripPageState extends State<GroupTripPage> {
                   padding: const EdgeInsets.only(top: 4),
                   child: Text(attraction.price, style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: AppColors.primary)),
                 ),
-              _activityFooter(item, forLabel, memberNames),
             ],
           ),
         ),
@@ -1853,7 +2086,7 @@ class _GroupTripPageState extends State<GroupTripPage> {
     );
   }
 
-  Widget _activityRestaurantBody(ActivityItem item, CatalogRestaurant restaurant, String forLabel, List<String> memberNames) {
+  Widget _activityRestaurantBody(ActivityItem item, CatalogRestaurant restaurant) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1871,7 +2104,6 @@ class _GroupTripPageState extends State<GroupTripPage> {
                   padding: const EdgeInsets.only(top: 4),
                   child: Text(restaurant.priceRange, style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: AppColors.primary)),
                 ),
-              _activityFooter(item, forLabel, memberNames),
             ],
           ),
         ),
@@ -1879,7 +2111,7 @@ class _GroupTripPageState extends State<GroupTripPage> {
     );
   }
 
-  Widget _activityPlainBody(ActivityItem item, String forLabel, List<String> memberNames) {
+  Widget _activityPlainBody(ActivityItem item) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1896,29 +2128,9 @@ class _GroupTripPageState extends State<GroupTripPage> {
             children: [
               Text(item.label, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.navy)),
               if (item.location.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 3), child: _activityLocationRow(item.location)),
-              _activityFooter(item, forLabel, memberNames),
             ],
           ),
         ),
-      ],
-    );
-  }
-
-  Widget _activityFooter(ActivityItem item, String forLabel, List<String> memberNames) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (forLabel.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.only(top: 3),
-            child: Text(forLabel,
-                maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600, color: AppColors.primary)),
-          ),
-        if (_activityMemberUids(item).isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: _avatarStack(_activityMemberUids(item)),
-          ),
       ],
     );
   }
@@ -1934,12 +2146,13 @@ class _GroupTripPageState extends State<GroupTripPage> {
     }
     return ClipRRect(
       borderRadius: BorderRadius.circular(10),
-      child: Image.network(
-        url,
+      child: CachedNetworkImage(
+        imageUrl: url,
         width: 48,
         height: 48,
         fit: BoxFit.cover,
-        errorBuilder: (_, __, ___) => Container(width: 48, height: 48, color: AppColors.chipGrey, child: Icon(icon, color: AppColors.textGrey, size: 20)),
+        placeholder: (_, __) => Container(width: 48, height: 48, color: AppColors.chipGrey),
+        errorWidget: (_, __, ___) => Container(width: 48, height: 48, color: AppColors.chipGrey, child: Icon(icon, color: AppColors.textGrey, size: 20)),
       ),
     );
   }
@@ -1995,41 +2208,6 @@ class _GroupTripPageState extends State<GroupTripPage> {
     if (confirmed) {
       await controller.removeHotelStay(stay.id);
     }
-  }
-
-  List<String> _activityMemberUids(ActivityItem item) =>
-      effectiveActivityMembers(item, controller.trip?.memberIds ?? const <String>[]);
-
-  Widget _avatarStack(List<String> uids) {
-    final shown = uids.take(4).toList();
-    final extra = uids.length - shown.length;
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        SizedBox(
-          width: shown.isEmpty ? 0 : 22.0 + (shown.length - 1) * 14.0,
-          height: 22,
-          child: Stack(
-            children: [
-              for (int i = 0; i < shown.length; i++)
-                Positioned(
-                  left: i * 14.0,
-                  child: Container(
-                    padding: const EdgeInsets.all(1.5),
-                    decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-                    child: UserAvatar(uid: shown[i], radius: 9.5),
-                  ),
-                ),
-            ],
-          ),
-        ),
-        if (extra > 0)
-          Padding(
-            padding: const EdgeInsets.only(left: 4),
-            child: Text('+$extra', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: AppColors.textGrey)),
-          ),
-      ],
-    );
   }
 
   String _formatTime12h(String time24) {
@@ -2128,21 +2306,19 @@ class _GroupTripPageState extends State<GroupTripPage> {
                                 onLongPress: mine ? () => _showMessageOptions(m) : null,
                                 child: ClipRRect(
                                   borderRadius: BorderRadius.circular(14),
-                                  child: Image.network(
-                                    m.imageUrl,
+                                  child: CachedNetworkImage(
+                                    imageUrl: m.imageUrl,
                                     width: 200,
                                     height: 200,
                                     fit: BoxFit.cover,
-                                    loadingBuilder: (context, child, progress) => progress == null
-                                        ? child
-                                        : Container(
-                                            width: 200,
-                                            height: 200,
-                                            color: const Color(0xFFF0F0F0),
-                                            alignment: Alignment.center,
-                                            child: const CircularProgressIndicator(strokeWidth: 2),
-                                          ),
-                                    errorBuilder: (context, error, stack) => Container(
+                                    placeholder: (context, url) => Container(
+                                      width: 200,
+                                      height: 200,
+                                      color: const Color(0xFFF0F0F0),
+                                      alignment: Alignment.center,
+                                      child: const CircularProgressIndicator(strokeWidth: 2),
+                                    ),
+                                    errorWidget: (context, url, error) => Container(
                                       width: 200,
                                       height: 200,
                                       color: const Color(0xFFF0F0F0),
@@ -2272,7 +2448,7 @@ class _GroupTripPageState extends State<GroupTripPage> {
       builder: (_) => Scaffold(
         backgroundColor: Colors.black,
         appBar: AppBar(backgroundColor: Colors.black, iconTheme: const IconThemeData(color: Colors.white)),
-        body: Center(child: InteractiveViewer(child: Image.network(imageUrl))),
+        body: Center(child: InteractiveViewer(child: CachedNetworkImage(imageUrl: imageUrl))),
       ),
     ));
   }
@@ -2320,6 +2496,11 @@ class _GroupTripPageState extends State<GroupTripPage> {
       fieldsBuilder: (ctx, setState) => [niceDialogField(textController, 'Message', autofocus: true, maxLines: 4)],
     );
     if (result == true) {
+      if (textController.text.trim().isEmpty) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Message cannot be empty.')));
+        return;
+      }
       await controller.editMessage(m.id, textController.text);
     }
   }

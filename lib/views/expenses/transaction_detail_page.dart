@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../repositories/trip_repository.dart';
@@ -217,12 +218,13 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
       onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => _ReceiptViewer(url: e.receiptImageUrl))),
       child: ClipRRect(
           borderRadius: BorderRadius.circular(14),
-          child: Image.network(
-            e.receiptImageUrl,
+          child: CachedNetworkImage(
+            imageUrl: e.receiptImageUrl,
             width: size,
             height: size,
             fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) => Container(
+            placeholder: (_, __) => Container(width: size, height: size, color: const Color(0xFFE2E2E2)),
+            errorWidget: (_, __, ___) => Container(
               width: size,
               height: size,
               color: const Color(0xFFE2E2E2),
@@ -247,18 +249,30 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
   }
 
   Widget _memberRow(TripExpense e, ExpenseParticipant p, {required bool isMe}) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Row(
-        children: [
-          UserAvatar(uid: p.uid, radius: 16),
-          const SizedBox(width: 12),
-          Expanded(child: Text(isMe ? '${p.name} (you)' : p.name, style: const TextStyle(fontSize: 13, color: Colors.black))),
-          Text('RM ${p.share.toStringAsFixed(2)}', style: const TextStyle(fontSize: 13, color: Colors.black)),
-          const SizedBox(width: 8),
-          Text(p.paid ? 'Paid' : 'Pending',
-              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: p.paid ? Colors.green : Colors.orange)),
-        ],
+    final theirItems = e.items.where((i) => i.assigneeUids.contains(p.uid)).toList();
+    final canOpen = theirItems.isNotEmpty;
+    return InkWell(
+      onTap: canOpen
+          ? () => Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => _MemberItemsPage(participant: p, isMe: isMe, items: theirItems)))
+          : null,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Row(
+          children: [
+            UserAvatar(uid: p.uid, radius: 16),
+            const SizedBox(width: 12),
+            Expanded(child: Text(isMe ? '${p.name} (you)' : p.name, style: const TextStyle(fontSize: 13, color: Colors.black))),
+            Text('RM ${p.share.toStringAsFixed(2)}', style: const TextStyle(fontSize: 13, color: Colors.black)),
+            const SizedBox(width: 8),
+            Text(p.paid ? 'Paid' : 'Pending',
+                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: p.paid ? Colors.green : Colors.orange)),
+            if (canOpen) ...[
+              const SizedBox(width: 4),
+              const Icon(Icons.chevron_right, size: 18, color: AppColors.textGrey),
+            ],
+          ],
+        ),
       ),
     );
   }
@@ -423,8 +437,8 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
                         child: newReceipt != null
                             ? Image.file(newReceipt!, fit: BoxFit.cover)
                             : hasReceipt
-                                ? Image.network(e.receiptImageUrl, fit: BoxFit.cover,
-                                    errorBuilder: (_, __, ___) => const Icon(Icons.broken_image_outlined, color: AppColors.textGrey))
+                                ? CachedNetworkImage(imageUrl: e.receiptImageUrl, fit: BoxFit.cover,
+                                    errorWidget: (_, __, ___) => const Icon(Icons.broken_image_outlined, color: AppColors.textGrey))
                                 : const Icon(Icons.receipt_long_outlined, color: AppColors.textGrey),
                       ),
                       const SizedBox(width: 10),
@@ -495,14 +509,80 @@ class _ReceiptViewer extends StatelessWidget {
         child: InteractiveViewer(
           minScale: 1,
           maxScale: 5,
-          child: Image.network(
-            url,
+          child: CachedNetworkImage(
+            imageUrl: url,
             fit: BoxFit.contain,
-            loadingBuilder: (context, child, progress) =>
-                progress == null ? child : const CircularProgressIndicator(color: Colors.white),
-            errorBuilder: (_, __, ___) => const Icon(Icons.broken_image_outlined, color: Colors.white54, size: 48),
+            placeholder: (context, u) => const CircularProgressIndicator(color: Colors.white),
+            errorWidget: (_, __, ___) => const Icon(Icons.broken_image_outlined, color: Colors.white54, size: 48),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _MemberItemsPage extends StatelessWidget {
+  final ExpenseParticipant participant;
+  final bool isMe;
+  final List<ExpenseLineItem> items;
+  const _MemberItemsPage({required this.participant, required this.isMe, required this.items});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.white,
+      appBar: VoyaAppBar(
+        title: Text(isMe ? 'Your Items' : "${participant.name}'s Items",
+            style: const TextStyle(color: AppColors.navy, fontWeight: FontWeight.bold, fontSize: 19)),
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(20),
+        children: [
+          Row(
+            children: [
+              UserAvatar(uid: participant.uid, radius: 20),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(isMe ? '${participant.name} (you)' : participant.name,
+                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.black)),
+              ),
+              Text('RM ${participant.share.toStringAsFixed(2)}',
+                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.primary)),
+            ],
+          ),
+          const SizedBox(height: 20),
+          Text('Items (${items.length})', style: const TextStyle(fontSize: 13, color: AppColors.textGrey)),
+          const SizedBox(height: 8),
+          for (final item in items) _itemShareRow(item),
+        ],
+      ),
+    );
+  }
+
+  Widget _itemShareRow(ExpenseLineItem item) {
+    final shared = item.assigneeUids.length > 1;
+    final yourShare = item.price / item.assigneeUids.length;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(color: AppColors.chipGrey, borderRadius: BorderRadius.circular(12)),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(item.label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.black)),
+                if (shared) ...[
+                  const SizedBox(height: 3),
+                  Text('RM ${item.price.toStringAsFixed(2)} split with ${item.assigneeUids.length} people',
+                      style: const TextStyle(fontSize: 11, color: AppColors.textGrey)),
+                ],
+              ],
+            ),
+          ),
+          Text('RM ${yourShare.toStringAsFixed(2)}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.black)),
+        ],
       ),
     );
   }

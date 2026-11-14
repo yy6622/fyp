@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 import '../../repositories/catalog_repository.dart';
 import '../../services/auth_service.dart';
@@ -62,14 +63,6 @@ class _DetailPageAttractionState extends State<DetailPageAttraction> {
                         children: [
                           Text(a.name, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.navy)),
                           const SizedBox(height: 8),
-                          Row(
-                            children: [
-                              const Icon(Icons.star, size: 16, color: AppColors.orange),
-                              const SizedBox(width: 4),
-                              Text('${a.rating} (${a.reviews} reviews)', style: const TextStyle(fontSize: 12.5, color: AppColors.textGrey)),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
                           Wrap(spacing: 6, runSpacing: 6, children: a.categoryTags.map(tagChip).toList()),
                           if (a.location.isNotEmpty || a.address.isNotEmpty) ...[
                             const SizedBox(height: 8),
@@ -91,12 +84,13 @@ class _DetailPageAttractionState extends State<DetailPageAttraction> {
                                 separatorBuilder: (_, __) => const SizedBox(width: 8),
                                 itemBuilder: (context, i) => ClipRRect(
                                   borderRadius: BorderRadius.circular(12),
-                                  child: Image.network(
-                                    a.gallery[i],
+                                  child: CachedNetworkImage(
+                                    imageUrl: a.gallery[i],
                                     width: 120,
                                     height: 90,
                                     fit: BoxFit.cover,
-                                    errorBuilder: (_, __, ___) => Container(
+                                    placeholder: (_, __) => Container(width: 120, height: 90, color: AppColors.chipGrey),
+                                    errorWidget: (_, __, ___) => Container(
                                       width: 120,
                                       height: 90,
                                       color: AppColors.chipGrey,
@@ -224,19 +218,9 @@ class _DetailPageAttractionState extends State<DetailPageAttraction> {
                       ],
                     ),
                   ),
-                  ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: _saved ? Colors.white : AppColors.primary,
-                      side: _saved ? const BorderSide(color: AppColors.primary) : null,
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                    ),
-                    onPressed: widget.onToggleSave == null ? null : _toggle,
-                    icon: Icon(_saved ? Icons.favorite : Icons.favorite_border, size: 18, color: _saved ? AppColors.primary : Colors.white),
-                    label: Text(
-                      _saved ? 'Saved' : 'Save',
-                      style: TextStyle(color: _saved ? AppColors.primary : Colors.white, fontWeight: FontWeight.w600),
-                    ),
+                  SaveHeartBox(
+                    saved: _saved,
+                    onTap: widget.onToggleSave == null ? null : _toggle,
                   ),
                 ],
               ),

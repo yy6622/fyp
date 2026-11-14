@@ -6,8 +6,8 @@
 <title>Claim Detail — Voya Insurance Partner</title>
 <link rel="stylesheet" href="../css/tokens.css?v=20261006b" />
 <link rel="stylesheet" href="../css/base.css?v=20261006b" />
-<link rel="stylesheet" href="../css/layout.css?v=20261021" />
-<link rel="stylesheet" href="../css/components.css?v=20261021c" />
+<link rel="stylesheet" href="../css/layout.css?v=20261111a" />
+<link rel="stylesheet" href="../css/components.css?v=20261106g" />
 </head>
 <body>
 <div class="shell">
@@ -41,14 +41,20 @@
 </div>
 
 <script type="module">
-import { requireRole } from "../js/auth-guard.js?v=20261021";
-import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261021";
-import { mountIcons } from "../js/icons.js?v=20261021";
-import { getClaim, updateClaimStatus } from "../js/data.js?v=20261021";
-import { moneyExact, statusBadge, escapeHtml, fullDate, toast, setBusy, confirmDialog } from "../js/ui.js?v=20261021";
+import { requireRole } from "../js/auth-guard.js?v=20261106b";
+import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261114a";
+import { mountIcons } from "../js/icons.js?v=20261106c";
+import { getClaim, updateClaimStatus } from "../js/data.js?v=20261114c";
+import { moneyExact, statusBadge, escapeHtml, fullDate, toast, setBusy, confirmDialog } from "../js/ui.js?v=20261113a";
 
 mountSidebarNav({ role: "partner", active: "claims" });
 const session = await requireRole("partner", "login.html");
+// A pending/suspended partner has no write access to claims/refunds
+// (firestore.rules requires isApprovedInsurancePartner()) — without this
+// gate the Approve/Reject/Request-info buttons rendered anyway and just
+// failed with a confusing permission-denied on click. Same pattern as
+// plans.html's isApproved gate.
+const isApproved = session?.profile.status === "approved";
 const claimId = new URLSearchParams(location.search).get("id");
 
 if (session) {
@@ -106,15 +112,19 @@ async function load() {
       <div></div>
     </div>
     <div class="form-actions" style="margin-top:4px;">
+      ${isApproved ? `
       <button class="btn btn-danger-outline" id="rejectBtn"><span data-icon="x" data-icon-size="14"></span>Reject claim</button>
       <button class="btn btn-outline" id="infoBtn"><span data-icon="eye" data-icon-size="14"></span>Request info</button>
       <button class="btn btn-primary" id="approveBtn"><span data-icon="check-circle" data-icon-size="14"></span>Approve</button>
+      ` : `<p class="muted small">Your account is ${escapeHtml(session?.profile.status || "pending")} — review actions unlock once an admin approves your account.</p>`}
     </div>`;
   mountIcons(document);
 
-  document.getElementById("rejectBtn").addEventListener("click", () => act("rejected", "Claim rejected", true));
-  document.getElementById("infoBtn").addEventListener("click", () => act("under_review", "Requested more information from the policyholder", false));
-  document.getElementById("approveBtn").addEventListener("click", () => act("approved", "Approved for payout", true));
+  if (isApproved) {
+    document.getElementById("rejectBtn").addEventListener("click", () => act("rejected", "Claim rejected", true));
+    document.getElementById("infoBtn").addEventListener("click", () => act("under_review", "Requested more information from the policyholder", false));
+    document.getElementById("approveBtn").addEventListener("click", () => act("approved", "Approved for payout", true));
+  }
 }
 
 async function act(status, note, needsConfirm) {

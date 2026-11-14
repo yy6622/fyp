@@ -1,9 +1,5 @@
-import 'dart:convert';
-
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/foundation.dart';
-import 'package:http/http.dart' as http;
-
-import '../config/secrets.dart';
 
 class ModerationResult {
   final bool flagged;
@@ -17,12 +13,20 @@ class ContentModerationService {
   ContentModerationService._();
   static final ContentModerationService instance = ContentModerationService._();
 
-  static const String _endpoint =
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent';
-
-  // Obvious profanity is caught locally first, so moderation still works when
-  // Gemini is offline, over quota, or returns an empty answer. Gemini then
-  // handles everything subtler (hate speech, harassment, other languages).
+  // The remote classifier call (OpenAI's Moderation API — a dedicated
+  // content-moderation classifier with fixed categories + confidence scores,
+  // not free-text LLM judgment, and free to call) runs server-side in the
+  // `moderateText` Cloud Function (functions/content_moderation.js), not
+  // from this client directly. Two reasons: OpenAI's /v1/moderations
+  // endpoint sends no CORS headers, so a browser (Flutter web) request to it
+  // is blocked outright before it even leaves the page; and this keeps the
+  // OpenAI key out of the client bundle entirely.
+  //
+  // Obvious profanity is still caught locally first, so moderation still
+  // works offline / if the Cloud Function is ever unreachable, and the
+  // common case doesn't need a network round-trip at all. The remote
+  // classifier then handles everything subtler (hate speech, harassment,
+  // sexual content, violence, self-harm, etc.), including other languages.
   static final RegExp _localProfanity = RegExp(
     r'\b(fuck\w*|shit\w*|bullshit|crap|bitch\w*|bastard\w*|asshole\w*|dickhead\w*|moron\w*|idiot\w*|'
     r'retard\w*|cunt\w*|wanker\w*|motherfuck\w*|stfu|wtf|pukimak|puki|bodoh|sial|celaka|lancau)\b',
@@ -40,8 +44,6 @@ class ContentModerationService {
     return null;
   }
 
-  bool get isConfigured => geminiApiKey.isNotEmpty && geminiApiKey != 'YOUR_GEMINI_API_KEY_HERE';
-
   Future<ModerationResult> check(String text) async {
     final trimmed = text.trim();
     if (trimmed.isEmpty) return ModerationResult.clean;
@@ -49,56 +51,19 @@ class ContentModerationService {
     if (hit != null) {
       return const ModerationResult(flagged: true, reason: 'Profanity');
     }
-    if (!isConfigured) {
-      debugPrint('[ContentModerationService] skipped — no Gemini API key configured in secrets.dart (geminiApiKey)');
-      return ModerationResult.clean;
-    }
     try {
-      final res = await http
-          .post(
-            Uri.parse('$_endpoint?key=$geminiApiKey'),
-            headers: {'Content-Type': 'application/json'},
-            body: jsonEncode({
-              'contents': [
-                {
-                  'parts': [
-                    {
-                      'text': 'You are a content moderation filter for a family-friendly travel social app. '
-                          'Decide if the text below contains profanity, hate speech, sexual content, '
-                          'harassment, or other content inappropriate for a public travel community feed, '
-                          'in ANY language (English, Chinese, Malay, or any other).\n'
-                          'Reply with EXACTLY one line and nothing else:\n'
-                          '- If the text is fine, reply exactly: CLEAN\n'
-                          '- If it is NOT fine, reply exactly: FLAGGED: <short reason, under 8 words, in English>\n\n'
-                          'Text: $trimmed',
-                    },
-                  ],
-                },
-              ],
-              'generationConfig': {'temperature': 0, 'maxOutputTokens': 1024},
-            }),
-          )
-          .timeout(const Duration(seconds: 8));
-      if (res.statusCode != 200) {
-        debugPrint('[ContentModerationService] HTTP ${res.statusCode} checking text: ${res.body}');
-        return ModerationResult.clean;
-      }
-      final decoded = jsonDecode(res.body) as Map<String, dynamic>;
-      final candidates = decoded['candidates'] as List?;
-      if (candidates == null || candidates.isEmpty) {
-        debugPrint('[ContentModerationService] no candidates checking text: ${res.body}');
-        return ModerationResult.clean;
-      }
-      final parts = (candidates.first as Map)['content']?['parts'] as List?;
-      final reply = (parts ?? const []).map((p) => (p as Map)['text'] as String? ?? '').join().trim();
-      if (reply.isEmpty) {
-        debugPrint('[ContentModerationService] empty reply from Gemini: ${res.body}');
-      }
-      if (reply.toUpperCase().startsWith('FLAGGED')) {
-        final colonIdx = reply.indexOf(':');
-        final reason = (colonIdx != -1 && colonIdx + 1 < reply.length) ? reply.substring(colonIdx + 1).trim() : '';
-        return ModerationResult(flagged: true, reason: reason.isEmpty ? 'Possible inappropriate content' : reason);
-      }
+      final callable = FirebaseFunctions.instance.httpsCallable(
+        'moderateText',
+        options: HttpsCallableOptions(timeout: const Duration(seconds: 10)),
+      );
+      final result = await callable.call({'text': trimmed});
+      final data = (result.data as Map).cast<String, dynamic>();
+      final flagged = data['flagged'] as bool? ?? false;
+      if (!flagged) return ModerationResult.clean;
+      final reason = (data['reason'] as String?)?.trim();
+      return ModerationResult(flagged: true, reason: (reason == null || reason.isEmpty) ? 'Possible inappropriate content' : reason);
+    } on FirebaseFunctionsException catch (e) {
+      debugPrint('[ContentModerationService] moderateText failed: ${e.code} ${e.message}');
       return ModerationResult.clean;
     } catch (e) {
       debugPrint('[ContentModerationService] error checking text: $e');

@@ -6,8 +6,8 @@
 <title>Organization Profile — Voya Insurance Partner</title>
 <link rel="stylesheet" href="../css/tokens.css?v=20261006b" />
 <link rel="stylesheet" href="../css/base.css?v=20261006b" />
-<link rel="stylesheet" href="../css/layout.css?v=20261021" />
-<link rel="stylesheet" href="../css/components.css?v=20261021c" />
+<link rel="stylesheet" href="../css/layout.css?v=20261111a" />
+<link rel="stylesheet" href="../css/components.css?v=20261106g" />
 </head>
 <body>
 <div class="shell">
@@ -43,6 +43,15 @@
     </div>
 
     <div class="card form-card">
+      <h3 class="h3" style="margin-bottom:18px;">Verification details</h3>
+      <div class="form-grid">
+        <div class="field"><label>Insurance license number</label><input class="input" id="licenseNumber" readonly /></div>
+        <div class="field"><label>Country of registration</label><select class="select" id="countryOfRegistration" disabled><option value="">Select a country…</option></select></div>
+        <div class="field"><label>Official website</label><input class="input" id="website" type="url" readonly placeholder="https://www.yourcompany.com" /></div>
+      </div>
+    </div>
+
+    <div class="card form-card">
       <h3 class="h3" style="margin-bottom:18px;">Brand identity</h3>
       <div class="form-grid">
         <div class="field">
@@ -54,7 +63,7 @@
         </div>
         <div class="field">
           <label>Upload new logo</label>
-          <input class="input" id="logoFile" type="file" accept="image/*" disabled />
+          <input class="input" id="logoFile" type="file" accept="image/jpeg,image/png,image/webp" disabled />
           <p class="hint">PNG or JPG, square works best.</p>
         </div>
       </div>
@@ -80,36 +89,71 @@
       </div>
     </div>
 
-    <div class="form-actions split" id="formActions" style="display:none;">
-      <button class="btn btn-outline" id="discardBtn">Discard</button>
+    <div class="card form-card">
+      <h3 class="h3" style="margin-bottom:18px;">Change password</h3>
+      <div class="field" style="max-width:360px;">
+        <label>Password</label>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <input class="input" value="••••••••••" readonly disabled style="flex:1;letter-spacing:3px;" />
+          <button class="btn btn-outline" id="editPasswordBtn"><span data-icon="edit"></span>Change password</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="form-actions" id="formActions" style="display:none;">
+      <button class="btn btn-outline" id="discardBtn">Cancel</button>
       <button class="btn btn-primary" id="saveBtn">Save changes</button>
     </div>
   </main>
 </div>
 
+<div class="modal-backdrop" id="changePasswordModal">
+  <div class="modal" style="max-width:440px;">
+    <div class="modal-head"><h3 class="h2">Change password</h3><button class="modal-close" data-close><span data-icon="x"></span></button></div>
+    <p class="subtitle" style="margin-bottom:18px;">You'll need your current password, and we'll email a code to confirm it's you.</p>
+    <div class="field" style="margin-bottom:14px;"><label>Current password</label><input class="input" id="currentPassword" type="password" autocomplete="current-password" /></div>
+    <div class="field" style="margin-bottom:14px;"><label>New password</label><input class="input" id="newPassword" type="password" autocomplete="new-password" /><ul class="password-rules" id="newPasswordRules"></ul></div>
+    <div class="field" style="margin-bottom:20px;"><label>Confirm new password</label><input class="input" id="confirmPassword" type="password" autocomplete="new-password" /></div>
+    <div class="form-actions">
+      <button class="btn btn-outline" data-close>Cancel</button>
+      <button class="btn btn-primary" id="changePasswordBtn">Update password</button>
+    </div>
+  </div>
+</div>
+
 <script type="module">
-import { requireRole } from "../js/auth-guard.js?v=20261021";
-import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261021";
-import { mountIcons } from "../js/icons.js?v=20261021";
-import { getPartnerProfile, savePartnerProfile } from "../js/data.js?v=20261021";
-import { storage } from "../js/firebase-config.js?v=20261007";
+import { requireRole, authErrorMessage } from "../js/auth-guard.js?v=20261106b";
+import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261114a";
+import { mountIcons } from "../js/icons.js?v=20261106c";
+import { getPartnerProfile, savePartnerProfile } from "../js/data.js?v=20261114c";
+import { COUNTRY_OPTIONS } from "../js/countries.js?v=20261113a";
+import { auth, storage } from "../js/firebase-config.js?v=20261007";
 import { ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-storage.js";
-import { toast, setBusy } from "../js/ui.js?v=20261021";
+import {
+  EmailAuthProvider, reauthenticateWithCredential, updatePassword,
+} from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
+import { toast, setBusy, isValidImageFile, openModal, closeModal, wireModalDismiss, emailCodeStepUp, wirePasswordRules } from "../js/ui.js?v=20261114a";
 
 mountSidebarNav({ role: "partner", active: "organization" });
-const session = await requireRole("partner", "login.html");
+// allowPending: a partner waiting on admin approval can still view and
+// edit their own organization profile (and change their password) --
+// only the OTHER partner pages (plans, transactions, claims, messages,
+// reports) are locked to dashboard.html while pending.
+const session = await requireRole("partner", "login.html", { allowPending: true });
 let profile = null;
 
 // Fields stay read-only until "Edit" is clicked, so nothing changes by
 // accident while just browsing the page — see setEditing() below.
 const EDITABLE_IDS = [
   "companyName", "registrationNumber", "supportEmail", "phone",
+  "licenseNumber", "website",
   "addrLine1", "addrCity", "addrState", "addrPostal",
   "contactName", "contactDesignation", "contactEmail", "contactPhone",
 ];
 
 function setEditing(on) {
   EDITABLE_IDS.forEach((id) => { document.getElementById(id).readOnly = !on; });
+  document.getElementById("countryOfRegistration").disabled = !on;
   document.getElementById("logoFile").disabled = !on;
   document.getElementById("editBtn").style.display = on ? "none" : "";
   document.getElementById("formActions").style.display = on ? "flex" : "none";
@@ -117,8 +161,19 @@ function setEditing(on) {
 
 if (session) {
   setSidebarUser({ displayName: session.profile.companyName || "Partner", roleLabel: `${session.profile.companyName || "Insurance"} · Insurance Partner` });
+  wireModalDismiss();
   await load();
 }
+
+const { isPasswordValid: isNewPasswordValid } = wirePasswordRules("newPassword", "newPasswordRules");
+
+document.getElementById("editPasswordBtn").addEventListener("click", () => {
+  document.getElementById("currentPassword").value = "";
+  document.getElementById("newPassword").value = "";
+  document.getElementById("confirmPassword").value = "";
+  document.getElementById("newPasswordRules").innerHTML = "";
+  openModal("changePasswordModal");
+});
 
 async function load() {
   profile = (await getPartnerProfile(session.uid)) || {};
@@ -126,6 +181,11 @@ async function load() {
   document.getElementById("registrationNumber").value = profile.registrationNumber || "";
   document.getElementById("supportEmail").value = profile.supportEmail || "";
   document.getElementById("phone").value = profile.phone || "";
+  document.getElementById("licenseNumber").value = profile.licenseNumber || "";
+  document.getElementById("website").value = profile.website || "";
+  const countrySelect = document.getElementById("countryOfRegistration");
+  countrySelect.innerHTML = '<option value="">Select a country…</option>' + COUNTRY_OPTIONS.map((c) => `<option>${c}</option>`).join("");
+  countrySelect.value = profile.countryOfRegistration || "";
   document.getElementById("addrLine1").value = profile.address?.line1 || "";
   document.getElementById("addrCity").value = profile.address?.city || "";
   document.getElementById("addrState").value = profile.address?.state || "";
@@ -144,6 +204,8 @@ async function uploadLogoIfNeeded() {
   const fileInput = document.getElementById("logoFile");
   const file = fileInput.files?.[0];
   if (!file) return profile.logoUrl || "";
+  const check = isValidImageFile(file);
+  if (!check.ok) throw new Error(check.reason);
   const ext = file.name.split(".").pop() || "jpg";
   const path = `partner_logos/${session.uid}.${ext}`;
   const storageRef = ref(storage, path);
@@ -153,16 +215,40 @@ async function uploadLogoIfNeeded() {
 
 document.getElementById("editBtn").addEventListener("click", () => setEditing(true));
 
+// Validate the picked file the moment it's chosen (not only at Save) —
+// accept="image/..." is only a hint to the OS file-picker dialog, so a
+// renamed file or "All files" can still hand back a .csv here with
+// nothing catching it until this fires. See isValidImageFile() in ui.js.
+document.getElementById("logoFile").addEventListener("change", (e) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+  const check = isValidImageFile(file);
+  if (!check.ok) {
+    toast(check.reason, "error");
+    e.target.value = "";
+    return;
+  }
+  document.getElementById("logoPreview").style.backgroundImage = `url('${URL.createObjectURL(file)}')`;
+  document.getElementById("logoStatus").textContent = file.name;
+});
+
 document.getElementById("saveBtn").addEventListener("click", async () => {
   const btn = document.getElementById("saveBtn");
   setBusy(btn, true, "Saving…");
   try {
     const logoUrl = await uploadLogoIfNeeded();
+    const licenseNumber = document.getElementById("licenseNumber").value.trim();
+    const countryOfRegistration = document.getElementById("countryOfRegistration").value;
+    if (!licenseNumber) { toast("Insurance license number is required.", "error"); return; }
+    if (!countryOfRegistration) { toast("Please select your country of registration.", "error"); return; }
     const data = {
       companyName: document.getElementById("companyName").value.trim(),
       registrationNumber: document.getElementById("registrationNumber").value.trim(),
       supportEmail: document.getElementById("supportEmail").value.trim(),
       phone: document.getElementById("phone").value.trim(),
+      licenseNumber,
+      countryOfRegistration,
+      website: document.getElementById("website").value.trim(),
       logoUrl,
       address: {
         line1: document.getElementById("addrLine1").value.trim(),
@@ -191,6 +277,41 @@ document.getElementById("saveBtn").addEventListener("click", async () => {
 document.getElementById("discardBtn").addEventListener("click", async () => {
   await load();
   setEditing(false);
+});
+
+document.getElementById("changePasswordBtn").addEventListener("click", async () => {
+  const current = document.getElementById("currentPassword").value;
+  const next = document.getElementById("newPassword").value;
+  const confirm = document.getElementById("confirmPassword").value;
+  if (!current || !next) { toast("Fill in both your current and new password.", "error"); return; }
+  if (!isNewPasswordValid()) { toast("Please meet all the password requirements shown below the field.", "error"); return; }
+  if (next !== confirm) { toast("New password and confirmation don't match.", "error"); return; }
+
+  // FR04 step-up: a fresh emailed code is required before the password
+  // actually changes — same check the Flutter app runs for every account.
+  const verified = await emailCodeStepUp("change_password", {
+    title: "Verify it's you",
+    body: "To change your password, enter the 6-digit code we're emailing to your account's email address.",
+  });
+  if (!verified) return;
+
+  const btn = document.getElementById("changePasswordBtn");
+  setBusy(btn, true, "Updating…");
+  try {
+    const user = auth.currentUser;
+    const cred = EmailAuthProvider.credential(user.email, current);
+    await reauthenticateWithCredential(user, cred);
+    await updatePassword(user, next);
+    document.getElementById("currentPassword").value = "";
+    document.getElementById("newPassword").value = "";
+    document.getElementById("confirmPassword").value = "";
+    closeModal("changePasswordModal");
+    toast("Password updated.", "success");
+  } catch (err) {
+    toast(authErrorMessage(err), "error");
+  } finally {
+    setBusy(btn, false);
+  }
 });
 </script>
 </body>

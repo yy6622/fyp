@@ -12,6 +12,7 @@ extension DiscussionDecisions on TripRepository {
     List<String> memberUids = const [],
     List<String> memberNames = const [],
     String voteTitle = '',
+    String voteId = '',
   }) {
     return FirebaseFirestore.instance.collection('trips').doc(tripId).update({
       'discussionDecisions.$messageId': {
@@ -21,6 +22,7 @@ extension DiscussionDecisions on TripRepository {
         'memberUids': memberUids,
         'memberNames': memberNames,
         'voteTitle': voteTitle,
+        'voteId': voteId,
         'at': FieldValue.serverTimestamp(),
       },
       'lastActivityAt': FieldValue.serverTimestamp(),

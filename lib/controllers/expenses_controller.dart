@@ -18,6 +18,10 @@ class ExpensesTabController extends ChangeNotifier {
     });
     _tripSub = TripRepository.instance.watchTrip(tripId, _uid).listen((t) {
       _trip = t;
+      // A solo trip has no one to split a bill with, so "Group" vs
+      // "Personal" is a distinction without a difference — force personal
+      // view so the UI doesn't offer a switch that changes nothing.
+      if (t != null && t.memberIds.length <= 1) _personal = true;
       notifyListeners();
     });
   }
@@ -228,6 +232,12 @@ class AddExpenseController extends ChangeNotifier {
   AddExpenseController({required this.tripId, required this.trip}) {
     selectedUids = trip.memberIds.toSet();
     if (trip.destination.trim().isNotEmpty) location = trip.destination.trim();
+    // Solo trip -- nobody else to split this with or remind about it, so
+    // there's no decision to surface in the UI at all (see
+    // expense_details_form_page.dart, which hides the Split Method and
+    // Reminder rows for the same reason). selectedUids already resolves
+    // to just the one member on its own either way.
+    if (trip.memberIds.length <= 1) reminder = false;
   }
 
   final TextEditingController titleController = TextEditingController();
@@ -396,6 +406,9 @@ class AddExpenseController extends ChangeNotifier {
         paidByName: myName,
         participants: participants,
         receiptImageUrl: receiptImageUrl,
+        items: splitEqually
+            ? const []
+            : items.map((i) => ExpenseLineItem(label: i.label, price: i.price, assigneeUids: i.assigneeUids.toList())).toList(),
         sendReminder: reminder,
       );
       return true;

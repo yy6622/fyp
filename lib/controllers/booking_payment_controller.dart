@@ -22,4 +22,8 @@ class BookingPaymentController extends ChangeNotifier {
   }
 
   double get subtotal => unitPrice * _quantity;
+
+  /// Flat default service fee added on top of the subtotal.
+  static const double serviceFee = 2.0;
+  double get total => subtotal + serviceFee;
 }

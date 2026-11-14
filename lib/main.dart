@@ -1,4 +1,5 @@
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_stripe/flutter_stripe.dart';
 
@@ -10,8 +11,15 @@ import 'views/auth/splash_page.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  Stripe.publishableKey = stripePublishableKey;
-  await Stripe.instance.applySettings();
+  // flutter_stripe has no web implementation (MissingPluginException on
+  // channel flutter.stripe/payments), and this used to run unconditionally
+  // before runApp() -- so on web the exception was thrown before the app
+  // ever rendered a single frame, leaving a permanently blank page. Mobile
+  // (iOS/Android) behavior is unchanged; only web skips Stripe init.
+  if (!kIsWeb) {
+    Stripe.publishableKey = stripePublishableKey;
+    await Stripe.instance.applySettings();
+  }
   runApp(const MyApp());
 }
 

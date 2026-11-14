@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 import '../../controllers/explore_controller.dart';
 import '../../controllers/filter_controller.dart';
+import '../../data/malaysia_airports.dart';
 import '../../models/duffel_models.dart';
 import '../../models/explore_models.dart';
+import '../../models/filter_models.dart';
 import '../../repositories/catalog_repository.dart';
 import '../../services/auth_service.dart';
 import '../../services/currency_service.dart';
@@ -75,30 +78,41 @@ class _ExplorePageState extends State<ExplorePage> {
         backgroundColor: AppColors.scaffoldBackground,
         floatingActionButton: _buildAiFab(),
         body: SafeArea(
-          child: Stack(
-            children: [
-              SingleChildScrollView(
-                controller: _pageScroll,
-                child: Column(
-                  children: [
-                    _buildHeader(),
-                    const SizedBox(height: 16),
-                    _buildTripCard(),
-                    const SizedBox(height: 16),
-                    _buildSearchBar(),
-                    if (controller.isManualSearch) ...[
+          // SizedBox.expand forces this Stack to always be the full
+          // screen height. Without it, a bare Stack sizes itself to its
+          // tallest non-positioned child -- normally that's close enough
+          // to full height to not notice, but the Flight tab's content
+          // can be much shorter right after switching trips (results
+          // cleared, still loading the new search), so the Stack itself
+          // shrank to that short height and the trip-switcher overlay
+          // below -- a Positioned.fill, which only fills the STACK's own
+          // bounds, not the real screen -- got cut off partway down with
+          // plain scaffold background showing underneath instead of the
+          // dimmed backdrop. Hotel/Attraction/Restaurant tabs always had
+          // enough content to fill the screen anyway, so this never
+          // showed up there.
+          child: SizedBox.expand(
+            child: Stack(
+              children: [
+                SingleChildScrollView(
+                  controller: _pageScroll,
+                  child: Column(
+                    children: [
+                      _buildHeader(),
+                      const SizedBox(height: 16),
+                      _buildTripCard(),
+                      const SizedBox(height: 16),
+                      _buildSearchBar(),
+                      const SizedBox(height: 14),
+                      _buildCategoryChips(),
                       const SizedBox(height: 10),
-                      _buildManualSearchBar(),
+                      _buildBody(),
                     ],
-                    const SizedBox(height: 14),
-                    _buildCategoryChips(),
-                    const SizedBox(height: 10),
-                    _buildBody(),
-                  ],
+                  ),
                 ),
-              ),
-              if (controller.showTripSwitcher) _buildTripSwitcherOverlay(),
-            ],
+                if (controller.showTripSwitcher) _buildTripSwitcherOverlay(),
+              ],
+            ),
           ),
         ),
       ),
@@ -167,6 +181,7 @@ class _ExplorePageState extends State<ExplorePage> {
     final availableAirlines = controller.flightResults.map((f) => f.airlineName).where((n) => n.isNotEmpty).toSet().toList()
       ..sort();
     filterController.airlines.removeWhere((a) => !availableAirlines.contains(a));
+    final isFlightTab = controller.selectedCategory.filterType == FilterType.flight;
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -175,6 +190,24 @@ class _ExplorePageState extends State<ExplorePage> {
         type: controller.selectedCategory.filterType,
         controller: filterController,
         availableAirlines: availableAirlines,
+        currentOriginCode: isFlightTab ? controller.homeAirportCode : '',
+        currentOriginLabel: isFlightTab ? malaysiaAirportLabel(controller.homeAirportCode) : '',
+        currentDestinationQuery: isFlightTab ? (controller.lastFlightDestinationQuery ?? '') : '',
+        currentDestinationLabel: isFlightTab ? (controller.lastFlightDestinationLabel ?? '') : '',
+        currentAdults: controller.flightAdults,
+        currentChildAges: controller.flightChildAges,
+        currentCabinClass: controller.flightCabinClass,
+        onRouteSearch: isFlightTab
+            ? (origin, destination, label, adults, childAges, cabinClass) {
+                controller.setTravelersAndCabin(adults: adults, childAges: childAges, cabinClass: cabinClass);
+                controller.searchFlights(
+                  origin: origin,
+                  destination: destination,
+                  departureDate: controller.defaultDepartureDate,
+                  label: label.isNotEmpty ? label : destination,
+                );
+              }
+            : null,
       ),
     );
   }
@@ -213,7 +246,7 @@ class _ExplorePageState extends State<ExplorePage> {
     final f = filterController;
     return controller.flightResults.where((flight) {
       final amount = CurrencyService.instance.convert(flight.totalAmount, from: flight.totalCurrency, to: 'MYR') ?? flight.totalAmount;
-      if (amount < f.priceRange.start || amount > f.priceRange.end) return false;
+      if (amount < f.flightPriceRange.start || amount > f.flightPriceRange.end) return false;
       if (f.stops.isNotEmpty) {
         final bucket = flight.stops == 0 ? 'Direct' : (flight.stops == 1 ? '1 Stop' : '2+ Stops');
         if (!f.stops.contains(bucket)) return false;
@@ -240,32 +273,58 @@ class _ExplorePageState extends State<ExplorePage> {
 
   List<DuffelStayResult> get _visibleHotels {
     final f = filterController;
-    return controller.hotelResults.where((hotel) {
+    final filtered = controller.hotelResults.where((hotel) {
       final amount = CurrencyService.instance.convert(hotel.cheapestTotalAmount, from: hotel.cheapestCurrency, to: 'MYR') ?? hotel.cheapestTotalAmount;
-      if (amount < f.priceRange.start || amount > f.priceRange.end) return false;
+      if (amount < f.hotelPriceRange.start || amount > f.hotelPriceRange.end) return false;
       if (f.starRatings.isNotEmpty) {
         final star = hotel.rating?.round();
         if (star == null || !f.starRatings.contains('$star★')) return false;
       }
-      if (f.guestRating != 'Any') {
-        final score = hotel.reviewScore != null ? hotel.reviewScore! / 2 : hotel.rating;
-        final threshold = double.tryParse(f.guestRating.replaceAll('+', '')) ?? 0;
-        if (score == null || score < threshold) return false;
-      }
+      // "Guest Rating" used to be a second filter here, but with no
+      // independent review-score data for most results it just duplicated
+      // Star Rating under a different name and label set (same underlying
+      // field, two controls) -- removed per explicit request rather than
+      // kept as a confusing near-duplicate.
       return true;
     }).toList();
+    // withinBudget is always true here — every survivor above already
+    // passed the real price/star/guest-rating checks, so there's nothing
+    // left to gate on. HotelRecommendation still re-sorts them by amenity
+    // preference + rating + that same budget pass, same as attractions.
+    final ctx = HotelRecommendationContext(withinBudget: (_) => true, affinity: controller.hotelAmenityAffinity);
+    return HotelRecommendation.rank(filtered, ctx);
   }
+
+  // The "Category" filter's 6 chip labels are a simplified, user-facing
+  // bucketing; the real stored category on each attraction is whatever
+  // admin_web/js/places-import.js's Geoapify import (or the live in-app OSM
+  // refresh in catalog_repository.dart) actually assigned — Museum, Art &
+  // Culture, Adventure, Nature, Historic Site, Shopping, Landmark, Attraction
+  // (Geoapify; the ~15k-doc majority of the catalogue), or Museum, Viewpoint,
+  // Gallery, Zoo, Theme Park, Artwork, Attraction (OSM tourism tag, a smaller
+  // minority). None of those is literally "Cultural", so a straight label
+  // match always returned zero results for that chip — this expands each
+  // chip into the real values it should cover instead.
+  static const Map<String, List<String>> _attractionCategoryBucket = {
+    'Museum': ['Museum'],
+    'Nature': ['Nature', 'Viewpoint'],
+    'Adventure': ['Adventure', 'Zoo', 'Theme Park'],
+    'Cultural': ['Art & Culture', 'Historic Site', 'Artwork', 'Gallery'],
+    'Shopping': ['Shopping'],
+    'Landmark': ['Landmark', 'Attraction'],
+  };
 
   List<CatalogAttraction> get _visibleAttractions {
     final f = filterController;
     final categoryFiltered = controller.attractions.where((item) {
       if (f.attractionCategories.isEmpty) return true;
       final tags = item.categories.isNotEmpty ? item.categories : [item.category];
-      return f.attractionCategories.any(tags.contains);
+      final wanted = f.attractionCategories.expand((label) => _attractionCategoryBucket[label] ?? [label]);
+      return wanted.any(tags.contains);
     }).toList();
     final ctx = RecommendationContext(
       withinBudget: (a) => f.attractionPrice == 'Any' || _priceTextMatchesBucket(a.price, f.attractionPrice),
-      affinity: controller.attractionAffinity,
+      affinity: controller.attractionAffinityForRanking,
       requireOpenNow: f.openNow,
       requireAccessible: f.accessibleOnly,
     );
@@ -274,11 +333,15 @@ class _ExplorePageState extends State<ExplorePage> {
 
   List<CatalogRestaurant> get _visibleRestaurants {
     final f = filterController;
-    return controller.restaurants.where((item) {
+    final cuisineFiltered = controller.restaurants.where((item) {
       if (f.restaurantCuisines.isNotEmpty && !f.restaurantCuisines.any(item.cuisineTags.contains)) return false;
-      if (f.restaurantPrice != 'Any' && !_priceTextMatchesBucket(item.priceRange, f.restaurantPrice)) return false;
       return true;
     }).toList();
+    final ctx = RestaurantRecommendationContext(
+      withinBudget: (r) => f.restaurantPrice == 'Any' || _priceTextMatchesBucket(r.priceRange, f.restaurantPrice),
+      affinity: controller.restaurantAffinity,
+    );
+    return RestaurantRecommendation.rank(cuisineFiltered, ctx);
   }
 
   // ---------------- Current trip card ----------------
@@ -508,47 +571,14 @@ class _ExplorePageState extends State<ExplorePage> {
                 ),
               ),
             ),
-            controller.isManualSearch
-                ? GestureDetector(
-                    onTap: _clearManualSearch,
-                    child: const Icon(Icons.close, color: AppColors.textGrey, size: 20),
-                  )
-                : const Icon(Icons.mic_none, color: AppColors.textGrey, size: 20),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildManualSearchBar() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(12)),
-        child: Row(
-          children: [
-            const Icon(Icons.search, size: 15, color: AppColors.primary),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                'Showing results for "${controller.lastSearchQuery}"',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.navy),
+            // No mic icon here -- this app has no voice-search capability
+            // wired up anywhere, so it was purely decorative (no onTap)
+            // and only ever misled travellers into tapping a dead button.
+            if (controller.isManualSearch)
+              GestureDetector(
+                onTap: _clearManualSearch,
+                child: const Icon(Icons.close, color: AppColors.textGrey, size: 20),
               ),
-            ),
-            GestureDetector(
-              onTap: _clearManualSearch,
-              child: const Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.close, size: 14, color: AppColors.primary),
-                  SizedBox(width: 3),
-                  Text('Clear', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.primary)),
-                ],
-              ),
-            ),
           ],
         ),
       ),
@@ -556,17 +586,49 @@ class _ExplorePageState extends State<ExplorePage> {
   }
 
   // ---------------- Category chips ----------------
+  /// During a manual search, only categories that actually matched (or are
+  /// still loading) are offered as tabs — a destination search for, say, an
+  /// attraction shouldn't still show a "Flights"/"Hotels" tab with unrelated
+  /// leftover results. Outside of a search, every category is shown as usual.
+  List<ExploreCategory> get _visibleCategories {
+    if (!controller.isManualSearch) return ExploreCategory.values;
+    final matched = <ExploreCategory>[
+      if (controller.loadingFlights || (controller.flightError == null && _visibleFlights.isNotEmpty)) ExploreCategory.flights,
+      if (controller.loadingHotels || (controller.hotelError == null && _visibleHotels.isNotEmpty)) ExploreCategory.accommodation,
+      if (controller.loadingPlaces || _visibleAttractions.isNotEmpty) ExploreCategory.attractions,
+      if (controller.loadingPlaces || _visibleRestaurants.isNotEmpty) ExploreCategory.restaurants,
+    ];
+    // Nothing matched anywhere — fall back to the full set so the normal
+    // per-section "no results" messaging still has somewhere to show up.
+    return matched.isEmpty ? ExploreCategory.values : matched;
+  }
+
+  /// The category actually driving the chip row and the body. During a
+  /// manual search this never settles on "All" — even with several
+  /// matching categories, the body always shows exactly one of them (the
+  /// previously-selected one if it's still among the matches, otherwise
+  /// the first match), never the "All" view's mixed sections. Outside a
+  /// search, the normal selected category (including "All") is used as-is.
+  ExploreCategory get _effectiveCategory {
+    final sel = controller.selectedCategory;
+    if (!controller.isManualSearch) return sel;
+    final matched = _visibleCategories.where((c) => c != ExploreCategory.all).toList();
+    if (matched.isEmpty) return sel;
+    return matched.contains(sel) ? sel : matched.first;
+  }
+
   Widget _buildCategoryChips() {
+    final categories = _visibleCategories;
     return SizedBox(
       height: 42,
       child: ListView.separated(
         padding: const EdgeInsets.symmetric(horizontal: 20),
         scrollDirection: Axis.horizontal,
-        itemCount: ExploreCategory.values.length,
+        itemCount: categories.length,
         separatorBuilder: (_, __) => const SizedBox(width: 8),
         itemBuilder: (context, index) {
-          final category = ExploreCategory.values[index];
-          final selected = category == controller.selectedCategory;
+          final category = categories[index];
+          final selected = category == _effectiveCategory;
           return GestureDetector(
             onTap: () => controller.setSelectedCategory(category),
             child: Container(
@@ -601,7 +663,7 @@ class _ExplorePageState extends State<ExplorePage> {
   }
 
   Widget _buildBody() {
-    switch (controller.selectedCategory) {
+    switch (_effectiveCategory) {
       case ExploreCategory.all:
         return _buildAllView();
       case ExploreCategory.flights:
@@ -697,10 +759,10 @@ class _ExplorePageState extends State<ExplorePage> {
           child: Stack(
             fit: StackFit.expand,
             children: [
-              Image.network(
-                controller.bannerImageUrl ?? _bannerFallbackImage,
+              CachedNetworkImage(
+                imageUrl: controller.bannerImageUrl ?? _bannerFallbackImage,
                 fit: BoxFit.cover,
-                errorBuilder: (c, e, s) => Image.network(_bannerFallbackImage, fit: BoxFit.cover),
+                errorWidget: (c, u, e) => CachedNetworkImage(imageUrl: _bannerFallbackImage, fit: BoxFit.cover),
               ),
               Container(
                 decoration: BoxDecoration(
@@ -824,7 +886,7 @@ class _ExplorePageState extends State<ExplorePage> {
   }
 
   Widget _buildFlightCompactCard(DuffelFlightOffer flight) {
-    final saved = controller.savedFlightIds.contains(flight.id);
+    final saved = controller.savedFlightIds.containsKey(flight.id);
     return GestureDetector(
       onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => _flightDetailFor(flight))),
       child: Container(
@@ -849,7 +911,7 @@ class _ExplorePageState extends State<ExplorePage> {
                       style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600, color: AppColors.navy)),
                 ),
                 GestureDetector(
-                  onTap: () => controller.saveFlightResult(flight),
+                  onTap: () => controller.toggleFlightSaved(flight),
                   child: Icon(saved ? Icons.favorite : Icons.favorite_border, size: 16, color: saved ? Colors.redAccent : AppColors.textGrey),
                 ),
               ],
@@ -874,6 +936,8 @@ class _ExplorePageState extends State<ExplorePage> {
   }
 
   DetailPageFlight _flightDetailFor(DuffelFlightOffer flight) => DetailPageFlight(
+        saved: controller.savedFlightIds.containsKey(flight.id),
+        onToggleSave: () => controller.toggleFlightSaved(flight),
         airline: flight.airlineName,
         fromCode: flight.originCode,
         fromCity: flight.originCityName,
@@ -935,7 +999,8 @@ class _ExplorePageState extends State<ExplorePage> {
       return const SizedBox(height: 200, child: Center(child: CircularProgressIndicator(color: AppColors.primary)));
     }
     if (controller.flightError != null || _visibleFlights.isEmpty) {
-      return _searchEmptyBox('No flights found — try a different search.', padded: true);
+      return _searchEmptyBox('No flights found — try a different search.',
+          padded: true, errorDetail: controller.flightError);
     }
     return ListView.separated(
       shrinkWrap: true,
@@ -948,7 +1013,7 @@ class _ExplorePageState extends State<ExplorePage> {
   }
 
   Widget _buildFlightRowCard(DuffelFlightOffer flight) {
-    final saved = controller.savedFlightIds.contains(flight.id);
+    final saved = controller.savedFlightIds.containsKey(flight.id);
     return GestureDetector(
       onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => _flightDetailFor(flight))),
       child: Container(
@@ -1004,7 +1069,7 @@ class _ExplorePageState extends State<ExplorePage> {
             ),
             const SizedBox(width: 8),
             GestureDetector(
-              onTap: () => controller.saveFlightResult(flight),
+              onTap: () => controller.toggleFlightSaved(flight),
               child: Icon(saved ? Icons.favorite : Icons.favorite_border, size: 18, color: saved ? Colors.redAccent : AppColors.textGrey),
             ),
           ],
@@ -1029,6 +1094,9 @@ class _ExplorePageState extends State<ExplorePage> {
   }
 
   DetailPageHotel _hotelDetailFor(DuffelStayResult hotel) => DetailPageHotel(
+        saved: controller.savedStayIds.containsKey(hotel.searchResultId),
+        onToggleSave: () => controller.toggleHotelSaved(hotel),
+        hotelId: hotel.accommodationId.isNotEmpty ? hotel.accommodationId : hotel.searchResultId,
         name: hotel.name,
         location: hotel.address,
         ratingLabel: hotel.reviewScore != null
@@ -1045,7 +1113,7 @@ class _ExplorePageState extends State<ExplorePage> {
       );
 
   Widget _buildHotelCompactCard(DuffelStayResult hotel) {
-    final saved = controller.savedStayIds.contains(hotel.searchResultId);
+    final saved = controller.savedStayIds.containsKey(hotel.searchResultId);
     return GestureDetector(
       onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => _hotelDetailFor(hotel))),
       child: Container(
@@ -1068,7 +1136,7 @@ class _ExplorePageState extends State<ExplorePage> {
                   top: 8,
                   right: 8,
                   child: GestureDetector(
-                    onTap: () => controller.saveHotelResult(hotel),
+                    onTap: () => controller.toggleHotelSaved(hotel),
                     child: Container(
                       padding: const EdgeInsets.all(5),
                       decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
@@ -1119,7 +1187,8 @@ class _ExplorePageState extends State<ExplorePage> {
       return const SizedBox(height: 200, child: Center(child: CircularProgressIndicator(color: AppColors.primary)));
     }
     if (controller.hotelError != null || _visibleHotels.isEmpty) {
-      return _searchEmptyBox('No hotels found — try a different search.', padded: true);
+      return _searchEmptyBox('No hotels found — try a different search.',
+          padded: true, errorDetail: controller.hotelError);
     }
     return ListView.separated(
       shrinkWrap: true,
@@ -1132,7 +1201,7 @@ class _ExplorePageState extends State<ExplorePage> {
   }
 
   Widget _buildHotelRowCard(DuffelStayResult hotel) {
-    final saved = controller.savedStayIds.contains(hotel.searchResultId);
+    final saved = controller.savedStayIds.containsKey(hotel.searchResultId);
     return GestureDetector(
       onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => _hotelDetailFor(hotel))),
       child: Container(
@@ -1180,7 +1249,7 @@ class _ExplorePageState extends State<ExplorePage> {
               ),
             ),
             GestureDetector(
-              onTap: () => controller.saveHotelResult(hotel),
+              onTap: () => controller.toggleHotelSaved(hotel),
               child: Icon(saved ? Icons.favorite : Icons.favorite_border, size: 18, color: saved ? Colors.redAccent : AppColors.textGrey),
             ),
           ],
@@ -1189,8 +1258,20 @@ class _ExplorePageState extends State<ExplorePage> {
     );
   }
 
-  Widget _searchEmptyBox(String message, {bool padded = false}) {
-    final child = Text(message, style: const TextStyle(fontSize: 12, color: AppColors.textGrey));
+  /// [errorDetail] is the real exception message (API/config failure) —
+  /// shown separately from [message] so a genuine "nothing matched" never
+  /// looks the same as a broken search that silently returned nothing.
+  Widget _searchEmptyBox(String message, {bool padded = false, String? errorDetail}) {
+    final child = errorDetail == null || errorDetail.isEmpty
+        ? Text(message, style: const TextStyle(fontSize: 12, color: AppColors.textGrey))
+        : Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(message, style: const TextStyle(fontSize: 12, color: AppColors.textGrey)),
+              const SizedBox(height: 4),
+              Text(errorDetail, style: const TextStyle(fontSize: 11, color: Colors.redAccent)),
+            ],
+          );
     return Padding(
       padding: padded ? const EdgeInsets.symmetric(horizontal: 20, vertical: 24) : const EdgeInsets.symmetric(horizontal: 20),
       child: child,
@@ -1201,24 +1282,33 @@ class _ExplorePageState extends State<ExplorePage> {
     if (url.isEmpty) {
       return Container(height: height, width: width, color: AppColors.chipGrey, child: Icon(icon, color: AppColors.textGrey, size: height * 0.35));
     }
-    return Image.network(
-      url,
+    return CachedNetworkImage(
+      imageUrl: url,
       height: height,
       width: width,
       fit: BoxFit.cover,
-      errorBuilder: (_, __, ___) =>
+      placeholder: (_, __) => Container(height: height, width: width, color: AppColors.chipGrey),
+      errorWidget: (_, __, ___) =>
           Container(height: height, width: width, color: AppColors.chipGrey, child: Icon(icon, color: AppColors.textGrey, size: height * 0.35)),
     );
   }
 
   // ================= ATTRACTIONS =================
+  // Card height: 95 (image) + 20 (padding) + ~16 (name) + 6 (gap) + ~18
+  // (price) ≈ 155, +~7 breathing room. Was 198 (sized for when this card
+  // also had a rating row, before rating got removed for attractions/
+  // restaurants since it was always the fake "New" placeholder) — left
+  // un-shrunk back then, which is why a big empty strip used to sit under
+  // the price on every card. Keep this in sync with
+  // _buildAttractionCompactCard's actual content height if that card's
+  // layout changes again.
   Widget _buildAttractionHorizontalList() {
     if (controller.loadingPlaces && _visibleAttractions.isEmpty) {
-      return const SizedBox(height: 198, child: Center(child: CircularProgressIndicator(color: AppColors.primary)));
+      return const SizedBox(height: 162, child: Center(child: CircularProgressIndicator(color: AppColors.primary)));
     }
     if (_visibleAttractions.isEmpty) return const SizedBox.shrink();
     return SizedBox(
-      height: 198,
+      height: 162,
       child: ListView.separated(
         padding: const EdgeInsets.symmetric(horizontal: 20),
         scrollDirection: Axis.horizontal,
@@ -1273,21 +1363,6 @@ class _ExplorePageState extends State<ExplorePage> {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.navy),
-                ),
-                const SizedBox(height: 6),
-                Row(
-                  children: [
-                    const Icon(Icons.star, size: 12, color: AppColors.orange),
-                    const SizedBox(width: 4),
-                    Expanded(
-                      child: Text(
-                        '${item.rating} (${item.reviews})',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 10, color: AppColors.textGrey),
-                      ),
-                    ),
-                  ],
                 ),
                 const SizedBox(height: 6),
                 Text(
@@ -1366,14 +1441,6 @@ class _ExplorePageState extends State<ExplorePage> {
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(item.category, style: const TextStyle(fontSize: 9.5, color: AppColors.textGrey)),
-                ),
-                const SizedBox(height: 6),
-                Row(
-                  children: [
-                    const Icon(Icons.star, size: 14, color: AppColors.orange),
-                    const SizedBox(width: 4),
-                    Text('${item.rating} (${item.reviews})', style: const TextStyle(fontSize: 11, color: AppColors.textGrey)),
-                  ],
                 ),
                 const SizedBox(height: 4),
                 Text(item.price, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.primary)),
@@ -1454,21 +1521,6 @@ class _ExplorePageState extends State<ExplorePage> {
               ],
             ),
             const SizedBox(height: 6),
-            Row(
-              children: [
-                const Icon(Icons.star, size: 12, color: AppColors.orange),
-                const SizedBox(width: 4),
-                Expanded(
-                  child: Text(
-                    '${item.rating} (${item.reviews})',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 10, color: AppColors.textGrey),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 6),
             Text(
               item.priceRange,
               maxLines: 1,
@@ -1521,14 +1573,6 @@ class _ExplorePageState extends State<ExplorePage> {
                 ),
                 const SizedBox(height: 6),
                 Wrap(spacing: 4, runSpacing: 4, children: item.cuisineTags.map(tagChip).toList()),
-                const SizedBox(height: 6),
-                Row(
-                  children: [
-                    const Icon(Icons.star, size: 14, color: AppColors.orange),
-                    const SizedBox(width: 4),
-                    Text('${item.rating} (${item.reviews})', style: const TextStyle(fontSize: 11, color: AppColors.textGrey)),
-                  ],
-                ),
                 const SizedBox(height: 4),
                 Text(item.location, style: const TextStyle(fontSize: 11, color: AppColors.textGrey)),
                 const SizedBox(height: 4),

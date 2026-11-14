@@ -6,8 +6,8 @@
 <title>Add Attraction — Voya Admin</title>
 <link rel="stylesheet" href="../css/tokens.css?v=20261006b" />
 <link rel="stylesheet" href="../css/base.css?v=20261006b" />
-<link rel="stylesheet" href="../css/layout.css?v=20261021" />
-<link rel="stylesheet" href="../css/components.css?v=20261021c" />
+<link rel="stylesheet" href="../css/layout.css?v=20261111a" />
+<link rel="stylesheet" href="../css/components.css?v=20261106g" />
 </head>
 <body>
 <div class="shell">
@@ -35,32 +35,36 @@
     </div>
 
     <div class="card card-pad">
+      <div id="suggestionBanner" class="card-pad" style="display:none;background:var(--teal-100);border-radius:12px;margin-bottom:18px;">
+        <p class="small" style="color:var(--navy-800);font-weight:700;margin-bottom:2px;">Completing a traveller's suggestion</p>
+        <p class="small" style="color:var(--text-700);">Name, location and photo are already filled in from what they submitted — check them, add a category, and fill in anything else before saving.</p>
+      </div>
       <div class="form-section">
         <div class="form-section-title"><span data-icon="map-pin"></span>Basic info</div>
         <div class="form-grid">
           <div class="field" style="grid-column:1/-1;">
-            <label>Name</label>
+            <label>Name <span class="req">*</span></label>
             <div style="display:flex;gap:8px;">
               <input class="input" id="fName" placeholder="e.g. Senso-ji Temple — or just type a place/location to search" style="flex:1;" />
               <button type="button" class="btn btn-outline btn-icon" id="osmFindBtn" title="Find on OpenStreetMap and auto-fill the fields below">
                 <span data-icon="search" data-icon-size="16"></span>
               </button>
             </div>
-            <p class="hint" id="osmFindStatus">Type a name or a location, then click the search button to auto-fill the fields below from OpenStreetMap. You can still edit anything afterwards.</p>
+            <p class="hint" id="osmFindStatus">Not sure about every detail? Type the name or area above and tap search — we'll pull in what OpenStreetMap already knows, so you only need to fill in the gaps.</p>
           </div>
-          <div class="field"><label>Primary category</label><input class="input" id="fCategory" placeholder="e.g. Cultural" /></div>
           <div class="field">
             <label>Status</label>
-            <select class="select" id="fStatus"><option value="active">Active</option><option value="pending">Pending</option><option value="suspended">Suspended</option></select>
+            <select class="select" id="fStatus"><option value="active">Active</option><option value="inactive">Inactive</option></select>
           </div>
           <div class="field" style="grid-column:1/-1;">
-            <label>Additional category tags</label>
-            <div class="tag-input-box" id="categoriesBox"><input placeholder="Type a tag and press Enter…" /></div>
-            <p class="hint">Shown as extra chips on the attraction's detail page (e.g. "Historic Site", "Temple").</p>
+            <label>Category <span class="req">*</span></label>
+            <div class="chip-picker" id="categoriesBox"></div>
+            <p class="hint">These power the category filters on Explore, not just decoration — pick every one that genuinely fits so travellers searching by type actually find this place.</p>
           </div>
-          <div class="field"><label>Location</label><input class="input" id="fLocation" placeholder="e.g. Asakusa, Tokyo" /></div>
+          <div class="field"><label>Location <span class="req">*</span></label><input class="input" id="fLocation" placeholder="e.g. Asakusa, Tokyo" /></div>
           <div class="field"><label>Recommended duration</label><input class="input" id="fDuration" placeholder="e.g. 1 - 2 hours" /></div>
           <div class="field" style="grid-column:1/-1;"><label>Full address</label><input class="input" id="fAddress" placeholder="Full street address" /></div>
+          <div class="field" style="grid-column:1/-1;"><label>Description</label><textarea class="input" id="fDescription" rows="3" placeholder="A short description shown as the attraction's About text"></textarea></div>
         </div>
       </div>
 
@@ -68,7 +72,7 @@
         <div class="form-section-title"><span data-icon="upload"></span>Photos</div>
         <div class="image-upload-grid" id="imageGrid"></div>
         <input type="file" id="imageFileInput" accept="image/jpeg,image/png,image/webp" multiple style="display:none;" />
-        <p class="hint">Click the star to set the cover photo shown on Explore. First photo added becomes the cover automatically.</p>
+        <p class="hint">Tap the star to choose the cover photo — whichever you add first becomes the cover automatically, and you can change it anytime.</p>
       </div>
 
       <div class="form-section">
@@ -94,19 +98,20 @@
         <div class="form-grid">
           <div class="field"><label>Phone</label><input class="input" id="fPhone" placeholder="e.g. +81 3-3842-0181" /></div>
           <div class="field"><label>Website</label><input class="input" id="fWebsite" placeholder="https://…" /></div>
-          <div class="field"><label>Rating</label><input class="input" id="fRating" placeholder="e.g. 4.7" /></div>
-          <div class="field"><label>Reviews</label><input class="input" id="fReviews" placeholder="e.g. 3.4k" /></div>
         </div>
+        <p class="hint">Ratings and reviews aren't entered here — they show up automatically once travellers start reviewing this place.</p>
       </div>
 
       <div class="form-section">
         <div class="form-section-title"><span data-icon="check-circle"></span>Facilities</div>
-        <div class="tag-input-box" id="facilitiesBox"><input placeholder="e.g. Public Toilet, then press Enter…" /></div>
+        <div class="chip-picker" id="facilitiesBox"></div>
+        <p class="hint">Only tick what you've actually confirmed is on-site. This list is shown as a checklist on the attraction's page, and travellers rely on it to judge things like wheelchair access or parking before they go — a wrong tick is worse than a blank one.</p>
       </div>
 
       <div class="form-section">
         <div class="form-section-title"><span data-icon="sparkle"></span>Highlights</div>
         <div class="tag-input-box" id="highlightsBox"><input placeholder="e.g. Iconic Kaminarimon Thunder Gate, then press Enter…" /></div>
+        <p class="hint">A few specific reasons to visit — a famous photo spot, a must-see exhibit, anything that makes this place stand out. Type one and press Enter to add it.</p>
       </div>
 
       <div class="form-actions">
@@ -118,23 +123,57 @@
 </div>
 
 <script type="module">
-import { requireRole } from "../js/auth-guard.js?v=20261021";
-import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261021";
-import { mountIcons } from "../js/icons.js?v=20261021";
+import { requireRole } from "../js/auth-guard.js?v=20261106b";
+import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261114a";
+import { mountIcons } from "../js/icons.js?v=20261106c";
 import {
   getAttraction, newAttractionRef, createAttraction, updateAttraction,
-  uploadAttractionImage, deleteAttractionImage,
-} from "../js/data.js?v=20261021";
-import { escapeHtml, toast, setBusy } from "../js/ui.js?v=20261021";
-import { findAndFillFromOsm, hasApiKey } from "../js/places-import.js?v=20261007";
+  uploadAttractionImage, deleteAttractionImage, markPlaceSuggestionAdded,
+  getTagPresets, addTagPreset, listAttractions,
+} from "../js/data.js?v=20261114c";
+import { escapeHtml, toast, setBusy, isValidImageFile, confirmDialog } from "../js/ui.js?v=20261113a";
+import { findAndFillFromOsm, hasApiKey } from "../js/places-import.js?v=20261106f";
 
 mountSidebarNav({ role: "admin", active: "attractions" });
 const session = await requireRole("admin", "login.html");
 const editingId = new URLSearchParams(location.search).get("id");
+// Set when this page was opened from Content Moderation's Place
+// Suggestions tab ("Add as Attraction") — see applySuggestionPrefill()
+// below and the save handler's markPlaceSuggestionAdded() call, which is
+// what actually closes out the suggestion once this new attraction is
+// saved (not before — backing out of this form leaves it pending).
+let suggestionId = null;
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 let categoriesTag, facilitiesTag, highlightsTag;
 let osmSourcePlaceId = null;
 let osmSource = null;
+// Hoisted up from right before wireImagePicker()'s definition — populateForm()
+// (called from the bootstrap block below) calls resetImages(), which touches
+// these immediately, and `let` bindings aren't initialized until their own
+// declaration line runs. Declaring them textually later threw "Cannot access
+// 'imageItems' before initialization" on every single page load (add AND
+// edit), which aborted the rest of this module's top-level execution —
+// including the saveBtn click listener near the bottom of the file, so
+// "Save attraction" silently had no handler at all.
+let imageItems = []; // { id, kind: 'existing'|'new', url?, file?, previewUrl? }
+let coverId = null;
+let nextImageId = 1;
+let removedExistingUrls = [];
+// Hoisted for the same reason as imageItems/coverId above: populateForm()
+// (called from the bootstrap block right below) builds the category/
+// facility pickers immediately, which needs these preset lists already
+// initialized — declaring them later (textually, next to mountPresetPicker)
+// threw the exact same "Cannot access before initialization" TDZ error.
+const CATEGORY_TAG_PRESETS = [
+  "Historic Site", "Temple", "Shrine", "Museum", "Art & Culture", "Viewpoint",
+  "Garden", "Park", "Nature Reserve", "Zoo", "Aquarium", "Theme Park",
+  "Shopping Mall", "Market", "Landmark", "Beach", "Religious Site", "Monument",
+];
+const FACILITY_PRESETS = [
+  "Parking", "Toilets", "Wheelchair Accessible", "Guided Tours", "Gift Shop",
+  "Café On-site", "Audio Guide", "Free Wi-Fi", "Locker", "First Aid", "ATM",
+  "Baby Changing Room", "Prayer Room",
+];
 
 if (session) {
   setSidebarUser({ displayName: session.profile.name || "Admin", roleLabel: "Administrator" });
@@ -153,6 +192,7 @@ if (session) {
     }
   } else {
     populateForm(null);
+    applySuggestionPrefill();
   }
 }
 
@@ -192,6 +232,97 @@ function mountTagInput(boxId, initialTags = []) {
 
   render();
   return { getTags: () => tags, setTags: (next) => { tags = [...next]; render(); } };
+}
+
+// Fills Name/Location/a cover photo from a traveller's "Report New
+// Attraction" submission (see Content Moderation's Place Suggestions
+// tab) — only the fields that submission actually has. Everything else
+// (category, facilities, hours, fees…) is left for the admin to fill in
+// normally, same as a blank new attraction.
+function applySuggestionPrefill() {
+  const params = new URLSearchParams(location.search);
+  if (params.get("fromSuggestion") !== "1") return;
+  let prefill = null;
+  try {
+    prefill = JSON.parse(sessionStorage.getItem("voya_suggestion_prefill") || "null");
+  } catch (e) { /* malformed/missing — just skip prefilling */ }
+  sessionStorage.removeItem("voya_suggestion_prefill");
+  if (!prefill?.reportId) return;
+  suggestionId = prefill.reportId;
+  if (prefill.name) document.getElementById("fName").value = prefill.name;
+  if (prefill.location) document.getElementById("fLocation").value = prefill.location;
+  if (prefill.description) document.getElementById("fDescription").value = prefill.description;
+  if (prefill.photoUrl) {
+    const id = nextImageId++;
+    imageItems.push({ id, kind: "existing", url: prefill.photoUrl });
+    if (!coverId) coverId = id;
+    renderImages();
+  }
+  document.getElementById("suggestionBanner").style.display = "block";
+}
+
+// Preset chip-picker (click to toggle) — for categories/facilities, where
+// the admin should pick from a known, consistent set instead of typing
+// free text that drifts ("Toilet" vs "toilets" vs "Public Restroom"). A
+// legacy tag outside the preset list is kept (appended) so editing an
+// older attraction never silently drops data. On top of the hardcoded
+// starter list, this also loads whatever extra tags admins have added
+// before (tag_presets/{firestoreKey}) and lets the admin add a brand new
+// one through the dashed "+ add" box at the end — typed once, saved to
+// that same doc, and from then on it's a normal clickable option for
+// every future attraction too, not just this one (same pattern as
+// restaurant-form.html's mountCuisinePicker — Nov 2026). Highlights stays
+// free-text below (mountTagInput) since highlights are inherently
+// specific to each place.
+function mountPresetPicker(boxId, presets, initialTags = [], firestoreKey = null) {
+  const box = document.getElementById(boxId);
+  const options = [...presets];
+  initialTags.forEach((t) => { if (!options.includes(t)) options.push(t); });
+  let selected = new Set(initialTags);
+
+  function render() {
+    box.innerHTML = options
+      .map((opt) => `<button type="button" class="chip-toggle${selected.has(opt) ? " active" : ""}" data-tag="${escapeHtml(opt)}">${escapeHtml(opt)}</button>`)
+      .join("") + (firestoreKey ? `<span class="chip-picker-add"><input placeholder="+ Add a new tag…" /></span>` : "");
+    box.querySelectorAll(".chip-toggle").forEach((btn) =>
+      btn.addEventListener("click", () => {
+        const tag = btn.dataset.tag;
+        if (selected.has(tag)) selected.delete(tag); else selected.add(tag);
+        render();
+      })
+    );
+    if (!firestoreKey) return;
+    const addInput = box.querySelector(".chip-picker-add input");
+    addInput.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter") return;
+      e.preventDefault();
+      const value = addInput.value.trim();
+      if (!value) return;
+      if (!options.includes(value)) {
+        options.push(value);
+        addTagPreset(firestoreKey, value);
+      }
+      selected.add(value);
+      render();
+    });
+  }
+
+  render();
+  if (firestoreKey) {
+    getTagPresets(firestoreKey).then((stored) => {
+      let changed = false;
+      stored.forEach((t) => { if (!options.includes(t)) { options.push(t); changed = true; } });
+      if (changed) render();
+    });
+  }
+  return {
+    getTags: () => options.filter((o) => selected.has(o)),
+    setTags: (next) => {
+      next.forEach((t) => { if (!options.includes(t)) options.push(t); });
+      selected = new Set(next);
+      render();
+    },
+  };
 }
 
 // ==================== Opening hours ====================
@@ -250,20 +381,21 @@ function readHours() {
 }
 
 // ==================== Images (existing URLs + newly-picked files) ====================
-let imageItems = []; // { id, kind: 'existing'|'new', url?, file?, previewUrl? }
-let coverId = null;
-let nextImageId = 1;
-let removedExistingUrls = [];
-
+// (imageItems/coverId/nextImageId/removedExistingUrls are now declared up
+// top, before the bootstrap block that needs them — see the comment there.)
 function wireImagePicker() {
   document.getElementById("imageFileInput").addEventListener("change", (e) => {
     const files = Array.from(e.target.files || []);
+    let firstRejection = "";
     files.forEach((file) => {
+      const check = isValidImageFile(file);
+      if (!check.ok) { firstRejection = firstRejection || check.reason; return; }
       const id = nextImageId++;
       const previewUrl = URL.createObjectURL(file);
       imageItems.push({ id, kind: "new", file, previewUrl });
       if (!coverId) coverId = id;
     });
+    if (firstRejection) toast(firstRejection, "error");
     e.target.value = "";
     renderImages();
   });
@@ -388,13 +520,13 @@ function wireOsmFind() {
 
 function applyOsmResult(result) {
   if (result.name) document.getElementById("fName").value = result.name;
-  if (result.category) {
-    document.getElementById("fCategory").value = result.category;
-    const extra = (result.categories || []).filter((c) => c !== result.category);
-    categoriesTag.setTags([...new Set([...categoriesTag.getTags(), ...extra])]);
+  if (result.category || result.categories?.length) {
+    const incoming = [result.category, ...(result.categories || [])].filter(Boolean);
+    categoriesTag.setTags([...new Set([...categoriesTag.getTags(), ...incoming])]);
   }
   if (result.location) document.getElementById("fLocation").value = result.location;
   if (result.address) document.getElementById("fAddress").value = result.address;
+  if (result.description) document.getElementById("fDescription").value = result.description;
   if (result.phone) document.getElementById("fPhone").value = result.phone;
   if (result.website) document.getElementById("fWebsite").value = result.website;
   if (result.openingHours) {
@@ -421,21 +553,23 @@ function applyOsmResult(result) {
 // ==================== Populate / save ====================
 function populateForm(a) {
   document.getElementById("fName").value = a?.name || "";
-  document.getElementById("fCategory").value = a?.category || "";
   document.getElementById("fLocation").value = a?.location || "";
   document.getElementById("fDuration").value = a?.recommendedDuration || "";
   document.getElementById("fAddress").value = a?.address || "";
+  document.getElementById("fDescription").value = a?.description || "";
   document.getElementById("fPhone").value = a?.phone || "";
   document.getElementById("fWebsite").value = a?.website || "";
-  document.getElementById("fRating").value = a?.rating || "";
-  document.getElementById("fReviews").value = a?.reviews || "";
   document.getElementById("fStatus").value = a?.status || "active";
   osmSourcePlaceId = a?.sourcePlaceId || null;
   osmSource = a?.source || null;
 
-  const extraCategories = (a?.categories || []).filter((c) => c !== (a?.category || ""));
-  categoriesTag = mountTagInput("categoriesBox", extraCategories);
-  facilitiesTag = mountTagInput("facilitiesBox", a?.facilities || []);
+  // Merges the legacy single `category` field into the picker's initial
+  // selection too (in case an older record's `categories` array somehow
+  // doesn't already include it) — editing an old attraction should never
+  // silently lose its category.
+  const allCategories = [...new Set([a?.category, ...(a?.categories || [])].filter(Boolean))];
+  categoriesTag = mountPresetPicker("categoriesBox", CATEGORY_TAG_PRESETS, allCategories, "attraction_category");
+  facilitiesTag = mountPresetPicker("facilitiesBox", FACILITY_PRESETS, a?.facilities || [], "attraction_facility");
   highlightsTag = mountTagInput("highlightsBox", a?.highlights || []);
 
   setFeeFields(a);
@@ -443,11 +577,56 @@ function populateForm(a) {
   resetImages(a);
 }
 
+// Normalizes name/location for a loose, case/whitespace-insensitive
+// comparison — "Senso-ji Temple" / " senso-ji temple " should still count
+// as the same place.
+function normalizeForDupeCheck(s) {
+  return (s || "").trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+async function findDuplicateAttraction(name, locationValue) {
+  const nName = normalizeForDupeCheck(name);
+  const nLoc = normalizeForDupeCheck(locationValue);
+  if (!nName || !nLoc) return null;
+  let all;
+  try {
+    all = await listAttractions();
+  } catch (e) {
+    console.warn("Couldn't check for duplicate attractions:", e.message);
+    return null; // never block saving just because the duplicate check itself failed
+  }
+  return all.find((a) => a.id !== editingId && normalizeForDupeCheck(a.name) === nName && normalizeForDupeCheck(a.location) === nLoc) || null;
+}
+
 document.getElementById("saveBtn").addEventListener("click", async () => {
   const name = document.getElementById("fName").value.trim();
-  const category = document.getElementById("fCategory").value.trim();
   if (!name) { toast("Name is required.", "error"); return; }
-  if (!category) { toast("Primary category is required.", "error"); return; }
+  const pickedCategories = categoriesTag.getTags();
+  if (!pickedCategories.length) { toast("Pick at least one category.", "error"); return; }
+  // The first picked tag doubles as the single `category` field a lot of
+  // the app still reads directly (attraction cards, chat context, etc.) —
+  // see mountPresetPicker's render(), which always lists tags in a fixed
+  // preset order, so this is deterministic even though the UI itself is
+  // a plain multi-select with no separate "primary" concept anymore.
+  const category = pickedCategories[0];
+  const locationValue = document.getElementById("fLocation").value.trim();
+  if (!locationValue) { toast("Location is required.", "error"); return; }
+
+  // Same name + same location already exists elsewhere in the catalogue —
+  // almost always an accidental double entry (re-adding a suggestion that
+  // was already added, OSM search pulling in something already catalogued,
+  // etc.), so warn and let the admin confirm rather than silently creating
+  // a duplicate attraction card in Explore.
+  const dup = await findDuplicateAttraction(name, locationValue);
+  if (dup) {
+    const proceed = await confirmDialog({
+      title: "This looks like a duplicate",
+      body: `"${dup.name}" already exists at "${dup.location}". Save this one anyway?`,
+      confirmText: "Save anyway",
+      danger: true,
+    });
+    if (!proceed) return;
+  }
 
   const btn = document.getElementById("saveBtn");
   setBusy(btn, true, "Saving…");
@@ -458,20 +637,18 @@ document.getElementById("saveBtn").addEventListener("click", async () => {
     const { images, image } = await resolveImages(attractionId);
     const { price, fees } = readFees();
     const { openingHours, openingHoursByDay } = readHours();
-    const extraCategories = categoriesTag.getTags();
 
     const data = {
       name,
       category,
-      categories: [category, ...extraCategories.filter((c) => c !== category)],
-      location: document.getElementById("fLocation").value.trim(),
+      categories: pickedCategories,
+      location: locationValue,
       address: document.getElementById("fAddress").value.trim(),
       recommendedDuration: document.getElementById("fDuration").value.trim(),
       phone: document.getElementById("fPhone").value.trim(),
       website: document.getElementById("fWebsite").value.trim(),
-      rating: document.getElementById("fRating").value.trim() || "0",
-      reviews: document.getElementById("fReviews").value.trim() || "0",
       status: document.getElementById("fStatus").value,
+      description: document.getElementById("fDescription").value.trim(),
       price, fees,
       openingHours, openingHoursByDay,
       images, image,
@@ -483,8 +660,17 @@ document.getElementById("saveBtn").addEventListener("click", async () => {
       data.source = osmSource || "Geoapify";
     }
 
-    if (editingId) await updateAttraction(editingId, data);
-    else await createAttraction(ref, data);
+    if (editingId) {
+      await updateAttraction(editingId, data);
+    } else {
+      await createAttraction(ref, data);
+      if (suggestionId) {
+        // Best-effort: the attraction is already saved either way, so a
+        // failure here (e.g. the suggestion was deleted in the meantime)
+        // should never block the admin from moving on.
+        markPlaceSuggestionAdded(suggestionId, { collection: "catalog_attractions", docId: attractionId }).catch((e) => console.warn("Couldn't mark suggestion as added:", e.message));
+      }
+    }
 
     toast("Attraction saved — this is live in the app's Explore catalogue.", "success");
     location.href = "attractions.html";

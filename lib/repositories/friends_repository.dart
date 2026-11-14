@@ -30,14 +30,21 @@ class FriendsRepository {
   CollectionReference<Map<String, dynamic>> get _requests => FirebaseFirestore.instance.collection('friendRequests');
   String _reqId(String fromUid, String toUid) => '${fromUid}_$toUid';
 
-  List<FriendEntry> _toEntries(QuerySnapshot<Map<String, dynamic>> snap) =>
-      snap.docs.map((d) => FriendEntry(uid: d.id, name: (d.data()['name'] as String?) ?? '')).toList();
+  // Defensive: a friend/blocked list must never contain the viewer's own
+  // uid. Normal writes (sendFriendRequest's isSelf guard, respondToFriendRequest)
+  // never add self, but this filters out any stray self-entry regardless of
+  // how it got into Firestore, so the UI can never show "yourself" as your
+  // own friend or as a pickable traveller candidate.
+  List<FriendEntry> _toEntries(QuerySnapshot<Map<String, dynamic>> snap, {String? excludeUid}) => snap.docs
+      .where((d) => d.id != excludeUid)
+      .map((d) => FriendEntry(uid: d.id, name: (d.data()['name'] as String?) ?? ''))
+      .toList();
 
   Stream<List<FriendEntry>> watchFriends(String uid) =>
-      _friendsOf(uid).orderBy('name').snapshots().map(_toEntries);
+      _friendsOf(uid).orderBy('name').snapshots().map((snap) => _toEntries(snap, excludeUid: uid));
 
   Stream<List<FriendEntry>> watchBlocked(String uid) =>
-      _blockedOf(uid).orderBy('name').snapshots().map(_toEntries);
+      _blockedOf(uid).orderBy('name').snapshots().map((snap) => _toEntries(snap, excludeUid: uid));
 
   Stream<Set<String>> watchBlockedIds(String uid) =>
       _blockedOf(uid).snapshots().map((snap) => snap.docs.map((d) => d.id).toSet());

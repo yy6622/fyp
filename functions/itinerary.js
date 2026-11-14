@@ -45,6 +45,11 @@ async function loadSavedPlaces(db, tripId, memberIds) {
   return saved.sort((a, b) => a.name.localeCompare(b.name)).slice(0, MAX_SAVED);
 }
 
+async function loadVotes(db, tripId) {
+  const snap = await db.collection("trips").doc(tripId).collection("votes").get();
+  return snap.docs.map((d) => d.data());
+}
+
 async function loadSavedHotels(db, tripId, memberIds) {
   const keys = memberIds.map((uid) => `${uid}#${tripId}`);
   const queries = [];
@@ -84,9 +89,9 @@ exports.loadCatalogPlaces = loadCatalogPlaces;
 
 
 function buildPrompt({ messages, members, days, plan, saved, catalog, model, destination, window,
-  hasHotel, flights, hotelStays, savedHotels, lookupNeed, decisions, foodPreference, accommodation }) {
+  hasHotel, flights, hotelStays, savedHotels, lookupNeed, decisions, foodPreference, accommodation, votes, interests }) {
   return { messages, members, days, plan, saved, catalog, model, destination, window,
-    hasHotel, flights, hotelStays, savedHotels, lookupNeed, decisions, foodPreference, accommodation };
+    hasHotel, flights, hotelStays, savedHotels, lookupNeed, decisions, foodPreference, accommodation, votes, interests };
 }
 
 async function submitAndParse(prompt, dayCount) {
@@ -118,7 +123,7 @@ exports.generateItinerary = onCall({ timeoutSeconds: 120, memory: "512MiB" }, as
   if (dayKeys.length === 0) throw new HttpsError("failed-precondition", "This trip has no days yet.");
 
   // Step 2: retrieve.
-  const [msgSnap, saved, catalog, savedHotels] = await Promise.all([
+  const [msgSnap, saved, catalog, savedHotels, votes] = await Promise.all([
     tripRef.collection("messages").orderBy("createdAt", "desc").limit(MAX_MESSAGES).get(),
     loadSavedPlaces(db, tripId, trip.memberIds).catch((err) => {
       console.error("generateItinerary could not read saved places", err);
@@ -126,6 +131,10 @@ exports.generateItinerary = onCall({ timeoutSeconds: 120, memory: "512MiB" }, as
     }),
     loadCatalogPlaces(db, trip.destination),
     loadSavedHotels(db, tripId, trip.memberIds).catch(() => []),
+    loadVotes(db, tripId).catch((err) => {
+      console.error("generateItinerary could not read votes", err);
+      return [];
+    }),
   ]);
   const messages = msgSnap.docs
     .map((d) => ({ id: d.id, ...d.data() }))
@@ -164,6 +173,13 @@ exports.generateItinerary = onCall({ timeoutSeconds: 120, memory: "512MiB" }, as
     decisions: trip.discussionDecisions || null,
     foodPreference: trip.foodPreference || "",
     accommodation: trip.accommodation || "",
+    // Trip-creation interest points (Beach/City/Nature/Adventure/Culture/
+    // Shopping/Nightlife/Relaxation/Food) -- see planner/needs.js's
+    // matchesInterests for how buildItinerary uses these as a tiebreaker
+    // among candidates that already fit something actually discussed in
+    // chat. Never overwrites or invents a need on its own.
+    interests: Array.isArray(trip.interests) ? trip.interests : [],
+    votes,
   };
 
   let built;

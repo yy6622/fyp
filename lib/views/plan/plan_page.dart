@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 import '../../controllers/group_trip_controller.dart';
 import '../../controllers/plan_page_controller.dart';
@@ -59,7 +60,7 @@ class _PlanPageState extends State<PlanPage> {
               ] else if (controller.selectedTab == PlanTab.voting)
                 _buildVotingEmptyState(),
               if (controller.showOwe) ...[
-                controller.selectedTab == PlanTab.expenses ? _buildExpensesTotalCard() : _buildOweCard(),
+                _buildExpensesTotalCard(),
                 const SizedBox(height: 20),
               ],
               if (controller.showGroups) ...[
@@ -307,12 +308,13 @@ class _PlanPageState extends State<PlanPage> {
         children: [
           ClipRRect(
             borderRadius: BorderRadius.circular(16),
-            child: Image.network(
-              item.image,
+            child: CachedNetworkImage(
+              imageUrl: item.image,
               height: 150,
               width: 130,
               fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => Container(
+              placeholder: (_, __) => Container(height: 150, width: 130, color: AppColors.chipGrey),
+              errorWidget: (_, __, ___) => Container(
                 height: 150,
                 width: 130,
                 color: AppColors.chipGrey,
@@ -422,12 +424,13 @@ class _PlanPageState extends State<PlanPage> {
           children: [
             ClipRRect(
               borderRadius: BorderRadius.circular(12),
-              child: Image.network(
-                item.image,
+              child: CachedNetworkImage(
+                imageUrl: item.image,
                 width: 56,
                 height: 56,
                 fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => Container(
+                placeholder: (_, __) => Container(width: 56, height: 56, color: AppColors.chipGrey),
+                errorWidget: (_, __, ___) => Container(
                   width: 56,
                   height: 56,
                   color: AppColors.chipGrey,
@@ -495,52 +498,6 @@ class _PlanPageState extends State<PlanPage> {
       MaterialPageRoute(
         settings: const RouteSettings(name: GroupTripPage.routeName),
         builder: (_) => GroupTripPage(tripId: tripId, initialTab: tab),
-      ),
-    );
-  }
-
-  // ---------------- Owe card ----------------
-  Widget _buildOweCard() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: AppColors.chipGrey,
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-              child: const Icon(Icons.account_balance_wallet_outlined, color: AppColors.primary, size: 20),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'You owe RM ${controller.totalYouOwe.toStringAsFixed(2)} in ${controller.groupsWithBalance} group${controller.groupsWithBalance == 1 ? '' : 's'}',
-                    style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: AppColors.navy),
-                  ),
-                  const SizedBox(height: 2),
-                  const Text('Tap Expenses below to settle up', style: TextStyle(fontSize: 10.5, color: AppColors.textGrey)),
-                ],
-              ),
-            ),
-            GestureDetector(
-              onTap: () => controller.setSelectedTab(PlanTab.expenses),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
-                decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(20)),
-                child: const Text('View', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -766,6 +723,10 @@ class _PlanPageState extends State<PlanPage> {
   }
 
   Widget _buildPastSection() {
+    // Voting tab is scoped to polls only — past (closed-trip) plan group
+    // cards don't belong there, so this whole collapsible section is
+    // skipped entirely on that tab (still shown on All/Plan/Expenses).
+    if (controller.selectedTab == PlanTab.voting) return const SizedBox.shrink();
     final pastGroups = controller.pastPlanGroups;
     final pastVotes = controller.showVoting ? controller.pastVotingItems : const <VotingItem>[];
     final count = pastGroups.length + pastVotes.length;

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 import '../../controllers/saved_items_controller.dart';
 import '../../repositories/catalog_repository.dart';
@@ -44,13 +45,12 @@ class _SavedItemsPageState extends State<SavedItemsPage> {
           children: [
             Row(
               children: [
-                Expanded(child: _tabButton('Flights', _SavedTab.flights)),
-                Expanded(child: _tabButton('Hotels', _SavedTab.hotels)),
-                Expanded(child: _tabButton('Attractions', _SavedTab.attractions)),
-                Expanded(child: _tabButton('Food', _SavedTab.restaurants)),
+                _tabButton('Flights', _SavedTab.flights),
+                _tabButton('Hotels', _SavedTab.hotels),
+                _tabButton('Attractions', _SavedTab.attractions),
+                _tabButton('Restaurant', _SavedTab.restaurants),
               ],
             ),
-            const Divider(height: 1, color: Color(0xFFECECEC)),
             Expanded(child: _buildBody()),
           ],
         ),
@@ -58,15 +58,36 @@ class _SavedItemsPageState extends State<SavedItemsPage> {
     );
   }
 
+  // Text-only tabs (no icon) -- same bar still used on the group trip
+  // page's Plan/Chat/Expenses/Vote tabs (see group_trip_page.dart's own
+  // _tabButton) has room for an icon next to a short label, but
+  // "Attractions"/"Restaurant" next to an icon in a quarter-width tab
+  // here just got cramped, so this one drops the icon and keeps the
+  // white background, rounded bottom corners, and 2px primary underline
+  // on the selected tab.
   Widget _tabButton(String label, _SavedTab tab) {
     final selected = _tab == tab;
-    return GestureDetector(
-      onTap: () => setState(() => _tab = tab),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        decoration: BoxDecoration(border: Border(bottom: BorderSide(color: selected ? AppColors.primary : Colors.transparent, width: 2))),
-        alignment: Alignment.center,
-        child: Text(label, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: selected ? AppColors.primary : AppColors.textGrey)),
+    return Expanded(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 3),
+        child: GestureDetector(
+          onTap: () => setState(() => _tab = tab),
+          child: Container(
+            height: 50,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: const BorderRadius.only(bottomLeft: Radius.circular(10), bottomRight: Radius.circular(10)),
+              border: Border(bottom: BorderSide(color: selected ? AppColors.primary : Colors.white, width: 2)),
+            ),
+            child: Text(
+              label,
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
+              style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: selected ? AppColors.primary : AppColors.textGrey),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -125,12 +146,13 @@ class _SavedItemsPageState extends State<SavedItemsPage> {
     if (url.isEmpty) {
       return Container(width: 56, height: 56, color: AppColors.chipGrey, child: Icon(icon, color: AppColors.textGrey, size: 22));
     }
-    return Image.network(
-      url,
+    return CachedNetworkImage(
+      imageUrl: url,
       width: 56,
       height: 56,
       fit: BoxFit.cover,
-      errorBuilder: (_, __, ___) => Container(width: 56, height: 56, color: AppColors.chipGrey, child: Icon(icon, color: AppColors.textGrey, size: 22)),
+      placeholder: (_, __) => Container(width: 56, height: 56, color: AppColors.chipGrey),
+      errorWidget: (_, __, ___) => Container(width: 56, height: 56, color: AppColors.chipGrey, child: Icon(icon, color: AppColors.textGrey, size: 22)),
     );
   }
 

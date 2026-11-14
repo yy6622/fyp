@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 import '../../models/group_models.dart';
 import '../../repositories/friends_repository.dart';
@@ -46,12 +47,12 @@ class GroupInfoPage extends StatelessWidget {
                         alignment: Alignment.topCenter,
                         child: trip.coverImage.isEmpty
                             ? AppImage('assets/images/adventure_bg.jpg', height: 190, width: double.infinity, fit: BoxFit.cover)
-                            : Image.network(
-                                trip.coverImage,
+                            : CachedNetworkImage(
+                                imageUrl: trip.coverImage,
                                 height: 190,
                                 width: double.infinity,
                                 fit: BoxFit.cover,
-                                errorBuilder: (_, __, ___) =>
+                                errorWidget: (_, __, ___) =>
                                     AppImage('assets/images/adventure_bg.jpg', height: 190, width: double.infinity, fit: BoxFit.cover),
                               ),
                       ),

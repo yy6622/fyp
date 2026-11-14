@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../models/review_models.dart';
@@ -72,13 +73,13 @@ class DetailHeader extends StatelessWidget {
       );
     }
     if (imageUrl != null && imageUrl!.isNotEmpty) {
-      return Image.network(
-        imageUrl!,
+      return CachedNetworkImage(
+        imageUrl: imageUrl!,
         height: 160,
         width: double.infinity,
         fit: BoxFit.cover,
-        loadingBuilder: (context, child, progress) => progress == null ? child : _fallbackBox(),
-        errorBuilder: (_, __, ___) => _fallbackBox(),
+        placeholder: (_, __) => _fallbackBox(),
+        errorWidget: (_, __, ___) => _fallbackBox(),
       );
     }
     return _fallbackBox();
@@ -155,6 +156,8 @@ class BookingBar extends StatelessWidget {
   final DateTime? checkIn;
   final DateTime? checkOut;
   final Future<void> Function(BookingConfirmation confirmation)? onPaid;
+  final bool saved;
+  final VoidCallback? onToggleSave;
   const BookingBar({
     super.key,
     required this.price,
@@ -168,6 +171,8 @@ class BookingBar extends StatelessWidget {
     this.checkIn,
     this.checkOut,
     this.onPaid,
+    this.saved = false,
+    this.onToggleSave,
   });
 
   @override
@@ -189,6 +194,10 @@ class BookingBar extends StatelessWidget {
               ],
             ),
           ),
+          if (onToggleSave != null) ...[
+            SaveHeartBox(saved: saved, onTap: onToggleSave),
+            const SizedBox(width: 10),
+          ],
           ElevatedButton(
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primary,
@@ -232,6 +241,37 @@ class BookingBar extends StatelessWidget {
             child: Text(buttonLabel, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// A small icon-only "save to favourites" control: a grey rounded box with
+/// a heart outline, filled red once saved. Used in the bottom action bar of
+/// every catalog detail page (flight, hotel, attraction, restaurant) instead
+/// of a big labelled button, so the bar stays focused on one primary action.
+class SaveHeartBox extends StatelessWidget {
+  final bool saved;
+  final VoidCallback? onTap;
+  const SaveHeartBox({super.key, required this.saved, this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 52,
+        height: 52,
+        decoration: BoxDecoration(
+          color: AppColors.chipGrey,
+          borderRadius: BorderRadius.circular(14),
+        ),
+        alignment: Alignment.center,
+        child: Icon(
+          saved ? Icons.favorite : Icons.favorite_border,
+          size: 22,
+          color: saved ? Colors.redAccent : AppColors.textGrey,
+        ),
       ),
     );
   }

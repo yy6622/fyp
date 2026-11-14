@@ -148,6 +148,14 @@ class RestaurantData {
   final String description;
   final double? lat;
   final double? lng;
+
+  /// Straight-line km from the destination's geocoded center, computed
+  /// once at OSM-import time (CatalogRepository._refreshRestaurantsFromOsm)
+  /// — same field/units as AttractionData.distanceKm, added so
+  /// RestaurantRecommendation.distanceScore has a real signal instead of
+  /// always falling back to neutral.
+  final double? distanceKm;
+
   const RestaurantData({
     required this.name,
     required this.cuisineTags,
@@ -163,6 +171,7 @@ class RestaurantData {
     this.description = '',
     this.lat,
     this.lng,
+    this.distanceKm,
   });
 
   String get cuisineLabel => cuisineTags.join(' ');

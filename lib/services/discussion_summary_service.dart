@@ -1,6 +1,8 @@
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/foundation.dart';
 
+import 'vote_resolution_service.dart';
+
 class DiscussionDecision {
   /// confirmed / rejected / split / voting
   final String status;
@@ -8,7 +10,9 @@ class DiscussionDecision {
 
   final List<String> memberNames;
   final String voteTitle;
-  const DiscussionDecision({required this.status, required this.byName, required this.memberNames, required this.voteTitle});
+  final String voteId;
+  const DiscussionDecision(
+      {required this.status, required this.byName, required this.memberNames, required this.voteTitle, this.voteId = ''});
 }
 
 class DiscussionItem {
@@ -70,6 +74,11 @@ class DiscussionSummary {
   final int messageCount;
   final int confirmedCount;
 
+  /// How many pending items are stuck on a poll with no automatic answer --
+  /// a tie, or the poll disagreeing with how the chat leaned -- and need a
+  /// person to pick one via Decide Now. See [VoteResolutionService].
+  final int conflictCount;
+
   const DiscussionSummary({
     required this.destination,
     required this.dates,
@@ -81,6 +90,7 @@ class DiscussionSummary {
     required this.text,
     required this.messageCount,
     required this.confirmedCount,
+    this.conflictCount = 0,
   });
 
   bool get isEmpty => sections.isEmpty && preferences.isEmpty;
@@ -124,7 +134,7 @@ class DiscussionSummaryService {
     });
   }
 
-  Future<DiscussionSummary> _fetch(String tripId) async {
+  Future<DiscussionSummary> _fetch(String tripId, {int depth = 0}) async {
     final Map<String, dynamic> data;
     try {
       final callable = FirebaseFunctions.instance.httpsCallable(
@@ -158,6 +168,7 @@ class DiscussionSummaryService {
         byName: str(d, 'byName'),
         memberNames: names(d['memberNames']),
         voteTitle: str(d, 'voteTitle'),
+        voteId: str(d, 'voteId'),
       );
     }
 
@@ -181,6 +192,19 @@ class DiscussionSummaryService {
       budget = 'RM${amount.toInt()}${basis == 'per_person' ? ' per person' : basis == 'total' ? ' in total' : ''}';
     }
     final stats = ((data['stats'] as Map?) ?? const {}).cast<String, dynamic>();
+    final pending = [for (final i in rows(data['pending'])) item(i)];
+
+    // Apply any poll results that have concluded since the last fetch
+    // (e.g. the group finished voting without anyone reopening Decide Now)
+    // before handing the summary back, so AI Summarise -- and, once a day
+    // & time is set, Optimise -- see the real outcome instead of a stale
+    // "voting" status. A tie or a poll-vs-chat disagreement is left as a
+    // conflict for the traveller to resolve manually.
+    final outcome = await VoteResolutionService.instance.resolvePending(tripId, pending);
+    if (outcome.anyResolved && depth < 2) {
+      return _fetch(tripId, depth: depth + 1);
+    }
+
     return DiscussionSummary(
       destination: facts['destination'] as String?,
       dates: facts['dates'] as String?,
@@ -196,11 +220,12 @@ class DiscussionSummaryService {
       preferences: [
         for (final p in rows(data['preferences'])) DiscussionPreference(speaker: str(p, 'speaker'), text: str(p, 'text')),
       ],
-      pending: [for (final i in rows(data['pending'])) item(i)],
+      pending: pending,
       highlights: [for (final h in rows(data['highlights'])) (speaker: str(h, 'speaker'), text: str(h, 'text'))],
       text: str(data, 'text'),
       messageCount: (data['messageCount'] as num?)?.toInt() ?? 0,
       confirmedCount: (stats['confirmed'] as num?)?.toInt() ?? 0,
+      conflictCount: outcome.conflictCount,
     );
   }
 }

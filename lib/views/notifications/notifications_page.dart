@@ -27,9 +27,9 @@ class _NotificationsPageState extends State<NotificationsPage> {
   Future<void> _removeAll() async {
     final confirmed = await showNiceConfirmDialog(
       context: context,
-      title: 'Remove All Notifications',
-      message: 'All of your notifications will be permanently removed. This cannot be undone.',
-      confirmLabel: 'Remove All',
+      title: 'Delete All Notifications',
+      message: 'All of your notifications will be permanently deleted. This cannot be undone.',
+      confirmLabel: 'Delete All',
       icon: Icons.delete_sweep_outlined,
       destructive: true,
     );
@@ -100,7 +100,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
                       )
                     : TextButton(
                         onPressed: _removeAll,
-                        child: const Text('Remove All', style: TextStyle(color: AppColors.textGrey, fontWeight: FontWeight.w600, fontSize: 12.5)),
+                        child: const Text('Delete All', style: TextStyle(color: AppColors.textGrey, fontWeight: FontWeight.w600, fontSize: 12.5)),
                       ),
               ],
       ),

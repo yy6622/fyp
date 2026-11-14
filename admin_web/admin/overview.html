@@ -3,11 +3,11 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Overview — Voya Admin</title>
+<title>Dashboard — Voya Admin</title>
 <link rel="stylesheet" href="../css/tokens.css?v=20261006b" />
 <link rel="stylesheet" href="../css/base.css?v=20261006b" />
-<link rel="stylesheet" href="../css/layout.css?v=20261021" />
-<link rel="stylesheet" href="../css/components.css?v=20261021c" />
+<link rel="stylesheet" href="../css/layout.css?v=20261111a" />
+<link rel="stylesheet" href="../css/components.css?v=20261106g" />
 </head>
 <body>
 <div class="shell">
@@ -26,20 +26,17 @@
     <div class="topbar">
       <div>
         <button class="menu-toggle" id="menuToggle"><span data-icon="menu"></span></button>
-        <h1 class="h1">Overview</h1>
+        <h1 class="h1">Dashboard</h1>
         <p class="subtitle">Monitor platform performance and key metrics</p>
       </div>
       <div class="inline-flex" style="gap:10px;align-items:flex-start;">
-        <button class="btn btn-outline bell-btn" id="notifBell" style="display:none;" title="You have new notifications — click to review">
-          <span data-icon="bell"></span><span class="bell-dot"></span>
+        <button class="btn btn-outline bell-btn" id="notifBell" title="Notifications — click to review">
+          <span data-icon="bell"></span><span class="bell-dot" id="notifBellDot" style="display:none;"></span>
         </button>
-        <div class="topbar-search"><span data-icon="search"></span><input placeholder="Search anything…" id="globalSearch" /></div>
       </div>
     </div>
 
     <div class="stat-grid" id="statGrid">
-      <div class="card stat-card"><div class="skeleton" style="height:70px;"></div></div>
-      <div class="card stat-card"><div class="skeleton" style="height:70px;"></div></div>
       <div class="card stat-card"><div class="skeleton" style="height:70px;"></div></div>
       <div class="card stat-card"><div class="skeleton" style="height:70px;"></div></div>
     </div>
@@ -56,19 +53,15 @@
       </div>
     </div>
 
-    <div class="card card-pad" style="margin-top:20px;">
-      <h3 class="h3" style="margin-bottom:18px;">Insurance Overview</h3>
-      <div class="stat-grid" id="insuranceStats" style="margin-bottom:0;"></div>
-    </div>
   </main>
 </div>
 
 <script type="module">
-import { requireRole } from "../js/auth-guard.js?v=20261021";
-import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261021";
-import { mountIcons } from "../js/icons.js?v=20261021";
-import { listUsers, listAttractions, listTransactions, listClaims, countPendingPartners, listReportedPosts, countFlaggedReviews } from "../js/data.js?v=20261021";
-import { money, number, statCard, plainCard, trendDelta, pointDelta, sumInMonth, sumBefore, countBefore, countBetween, monthBounds, rateOf } from "../js/ui.js?v=20261021";
+import { requireRole } from "../js/auth-guard.js?v=20261106b";
+import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261114a";
+import { mountIcons } from "../js/icons.js?v=20261106c";
+import { listUsers, listAllPosts, countPendingPartners, listReportedPosts, countFlaggedReviews, countPlaceSuggestions } from "../js/data.js?v=20261114c";
+import { number, statCard, plainCard, trendDelta, countBetween } from "../js/ui.js?v=20261113a";
 
 mountSidebarNav({ role: "admin", active: "overview" });
 const session = await requireRole("admin", "login.html");
@@ -79,58 +72,71 @@ if (session) {
 }
 
 async function loadNotifBell() {
-  const [pendingPartners, reportedPosts, flaggedReviews] = await Promise.all([
+  // Bell button itself is always visible now (Nov 2026 — the admin
+  // wants a permanent way into notifications.html, not a button that
+  // disappears entirely when nothing's pending); only the red dot on it
+  // is conditional, same idea as sidebar.js's own nav-dot.
+  const bell = document.getElementById("notifBell");
+  bell.addEventListener("click", () => { location.href = "notifications.html"; });
+  const [pendingPartners, reportedPosts, flaggedReviews, placeSuggestions] = await Promise.all([
     countPendingPartners().catch(() => 0),
     listReportedPosts().then((p) => p.length).catch(() => 0),
     countFlaggedReviews().catch(() => 0),
+    countPlaceSuggestions().catch(() => 0),
   ]);
-  const moderationCount = reportedPosts + flaggedReviews;
+  const moderationCount = reportedPosts + flaggedReviews + placeSuggestions;
   const total = pendingPartners + moderationCount;
-  const bell = document.getElementById("notifBell");
+  const dot = document.getElementById("notifBellDot");
+  dot.style.display = total > 0 ? "" : "none";
   if (total > 0) {
-    bell.style.display = "";
     const parts = [];
     if (pendingPartners) parts.push(`${pendingPartners} new partner request${pendingPartners === 1 ? "" : "s"}`);
     if (moderationCount) parts.push(`${moderationCount} item${moderationCount === 1 ? "" : "s"} to moderate`);
     bell.title = `${parts.join(" · ")} — click to review`;
-    bell.addEventListener("click", () => { location.href = "notifications.html"; });
+  } else {
+    bell.title = "No new notifications — click to review";
   }
 }
 
 async function loadOverview() {
-  const [users, attractions, txns, claims] = await Promise.all([
-    listUsers(), listAttractions(), listTransactions(), listClaims(),
+  const [users, posts, pendingPartners, reportedPosts, flaggedReviews, placeSuggestions] = await Promise.all([
+    listUsers(), listAllPosts(),
+    countPendingPartners().catch(() => 0),
+    listReportedPosts().then((p) => p.length).catch(() => 0),
+    countFlaggedReviews().catch(() => 0),
+    countPlaceSuggestions().catch(() => 0),
   ]);
 
   // ---- Top stat row ----
+  // Kept deliberately lean: Total/Active/Suspended users already have a
+  // full breakdown on the Users page (same filters, same numbers), so
+  // repeating them here would just be the same three cards in two
+  // places. What's actually left for a dashboard to usefully show,
+  // without echoing any other admin page, is (a) the one user trend
+  // Users doesn't track -- new sign-ups -- and (b) a single
+  // across-the-board "does anything need me right now" number: every
+  // other page only ever shows its own slice of that (Insurance shows
+  // its own pending partners, Content Moderation shows its own pending
+  // posts/reviews, Places shows its own pending suggestions), nobody
+  // else adds them all up into one figure.
   const now = new Date();
   const thirtyDaysAgo = new Date(now.getTime() - 30 * 86400000);
   const sixtyDaysAgo = new Date(now.getTime() - 60 * 86400000);
   const newSignups = users.filter((u) => u.createdAt?.toDate && u.createdAt.toDate().getTime() > thirtyDaysAgo.getTime()).length;
-  const suspended = users.filter((u) => u.status === "suspended").length;
-  const active = users.length - suspended;
 
-  // Real deltas (js/ui.js). New Sign-ups is a rolling 30-day window, so
-  // it's compared to the 30 days before that rather than a calendar
-  // month. Suspended has no honest baseline (not correlated with signup
-  // date the way "active" roughly is), so it's a plainCard.
-  const { start: thisMonthStart } = monthBounds(0);
-  const totalDelta = trendDelta(users.length, countBefore(users, "createdAt", thisMonthStart));
+  // New Sign-ups is a rolling 30-day window, so it's compared to the 30
+  // days before that rather than a calendar month.
   const newSignupsDelta = trendDelta(countBetween(users, "createdAt", thirtyDaysAgo, now), countBetween(users, "createdAt", sixtyDaysAgo, thirtyDaysAgo), "the previous 30 days");
-  const activeDelta = trendDelta(
-    active,
-    users.filter((u) => {
-      if (u.status === "suspended") return false;
-      const d = u.createdAt?.toDate ? u.createdAt.toDate() : null;
-      return d && d < thisMonthStart;
-    }).length,
-  );
+  // Same four counts the notification bell below already tracks (kept
+  // as its own independent fetch, same as the bell -- see loadNotifBell
+  // -- so neither one can block or break the other); a queue-style
+  // total like this has no honest "vs last month" baseline, so it's a
+  // plainCard, same reasoning as Suspended used to get.
+  const needsAttention = pendingPartners + reportedPosts + flaggedReviews + placeSuggestions;
 
   document.getElementById("statGrid").innerHTML = [
-    statCard("Total Users", number(users.length), "user", totalDelta),
     statCard("New Sign-ups", number(newSignups), "sparkle", newSignupsDelta),
-    statCard("Active Users", number(active), "user-check", activeDelta),
-    plainCard("Suspended", number(suspended)),
+    plainCard("Needs Attention", number(needsAttention), "bell"),
   ].join("");
   // ---- Bar chart: users joined per month (last 6 months) ----
   const months = [];
@@ -147,46 +153,32 @@ async function loadOverview() {
   });
   const max = Math.max(1, ...months.map((m) => m.count));
   document.getElementById("chartBars").innerHTML = months
-    .map((m, i) => `<div class="bar-col"><div class="bar${i % 2 ? " alt" : ""}" style="height:${Math.max(6, (m.count / max) * 100)}%"></div></div>`)
+    .map((m, i) => `<div class="bar-col" data-tooltip="${m.label}: ${number(m.count)} new user${m.count === 1 ? "" : "s"}"><div class="bar${i % 2 ? " alt" : ""}" style="height:${Math.max(6, (m.count / max) * 100)}%"></div></div>`)
     .join("");
   document.getElementById("chartLabels").innerHTML = months.map((m) => `<span>${m.label}</span>`).join("");
 
-  // ---- Top destinations (from catalog_attractions locations) ----
-  const byLocation = {};
-  attractions.forEach((a) => {
-    const loc = a.location || "Unknown";
-    byLocation[loc] = (byLocation[loc] || 0) + 1;
+  // ---- Top destinations: ranked by actual traveller engagement, not
+  // catalog size. Attractions/restaurants have no view tracking at all,
+  // so community post views (summed per post.location — the one real
+  // "how much do travellers actually look at this place" signal in the
+  // app, also used by Reports' Community Post Analysis tab) stand in for
+  // "most viewed destination".
+  const byLocationViews = {};
+  posts.forEach((p) => {
+    const loc = p.location || "Unknown";
+    byLocationViews[loc] = (byLocationViews[loc] || 0) + (Number(p.viewCount) || 0);
   });
-  const top = Object.entries(byLocation).sort((a, b) => b[1] - a[1]).slice(0, 5);
+  const top = Object.entries(byLocationViews)
+    .filter(([, views]) => views > 0)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5);
   document.getElementById("topDestinations").innerHTML = top.length
-    ? top.map(([loc, count], i) => `
+    ? top.map(([loc, views], i) => `
         <div class="rank-row">
           <div class="rank-num">${i + 1}</div>
-          <div><div class="rank-name">${loc}</div><div class="rank-sub">${count} attraction${count === 1 ? "" : "s"} listed</div></div>
+          <div><div class="rank-name">${loc}</div><div class="rank-sub">${number(views)} view${views === 1 ? "" : "s"}</div></div>
         </div>`).join("")
-    : `<p class="muted small">No attractions in the catalogue yet.</p>`;
-
-  // ---- Insurance overview ----
-  const pendingClaims = claims.filter((c) => c.status === "new" || c.status === "under_review").length;
-  const approvedCount = claims.filter((c) => c.status === "approved").length;
-  const approvalRate = claims.length ? Math.round((approvedCount / claims.length) * 1000) / 10 : 0;
-  const rejectedTxns = txns.filter((t) => t.status === "rejected");
-  const returned = rejectedTxns.reduce((sum, t) => sum + (Number(t.premium) || 0), 0);
-
-  const transactionsDelta = trendDelta(txns.length, countBefore(txns, "createdAt", thisMonthStart));
-  const { start: lastMonthStart, end: lastMonthEnd } = monthBounds(1);
-  const claimDateOf = (c) => (c.createdAt?.toDate ? c.createdAt.toDate() : null);
-  const claimsThisMonth = claims.filter((c) => { const d = claimDateOf(c); return d && d >= thisMonthStart; });
-  const claimsLastMonth = claims.filter((c) => { const d = claimDateOf(c); return d && d >= lastMonthStart && d < lastMonthEnd; });
-  const approvalRateDelta = pointDelta(rateOf(claimsThisMonth, (c) => c.status === "approved"), rateOf(claimsLastMonth, (c) => c.status === "approved"));
-  const returnedDelta = trendDelta(returned, sumBefore(rejectedTxns, "createdAt", (t) => Number(t.premium) || 0, thisMonthStart));
-
-  document.getElementById("insuranceStats").innerHTML = [
-    statCard("Transactions", number(txns.length), "swap", transactionsDelta),
-    plainCard("Pending Claims", number(pendingClaims)),
-    statCard("Approved", `${approvalRate}%`, "file-check", approvalRateDelta),
-    statCard("Returned", money(returned), "undo", returnedDelta),
-  ].join("");
+    : `<p class="muted small">No community post views recorded yet.</p>`;
 
   mountIcons(document);
 }

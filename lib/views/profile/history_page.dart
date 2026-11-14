@@ -2,10 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../controllers/profile_controller.dart';
 import '../../repositories/booking_repository.dart';
-import '../../repositories/notifications_repository.dart';
-import '../../services/auth_service.dart';
 import '../../theme.dart';
-import '../notifications/notifications_page.dart';
 import 'history_detail_pages.dart';
 
 class HistoryPage extends StatefulWidget {
@@ -30,7 +27,6 @@ class _HistoryPageState extends State<HistoryPage> {
       backgroundColor: Colors.white,
       appBar: VoyaAppBar(
         title: const Text('History', style: TextStyle(color: AppColors.navy, fontWeight: FontWeight.bold, fontSize: 19)),
-        actions: [_notificationsBell(context)],
       ),
       body: ListenableBuilder(
         listenable: controller,
@@ -85,47 +81,6 @@ class _HistoryPageState extends State<HistoryPage> {
       case HistoryTab.insurance:
         return controller.insuranceBookings;
     }
-  }
-
-  Widget _notificationsBell(BuildContext context) {
-    final uid = AuthService.instance.currentUser?.uid;
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        IconButton(
-          icon: const Icon(Icons.mail_outline, color: AppColors.navy),
-          onPressed: () => Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const NotificationsPage()),
-          ),
-        ),
-        if (uid != null)
-          StreamBuilder<int>(
-            stream: NotificationsRepository.instance.watchUnreadCount(uid),
-            builder: (context, snapshot) {
-              final count = snapshot.data ?? 0;
-              if (count == 0) return const SizedBox.shrink();
-              return Positioned(
-                right: 4,
-                top: 4,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                  decoration: BoxDecoration(
-                    color: Colors.redAccent,
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: Colors.white, width: 1.5),
-                  ),
-                  constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
-                  child: Text(
-                    count > 9 ? '9+' : '$count',
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
-                  ),
-                ),
-              );
-            },
-          ),
-      ],
-    );
   }
 
   Future<void> _openSortSheet(BuildContext context) async {
@@ -255,6 +210,11 @@ class _HistoryPageState extends State<HistoryPage> {
             status: b.status.isEmpty ? 'Confirmed' : b.status,
             bookingId: b.id,
             documents: b.documents,
+            guestName: b.guestName,
+            guestEmail: b.guestEmail,
+            guestPhone: b.guestPhone,
+            guestIdNumber: b.guestIdNumber,
+            purchasedAt: b.purchasedAt,
           ),
         ));
         break;
@@ -276,6 +236,7 @@ class _HistoryPageState extends State<HistoryPage> {
             hotelId: b.refId,
             bookingId: b.id,
             documents: b.documents,
+            purchasedAt: b.purchasedAt,
           ),
         ));
         break;
@@ -291,6 +252,14 @@ class _HistoryPageState extends State<HistoryPage> {
             documents: b.documents,
             coverage: b.coverage,
             transactionId: b.transactionId,
+            purchasedAt: b.purchasedAt,
+            partnerId: b.partnerId,
+            providerName: b.providerName,
+            travelStart: b.travelStart,
+            travelEnd: b.travelEnd,
+            travellerIdNumber: b.guestIdNumber,
+            travellerEmail: b.guestEmail,
+            travellerPhone: b.guestPhone,
           ),
         ));
         break;

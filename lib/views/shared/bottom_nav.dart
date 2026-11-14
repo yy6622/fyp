@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 
 import '../../controllers/bottom_nav_controller.dart';
+import '../../repositories/insurance_chat_repository.dart';
 import '../../repositories/trip_repository.dart';
 import '../../repositories/user_repository.dart';
 import '../../services/auth_service.dart';
@@ -43,8 +44,10 @@ class _MainPageState extends State<MainPage> {
 
   StreamSubscription<AppUser?>? _profileSub;
   StreamSubscription<Position>? _positionSub;
+  StreamSubscription<List<InsuranceChatSummary>>? _insuranceChatsSub;
   bool _tracking = false;
   bool _wantsTracking = false;
+  bool _hasUnreadInsuranceMessage = false;
   Timer? _retryTimer;
 
   @override
@@ -60,6 +63,15 @@ class _MainPageState extends State<MainPage> {
           _startTracking(uid);
         } else if (!_wantsTracking && _tracking) {
           _stopTracking();
+        }
+      });
+      // Feeds the red dot on the Profile tab below -- same signal the
+      // homepage's "Insurance Messages" quick link uses, so a reply from
+      // an insurance partner is visible without opening either screen first.
+      _insuranceChatsSub = InsuranceChatRepository.instance.watchChatsForTraveller(uid).listen((chats) {
+        final hasUnread = chats.any((c) => c.unreadForTraveller);
+        if (hasUnread != _hasUnreadInsuranceMessage && mounted) {
+          setState(() => _hasUnreadInsuranceMessage = hasUnread);
         }
       });
     }
@@ -97,6 +109,7 @@ class _MainPageState extends State<MainPage> {
     controller.dispose();
     _profileSub?.cancel();
     _positionSub?.cancel();
+    _insuranceChatsSub?.cancel();
     _retryTimer?.cancel();
     super.dispose();
   }
@@ -144,6 +157,10 @@ class _MainPageState extends State<MainPage> {
 
   Widget _navItem(int index) {
     final selected = controller.index == index;
+    // Only the Profile tab (index 3) ever carries a badge right now
+    // (Insurance Messages) -- kept as a per-index check rather than a
+    // list so adding another tab's badge later is a one-line change here.
+    final showBadge = index == 3 && _hasUnreadInsuranceMessage;
     return Expanded(
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
@@ -155,12 +172,31 @@ class _MainPageState extends State<MainPage> {
             mainAxisSize: MainAxisSize.min,
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              ColorFiltered(
-                colorFilter: ColorFilter.mode(
-                  selected ? Colors.white : AppColors.primary,
-                  BlendMode.srcIn,
-                ),
-                child: AppImage(_icons[index], width: 22, height: 22),
+              Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  ColorFiltered(
+                    colorFilter: ColorFilter.mode(
+                      selected ? Colors.white : AppColors.primary,
+                      BlendMode.srcIn,
+                    ),
+                    child: AppImage(_icons[index], width: 22, height: 22),
+                  ),
+                  if (showBadge)
+                    Positioned(
+                      top: -2,
+                      right: -4,
+                      child: Container(
+                        width: 9,
+                        height: 9,
+                        decoration: BoxDecoration(
+                          color: Colors.redAccent,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: selected ? AppColors.primary : Colors.white, width: 1.5),
+                        ),
+                      ),
+                    ),
+                ],
               ),
               if (selected) ...[
                 const SizedBox(height: 3),

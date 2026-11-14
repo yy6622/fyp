@@ -3,21 +3,23 @@
 // the Flutter app reads/writes — changes here are real and show up there too.
 // New collections (admins, insurance_partners, insurance_plans, claims,
 // insurance_transactions) exist only for this console.
-import { db, storage } from "./firebase-config.js";
+import { db, storage, functions } from "./firebase-config.js";
 import {
   collection, collectionGroup, doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc,
-  setDoc, query, where, limit, serverTimestamp, deleteField, increment,
+  setDoc, query, where, limit, serverTimestamp, deleteField, increment, arrayUnion,
 } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
+// Re-exported so pages that need to stamp a timestamp or clear a field as
+// part of a bigger write they build themselves (e.g.
+// partner/plan-form.html's submit-for-review flow) don't need their own
+// separate Firestore SDK import just for these two.
+export { serverTimestamp, deleteField };
 import {
   ref as storageRef, uploadBytes, getDownloadURL, deleteObject,
 } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-storage.js";
+import { httpsCallable } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-functions.js";
 
 const col = (name) => collection(db, name);
 
-function refCode(prefix, digits = 5) {
-  const n = Math.floor(Math.random() * 9 * 10 ** (digits - 1)) + 10 ** (digits - 1);
-  return `${prefix}-${n}`;
-}
 export function newClaimRef() {
   return `CLM-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 90000) + 10000)}`;
 }
@@ -25,7 +27,7 @@ export function newRefundRef() {
   return `RFD-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 90000) + 10000)}`;
 }
 export function newTxnRef() {
-  return refCode("TXN");
+  return `TXN-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 90000) + 10000)}`;
 }
 
 async function all(q) {
@@ -56,6 +58,15 @@ export async function isFirstAdminNeeded() {
 export async function listAdmins() {
   const items = await all(query(col("admins")));
   return items.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+}
+/** Backs admin/admin-profile.html — mirrors getPartnerProfile/savePartnerProfile's
+ * shape below, but against the signed-in admin's own admins/{uid} doc. */
+export async function getAdminProfile(uid) {
+  const snap = await getDoc(doc(db, "admins", uid));
+  return snap.exists() ? { id: snap.id, ...snap.data() } : null;
+}
+export async function updateAdminProfile(uid, data) {
+  await updateDoc(doc(db, "admins", uid), data);
 }
 
 // ==================== INSURANCE PARTNERS (insurance_partners/{uid}) ====================
@@ -112,6 +123,11 @@ export async function listPlans(partnerId = null) {
   const items = await all(q);
   return items.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
 }
+/** Single plan by id — used by partner/plan-form.html's Edit path. */
+export async function getPlan(id) {
+  const snap = await getDoc(doc(db, "insurance_plans", id));
+  return snap.exists() ? { id: snap.id, ...snap.data() } : null;
+}
 export async function createPlan(data) {
   return addDoc(col("insurance_plans"), { ...data, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
 }
@@ -120,6 +136,35 @@ export async function updatePlan(id, data) {
 }
 export async function deletePlan(id) {
   await deleteDoc(doc(db, "insurance_plans", id));
+}
+/**
+ * Sets a plan's status -- the per-PLAN counterpart of setPartnerStatus()
+ * above (per-ORGANIZATION), same reasoning: every status change goes
+ * through one function so every page that can trigger one
+ * (partner/plan-form.html creating/activating/deactivating,
+ * admin/insurance.html suspending/reactivating) stamps the same audit
+ * fields the same way.
+ *
+ * There is no approval queue -- a partner fully controls their own
+ * plan's status, toggling freely between "active" (live, travellers can
+ * see and buy it) and "inactive" (saved, hidden from travellers) any
+ * time. "suspended" is a separate, admin-only state: an admin can
+ * suspend any plan, active or inactive, and firestore.rules only lets
+ * an admin move a plan back OUT of "suspended" -- a partner can keep
+ * editing a suspended plan's content, they just can't change its status
+ * themselves while it's suspended.
+ * - active -> stamps activatedAt.
+ * - suspended -> stamps suspendedAt. Works the same whether an admin
+ *   suspended it, or (going forward) an admin reactivates it.
+ */
+export async function setPlanStatus(id, status, extra = {}) {
+  const payload = { status, ...extra, updatedAt: serverTimestamp() };
+  if (status === "active") {
+    payload.activatedAt = serverTimestamp();
+  } else if (status === "suspended") {
+    payload.suspendedAt = serverTimestamp();
+  }
+  await updateDoc(doc(db, "insurance_plans", id), payload);
 }
 
 // ==================== TRANSACTIONS (insurance_transactions/{id}) ====================
@@ -131,7 +176,11 @@ export async function listTransactions(partnerId = null) {
   return items.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
 }
 export async function createTransaction(data) {
-  return addDoc(col("insurance_transactions"), { ...data, createdAt: serverTimestamp() });
+  return addDoc(col("insurance_transactions"), {
+    ...data,
+    txnRef: data.txnRef || newTxnRef(),
+    createdAt: serverTimestamp(),
+  });
 }
 export async function updateTransactionStatus(id, status) {
   await updateDoc(doc(db, "insurance_transactions", id), { status });
@@ -189,6 +238,63 @@ export async function updateRefundStatus(id, status, note = "") {
   const current = await getRefund(id);
   const timeline = [...(current?.timeline || []), { status, at: new Date().toISOString(), note }];
   await updateDoc(doc(db, "refunds", id), { status, timeline, updatedAt: serverTimestamp() });
+}
+
+// ==================== INSURANCE CHATS (insurance_chats/{chatId}) ====================
+// A direct-message thread between one traveller and one insurance partner —
+// the SAME collection the Flutter app's InsuranceChatRepository reads/writes
+// (lib/repositories/insurance_chat_repository.dart), so a message either
+// side sends shows up for the other right away. Deliberately not tied to
+// any one transaction — a traveller can message a partner with questions
+// before buying a plan, as well as to discuss an existing policy after.
+export async function listInsuranceChats(partnerId) {
+  const items = await all(query(col("insurance_chats"), where("partnerId", "==", partnerId)));
+  return items.sort((a, b) => (b.lastMessageAt?.seconds || 0) - (a.lastMessageAt?.seconds || 0));
+}
+export async function getInsuranceChat(id) {
+  const snap = await getDoc(doc(db, "insurance_chats", id));
+  return snap.exists() ? { id: snap.id, ...snap.data() } : null;
+}
+export async function listInsuranceChatMessages(chatId) {
+  const items = await all(query(collection(db, "insurance_chats", chatId, "messages")));
+  return items.sort((a, b) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0));
+}
+/** Sends as the partner side — senderId must be the signed-in partner's own uid (matches the security rule). */
+export async function sendInsuranceChatMessage(chatId, senderId, text) {
+  await addDoc(collection(db, "insurance_chats", chatId, "messages"), {
+    senderId, senderRole: "partner", text, createdAt: serverTimestamp(),
+  });
+  await updateDoc(doc(db, "insurance_chats", chatId), {
+    lastMessage: text,
+    lastMessageAt: serverTimestamp(),
+    lastSenderRole: "partner",
+    unreadForTraveller: true,
+    unreadForPartner: false,
+  });
+}
+/** Sends an attached-plan "card" message as the partner side — only the
+ * plan id (plus a human fallback in `text` for the inbox preview and any
+ * client that doesn't render cards) is stored. Both this console's own
+ * bubble and the traveller's (InsuranceChatPage) render the card by
+ * fetching the live plan via getPlan()/InsuranceRepository.getPlan, so it
+ * always reflects the plan's current price/coverage rather than a
+ * point-in-time copy that could drift from it as the partner edits the
+ * plan later. */
+export async function sendInsuranceChatPlan(chatId, senderId, plan) {
+  const text = `\ud83d\udcc4 Sent a plan: ${plan.name || "Insurance Plan"}`;
+  await addDoc(collection(db, "insurance_chats", chatId, "messages"), {
+    senderId, senderRole: "partner", text, createdAt: serverTimestamp(), attachedPlanId: plan.id,
+  });
+  await updateDoc(doc(db, "insurance_chats", chatId), {
+    lastMessage: text,
+    lastMessageAt: serverTimestamp(),
+    lastSenderRole: "partner",
+    unreadForTraveller: true,
+    unreadForPartner: false,
+  });
+}
+export async function markInsuranceChatReadByPartner(chatId) {
+  await updateDoc(doc(db, "insurance_chats", chatId), { unreadForPartner: false });
 }
 
 // ==================== ATTRACTIONS (catalog_attractions/{id}) — shared w/ mobile app ====================
@@ -299,6 +405,43 @@ export async function deleteRestaurant(id) {
   await deleteDoc(doc(db, "catalog_restaurants", id));
 }
 
+/** Sets the "description" ("About") field on one catalog item — either a
+ * catalog_attractions or catalog_restaurants doc, whichever collectionName
+ * names (both share this field; see lib/repositories/catalog_repository.dart's
+ * AttractionData/RestaurantData models). Backs admin/fill-about.html, a
+ * one-click tool (same pattern as the old translate-names.html) that lets
+ * an admin review web-researched/inferred About text for catalog items that
+ * are missing one, then click a single button to write the reviewed batch —
+ * this is the one Firestore write it triggers, nothing automatic. */
+export async function updateCatalogItemDescription(collectionName, id, description) {
+  await updateDoc(doc(db, collectionName, id), { description, updatedAt: serverTimestamp() });
+}
+
+/** Overwrites just the "name" field on one catalog item — for a one-off
+ * correction to a specific MyMemory mistranslation (e.g. a chain's
+ * already-correct brand name getting literally translated into a
+ * garbled English phrase, like "添好運" → "Tim Ho Wan for good luck").
+ * Deliberately leaves `nameLocal` untouched — it already holds the real
+ * original name; this only replaces the bad English rendering. Backs
+ * admin/fix-names.html, a one-click tool for reviewing a short,
+ * hand-picked list of such corrections — NOT a general bulk-rename tool
+ * (see updateCatalogItemDescription/fill-about.html for that pattern). */
+export async function fixCatalogItemName(collectionName, id, name) {
+  await updateDoc(doc(db, collectionName, id), { name, updatedAt: serverTimestamp() });
+}
+
+/** One-off correction for a MyMemory translation-backfill mistake: the
+ * well-known dim sum chain's name "添好運" got translated literally
+ * ("for good luck" / "a Lucky Snack Shop") instead of being recognised as
+ * the brand's own romanization "Tim Ho Wan" (already the plain name on a
+ * third, untranslated doc of the same chain). Backs
+ * admin/fix-tim-ho-wan-names.html — a tiny one-click tool for exactly the
+ * 2 known-affected catalog_restaurants docs, same click-to-write pattern
+ * as the rest of this console. */
+export async function fixRestaurantName(id, name) {
+  await updateDoc(doc(db, "catalog_restaurants", id), { name, updatedAt: serverTimestamp() });
+}
+
 // ==================== CONTENT MODERATION (posts/{id}) — shared w/ mobile app ====================
 export async function listReportedPosts() {
   return all(query(col("posts"), where("reported", "==", true)));
@@ -387,6 +530,22 @@ export async function approveReview(review) {
  * removes the review doc, nothing more. */
 export async function rejectReview(review) {
   await deleteDoc(review.ref);
+}
+
+// ==================== ALL BOOKINGS (collectionGroup "bookings", admin only) ====================
+// Flight/hotel/insurance purchases live per-user at users/{uid}/bookings/{id}
+// (see lib/repositories/booking_repository.dart) — there is no top-level
+// bookings collection, so seeing every traveller's purchase across the
+// whole platform needs a collectionGroup query. No where/orderBy here (same
+// as listPostViewers' "viewers" collectionGroup above) so this needs no new
+// Firestore index — just fetch everything and filter/sort in JS, same as
+// the admin-wide reads above already do. Needs firestore.rules' bookings
+// admin read bypass (added alongside this feature) deployed first.
+export async function listAllBookings() {
+  const snap = await getDocs(collectionGroup(db, "bookings"));
+  return snap.docs
+    .map((d) => ({ id: d.id, uid: d.ref.parent.parent?.id || "", ...d.data() }))
+    .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
 }
 
 // ==================== COMMUNITY POST ANALYSIS (posts/{id}, post_view_stats/{YYYY-MM}) ====================
@@ -502,4 +661,116 @@ export async function uploadEmbassyPhoto(countryKey, homeCountryKey, file) {
   const ref = storageRef(storage, path);
   await uploadBytes(ref, file);
   return getDownloadURL(ref);
+}
+
+// ==================== EMAIL CODE STEP-UP (FR04) ====================
+// Same Cloud Functions the Flutter app uses for its own email-code step-up
+// (lib/services/verification_service.dart -> sendVerificationCode/verifyCode
+// in functions/email_code.js). `purpose` must be one of that file's PURPOSES
+// ("change_password" is the one js/ui.js's emailCodeStepUp() currently sends).
+export async function sendVerificationCode(purpose) {
+  const call = httpsCallable(functions, "sendVerificationCode");
+  const res = await call({ purpose });
+  return res.data;
+}
+export async function verifyEmailCode(purpose, code) {
+  const call = httpsCallable(functions, "verifyCode");
+  const res = await call({ purpose, code });
+  return res.data;
+}
+
+// ==================== TAG PRESETS (tag_presets/{key}) ====================
+// Admin-extensible pick-lists behind the chip pickers on
+// attraction-form.html/restaurant-form.html (cuisine/category/facility tags)
+// — one doc per list, {tags: string[]} (see firestore.rules' own comment on
+// this collection). Each form ships a hardcoded starter list so it's never
+// empty even before this doc exists; getTagPresets() just returns whatever
+// extra tags admins have typed in beyond that starter list.
+export async function getTagPresets(key) {
+  const snap = await getDoc(doc(db, "tag_presets", key));
+  return snap.exists() ? (snap.data().tags || []) : [];
+}
+export async function addTagPreset(key, tag) {
+  await setDoc(doc(db, "tag_presets", key), { tags: arrayUnion(tag) }, { merge: true });
+}
+
+// ==================== DISMISSED NOTICES (dismissed_notices/{key}) ====================
+// Tracks which notices an admin has manually dismissed from
+// admin/notifications.html's feed — shared across every admin (doc id is
+// the same "kind:id" key the page already uses), same as firestore.rules'
+// comment on this collection describes. The underlying partner/post/review/
+// suggestion doc the notice is about is untouched by this.
+export async function listDismissedNoticeKeys() {
+  const snap = await getDocs(col("dismissed_notices"));
+  return new Set(snap.docs.map((d) => d.id));
+}
+export async function dismissNotice(key) {
+  await setDoc(doc(db, "dismissed_notices", key), { dismissedAt: serverTimestamp() });
+}
+
+// ==================== PARTNER-SCOPED DISMISSED NOTICES ====================
+// Same idea as the admin pair above, but for partner/notifications.html's
+// own activity feed -- scoped under the partner's own uid (see
+// firestore.rules' partner_dismissed_notices/{partnerId}/items/{key}) so
+// one partner dismissing a notice never affects another partner or admins.
+export async function listPartnerDismissedNoticeKeys(partnerId) {
+  const snap = await getDocs(col(`partner_dismissed_notices/${partnerId}/items`));
+  return new Set(snap.docs.map((d) => d.id));
+}
+export async function dismissPartnerNotice(partnerId, key) {
+  await setDoc(doc(db, "partner_dismissed_notices", partnerId, "items", key), { dismissedAt: serverTimestamp() });
+}
+
+// ==================== SEEN NOTICES (admin + partner) ====================
+// "Seen" tracks whether a notice has been opened/clicked at least once --
+// separate from dismissed_notices/partner_dismissed_notices above (an
+// explicit "hide this forever"). notifications.html uses this to show an
+// unseen notice differently (bold + a dot, same idea as the traveller
+// app's own unread styling) and to let an already-decided partner notice
+// age out of the admin feed 30 days after it was first seen -- a notice
+// nobody has looked at yet never silently disappears, however old.
+export async function listSeenNoticeKeys() {
+  const snap = await getDocs(col("seen_notices"));
+  return new Map(snap.docs.map((d) => [d.id, d.data().seenAt || null]));
+}
+export async function markNoticeSeen(key) {
+  await setDoc(doc(db, "seen_notices", key), { seenAt: serverTimestamp() }, { merge: true });
+}
+export async function listPartnerSeenNoticeKeys(partnerId) {
+  const snap = await getDocs(col(`partner_seen_notices/${partnerId}/items`));
+  return new Map(snap.docs.map((d) => [d.id, d.data().seenAt || null]));
+}
+export async function markPartnerNoticeSeen(partnerId, key) {
+  await setDoc(doc(db, "partner_seen_notices", partnerId, "items", key), { seenAt: serverTimestamp() }, { merge: true });
+}
+
+// ==================== PLACE SUGGESTIONS (place_suggestions/{id}) ====================
+// A traveller-submitted "suggest a new place" card, reviewed on
+// admin/attractions.html's Place Suggestions tab and surfaced in
+// admin/notifications.html's feed. Rejecting/accepting one never deletes
+// it — attractions.html's reject-confirm copy promises "the traveller's
+// submission stays on record, just marked as declined" — it only moves
+// status out of "pending" so it drops off the review queue.
+// NOTE: nothing in the Flutter app writes to this collection yet (no
+// "Suggest a place" UI there) — these functions make the existing admin
+// review UI actually work, but the queue will stay empty until that
+// mobile-side submission form is built as its own feature.
+export async function listPlaceSuggestions() {
+  const items = await all(query(col("place_suggestions")));
+  return items
+    .filter((s) => s.status === "pending" || !s.status)
+    .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+}
+export async function countPlaceSuggestions() {
+  return (await listPlaceSuggestions()).length;
+}
+export async function rejectPlaceSuggestion(id) {
+  await updateDoc(doc(db, "place_suggestions", id), { status: "rejected", decidedAt: serverTimestamp() });
+}
+/** Called once the admin has actually saved the catalog_attractions/
+ * catalog_restaurants doc the suggestion was turned into (see
+ * attraction-form.html/restaurant-form.html's save handlers) — [addedAs]
+ * is `{ collection, docId }`, recording which. */
+export async function markPlaceSuggestionAdded(id, addedAs) {
+  await updateDoc(doc(db, "place_suggestions", id), { status: "added", addedAs, decidedAt: serverTimestamp() });
 }

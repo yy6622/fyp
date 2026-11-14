@@ -113,13 +113,6 @@ class _AccountSettingPageState extends State<AccountSettingPage> {
     await UserRepository.instance.updateProfile(uid, currencyCode: picked.code);
   }
 
-  String _airportLabel(String iataCode) {
-    for (final a in kMalaysiaAirports) {
-      if (a.iataCode == iataCode) return '${a.city.split(',').first} (${a.iataCode})';
-    }
-    return iataCode;
-  }
-
   Future<void> _changeHomeAirport() async {
     final picked = await showModalBottomSheet<MalaysiaAirport>(
       context: context,
@@ -146,9 +139,14 @@ class _AccountSettingPageState extends State<AccountSettingPage> {
       ],
     );
     if (result != true) return;
+    final value = ctrl.text.trim();
+    if (field == 'name' && value.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Username cannot be empty.')));
+      return;
+    }
     final uid = AuthService.instance.currentUser?.uid;
     if (uid == null) return;
-    final value = ctrl.text.trim();
     await UserRepository.instance.updateProfile(uid, name: field == 'name' ? value : null, phone: field == 'phone' ? value : null);
   }
 
@@ -292,7 +290,7 @@ class _AccountSettingPageState extends State<AccountSettingPage> {
           final phone = (profile?.phone.isNotEmpty ?? false) ? profile!.phone : 'Not set';
           final country = (profile?.country.isNotEmpty ?? false) ? profile!.country : 'Not set';
           final currency = (profile?.currencyCode.isNotEmpty ?? false) ? profile!.currencyCode : 'Not set';
-          final homeAirport = _airportLabel((profile?.homeAirportCode.isNotEmpty ?? false) ? profile!.homeAirportCode : kDefaultHomeAirport);
+          final homeAirport = malaysiaAirportLabel((profile?.homeAirportCode.isNotEmpty ?? false) ? profile!.homeAirportCode : kDefaultHomeAirport);
           return ListView(
             children: [
               profileNavRow('Username', username, onTap: () => _editField(label: 'Username', current: username, field: 'name')),

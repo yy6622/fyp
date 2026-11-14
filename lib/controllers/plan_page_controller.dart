@@ -27,7 +27,10 @@ class PlanPageController extends ChangeNotifier {
   double get totalYouOwe => planGroups.fold(0.0, (sum, g) => sum + g.yourShare);
   int get groupsWithBalance => planGroups.where((g) => g.yourShare > 0).length;
 
-  bool get showOwe => _selectedTab == PlanTab.expenses || (_selectedTab == PlanTab.all && totalYouOwe > 0);
+  // Only the dedicated Expenses tab shows balance info now — the "All"
+  // tab used to surface an owe-teaser too, which the trip list shouldn't
+  // be mixed with.
+  bool get showOwe => _selectedTab == PlanTab.expenses;
   bool get showGroups =>
       _selectedTab == PlanTab.all || _selectedTab == PlanTab.plan || _selectedTab == PlanTab.expenses;
 
@@ -52,24 +55,49 @@ class PlanPageController extends ChangeNotifier {
     _tripsSub = TripRepository.instance.watchMyTrips(uid).listen((trips) {
       _trips = trips;
       _loading = false;
-      _syncSubs(trips.map((t) => t.id).toSet());
+      _syncSubs(trips);
       notifyListeners();
     });
   }
 
-  void _syncSubs(Set<String> tripIds) {
-    for (final id in tripIds) {
+  /// A live listener per trip for votes AND expenses, held open for the
+  /// whole app session, scales straight with how many trips the account
+  /// has — and most of those trips are dormant (over, untouched for
+  /// weeks). Those never need a live update again, so only a trip that
+  /// isn't [Trip.isInactive] keeps a persistent listener; a dormant one
+  /// gets a single one-off fetch instead, which is refreshed again only if
+  /// it drops out of the trip list and comes back (e.g. rejoining).
+  void _syncSubs(List<Trip> trips) {
+    final tripIds = trips.map((t) => t.id).toSet();
+    for (final trip in trips) {
+      if (trip.isInactive) {
+        _voteSubs.remove(trip.id)?.cancel();
+        _expenseSubs.remove(trip.id)?.cancel();
+        if (!_votesByTrip.containsKey(trip.id)) {
+          unawaited(TripRepository.instance.watchVotes(trip.id).first.then((votes) {
+            _votesByTrip[trip.id] = votes;
+            notifyListeners();
+          }));
+        }
+        if (!_expensesByTrip.containsKey(trip.id)) {
+          unawaited(TripRepository.instance.watchExpenses(trip.id).first.then((expenses) {
+            _expensesByTrip[trip.id] = expenses;
+            notifyListeners();
+          }));
+        }
+        continue;
+      }
       _voteSubs.putIfAbsent(
-        id,
-        () => TripRepository.instance.watchVotes(id).listen((votes) {
-          _votesByTrip[id] = votes;
+        trip.id,
+        () => TripRepository.instance.watchVotes(trip.id).listen((votes) {
+          _votesByTrip[trip.id] = votes;
           notifyListeners();
         }),
       );
       _expenseSubs.putIfAbsent(
-        id,
-        () => TripRepository.instance.watchExpenses(id).listen((expenses) {
-          _expensesByTrip[id] = expenses;
+        trip.id,
+        () => TripRepository.instance.watchExpenses(trip.id).listen((expenses) {
+          _expensesByTrip[trip.id] = expenses;
           notifyListeners();
         }),
       );

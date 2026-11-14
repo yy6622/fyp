@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 import '../../models/insurance_models.dart';
+import '../../services/currency_service.dart';
 import '../../theme.dart';
 import 'insurance_plan_detail_page.dart';
 
@@ -24,13 +26,13 @@ Widget insuranceLogo(InsurancePlan plan, {double size = 46}) {
     alignment: Alignment.center,
     child: (plan.logoUrl != null && plan.logoUrl!.isNotEmpty)
         ? ClipOval(
-            child: Image.network(
-              plan.logoUrl!,
+            child: CachedNetworkImage(
+              imageUrl: plan.logoUrl!,
               width: size,
               height: size,
               fit: BoxFit.cover,
-              loadingBuilder: (context, child, progress) => progress == null ? child : letterBadge,
-              errorBuilder: (context, error, stackTrace) => letterBadge,
+              placeholder: (context, url) => letterBadge,
+              errorWidget: (context, url, error) => letterBadge,
             ),
           )
         : letterBadge,
@@ -86,10 +88,10 @@ class InsurancePlanCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text(
-                  plan.price,
+                  plan.displayPrice(CurrencyService.instance.lastKnownUserCurrency),
                   style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.navy),
                 ),
-                const Text('per trips', style: TextStyle(fontSize: 9.5, color: AppColors.textGrey)),
+                Text(insurancePriceUnitLabel(plan.category), style: const TextStyle(fontSize: 9.5, color: AppColors.textGrey)),
               ],
             ),
           ],
@@ -145,9 +147,9 @@ class InsurancePlanTile extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.baseline,
               textBaseline: TextBaseline.alphabetic,
               children: [
-                Text(plan.price, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.navy)),
+                Text(plan.displayPrice(CurrencyService.instance.lastKnownUserCurrency), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.navy)),
                 const SizedBox(width: 3),
-                const Text('per trips', style: TextStyle(fontSize: 8.5, color: AppColors.textGrey)),
+                Text(insurancePriceUnitLabel(plan.category), style: const TextStyle(fontSize: 8.5, color: AppColors.textGrey)),
               ],
             ),
           ],

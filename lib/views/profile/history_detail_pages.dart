@@ -1,12 +1,28 @@
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
-import 'package:url_launcher/url_launcher.dart';
 
-import '../../repositories/booking_repository.dart';
-import '../../services/auth_service.dart';
-import '../../services/booking_document_service.dart';
 import '../../theme.dart';
 import '../insurance/claim_refund_page.dart';
+import '../insurance/insurance_chat_page.dart';
+
+const List<String> _historyMonthNames = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+];
+
+String _formatPurchasedAt(DateTime? d) {
+  if (d == null) return '';
+  final hour12 = d.hour % 12 == 0 ? 12 : d.hour % 12;
+  final minute = d.minute.toString().padLeft(2, '0');
+  final ampm = d.hour < 12 ? 'AM' : 'PM';
+  return '${d.day} ${_historyMonthNames[d.month - 1]} ${d.year}, $hour12:$minute $ampm';
+}
+
+String _formatDateOnly(DateTime d) => '${d.day} ${_historyMonthNames[d.month - 1]} ${d.year}';
+
+// Passenger/traveller names and ID numbers are stored as one comma-joined
+// string per booking (guestName / guestIdNumber, or the insurance
+// equivalents), in the same order, since one booking can cover several
+// people under a single booking record.
+List<String> _split(String s) => s.trim().isEmpty ? const [] : s.split(', ').where((v) => v.trim().isNotEmpty).toList();
 
 
 class _HistoryDetailShell extends StatefulWidget {
@@ -121,116 +137,75 @@ Widget _peopleList(String roleLabel, {required String name, String email = '', S
   );
 }
 
-Widget _documentsList({
-  required List<(String, IconData)> docs,
-  required Map<String, String> documents,
-  required Set<String> uploading,
-  required void Function(String docType) onUpload,
+Widget _passengersList({
+  required List<String> names,
+  List<String> idNumbers = const [],
+  String email = '',
+  String phone = '',
+  String roleLabel = 'Passenger',
+  String emptyMessage = 'No passenger details for this entry.',
 }) {
-  return ListView.separated(
-    padding: const EdgeInsets.all(20),
-    itemCount: docs.length,
-    separatorBuilder: (_, __) => const SizedBox(height: 10),
-    itemBuilder: (context, i) {
-      final (label, icon) = docs[i];
-      final url = documents[label];
-      final isUploading = uploading.contains(label);
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        decoration: BoxDecoration(color: AppColors.chipGrey, borderRadius: BorderRadius.circular(12)),
-        child: Row(
-          children: [
-            Container(
-              width: 34,
-              height: 34,
-              decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-              child: Icon(icon, size: 16, color: AppColors.navy),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(label, style: const TextStyle(fontSize: 13, color: Colors.black)),
-                  if (url != null) ...[
-                    const SizedBox(height: 2),
-                    const Text('Uploaded', style: TextStyle(fontSize: 11, color: AppColors.primary)),
-                  ],
-                ],
-              ),
-            ),
-            if (isUploading)
-              const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary))
-            else if (url != null)
-              TextButton(
-                onPressed: () => launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication),
-                child: const Text('View', style: TextStyle(color: AppColors.primary, fontSize: 12, fontWeight: FontWeight.w600)),
-              )
-            else
-              TextButton.icon(
-                onPressed: () => onUpload(label),
-                icon: const Icon(Icons.upload_outlined, size: 16, color: AppColors.primary),
-                label: const Text('Upload', style: TextStyle(color: AppColors.primary, fontSize: 12, fontWeight: FontWeight.w600)),
-              ),
-          ],
-        ),
-      );
-    },
-  );
-}
-
-mixin _BookingDocumentUploader<T extends StatefulWidget> on State<T> {
-  Map<String, String> get documents;
-  set documents(Map<String, String> value);
-  Set<String> get uploading;
-  String get bookingId;
-
-  Future<void> uploadDocument(String docType) async {
-    final uid = AuthService.instance.currentUser?.uid ?? '';
-    if (uid.isEmpty || bookingId.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Not available for this entry.')));
-      return;
-    }
-    final source = await showModalBottomSheet<ImageSource>(
-      context: context,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.camera_alt_outlined, color: AppColors.primary),
-              title: const Text('Take a Photo'),
-              onTap: () => Navigator.of(ctx).pop(ImageSource.camera),
-            ),
-            ListTile(
-              leading: const Icon(Icons.photo_library_outlined, color: AppColors.primary),
-              title: const Text('Choose from Gallery'),
-              onTap: () => Navigator.of(ctx).pop(ImageSource.gallery),
-            ),
-          ],
+  if (names.isEmpty && email.isEmpty && phone.isEmpty) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Text(
+          emptyMessage,
+          textAlign: TextAlign.center,
+          style: const TextStyle(color: AppColors.textGrey, fontSize: 12.5),
         ),
       ),
     );
-    if (source == null) return;
-    final file = await BookingDocumentService.instance.pick(source);
-    if (file == null || !mounted) return;
-    setState(() => uploading.add(docType));
-    try {
-      final url = await BookingDocumentService.instance.upload(uid: uid, bookingId: bookingId, docType: docType, file: file);
-      await BookingRepository.instance.setBookingDocument(uid, bookingId, docType, url);
-      if (!mounted) return;
-      setState(() {
-        documents = {...documents, docType: url};
-        uploading.remove(docType);
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => uploading.remove(docType));
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Upload failed: $e')));
-    }
   }
+  return ListView(
+    padding: const EdgeInsets.all(20),
+    children: [
+      if (email.isNotEmpty || phone.isNotEmpty) ...[
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          decoration: BoxDecoration(color: AppColors.chipGrey, borderRadius: BorderRadius.circular(12)),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (email.isNotEmpty) Text('Contact Email: $email', style: const TextStyle(fontSize: 12, color: AppColors.textGrey)),
+              if (email.isNotEmpty && phone.isNotEmpty) const SizedBox(height: 4),
+              if (phone.isNotEmpty) Text('Contact Phone: $phone', style: const TextStyle(fontSize: 12, color: AppColors.textGrey)),
+            ],
+          ),
+        ),
+        const SizedBox(height: 10),
+      ],
+      for (int i = 0; i < names.length; i++) ...[
+        if (i > 0) const SizedBox(height: 10),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          decoration: BoxDecoration(color: AppColors.chipGrey, borderRadius: BorderRadius.circular(12)),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const CircleAvatar(radius: 16, backgroundColor: Color(0xFFD9D9D9), child: Icon(Icons.person_outline, size: 16, color: AppColors.textGrey)),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(names[i].isEmpty ? '$roleLabel ${i + 1}' : names[i],
+                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.black)),
+                    Text(roleLabel, style: const TextStyle(fontSize: 10.5, color: AppColors.textGrey)),
+                    if (i < idNumbers.length && idNumbers[i].isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Text('Passport/ID: ${idNumbers[i]}', style: const TextStyle(fontSize: 11.5, color: AppColors.textGrey)),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    ],
+  );
 }
 
 class HistoryFlightDetailPage extends StatefulWidget {
@@ -241,6 +216,11 @@ class HistoryFlightDetailPage extends StatefulWidget {
   final String status;
   final String bookingId;
   final Map<String, String> documents;
+  final String guestName;
+  final String guestEmail;
+  final String guestPhone;
+  final String guestIdNumber;
+  final DateTime? purchasedAt;
 
   const HistoryFlightDetailPage({
     super.key,
@@ -251,34 +231,25 @@ class HistoryFlightDetailPage extends StatefulWidget {
     this.status = 'Confirmed',
     this.bookingId = '',
     this.documents = const {},
+    this.guestName = '',
+    this.guestEmail = '',
+    this.guestPhone = '',
+    this.guestIdNumber = '',
+    this.purchasedAt,
   });
-
-  static const _docs = [
-    ('E-Ticket', Icons.confirmation_number_outlined),
-    ('Boarding Pass', Icons.airplane_ticket_outlined),
-    ('Passport Scan', Icons.badge_outlined),
-    ('Travel Insurance', Icons.shield_outlined),
-  ];
 
   @override
   State<HistoryFlightDetailPage> createState() => _HistoryFlightDetailPageState();
 }
 
-class _HistoryFlightDetailPageState extends State<HistoryFlightDetailPage> with _BookingDocumentUploader<HistoryFlightDetailPage> {
-  @override
-  late Map<String, String> documents = Map.of(widget.documents);
-  @override
-  final Set<String> uploading = {};
-  @override
-  String get bookingId => widget.bookingId;
-
+class _HistoryFlightDetailPageState extends State<HistoryFlightDetailPage> {
   @override
   Widget build(BuildContext context) {
     return _HistoryDetailShell(
       title: 'Flight',
       tabs: const [
         PillTab('Detail', Icons.info_outline),
-        PillTab('Documents', Icons.description_outlined),
+        PillTab('Passenger', Icons.people_outline),
       ],
       builders: [
         (_) => _infoCard('FLIGHT INFORMATION', [
@@ -286,13 +257,14 @@ class _HistoryFlightDetailPageState extends State<HistoryFlightDetailPage> with 
               _field('Date & Time', widget.dateTime),
               _field('Price', widget.price),
               _field('Booking Reference', widget.bookingRef.isEmpty ? 'Not available' : widget.bookingRef),
+              _field('Purchased On', widget.purchasedAt == null ? 'Not available' : _formatPurchasedAt(widget.purchasedAt)),
               _field('Status', widget.status, last: true),
             ]),
-        (_) => _documentsList(
-              docs: HistoryFlightDetailPage._docs,
-              documents: documents,
-              uploading: uploading,
-              onUpload: uploadDocument,
+        (_) => _passengersList(
+              names: _split(widget.guestName),
+              idNumbers: _split(widget.guestIdNumber),
+              email: widget.guestEmail,
+              phone: widget.guestPhone,
             ),
       ],
     );
@@ -315,6 +287,7 @@ class HistoryHotelDetailPage extends StatefulWidget {
   final String hotelId;
   final String bookingId;
   final Map<String, String> documents;
+  final DateTime? purchasedAt;
 
   const HistoryHotelDetailPage({
     super.key,
@@ -333,27 +306,14 @@ class HistoryHotelDetailPage extends StatefulWidget {
     this.hotelId = '',
     this.bookingId = '',
     this.documents = const {},
+    this.purchasedAt,
   });
-
-  static const _docs = [
-    ('Booking Confirmation', Icons.confirmation_number_outlined),
-    ('Room Voucher', Icons.hotel_outlined),
-    ('Passport Scan', Icons.badge_outlined),
-    ('Travel Insurance', Icons.shield_outlined),
-  ];
 
   @override
   State<HistoryHotelDetailPage> createState() => _HistoryHotelDetailPageState();
 }
 
-class _HistoryHotelDetailPageState extends State<HistoryHotelDetailPage> with _BookingDocumentUploader<HistoryHotelDetailPage> {
-  @override
-  late Map<String, String> documents = Map.of(widget.documents);
-  @override
-  final Set<String> uploading = {};
-  @override
-  String get bookingId => widget.bookingId;
-
+class _HistoryHotelDetailPageState extends State<HistoryHotelDetailPage> {
   @override
   Widget build(BuildContext context) {
     return _HistoryDetailShell(
@@ -361,7 +321,6 @@ class _HistoryHotelDetailPageState extends State<HistoryHotelDetailPage> with _B
       tabs: const [
         PillTab('Detail', Icons.info_outline),
         PillTab('Guests', Icons.people_outline),
-        PillTab('Documents', Icons.description_outlined),
       ],
       builders: [
         (_) => _infoCard('HOTEL INFORMATION', [
@@ -371,6 +330,7 @@ class _HistoryHotelDetailPageState extends State<HistoryHotelDetailPage> with _B
               _field('Check-out', widget.checkOut.isEmpty ? 'Not available' : widget.checkOut),
               _field('Price / Night', widget.pricePerNight),
               _field('Booking Reference', widget.bookingRef.isEmpty ? 'Not available' : widget.bookingRef),
+              _field('Purchased On', widget.purchasedAt == null ? 'Not available' : _formatPurchasedAt(widget.purchasedAt)),
               _field('Status', widget.status, last: true),
             ]),
         (_) => _peopleList(
@@ -379,12 +339,6 @@ class _HistoryHotelDetailPageState extends State<HistoryHotelDetailPage> with _B
               email: widget.guestEmail,
               phone: widget.guestPhone,
               idNumber: widget.guestIdNumber,
-            ),
-        (_) => _documentsList(
-              docs: HistoryHotelDetailPage._docs,
-              documents: documents,
-              uploading: uploading,
-              onUpload: uploadDocument,
             ),
       ],
     );
@@ -401,6 +355,14 @@ class HistoryInsuranceDetailPage extends StatefulWidget {
   final String bookingId;
   final Map<String, String> documents;
   final String transactionId;
+  final DateTime? purchasedAt;
+  final String partnerId;
+  final String providerName;
+  final DateTime? travelStart;
+  final DateTime? travelEnd;
+  final String travellerIdNumber;
+  final String travellerEmail;
+  final String travellerPhone;
 
   const HistoryInsuranceDetailPage({
     super.key,
@@ -413,27 +375,21 @@ class HistoryInsuranceDetailPage extends StatefulWidget {
     this.bookingId = '',
     this.documents = const {},
     this.transactionId = '',
+    this.purchasedAt,
+    this.partnerId = '',
+    this.providerName = '',
+    this.travelStart,
+    this.travelEnd,
+    this.travellerIdNumber = '',
+    this.travellerEmail = '',
+    this.travellerPhone = '',
   });
-
-  static const _docs = [
-    ('Policy Document', Icons.description_outlined),
-    ('Certificate of Insurance', Icons.verified_outlined),
-    ('Passport Scan', Icons.badge_outlined),
-    ('Claim Form', Icons.assignment_outlined),
-  ];
 
   @override
   State<HistoryInsuranceDetailPage> createState() => _HistoryInsuranceDetailPageState();
 }
 
-class _HistoryInsuranceDetailPageState extends State<HistoryInsuranceDetailPage> with _BookingDocumentUploader<HistoryInsuranceDetailPage> {
-  @override
-  late Map<String, String> documents = Map.of(widget.documents);
-  @override
-  final Set<String> uploading = {};
-  @override
-  String get bookingId => widget.bookingId;
-
+class _HistoryInsuranceDetailPageState extends State<HistoryInsuranceDetailPage> {
   @override
   Widget build(BuildContext context) {
     return _HistoryDetailShell(
@@ -441,7 +397,6 @@ class _HistoryInsuranceDetailPageState extends State<HistoryInsuranceDetailPage>
       tabs: const [
         PillTab('Detail', Icons.info_outline),
         PillTab('Traveller', Icons.people_outline),
-        PillTab('Documents', Icons.description_outlined),
       ],
       builders: [
         (context) => ListView(
@@ -457,6 +412,10 @@ class _HistoryInsuranceDetailPageState extends State<HistoryInsuranceDetailPage>
                       _field('Coverage', widget.coverage),
                       _field('Policy Number', widget.policyNumber),
                       _field('Amount Paid', widget.amountPaid),
+                      _field('Coverage Period', widget.travelStart == null || widget.travelEnd == null
+                          ? 'Not available'
+                          : '${_formatDateOnly(widget.travelStart!)} - ${_formatDateOnly(widget.travelEnd!)}'),
+                      _field('Purchased On', widget.purchasedAt == null ? 'Not available' : _formatPurchasedAt(widget.purchasedAt)),
                       _field('Status', widget.status, last: true),
                     ],
                   ),
@@ -505,14 +464,37 @@ class _HistoryInsuranceDetailPageState extends State<HistoryInsuranceDetailPage>
                       ),
                     ],
                   ),
+                if (widget.partnerId.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: AppColors.primary),
+                        padding: const EdgeInsets.symmetric(vertical: 13),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+                          builder: (_) => InsuranceChatPage(
+                                partnerId: widget.partnerId,
+                                providerName: widget.providerName.isNotEmpty ? widget.providerName : 'Insurance Partner',
+                                planName: widget.planName,
+                              ))),
+                      icon: const Icon(Icons.chat_bubble_outline, size: 16, color: AppColors.primary),
+                      label: const Text('Chat with Partner',
+                          style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.w600, fontSize: 12.5)),
+                    ),
+                  ),
+                ],
               ],
             ),
-        (_) => _peopleList('Traveller', name: widget.travellerName),
-        (_) => _documentsList(
-              docs: HistoryInsuranceDetailPage._docs,
-              documents: documents,
-              uploading: uploading,
-              onUpload: uploadDocument,
+        (_) => _passengersList(
+              names: _split(widget.travellerName),
+              idNumbers: _split(widget.travellerIdNumber),
+              email: widget.travellerEmail,
+              phone: widget.travellerPhone,
+              roleLabel: 'Traveller',
+              emptyMessage: 'No traveller details for this entry.',
             ),
       ],
     );

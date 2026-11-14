@@ -67,7 +67,6 @@ class _PlanHotelDetailPageState extends State<PlanHotelDetailPage> {
     ('Booking Confirmation', Icons.confirmation_number_outlined),
     ('Room Voucher', Icons.hotel_outlined),
     ('Passport Scan', Icons.badge_outlined),
-    ('Travel Insurance', Icons.shield_outlined),
   ];
 
   @override

@@ -1,11 +1,11 @@
 // Voya — auth/role helpers shared by every admin & partner page.
-import { auth, db } from "./firebase-config.js";
+import { auth, db } from "./firebase-config.js?v=20261007";
 import {
   onAuthStateChanged, signOut, signInWithEmailAndPassword,
   createUserWithEmailAndPassword, sendPasswordResetEmail,
 } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
 import {
-  doc, getDoc, updateDoc, setDoc, serverTimestamp,
+  doc, getDoc, setDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
 
 function waitForUser() {
@@ -17,46 +17,23 @@ function waitForUser() {
   });
 }
 
-const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
-
-/**
- * A rejected partner who's still rejected 30 days after admin rejected
- * them (admin/insurance.html or insurance-partners.html's Reject action,
- * which stamps rejectedAt — see js/data.js setPartnerStatus) gets
- * auto-blocked. There's no scheduled backend in this project to do this
- * on a timer, so it's checked lazily here instead, on every partner page
- * load (requireRole() calls this for role: "partner") — the first partner
- * page load after the 30 days are up is what actually flips the status.
- * The partner's own client does the write; insurance_partners/{uid}'s
- * rule already lets isOwner(uid) update their own doc.
- */
-async function applyPartnerAutoBlock(uid, profile) {
-  if (profile.status !== "rejected" || !profile.rejectedAt?.toMillis) return profile;
-  const rejectedAtMs = profile.rejectedAt.toMillis();
-  if (Date.now() - rejectedAtMs < THIRTY_DAYS_MS) return profile;
-  try {
-    await updateDoc(doc(db, "insurance_partners", uid), { status: "blocked", blockedAt: serverTimestamp() });
-  } catch {
-    return profile; // couldn't write (offline, rules hiccup) — leave as "rejected" for now, retried on next load
-  }
-  return { ...profile, status: "blocked" };
-}
-
 /**
  * Blocks page render until we know the signed-in user really has `role`
  * ('admin' | 'partner'). Redirects to `loginUrl` otherwise. Returns
  * { user, uid, profile } on success (profile = the admins/insurance_partners doc).
  *
  * For role: "partner", also redirects to partner/notifications.html when
- * their status is "rejected" or "blocked" — so no partner page (dashboard,
- * plans, claims, ...) is reachable while in either state, not just the
- * dashboard's old small banner. Pass { skipStatusGate: true } from
- * notifications.html itself, so that page can actually show the message
- * instead of redirecting to itself forever (notifications.html is also a
- * normal, always-reachable nav item for an approved/pending/suspended
- * partner — the gate only forces the redirect for rejected/blocked).
+ * their status is "rejected" — so no partner page (dashboard, plans,
+ * claims, ...) is reachable while rejected, not just the dashboard's old
+ * small banner. Rejected stays rejected — there's no automatic status
+ * change over time; only an admin re-approving them moves it. Pass
+ * { skipStatusGate: true } from notifications.html itself, so that page
+ * can actually show the message instead of redirecting to itself forever
+ * (notifications.html is also a normal, always-reachable nav item for an
+ * approved/pending/suspended partner — the gate only forces the redirect
+ * while rejected).
  */
-export async function requireRole(role, loginUrl, { skipStatusGate = false } = {}) {
+export async function requireRole(role, loginUrl, { skipStatusGate = false, allowPending = false } = {}) {
   const user = await waitForUser();
   if (!user) {
     location.replace(loginUrl);
@@ -71,11 +48,21 @@ export async function requireRole(role, loginUrl, { skipStatusGate = false } = {
   }
   let profile = snap.data();
   if (role === "partner" && !skipStatusGate) {
-    profile = await applyPartnerAutoBlock(user.uid, profile);
-    if (profile.status === "rejected" || profile.status === "blocked") {
+    if (profile.status === "rejected") {
       location.replace("notifications.html");
       return null;
     }
+  }
+  // Separate from the rejected gate above (and NOT bypassed by
+  // skipStatusGate, which notifications.html uses only to avoid a
+  // redirect loop for rejected partners) -- a partner who has never
+  // been approved yet is confined to dashboard.html, which itself shows
+  // only the "Pending approval" message, until an admin approves them.
+  // dashboard.html is the one page that passes allowPending: true so it
+  // doesn't redirect into itself.
+  if (role === "partner" && profile.status === "pending" && !allowPending) {
+    location.replace("dashboard.html");
+    return null;
   }
   return { user, uid: user.uid, profile };
 }
@@ -93,11 +80,22 @@ export async function resetPassword(email) {
 export async function registerWithRole(role, email, password, profileData) {
   const cred = await createUserWithEmailAndPassword(auth, email.trim(), password);
   const col = role === "admin" ? "admins" : "insurance_partners";
-  await setDoc(doc(db, col, cred.user.uid), {
-    ...profileData,
-    email: email.trim().toLowerCase(),
-    createdAt: serverTimestamp(),
-  });
+  try {
+    await setDoc(doc(db, col, cred.user.uid), {
+      ...profileData,
+      email: email.trim().toLowerCase(),
+      createdAt: serverTimestamp(),
+    });
+  } catch (err) {
+    // The role-doc write can fail even after a real Auth account was just
+    // created — e.g. setup-admin.html's admins/{uid} create rule requires
+    // isAdmin(), which is false for anyone but the very first admin. Left
+    // alone, that silently leaves a real, permanent Auth account with no
+    // role doc at all — not an admin, not a partner, just dangling. Clean
+    // it up so a failed signup leaves nothing behind.
+    await cred.user.delete().catch(() => {});
+    throw err;
+  }
   return cred.user;
 }
 

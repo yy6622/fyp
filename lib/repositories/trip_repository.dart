@@ -179,12 +179,32 @@ class TripInsurance {
   final String price;
   final String policyNumber;
   final String transactionId;
+  final String travellerName;
+  final String bookingId;
+  final DateTime? purchasedAt;
+  final String partnerId;
+  final String providerName;
+  final DateTime? travelStart;
+  final DateTime? travelEnd;
+  final String travellerIdNumber;
+  final String travellerEmail;
+  final String travellerPhone;
   const TripInsurance({
     required this.planName,
     required this.coverage,
     required this.price,
     required this.policyNumber,
     this.transactionId = '',
+    this.travellerName = '',
+    this.bookingId = '',
+    this.purchasedAt,
+    this.partnerId = '',
+    this.providerName = '',
+    this.travelStart,
+    this.travelEnd,
+    this.travellerIdNumber = '',
+    this.travellerEmail = '',
+    this.travellerPhone = '',
   });
 
   Map<String, dynamic> toMap() => {
@@ -193,6 +213,16 @@ class TripInsurance {
         'price': price,
         'policyNumber': policyNumber,
         'transactionId': transactionId,
+        'travellerName': travellerName,
+        'bookingId': bookingId,
+        if (purchasedAt != null) 'purchasedAt': Timestamp.fromDate(purchasedAt!),
+        if (partnerId.isNotEmpty) 'partnerId': partnerId,
+        if (providerName.isNotEmpty) 'providerName': providerName,
+        if (travelStart != null) 'travelStart': Timestamp.fromDate(travelStart!),
+        if (travelEnd != null) 'travelEnd': Timestamp.fromDate(travelEnd!),
+        if (travellerIdNumber.isNotEmpty) 'travellerIdNumber': travellerIdNumber,
+        if (travellerEmail.isNotEmpty) 'travellerEmail': travellerEmail,
+        if (travellerPhone.isNotEmpty) 'travellerPhone': travellerPhone,
       };
 
   factory TripInsurance.fromMap(Map<String, dynamic> m) => TripInsurance(
@@ -201,6 +231,16 @@ class TripInsurance {
         price: (m['price'] as String?) ?? '',
         policyNumber: (m['policyNumber'] as String?) ?? '',
         transactionId: (m['transactionId'] as String?) ?? '',
+        travellerName: (m['travellerName'] as String?) ?? '',
+        bookingId: (m['bookingId'] as String?) ?? '',
+        purchasedAt: (m['purchasedAt'] as Timestamp?)?.toDate(),
+        partnerId: (m['partnerId'] as String?) ?? '',
+        providerName: (m['providerName'] as String?) ?? '',
+        travelStart: (m['travelStart'] as Timestamp?)?.toDate(),
+        travelEnd: (m['travelEnd'] as Timestamp?)?.toDate(),
+        travellerIdNumber: (m['travellerIdNumber'] as String?) ?? '',
+        travellerEmail: (m['travellerEmail'] as String?) ?? '',
+        travellerPhone: (m['travellerPhone'] as String?) ?? '',
       );
 }
 
@@ -273,6 +313,17 @@ class Trip {
     final last = lastActivityAt ?? createdAt;
     if (last == null) return false;
     return DateTime.now().difference(last) > const Duration(days: 30);
+  }
+
+  /// True once the whole trip is over (today is after the last day) — live
+  /// weather/traffic conditions stop being shown once this is true.
+  bool get hasEnded {
+    final end = endDate;
+    if (end == null) return false;
+    final today = DateTime.now();
+    final todayStart = DateTime(today.year, today.month, today.day);
+    final endStart = DateTime(end.year, end.month, end.day);
+    return todayStart.isAfter(endStart);
   }
 
   bool planUnseenFor(String uid) {
@@ -390,6 +441,11 @@ class Trip {
         );
       }).toList()
         ..sort((a, b) {
+          // Activities without a time (it's an optional field) should fall
+          // after timed ones for that day, not before — '' sorts before
+          // any 'HH:MM' string, which used to push "sometime today" items
+          // above a day's very first scheduled activity.
+          if (a.time.isEmpty != b.time.isEmpty) return a.time.isEmpty ? 1 : -1;
           final byTime = a.time.compareTo(b.time);
           return byTime != 0 ? byTime : a.id.compareTo(b.id);
         });
@@ -482,16 +538,42 @@ class TripVote {
   VoteOption? get leading =>
       options.isEmpty ? null : (options.toList()..sort((a, b) => b.votedBy.length.compareTo(a.votedBy.length))).first;
 
+  /// All options tied for the most votes (only meaningful once at least one
+  /// vote has been cast — with zero votes every option "ties" at 0, which
+  /// isn't a real tie, so callers should check [hasAnyVotes] first).
+  List<VoteOption> get leaders {
+    if (options.isEmpty) return const [];
+    final top = options.map((o) => o.votedBy.length).reduce((a, b) => a > b ? a : b);
+    return options.where((o) => o.votedBy.length == top).toList();
+  }
+
+  bool get hasAnyVotes => options.any((o) => o.votedBy.isNotEmpty);
+
+  /// True when two or more options are tied for first place, after at least
+  /// one vote has been cast.
+  bool get isTie => hasAnyVotes && leaders.length > 1;
+
   static TripVote fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
     final data = doc.data() ?? const {};
     final optionsRaw = Map<String, dynamic>.from(data['options'] as Map? ?? const {});
+    // Firestore map fields don't preserve insertion order, so the options a
+    // user typed in as #1/#2/#3 can come back from the server in a
+    // different order. Every option id ends in the microsecond timestamp it
+    // was created with ('opt{i}_{micros}' or 'opt_{micros}'), which does
+    // preserve creation order, so sort on that instead of trusting map order.
+    int creationMicros(String id) {
+      final tail = id.split('_').last;
+      return int.tryParse(tail) ?? 0;
+    }
+
     final options = optionsRaw.entries
         .map((e) => VoteOption(
               id: e.key,
               label: (Map<String, dynamic>.from(e.value as Map)['label'] as String?) ?? '',
               votedBy: List<String>.from(Map<String, dynamic>.from(e.value as Map)['votedBy'] as List? ?? const []),
             ))
-        .toList();
+        .toList()
+      ..sort((a, b) => creationMicros(a.id).compareTo(creationMicros(b.id)));
     return TripVote(
       id: doc.id,
       title: (data['title'] as String?) ?? '',
@@ -511,6 +593,13 @@ class ExpenseParticipant {
   final double share;
   final bool paid;
   const ExpenseParticipant({required this.uid, required this.name, required this.share, required this.paid});
+}
+
+class ExpenseLineItem {
+  final String label;
+  final double price;
+  final List<String> assigneeUids;
+  const ExpenseLineItem({required this.label, required this.price, required this.assigneeUids});
 }
 
 String expenseLabel(TripExpense e) {
@@ -599,6 +688,7 @@ class TripExpense {
   final DateTime? date;
   final List<ExpenseParticipant> participants;
   final String receiptImageUrl;
+  final List<ExpenseLineItem> items;
 
   const TripExpense({
     required this.id,
@@ -614,6 +704,7 @@ class TripExpense {
     required this.date,
     required this.participants,
     this.receiptImageUrl = '',
+    this.items = const [],
   });
 
   double shareFor(String uid) => participants.where((p) => p.uid == uid).fold(0.0, (s, p) => s + p.share);
@@ -647,6 +738,14 @@ class TripExpense {
       date: (data['date'] as Timestamp?)?.toDate(),
       participants: participants,
       receiptImageUrl: (data['receiptImageUrl'] as String?) ?? '',
+      items: (data['items'] as List? ?? const [])
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .map((e) => ExpenseLineItem(
+                label: (e['label'] as String?) ?? '',
+                price: (e['price'] as num?)?.toDouble() ?? 0,
+                assigneeUids: List<String>.from(e['assigneeUids'] as List? ?? const []),
+              ))
+          .toList(),
     );
   }
 }
@@ -1019,6 +1118,49 @@ class TripRepository {
     });
   }
 
+  // Moves an activity from one day to another (e.g. dragged across the
+  // day-pager edge while reordering). Reads the item's current field map
+  // so votedBy/forMemberUids/icon/label/location all carry over untouched
+  // — only `time` changes, to the slot it's dropped on in the new day.
+  Future<void> moveActivityToDay(
+    String tripId,
+    int fromDayIndex,
+    String itemId,
+    int toDayIndex,
+    String time, {
+    String? actorUid,
+  }) async {
+    if (fromDayIndex == toDayIndex) {
+      await updateActivityTime(tripId, fromDayIndex, itemId, time, actorUid: actorUid);
+      return;
+    }
+    final docRef = _trips.doc(tripId);
+    final snap = await docRef.get();
+    final data = snap.data();
+    if (data == null) return;
+    final days = Map<String, dynamic>.from(data['days'] as Map? ?? const {});
+    final fromDay = Map<String, dynamic>.from(days['$fromDayIndex'] as Map? ?? const {});
+    final items = Map<String, dynamic>.from(fromDay['items'] as Map? ?? const {});
+    final raw = items[itemId];
+    if (raw == null) return;
+    final movedItem = Map<String, dynamic>.from(raw as Map)..['time'] = time;
+    await docRef.update({
+      'days.$fromDayIndex.items.$itemId': FieldValue.delete(),
+      'days.$toDayIndex.items.$itemId': movedItem,
+      'lastActivityAt': FieldValue.serverTimestamp(),
+      ..._planUpdateFields(actorUid: actorUid),
+    });
+    if (actorUid != null) {
+      await _notifyMembers(
+        tripId,
+        actorUid,
+        (name, _) => '$name moved "${movedItem['label'] ?? 'an activity'}" to Day ${toDayIndex + 1}',
+        type: 'trip_activity_moved',
+        data: {'dayIndex': toDayIndex},
+      );
+    }
+  }
+
   Future<void> toggleActivityVote(String tripId, int dayIndex, String itemId, String uid, bool voted) {
     return _trips.doc(tripId).update({
       'days.$dayIndex.items.$itemId.votedBy':
@@ -1174,7 +1316,10 @@ class TripRepository {
         (snap) => snap.docs.map(TripVote.fromDoc).toList());
   }
 
-  Future<void> createVote(
+  /// Returns the new poll's doc id, so callers (e.g. decide_now_sheet's
+  /// "Vote" action) can remember which poll a discussion decision is
+  /// waiting on and read its result back later.
+  Future<String> createVote(
     String tripId, {
     required String title,
     required List<String> options,
@@ -1188,7 +1333,7 @@ class TripRepository {
       optionsMap['opt${i}_${DateTime.now().microsecondsSinceEpoch}'] = {'label': options[i], 'votedBy': <String>[]};
     }
     _touchActivity(tripId);
-    await _votes(tripId).add({
+    final ref = await _votes(tripId).add({
       'title': title,
       'createdBy': createdBy,
       'allowAddOptions': allowAddOptions,
@@ -1203,6 +1348,13 @@ class TripRepository {
       (name, _) => '$name started a new poll: "$title"',
       type: 'trip_poll_created',
     );
+    return ref.id;
+  }
+
+  /// Live-reads a single poll by id, for a discussion decision that's
+  /// waiting on it (see decide_now_sheet.dart's conflict check).
+  Stream<TripVote?> watchVoteById(String tripId, String voteId) {
+    return _votes(tripId).doc(voteId).snapshots().map((doc) => doc.exists ? TripVote.fromDoc(doc) : null);
   }
 
   Future<void> castVote(String tripId, TripVote vote, String optionId, String uid) async {
@@ -1287,6 +1439,7 @@ class TripRepository {
     required String paidByName,
     required List<ExpenseParticipant> participants,
     String receiptImageUrl = '',
+    List<ExpenseLineItem> items = const [],
     bool sendReminder = false,
   }) async {
     _validateExpenseSplitInputs(amount, participants.length);
@@ -1314,6 +1467,7 @@ class TripRepository {
       'participants': participantsMap,
       'participantIds': participants.map((p) => p.uid).toList(),
       'receiptImageUrl': receiptImageUrl,
+      'items': items.map((i) => {'label': i.label, 'price': i.price, 'assigneeUids': i.assigneeUids}).toList(),
       'createdAt': FieldValue.serverTimestamp(),
     });
     await batch.commit();

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../controllers/group_settings_controller.dart';
@@ -95,6 +96,11 @@ class _GroupSettingPageState extends State<GroupSettingPage> {
       ],
     );
     if (result == true) {
+      if (label == 'Group Name' && fieldController.text.trim().isEmpty) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Group name cannot be empty.')));
+        return;
+      }
       await onSave(fieldController.text);
     }
   }
@@ -214,12 +220,12 @@ class _GroupSettingPageState extends State<GroupSettingPage> {
               borderRadius: BorderRadius.circular(6),
               child: url.isEmpty
                   ? AppImage('assets/images/adventure_bg.jpg', width: 36, height: 36, fit: BoxFit.cover)
-                  : Image.network(
-                      url,
+                  : CachedNetworkImage(
+                      imageUrl: url,
                       width: 36,
                       height: 36,
                       fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => AppImage('assets/images/adventure_bg.jpg', width: 36, height: 36, fit: BoxFit.cover),
+                      errorWidget: (_, __, ___) => AppImage('assets/images/adventure_bg.jpg', width: 36, height: 36, fit: BoxFit.cover),
                     ),
             ),
             const SizedBox(width: 8),

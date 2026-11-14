@@ -2,7 +2,6 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-
 import 'places_api_service.dart';
 
 
@@ -127,4 +126,16 @@ class WeatherService {
     if (maxT == null || minT == null || code == null) return null;
     return DestinationWeather(tempC: (maxT + minT) / 2, tempMinC: minT, tempMaxC: maxT, weatherCode: code);
   }
+
+  /// Weather for one day of a trip's itinerary. The caller (LiveConditionsCard)
+  /// never asks for a day that has already passed — weather is only shown
+  /// for today or an upcoming day within the forecast-worthwhile window —
+  /// so this always does a live/forecast fetch, no local replay needed.
+  Future<DestinationWeather?> forTripDay({
+    required String tripId,
+    required int dayNumber,
+    required String destination,
+    required DateTime date,
+  }) =>
+      forDestination(destination, forDate: date);
 }

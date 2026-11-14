@@ -198,7 +198,6 @@ class _CreatePostPageState extends State<CreatePostPage> {
                   const Text('More Options', style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold, color: Colors.black)),
                   const SizedBox(height: 4),
                   _switchRow('Allow comments', controller.allowComments, controller.setAllowComments),
-                  _switchRow('Allow others to share', controller.allowShare, controller.setAllowShare),
                 ],
               ),
             ),

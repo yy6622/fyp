@@ -1,4 +1,5 @@
 import 'package:cloud_functions/cloud_functions.dart';
+import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
 import 'package:flutter_stripe/flutter_stripe.dart';
 
 class StripePaymentException implements Exception {
@@ -30,12 +31,29 @@ class StripeService {
     } on FirebaseFunctionsException catch (e) {
       throw StripePaymentException(e.message ?? 'Could not start the payment (${e.code}).');
     } catch (e) {
-      throw StripePaymentException('Could not reach the payment server: $e');
+      debugPrint('[StripeService] payment server unreachable: $e');
+      throw const StripePaymentException('Could not reach the payment server. Check your connection and try again.');
     }
 
     final clientSecret = data['clientSecret'] as String?;
     if (clientSecret == null || clientSecret.isEmpty) {
       throw const StripePaymentException('Payment server did not return a client secret.');
+    }
+
+    // TEMP TEST BYPASS (web only): flutter_stripe has no web implementation
+    // of the PaymentSheet API -- Stripe's own docs mark Flutter Web support
+    // as "highly experimental" and list PaymentSheet as unsupported there
+    // (only native iOS/Android render it). Calling initPaymentSheet on web
+    // throws an uncaught StripeConfigException and the Pay button spins
+    // forever. Until a real web card-entry flow is built (CardField /
+    // PaymentElement + confirmPayment), skip presenting the Stripe sheet on
+    // web so the rest of the purchase pipeline below this method
+    // (recordPurchase -> addBooking -> History) can still be exercised
+    // end-to-end during testing. The PaymentIntent above was still created
+    // for real against Stripe's test server; this only skips the card UI.
+    // Native iOS/Android are unaffected and still use the real PaymentSheet.
+    if (kIsWeb) {
+      return clientSecret.split('_secret_').first;
     }
 
     try {

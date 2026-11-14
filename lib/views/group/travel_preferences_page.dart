@@ -123,7 +123,11 @@ class TravelPreferencesPage extends StatelessWidget {
     );
     if (result != true) return;
     final parsed = double.tryParse(budgetController.text.trim());
-    if (parsed == null || parsed < 0) return;
+    if (parsed == null || parsed < 0) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please enter a valid budget amount.')));
+      return;
+    }
     await TripRepository.instance.updateSettings(tripId, budgetPerPerson: parsed, actorUid: _uid);
   }
 

@@ -1,0 +1,42 @@
+// Calling codes for the same 30 countries COUNTRY_OPTIONS (countries.js)
+// lists, in the same order -- kept as a separate file (rather than
+// merged into countries.js) because not every COUNTRY_OPTIONS consumer
+// needs a dial code (plan-form.html's destination picker, for one), so
+// this only loads where it's actually used (partner/register.html's
+// phone field).
+export const DIAL_CODES = [
+  { name: "Malaysia", code: "+60" },
+  { name: "Singapore", code: "+65" },
+  { name: "Indonesia", code: "+62" },
+  { name: "Thailand", code: "+66" },
+  { name: "Vietnam", code: "+84" },
+  { name: "Philippines", code: "+63" },
+  { name: "Japan", code: "+81" },
+  { name: "South Korea", code: "+82" },
+  { name: "China", code: "+86" },
+  { name: "Hong Kong", code: "+852" },
+  { name: "Taiwan", code: "+886" },
+  { name: "India", code: "+91" },
+  { name: "Australia", code: "+61" },
+  { name: "New Zealand", code: "+64" },
+  { name: "United Kingdom", code: "+44" },
+  { name: "Ireland", code: "+353" },
+  { name: "France", code: "+33" },
+  { name: "Germany", code: "+49" },
+  { name: "Italy", code: "+39" },
+  { name: "Spain", code: "+34" },
+  { name: "Netherlands", code: "+31" },
+  { name: "Switzerland", code: "+41" },
+  { name: "United States", code: "+1" },
+  { name: "Canada", code: "+1" },
+  { name: "United Arab Emirates", code: "+971" },
+  { name: "Saudi Arabia", code: "+966" },
+  { name: "Turkey", code: "+90" },
+  { name: "South Africa", code: "+27" },
+  { name: "Brazil", code: "+55" },
+  { name: "Mexico", code: "+52" },
+];
+
+// Default to Malaysia -- this platform's own base market (same default
+// used for currency/home-airport elsewhere in the app).
+export const DEFAULT_DIAL_CODE = "+60";

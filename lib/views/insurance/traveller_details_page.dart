@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../controllers/insurance_controller.dart';
 import '../../models/insurance_models.dart';
 import '../../repositories/trip_repository.dart';
+import '../../repositories/user_repository.dart';
 import '../../services/auth_service.dart';
 import '../../theme.dart';
 import '../shared/nice_pickers.dart';
@@ -18,7 +19,20 @@ class TravellerDetailsPage extends StatefulWidget {
   final InsurancePlan plan;
   // See [InsurancePlanCard.tripId].
   final String? tripId;
-  const TravellerDetailsPage({super.key, required this.plan, this.tripId});
+  // Set when arriving from a quote/compare flow that already collected
+  // these on [InsuranceQuotePage] — pre-fills (and skips re-deriving from
+  // the trip) traveller count and travel dates instead of asking again.
+  final int? initialTravellerCount;
+  final DateTime? initialTravelStart;
+  final DateTime? initialTravelEnd;
+  const TravellerDetailsPage({
+    super.key,
+    required this.plan,
+    this.tripId,
+    this.initialTravellerCount,
+    this.initialTravelStart,
+    this.initialTravelEnd,
+  });
 
   @override
   State<TravellerDetailsPage> createState() => _TravellerDetailsPageState();
@@ -28,6 +42,7 @@ class _TravellerDetailsPageState extends State<TravellerDetailsPage> {
   final TravellerDetailsController controller = TravellerDetailsController();
 
   bool _loadingTrip = false;
+  int _phoneFieldVersion = 0;
 
   final List<TextEditingController> _nameCtrls = [];
   final List<TextEditingController> _passportCtrls = [];
@@ -41,9 +56,62 @@ class _TravellerDetailsPageState extends State<TravellerDetailsPage> {
     _passportCtrls.add(TextEditingController());
     _emailCtrls.add(TextEditingController());
     _phoneCtrls.add(TextEditingController());
-    if (widget.tripId != null && widget.tripId!.isNotEmpty) {
+    if (widget.initialTravelStart != null && widget.initialTravelEnd != null) {
+      // A quote/compare step already fixed the trip dates — use those
+      // instead of re-deriving (and possibly disagreeing with them) from
+      // the trip record.
+      controller.setTravelDates(widget.initialTravelStart!, widget.initialTravelEnd!);
+    } else if (widget.tripId != null && widget.tripId!.isNotEmpty) {
       _loadTripDates();
     }
+    if (widget.initialTravellerCount != null) {
+      // Grow the controller lists directly (no setState: the first build
+      // hasn't happened yet, so there's nothing to re-render) to match the
+      // traveller count already chosen on the quote step.
+      final clamped = widget.initialTravellerCount!
+          .clamp(TravellerDetailsController.minTravellers, TravellerDetailsController.maxTravellers);
+      controller.setTravellerCount(clamped);
+      while (_nameCtrls.length < controller.travellers.length) {
+        _nameCtrls.add(TextEditingController());
+        _passportCtrls.add(TextEditingController());
+        _emailCtrls.add(TextEditingController());
+        _phoneCtrls.add(TextEditingController());
+      }
+      while (_nameCtrls.length > controller.travellers.length) {
+        _nameCtrls.removeLast().dispose();
+        _passportCtrls.removeLast().dispose();
+        _emailCtrls.removeLast().dispose();
+        _phoneCtrls.removeLast().dispose();
+      }
+    }
+    _prefillContactFromAccount();
+  }
+
+  /// The lead traveller's contact fields double as the account holder's
+  /// own details most of the time, so default them from the signed-in
+  /// traveller's profile (still fully editable) instead of leaving them
+  /// blank.
+  Future<void> _prefillContactFromAccount() async {
+    final uid = AuthService.instance.currentUser?.uid;
+    if (uid == null) return;
+    AppUser? profile;
+    try {
+      profile = await UserRepository.instance.fetchProfile(uid);
+    } catch (_) {
+      return;
+    }
+    if (!mounted || profile == null) return;
+    setState(() {
+      if (_emailCtrls[0].text.trim().isEmpty && profile!.email.trim().isNotEmpty) {
+        _emailCtrls[0].text = profile.email;
+        controller.setEmail(0, profile.email);
+      }
+      if (_phoneCtrls[0].text.trim().isEmpty && profile!.phone.trim().isNotEmpty) {
+        _phoneCtrls[0].text = profile.phone;
+        controller.setPhone(0, profile.phone);
+        _phoneFieldVersion++;
+      }
+    });
   }
 
   Future<void> _loadTripDates() async {
@@ -74,35 +142,28 @@ class _TravellerDetailsPageState extends State<TravellerDetailsPage> {
     super.dispose();
   }
 
-  void _addTraveller() {
-    final added = controller.addTraveller();
-    if (!added) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('You can add up to 6 travellers per booking')),
-      );
-      return;
-    }
+  void _setTravellerCount(int target) {
+    final clamped = target.clamp(TravellerDetailsController.minTravellers, TravellerDetailsController.maxTravellers);
+    if (clamped == controller.travellers.length) return;
+    controller.setTravellerCount(clamped);
     setState(() {
-      _nameCtrls.add(TextEditingController());
-      _passportCtrls.add(TextEditingController());
-      _emailCtrls.add(TextEditingController());
-      _phoneCtrls.add(TextEditingController());
-    });
-  }
-
-  void _removeTraveller(int index) {
-    if (controller.travellers.length <= 1) return;
-    controller.removeTraveller(index);
-    setState(() {
-      _nameCtrls.removeAt(index).dispose();
-      _passportCtrls.removeAt(index).dispose();
-      _emailCtrls.removeAt(index).dispose();
-      _phoneCtrls.removeAt(index).dispose();
+      while (_nameCtrls.length < controller.travellers.length) {
+        _nameCtrls.add(TextEditingController());
+        _passportCtrls.add(TextEditingController());
+        _emailCtrls.add(TextEditingController());
+        _phoneCtrls.add(TextEditingController());
+      }
+      while (_nameCtrls.length > controller.travellers.length) {
+        _nameCtrls.removeLast().dispose();
+        _passportCtrls.removeLast().dispose();
+        _emailCtrls.removeLast().dispose();
+        _phoneCtrls.removeLast().dispose();
+      }
     });
   }
 
   void _continue() {
-    final error = controller.validate();
+    final error = controller.validate(widget.plan);
     if (error != null) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
       return;
@@ -112,6 +173,7 @@ class _TravellerDetailsPageState extends State<TravellerDetailsPage> {
           builder: (_) => PaymentMethodPage(
                 plan: widget.plan,
                 travellerCount: controller.travellerCount,
+                travellers: controller.travellers,
                 tripId: widget.tripId,
                 travelStart: controller.travelStart!,
                 travelEnd: controller.travelEnd!,
@@ -157,6 +219,26 @@ class _TravellerDetailsPageState extends State<TravellerDetailsPage> {
                       ],
                     ),
                   ),
+                  if (widget.plan.hasNationalityRestriction) ...[
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(color: const Color(0xFFFFF8EE), borderRadius: BorderRadius.circular(14), border: Border.all(color: const Color(0xFFFCE4BE))),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Icon(Icons.info_outline, size: 18, color: Color(0xFFB8740A)),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              'This plan is only available to: ${widget.plan.eligibleCountries.join(', ')}.',
+                              style: const TextStyle(fontSize: 12, color: AppColors.navy, height: 1.3),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 16),
                   Container(
                     padding: const EdgeInsets.all(18),
@@ -164,25 +246,17 @@ class _TravellerDetailsPageState extends State<TravellerDetailsPage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('Traveller Details', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.navy)),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text('Traveller Details', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.navy)),
+                            _travellerStepper(),
+                          ],
+                        ),
                         for (int i = 0; i < controller.travellerCount; i++) ...[
                           const SizedBox(height: 18),
                           _travellerFields(i),
                         ],
-                        const SizedBox(height: 18),
-                        SizedBox(
-                          width: double.infinity,
-                          child: OutlinedButton.icon(
-                            style: OutlinedButton.styleFrom(
-                              side: const BorderSide(color: AppColors.primary, style: BorderStyle.solid),
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                            ),
-                            onPressed: _addTraveller,
-                            icon: const Icon(Icons.add, size: 18, color: AppColors.primary),
-                            label: const Text('Add Traveller', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.w600)),
-                          ),
-                        ),
                       ],
                     ),
                   ),
@@ -210,6 +284,34 @@ class _TravellerDetailsPageState extends State<TravellerDetailsPage> {
     );
   }
 
+  Widget _travellerStepper() {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _stepperButton(Icons.remove, enabled: controller.travellerCount > TravellerDetailsController.minTravellers, onTap: () => _setTravellerCount(controller.travellerCount - 1)),
+        SizedBox(
+          width: 28,
+          child: Text('${controller.travellerCount}', textAlign: TextAlign.center, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.navy)),
+        ),
+        _stepperButton(Icons.add, enabled: controller.travellerCount < TravellerDetailsController.maxTravellers, onTap: () => _setTravellerCount(controller.travellerCount + 1)),
+      ],
+    );
+  }
+
+  Widget _stepperButton(IconData icon, {required bool enabled, required VoidCallback onTap}) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(16),
+      onTap: enabled ? onTap : null,
+      child: Container(
+        width: 30,
+        height: 30,
+        decoration: BoxDecoration(shape: BoxShape.circle, color: enabled ? AppColors.primary.withValues(alpha: 0.1) : AppColors.chipGrey),
+        alignment: Alignment.center,
+        child: Icon(icon, size: 16, color: enabled ? AppColors.primary : AppColors.textGrey),
+      ),
+    );
+  }
+
   Widget _travellerFields(int index) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -219,16 +321,10 @@ class _TravellerDetailsPageState extends State<TravellerDetailsPage> {
             Text('Traveller ${index + 1}', style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold, color: AppColors.navy)),
             const SizedBox(width: 6),
             const Text('(Adult)', style: TextStyle(fontSize: 12, color: AppColors.textGrey)),
-            const Spacer(),
-            if (index > 0)
-              GestureDetector(
-                onTap: () => _removeTraveller(index),
-                child: const Icon(Icons.delete_outline, size: 20, color: Colors.redAccent),
-              ),
           ],
         ),
         const SizedBox(height: 10),
-        _field(_nameCtrls[index], 'Full Name (as in passport)', onChanged: (v) => controller.setName(index, v)),
+        _field(_nameCtrls[index], 'Full Name (as in IC/passport)', onChanged: (v) => controller.setName(index, v)),
         const SizedBox(height: 10),
         _pickerField(
           'Date of Birth',
@@ -242,12 +338,19 @@ class _TravellerDetailsPageState extends State<TravellerDetailsPage> {
           onTap: () => _pickNationality(index),
         ),
         const SizedBox(height: 10),
-        _field(_passportCtrls[index], 'Passport Number', onChanged: (v) => controller.setPassport(index, v)),
+        // Malaysians buy travel insurance on their IC (MyKad) — only
+        // foreigners are asked for a passport number instead.
+        _field(
+          _passportCtrls[index],
+          controller.travellers[index].nationality == 'Malaysian' ? 'IC Number (MyKad)' : 'Passport Number',
+          onChanged: (v) => controller.setIdentityNumber(index, v),
+        ),
         if (index == 0) ...[
           const SizedBox(height: 10),
           _field(_emailCtrls[index], 'Email', keyboardType: TextInputType.emailAddress, onChanged: (v) => controller.setEmail(index, v)),
           const SizedBox(height: 10),
           PhoneInputField(
+            key: ValueKey('phone-$index-$_phoneFieldVersion'),
             initialValue: _phoneCtrls[index].text,
             onChanged: (v) {
               _phoneCtrls[index].text = v;
@@ -278,7 +381,7 @@ class _TravellerDetailsPageState extends State<TravellerDetailsPage> {
               onChanged: onChanged,
               decoration: InputDecoration(
                 labelText: label,
-                labelStyle: const TextStyle(fontSize: 11.5, color: AppColors.textGrey),
+                labelStyle: const TextStyle(fontSize: 13.5, color: AppColors.textGrey),
                 border: InputBorder.none,
                 isDense: true,
               ),
@@ -366,6 +469,10 @@ class _TravellerDetailsPageState extends State<TravellerDetailsPage> {
   }
 
   Future<void> _pickNationality(int index) async {
+    // When the plan restricts eligible nationalities, only offer those —
+    // the traveller simply can't select one this plan doesn't cover,
+    // rather than finding out only after filling in the rest of the form.
+    final options = widget.plan.hasNationalityRestriction ? widget.plan.eligibleCountries : nationalityOptions;
     final picked = await showModalBottomSheet<String>(
       context: context,
       backgroundColor: Colors.white,
@@ -384,9 +491,9 @@ class _TravellerDetailsPageState extends State<TravellerDetailsPage> {
             Flexible(
               child: ListView.builder(
                 shrinkWrap: true,
-                itemCount: nationalityOptions.length,
+                itemCount: options.length,
                 itemBuilder: (context, i) {
-                  final option = nationalityOptions[i];
+                  final option = options[i];
                   return ListTile(
                     title: Text(option, style: const TextStyle(fontSize: 13.5, color: Colors.black)),
                     trailing: option == controller.travellers[index].nationality

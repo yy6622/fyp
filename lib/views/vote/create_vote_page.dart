@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 import '../../controllers/vote_controller.dart';
 import '../../theme.dart';
@@ -239,10 +240,10 @@ class _CreateVotePageState extends State<CreateVotePage> {
               color: AppColors.chipGrey,
               child: item.imageUrl.isEmpty
                   ? Icon(item.fallbackIcon, size: 18, color: AppColors.textGrey)
-                  : Image.network(
-                      item.imageUrl,
+                  : CachedNetworkImage(
+                      imageUrl: item.imageUrl,
                       fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => Icon(item.fallbackIcon, size: 18, color: AppColors.textGrey),
+                      errorWidget: (_, __, ___) => Icon(item.fallbackIcon, size: 18, color: AppColors.textGrey),
                     ),
             ),
           ),

@@ -81,5 +81,17 @@ service firebase.storage {
       allow write: if request.auth != null &&
         firestore.exists(/databases/(default)/documents/admins/$(request.auth.uid));
     }
+
+    // Attraction photos (admin/attraction-form.html, see
+    // uploadAttractionImage/deleteAttractionImage in js/data.js) — had no
+    // match block at all, so every upload was being silently denied with
+    // storage/unauthorized and every delete silently no-op'd (caught by
+    // its own try/catch). Admin-only write, same as embassy photos above;
+    // read open to any signed-in user since attractions are public.
+    match /attraction_images/{attractionId}/{fileName} {
+      allow read: if request.auth != null;
+      allow write, delete: if request.auth != null &&
+        firestore.exists(/databases/(default)/documents/admins/$(request.auth.uid));
+    }
   }
 }

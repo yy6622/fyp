@@ -14,6 +14,23 @@ bool isValidPhoneFormat(String value) {
   return digitCount >= 7 && digitCount <= 15;
 }
 
+// Passport number formats vary a lot by issuing country — some are purely
+// numeric (older German/Russian-style), most mix letters and digits
+// (Malaysia "A12345678", Singapore "K1234567A", China "E12345678", India
+// "A1234567", ...). There's no single universal digits-only rule, so this
+// only checks what IS universal: letters/digits only (no spaces, hyphens,
+// or other punctuation — real passport numbers never have those) and a
+// length in the range every issuing country's format actually falls into.
+final RegExp _passportPattern = RegExp(r'^[A-Za-z0-9]{5,12}$');
+
+bool isValidPassportFormat(String value) => _passportPattern.hasMatch(value.trim());
+
+// Malaysian NRIC (IC): 12 digits, YYMMDD-PB-###G, entered with or without
+// the dashes (e.g. "901231-14-5566" or "901231145566").
+final RegExp _icPattern = RegExp(r'^\d{6}-?\d{2}-?\d{4}$');
+
+bool isValidICFormat(String value) => _icPattern.hasMatch(value.trim());
+
 class FlightPassengerDetailsController extends ChangeNotifier {
   final int minQuantity;
   final int maxQuantity;
@@ -30,16 +47,18 @@ class FlightPassengerDetailsController extends ChangeNotifier {
 
   int get quantity => passengers.length;
 
-  bool addPassenger() {
-    if (passengers.length >= maxQuantity) return false;
-    passengers.add(PassengerDetail());
-    notifyListeners();
-    return true;
-  }
-
-  void removePassenger(int index) {
-    if (passengers.length <= minQuantity) return;
-    passengers.removeAt(index);
+  /// Grows/shrinks [passengers] to match a quantity picked up front (a
+  /// stepper, same pattern as [HotelGuestDetailsController.setRooms]) —
+  /// new entries are blank, extra ones are dropped from the end.
+  void setQuantity(int value) {
+    final target = value.clamp(minQuantity, maxQuantity);
+    if (target == passengers.length) return;
+    while (passengers.length < target) {
+      passengers.add(PassengerDetail());
+    }
+    while (passengers.length > target) {
+      passengers.removeLast();
+    }
     notifyListeners();
   }
 
@@ -74,6 +93,7 @@ class FlightPassengerDetailsController extends ChangeNotifier {
       if (p.dob == null) return "$who's date of birth is required.";
       if (p.nationality == null || p.nationality!.isEmpty) return "$who's nationality is required.";
       if (p.passportNumber.trim().isEmpty) return "$who's passport number is required.";
+      if (!isValidPassportFormat(p.passportNumber)) return "$who's passport number doesn't look right — letters/digits only, 5-12 characters.";
       if (p.passportExpiry == null) return "$who's passport expiry date is required.";
     }
     if (contactEmail.trim().isEmpty) return 'A contact email is required.';
@@ -133,6 +153,9 @@ class HotelGuestDetailsController extends ChangeNotifier {
     if (phone.trim().isEmpty) return 'A contact phone number is required.';
     if (!isValidPhoneFormat(phone)) return 'Please enter a valid phone number.';
     if (idNumber.trim().isEmpty) return 'A passport/ID number is required.';
+    if (!RegExp(r'^[A-Za-z0-9]{5,20}$').hasMatch(idNumber.trim())) {
+      return "That passport/ID number doesn't look right — letters/digits only, 5-20 characters.";
+    }
     if (checkIn == null || checkOut == null) return 'Please select check-in and check-out dates.';
     return null;
   }

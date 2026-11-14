@@ -6,8 +6,8 @@
 <title>Transactions — Voya Insurance Partner</title>
 <link rel="stylesheet" href="../css/tokens.css?v=20261006b" />
 <link rel="stylesheet" href="../css/base.css?v=20261006b" />
-<link rel="stylesheet" href="../css/layout.css?v=20261021" />
-<link rel="stylesheet" href="../css/components.css?v=20261021c" />
+<link rel="stylesheet" href="../css/layout.css?v=20261111a" />
+<link rel="stylesheet" href="../css/components.css?v=20261106g" />
 </head>
 <body>
 <div class="shell">
@@ -34,12 +34,27 @@
     <div class="stat-grid" id="statGrid"><div class="skeleton" style="height:90px;grid-column:1/-1;"></div></div>
 
     <div class="filter-bar">
-      <div class="search-input-wrap"><span data-icon="search"></span><input class="input" id="searchInput" placeholder="Search…" /></div>
+      <div class="search-input-wrap"><span data-icon="search"></span><input class="input" id="searchInput" placeholder="Search reference or customer…" /></div>
       <select class="select" id="statusFilter">
         <option value="">All status</option>
         <option value="paid">Paid</option>
-        <option value="pending">Pending</option>
-        <option value="rejected">Rejected</option>
+      </select>
+      <select class="select" id="planFilter">
+        <option value="">All plans</option>
+      </select>
+      <select class="select" id="destinationFilter">
+        <option value="">All destinations</option>
+      </select>
+      <div class="inline-flex" style="gap:6px;">
+        <input type="date" class="input" id="purchasedFrom" style="width:150px;" title="Purchased from" />
+        <span class="muted small">to</span>
+        <input type="date" class="input" id="purchasedTo" style="width:150px;" title="Purchased to" />
+      </div>
+      <select class="select" id="sortFilter">
+        <option value="date_desc">Newest first</option>
+        <option value="date_asc">Oldest first</option>
+        <option value="price_desc">Premium: high to low</option>
+        <option value="price_asc">Premium: low to high</option>
       </select>
     </div>
 
@@ -61,12 +76,19 @@
   </main>
 </div>
 
+<div class="modal-backdrop" id="txnModal">
+  <div class="modal">
+    <div class="modal-head"><h3 class="h2">Transaction detail</h3><button class="modal-close" data-close><span data-icon="x"></span></button></div>
+    <div id="txnModalBody"></div>
+  </div>
+</div>
+
 <script type="module">
-import { requireRole } from "../js/auth-guard.js?v=20261021";
-import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261021";
-import { mountIcons } from "../js/icons.js?v=20261021";
-import { listTransactions } from "../js/data.js?v=20261021";
-import { money, moneyExact, number, statusBadge, escapeHtml, paginate, renderPager, statCard, plainCard, trendDelta, countBefore, sumBefore, monthBounds } from "../js/ui.js?v=20261021";
+import { requireRole } from "../js/auth-guard.js?v=20261106b";
+import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261114a";
+import { mountIcons } from "../js/icons.js?v=20261106c";
+import { listTransactions } from "../js/data.js?v=20261114c";
+import { money, moneyExact, number, fullDate, statusBadge, escapeHtml, paginate, renderPager, statCard, plainCard, trendDelta, countBefore, sumBefore, monthBounds, openModal, closeModal, wireModalDismiss } from "../js/ui.js?v=20261113a";
 
 mountSidebarNav({ role: "partner", active: "transactions" });
 const session = await requireRole("partner", "login.html");
@@ -75,13 +97,13 @@ const PAGE_SIZE = 8;
 
 if (session) {
   setSidebarUser({ displayName: session.profile.companyName || "Partner", roleLabel: `${session.profile.companyName || "Insurance"} · Insurance Partner` });
+  wireModalDismiss();
   await load();
 }
 
 async function load() {
   items = await listTransactions(session.uid);
   const paid = items.filter((t) => t.status === "paid");
-  const pending = items.filter((t) => t.status === "pending");
   const gross = paid.reduce((s, t) => s + (Number(t.premium) || 0), 0);
   const { start: thisMonthStart } = monthBounds(0);
   const totalDelta = trendDelta(items.length, countBefore(items, "createdAt", thisMonthStart));
@@ -90,19 +112,62 @@ async function load() {
   document.getElementById("statGrid").innerHTML = [
     statCard("Total transactions", number(items.length), "swap", totalDelta),
     statCard("Paid", number(paid.length), "check-circle", paidDelta),
-    plainCard("Pending", number(pending.length)),
     statCard("Gross premium", money(gross), "coin", grossDelta),
   ].join("");
+  populateDropdownFilters();
   applyFilters();
   mountIcons(document);
+}
+
+function populateDropdownFilters() {
+  const planSelect = document.getElementById("planFilter");
+  const plans = [...new Set(items.map((t) => (t.planName || "").trim()).filter(Boolean))].sort();
+  const currentPlan = planSelect.value;
+  planSelect.innerHTML = '<option value="">All plans</option>' + plans.map((p) => `<option value="${escapeHtml(p)}">${escapeHtml(p)}</option>`).join("");
+  planSelect.value = currentPlan;
+
+  const destSelect = document.getElementById("destinationFilter");
+  const destinations = [...new Set(items.map((t) => (t.destination || "").trim()).filter(Boolean))].sort();
+  const currentDest = destSelect.value;
+  destSelect.innerHTML = '<option value="">All destinations</option>' + destinations.map((d) => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join("");
+  destSelect.value = currentDest;
 }
 
 function applyFilters() {
   const q = document.getElementById("searchInput").value.trim().toLowerCase();
   const status = document.getElementById("statusFilter").value;
-  filtered = items.filter((t) => (!q || (t.customerName || "").toLowerCase().includes(q) || (t.txnRef || "").toLowerCase().includes(q)) && (!status || t.status === status));
+  const plan = document.getElementById("planFilter").value;
+  const destination = document.getElementById("destinationFilter").value;
+  const purchasedFrom = document.getElementById("purchasedFrom").value ? new Date(document.getElementById("purchasedFrom").value) : null;
+  const purchasedTo = document.getElementById("purchasedTo").value ? new Date(document.getElementById("purchasedTo").value + "T23:59:59") : null;
+  filtered = items.filter((t) => {
+    // Matches the same fallback the Reference column itself displays
+    // (t.txnRef || t.id) -- a transaction recorded before txnRef existed
+    // (or anything else that somehow still lacks it) shows its raw doc id
+    // as the Reference, so search has to accept that exact string too, or
+    // typing precisely what's on screen would never find the row.
+    const matchesQ = !q || (t.customerName || "").toLowerCase().includes(q) || (t.txnRef || t.id || "").toLowerCase().includes(q);
+    const matchesStatus = !status || t.status === status;
+    const matchesPlan = !plan || (t.planName || "").trim() === plan;
+    const matchesDest = !destination || (t.destination || "").trim() === destination;
+    const purchasedAt = t.createdAt?.toDate ? t.createdAt.toDate() : null;
+    const matchesFrom = !purchasedFrom || (purchasedAt && purchasedAt >= purchasedFrom);
+    const matchesTo = !purchasedTo || (purchasedAt && purchasedAt <= purchasedTo);
+    return matchesQ && matchesStatus && matchesPlan && matchesDest && matchesFrom && matchesTo;
+  });
+  filtered = sortTxns(filtered, document.getElementById("sortFilter").value);
   page = 1;
   renderTable();
+}
+
+function sortTxns(list, sort) {
+  const sorted = [...list];
+  const dateOf = (t) => (t.createdAt?.toDate ? t.createdAt.toDate().getTime() : 0);
+  if (sort === "price_desc") sorted.sort((a, b) => (Number(b.premium) || 0) - (Number(a.premium) || 0));
+  else if (sort === "price_asc") sorted.sort((a, b) => (Number(a.premium) || 0) - (Number(b.premium) || 0));
+  else if (sort === "date_asc") sorted.sort((a, b) => dateOf(a) - dateOf(b));
+  else sorted.sort((a, b) => dateOf(b) - dateOf(a)); // date_desc, and the default
+  return sorted;
 }
 
 function renderTable() {
@@ -113,13 +178,14 @@ function renderTable() {
   else {
     empty.style.display = "none";
     body.innerHTML = pageItems.map((t) => `
-      <tr>
+      <tr style="cursor:pointer;" data-open-txn="${t.id}">
         <td class="cell-strong">${escapeHtml(t.txnRef || t.id)}</td>
         <td>${escapeHtml(t.customerName || "—")}</td>
         <td class="muted">${escapeHtml(t.destination || "—")}</td>
         <td class="muted">${moneyExact(t.premium)}</td>
         <td>${statusBadge(t.status)}</td>
       </tr>`).join("");
+    body.querySelectorAll("[data-open-txn]").forEach((row) => row.addEventListener("click", () => openTxnDetail(row.dataset.openTxn)));
   }
   document.getElementById("resultsLabel").textContent = total
     ? `Showing ${(page - 1) * PAGE_SIZE + 1} to ${Math.min(page * PAGE_SIZE, total)} of ${total} results` : "No results";
@@ -127,8 +193,53 @@ function renderTable() {
   mountIcons(document);
 }
 
+/** Shows everything we actually know about one transaction — the table
+ * only has room for Reference/Customer/Destination/Premium/Status, but a
+ * real insurance_transactions doc also carries the plan, channel,
+ * purchase date, policy number and the actual insured traveller's own
+ * details — see js/data.js and lib/repositories/insurance_repository.dart.
+ * "Customer" is whoever's Voya account paid (who can file a claim/
+ * refund); "Traveller" is who the policy actually covers, collected
+ * separately at checkout — the two can differ (e.g. buying insurance for
+ * someone else), so this partner needs both, not just the payer. Same
+ * field set as admin's own transaction detail (admin/insurance.html's
+ * openTxnDetail), minus Provider — every transaction here is already
+ * this partner's own, so repeating their own company name back to them
+ * would just be noise. */
+function openTxnDetail(id) {
+  const t = items.find((x) => x.id === id);
+  if (!t) return;
+  const row = (label, value) => `<div class="field" style="margin-bottom:12px;"><label>${label}</label><p class="value">${value}</p></div>`;
+  document.getElementById("txnModalBody").innerHTML = `
+    <div class="form-grid">
+      ${row("Reference", escapeHtml(t.txnRef || t.id))}
+      ${row("Status", statusBadge(t.status))}
+      ${row("Policy number", escapeHtml(t.policyNumber || "—"))}
+      ${row("Customer (buyer)", escapeHtml(t.customerName || "—"))}
+      ${row("Customer email", escapeHtml(t.customerEmail || "—"))}
+      ${row("Traveller", escapeHtml(t.travellerName || "—"))}
+      ${row("Traveller passport/ID", escapeHtml(t.travellerIdNumber || "—"))}
+      ${row("Traveller email", escapeHtml(t.travellerEmail || "—"))}
+      ${row("Traveller phone", escapeHtml(t.travellerPhone || "—"))}
+      ${row("Plan", escapeHtml(t.planName || "—"))}
+      ${row("Coverage", escapeHtml(t.coverage || "—"))}
+      ${row("Premium", moneyExact(t.premium))}
+      ${row("Destination", escapeHtml(t.destination || "—"))}
+      ${row("Channel", escapeHtml(t.channel || "—"))}
+      ${row("Purchased", fullDate(t.createdAt))}
+    </div>
+    ${t.isDemoSeed ? `<p class="muted small" style="margin-top:4px;">This is seeded demo data.</p>` : ""}`;
+  mountIcons(document.getElementById("txnModalBody"));
+  openModal("txnModal");
+}
+
 document.getElementById("searchInput").addEventListener("input", applyFilters);
 document.getElementById("statusFilter").addEventListener("change", applyFilters);
+document.getElementById("planFilter").addEventListener("change", applyFilters);
+document.getElementById("destinationFilter").addEventListener("change", applyFilters);
+document.getElementById("purchasedFrom").addEventListener("change", applyFilters);
+document.getElementById("purchasedTo").addEventListener("change", applyFilters);
+document.getElementById("sortFilter").addEventListener("change", applyFilters);
 </script>
 </body>
 </html>

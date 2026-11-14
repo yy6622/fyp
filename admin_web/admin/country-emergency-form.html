@@ -6,8 +6,8 @@
 <title>Country Emergency Info — Voya Admin</title>
 <link rel="stylesheet" href="../css/tokens.css?v=20261020c" />
 <link rel="stylesheet" href="../css/base.css?v=20261020c" />
-<link rel="stylesheet" href="../css/layout.css?v=20261021" />
-<link rel="stylesheet" href="../css/components.css?v=20261021c" />
+<link rel="stylesheet" href="../css/layout.css?v=20261111a" />
+<link rel="stylesheet" href="../css/components.css?v=20261106g" />
 </head>
 <body>
 <div class="shell">
@@ -39,16 +39,16 @@
         <div class="form-section-title"><span data-icon="flag"></span>Country</div>
         <div class="form-grid">
           <div class="field" style="grid-column:1/-1;">
-            <label>Country name</label>
+            <label>Country name <span class="req">*</span></label>
             <input class="input" id="fCountry" placeholder="e.g. Thailand — must match the trip's destination field" />
-            <p class="hint" id="countryHint">Type the country exactly as it appears in the app's destination picker (not case-sensitive).</p>
+            <p class="hint" id="countryHint">Spell it exactly how a traveller would pick it when choosing their trip's destination in the app, so this info can actually match up to their trip.</p>
           </div>
         </div>
       </div>
 
       <div class="form-section">
         <div class="form-section-title"><span data-icon="phone"></span>Emergency contact</div>
-        <p class="hint" style="margin-top:-6px;margin-bottom:12px;">Local police/ambulance/fire numbers — these don't depend on which country a trip member is from.</p>
+        <p class="hint" style="margin-top:-6px;margin-bottom:12px;">These are the local emergency numbers for this country — the same for every traveller here, no matter where they're from. Leave any of them blank if you don't have a confirmed number yet.</p>
         <div class="form-grid">
           <div class="field"><label>Police</label><input class="input" id="fPolice" placeholder="e.g. 999" /></div>
           <div class="field"><label>Ambulance</label><input class="input" id="fAmbulance" placeholder="e.g. 995" /></div>
@@ -70,8 +70,8 @@
 
     <div class="card card-pad" style="margin-top:20px;">
       <div class="form-section-title" style="margin-bottom:4px;"><span data-icon="building"></span>Embassies</div>
-      <p class="hint" style="margin-bottom:14px;">The app isn't Malaysia-only — add one entry per home country whose travellers should see their own embassy here. A trip member sees the embassy matching their own Account Setting &gt; Country/Region.</p>
-      <div id="noKeyNotice" class="hint" style="display:none;">Save the country above first — embassies are added per country.</div>
+      <p class="hint" style="margin-bottom:14px;">Add one embassy entry for every home country your travellers might come from — each traveller only sees the one that matches their own home country.</p>
+      <div id="noKeyNotice" class="hint" style="display:none;">Save the country name and emergency numbers above first — you can only add embassies once this country entry exists.</div>
       <div id="embassyList" style="display:flex;flex-direction:column;gap:10px;margin-bottom:14px;"></div>
       <button class="btn btn-outline" id="addEmbassyBtn" style="display:none;"><span data-icon="plus"></span>Add embassy</button>
     </div>
@@ -85,13 +85,13 @@
       <div class="form-section">
         <div class="form-grid">
           <div class="field" style="grid-column:1/-1;">
-            <label>Home country</label>
+            <label>Home country <span class="req">*</span></label>
             <input class="input" id="eHomeCountry" list="homeCountrySuggestions" placeholder="e.g. Malaysia, Singapore, Indonesia…" />
             <datalist id="homeCountrySuggestions"></datalist>
-            <p class="hint">Whose embassy this is — matched against a trip member's own Account Setting &gt; Country/Region.</p>
+            <p class="hint">Whose embassy this is — travellers from this home country are the only ones who'll see it.</p>
           </div>
-          <div class="field" style="grid-column:1/-1;"><label>Mission name</label><input class="input" id="eMissionName" placeholder="e.g. Embassy of Malaysia, Bangkok" /></div>
-          <div class="field" style="grid-column:1/-1;"><label>Address</label><input class="input" id="eAddress" placeholder="Full address" /></div>
+          <div class="field" style="grid-column:1/-1;"><label>Mission name <span class="req">*</span></label><input class="input" id="eMissionName" placeholder="e.g. Embassy of Malaysia, Bangkok" /></div>
+          <div class="field" style="grid-column:1/-1;"><label>Address <span class="req">*</span></label><input class="input" id="eAddress" placeholder="Full address" /></div>
           <div class="field" style="grid-column:1/-1;">
             <label>Office lines</label>
             <div class="tag-input-box" id="officeLinesBox"><input placeholder="Type a phone number and press Enter…" /></div>
@@ -122,14 +122,14 @@
 </div>
 
 <script type="module">
-import { requireRole } from "../js/auth-guard.js?v=20261021";
-import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261021";
-import { mountIcons } from "../js/icons.js?v=20261021";
+import { requireRole } from "../js/auth-guard.js?v=20261106b";
+import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261114a";
+import { mountIcons } from "../js/icons.js?v=20261106c";
 import {
   getCountryEmergencyInfo, saveCountryEmergencyInfo, deleteCountryEmergencyInfo,
   listEmbassies, getEmbassy, saveEmbassy, deleteEmbassy, uploadEmbassyPhoto,
-} from "../js/data.js?v=20261021";
-import { toast, setBusy, escapeHtml, openModal, closeModal, wireModalDismiss, confirmDialog } from "../js/ui.js?v=20261021";
+} from "../js/data.js?v=20261114c";
+import { toast, setBusy, escapeHtml, openModal, closeModal, wireModalDismiss, confirmDialog, isValidEmail, isPlausiblePhone, isValidImageFile } from "../js/ui.js?v=20261113a";
 import { DEFAULT_EMERGENCY_NUMBERS, DEFAULT_EMBASSIES, COMMON_HOME_COUNTRIES, titleCase } from "./country-emergency-defaults.js?v=20261020c";
 
 mountSidebarNav({ role: "admin", active: "emergency" });
@@ -227,6 +227,14 @@ document.getElementById("fillDefaultBtn").addEventListener("click", () => {
 document.getElementById("saveBtn").addEventListener("click", async () => {
   const key = currentCountryKey();
   if (!key) { toast("Enter the country's name first.", "error"); document.getElementById("fCountry").focus(); return; }
+  for (const [id, label] of [["fPolice", "Police"], ["fAmbulance", "Ambulance"], ["fFire", "Fire"]]) {
+    const el = document.getElementById(id);
+    if (el.value.trim() && !isPlausiblePhone(el.value)) {
+      toast(`${label} doesn't look like a valid number — numbers and spaces only.`, "error");
+      el.focus();
+      return;
+    }
+  }
 
   const btn = document.getElementById("saveBtn");
   setBusy(btn, true, "Saving…");
@@ -371,6 +379,12 @@ function wirePhotoPicker() {
   document.getElementById("ePhotoFile").addEventListener("change", (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    const check = isValidImageFile(file);
+    if (!check.ok) {
+      toast(check.reason, "error");
+      e.target.value = "";
+      return;
+    }
     pendingEmbassyPhotoFile = file;
     setEmbassyPhotoPreview(URL.createObjectURL(file));
   });
@@ -379,6 +393,14 @@ function wirePhotoPicker() {
 document.getElementById("eSaveBtn").addEventListener("click", async () => {
   const homeKey = currentEmbassyKey();
   if (!homeKey) { toast("Enter the home country first.", "error"); document.getElementById("eHomeCountry").focus(); return; }
+  const missionName = document.getElementById("eMissionName").value.trim();
+  if (!missionName) { toast("Mission name is required.", "error"); document.getElementById("eMissionName").focus(); return; }
+  const address = document.getElementById("eAddress").value.trim();
+  if (!address) { toast("Address is required.", "error"); document.getElementById("eAddress").focus(); return; }
+  const emailValue = document.getElementById("eEmail").value.trim();
+  if (emailValue && !isValidEmail(emailValue)) { toast("That email address doesn't look valid.", "error"); document.getElementById("eEmail").focus(); return; }
+  const emergencyPhoneValue = document.getElementById("eEmergencyPhone").value.trim();
+  if (emergencyPhoneValue && !isPlausiblePhone(emergencyPhoneValue)) { toast("Emergency phone doesn't look like a valid number.", "error"); document.getElementById("eEmergencyPhone").focus(); return; }
 
   const btn = document.getElementById("eSaveBtn");
   setBusy(btn, true, "Saving…");
@@ -393,11 +415,11 @@ document.getElementById("eSaveBtn").addEventListener("click", async () => {
     }
     await saveEmbassy(countryKey, homeKey, {
       homeCountry: titleCase(homeKey),
-      missionName: document.getElementById("eMissionName").value.trim(),
-      address: document.getElementById("eAddress").value.trim(),
+      missionName,
+      address,
       officeLines: officeLinesTag.getTags(),
-      emergencyPhone: document.getElementById("eEmergencyPhone").value.trim(),
-      email: document.getElementById("eEmail").value.trim(),
+      emergencyPhone: emergencyPhoneValue,
+      email: emailValue,
       embassyPhotoUrl,
     });
     toast("Embassy saved.", "success");
@@ -440,7 +462,7 @@ function mountTagInput(boxId, initialTags = []) {
     tags.forEach((tag, i) => {
       const chip = document.createElement("span");
       chip.className = "chip";
-      chip.innerHTML = `${tag}<button type="button" data-i="${i}"><span data-icon="x"></span></button>`;
+      chip.innerHTML = `${escapeHtml(tag)}<button type="button" data-i="${i}"><span data-icon="x"></span></button>`;
       box.insertBefore(chip, input);
     });
     box.querySelectorAll(".chip button").forEach((btn) =>
@@ -453,6 +475,10 @@ function mountTagInput(boxId, initialTags = []) {
     if (e.key === "Enter" || e.key === ",") {
       e.preventDefault();
       const value = input.value.trim().replace(/,$/, "");
+      if (value && !isPlausiblePhone(value)) {
+        toast("That doesn't look like a valid phone number.", "error");
+        return;
+      }
       if (value && !tags.includes(value)) { tags.push(value); render(); }
       input.value = "";
     } else if (e.key === "Backspace" && !input.value && tags.length) {

@@ -75,6 +75,39 @@ function matchesFoodPreference(place, foodPreference) {
   return re.test(text);
 }
 
+// Trip-creation "interest points" (CreatePlanWizardController.interestOptions
+// in the Flutter app) as keyword matches over a known place's own
+// name/tags/aliases text -- same technique as DIETARY/matchesFoodPreference
+// above, not a tag-equality lookup, so it works regardless of which
+// catalogue (Voya's own, or an OSM lookup) a candidate place came from.
+// Used as a tiebreaker when buildItinerary has more than one place that
+// already fits a chat-mentioned need: among equally-fitting candidates,
+// prefer the one that also matches what the trip's members said they're
+// into when the plan was first created, so interest points keep
+// mattering here too, not just in Explore's own ranking
+// (recommendation_service.dart / interest_mapping.dart on the Flutter
+// side). This does NOT invent a brand-new suggestion purely from
+// interests when nothing was ever discussed in chat -- buildItinerary
+// only ever fills needs that were actually mentioned; see its own
+// comments for why that's a separate, bigger feature.
+const INTEREST_WORDS = {
+  Beach: /beach|海滩|沙滩|海边|pantai|\bbay\b/i,
+  City: /\bcity\b|urban|downtown|landmark|市区|市中心|地标/i,
+  Nature: /nature|park|garden|forest|mountain|lake|公园|花园|森林|山|湖/i,
+  Food: /food|restaurant|caf[eé]|eatery|小吃|餐厅|美食/i,
+  Adventure: /adventure|hik(e|ing)|climb|zipline|rafting|div(e|ing)|探险|徒步|攀/i,
+  Culture: /museum|temple|heritage|culture|historic|gallery|博物馆|寺|文化|古|遗产/i,
+  Shopping: /shopping|\bmall\b|market|bazaar|商场|购物|市场/i,
+  Nightlife: /\bbar\b|\bclub\b|nightlife|rooftop|\bpub\b|夜店|酒吧/i,
+  Relaxation: /\bspa\b|massage|relax|wellness|按摩|放松/i,
+};
+
+function matchesInterests(place, interests) {
+  if (!place || !Array.isArray(interests) || !interests.length) return false;
+  const text = [place.name, ...(place.tags || []), ...(place.aliases || [])].join(" ");
+  return interests.some((i) => INTEREST_WORDS[i]?.test(text));
+}
+
 function genericPlace(need) {
   const food = need.food === true || need.icon === "food";
   return {
@@ -86,4 +119,4 @@ function genericPlace(need) {
   };
 }
 
-module.exports = { NEEDS, findNeeds, placeFits, genericPlace, matchesFoodPreference };
+module.exports = { NEEDS, findNeeds, placeFits, genericPlace, matchesFoodPreference, matchesInterests };

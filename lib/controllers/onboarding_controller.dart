@@ -8,6 +8,7 @@ import '../repositories/friends_repository.dart';
 import '../repositories/user_repository.dart';
 import '../services/auth_service.dart';
 import '../services/avatar_service.dart';
+import 'booking_details_controller.dart' show isValidPhoneFormat;
 
 class OnboardingController extends ChangeNotifier {
   static const totalSteps = 5;
@@ -60,10 +61,26 @@ class OnboardingController extends ChangeNotifier {
   // ---------------- Step 2: Phone number ----------------
   final phoneController = TextEditingController();
   bool savingPhone = false;
+  String? phoneError;
 
+  // Phone, country and currency are required -- the app relies on all
+  // three being set (bookings prefill from them, Insurance will soon
+  // price and filter plans by them) so unlike the avatar/add-friend
+  // steps, this one can't just silently move on when left blank.
   Future<void> savePhoneAndNext() async {
     final phone = phoneController.text.trim();
-    if (phone.isNotEmpty && _uid.isNotEmpty) {
+    if (phone.isEmpty) {
+      phoneError = 'Please enter your phone number.';
+      notifyListeners();
+      return;
+    }
+    if (!isValidPhoneFormat(phone)) {
+      phoneError = "That phone number doesn't look right.";
+      notifyListeners();
+      return;
+    }
+    phoneError = null;
+    if (_uid.isNotEmpty) {
       savingPhone = true;
       notifyListeners();
       await UserRepository.instance.updateProfile(_uid, phone: phone);
@@ -75,16 +92,23 @@ class OnboardingController extends ChangeNotifier {
   // ---------------- Step 3: Region / Country ----------------
   Country? selectedCountry;
   bool savingCountry = false;
+  String? countryError;
 
   void selectCountry(Country country) {
     selectedCountry = country;
     selectedCurrency ??= country.currencyCode;
+    countryError = null;
     notifyListeners();
   }
 
   Future<void> saveCountryAndNext() async {
     final country = selectedCountry;
-    if (country != null && _uid.isNotEmpty) {
+    if (country == null) {
+      countryError = 'Please choose your country.';
+      notifyListeners();
+      return;
+    }
+    if (_uid.isNotEmpty) {
       savingCountry = true;
       notifyListeners();
       await UserRepository.instance.updateProfile(_uid, country: country.name);
@@ -96,15 +120,22 @@ class OnboardingController extends ChangeNotifier {
   // ---------------- Step 4: Currency ----------------
   String? selectedCurrency;
   bool savingCurrency = false;
+  String? currencyError;
 
   void selectCurrency(String code) {
     selectedCurrency = code;
+    currencyError = null;
     notifyListeners();
   }
 
   Future<void> saveCurrencyAndNext() async {
     final currency = selectedCurrency;
-    if (currency != null && _uid.isNotEmpty) {
+    if (currency == null) {
+      currencyError = 'Please choose your preferred currency.';
+      notifyListeners();
+      return;
+    }
+    if (_uid.isNotEmpty) {
       savingCurrency = true;
       notifyListeners();
       await UserRepository.instance.updateProfile(_uid, currencyCode: currency);

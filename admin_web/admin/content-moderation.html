@@ -6,8 +6,8 @@
 <title>Content Moderation — Voya Admin</title>
 <link rel="stylesheet" href="../css/tokens.css?v=20261006b" />
 <link rel="stylesheet" href="../css/base.css?v=20261006b" />
-<link rel="stylesheet" href="../css/layout.css?v=20261021" />
-<link rel="stylesheet" href="../css/components.css?v=20261021c" />
+<link rel="stylesheet" href="../css/layout.css?v=20261111a" />
+<link rel="stylesheet" href="../css/components.css?v=20261106g" />
 </head>
 <body>
 <div class="shell">
@@ -41,6 +41,10 @@
 
       <div class="filter-bar">
         <div class="search-input-wrap"><span data-icon="search"></span><input class="input" id="searchInput" placeholder="Search reported content…" /></div>
+        <select class="select" id="sortFilter">
+          <option value="reported_desc">Reported: newest first</option>
+          <option value="reported_asc">Reported: oldest first</option>
+        </select>
       </div>
 
       <div id="list"><div class="card" style="padding:20px;"><div class="skeleton" style="height:80px;"></div></div></div>
@@ -56,13 +60,17 @@
 
       <div class="filter-bar">
         <div class="search-input-wrap"><span data-icon="search"></span><input class="input" id="reviewSearchInput" placeholder="Search reported reviews…" /></div>
+        <select class="select" id="reviewSortFilter">
+          <option value="reported_desc">Reported: newest first</option>
+          <option value="reported_asc">Reported: oldest first</option>
+        </select>
       </div>
 
       <div id="reviewList"><div class="card" style="padding:20px;"><div class="skeleton" style="height:80px;"></div></div></div>
       <div class="empty-state" id="reviewEmptyState" style="display:none;">
         <span data-icon="flag" class="icon-lg"></span>
         <div class="h3">Nothing to review</div>
-        <p class="small">Reported reviews (left on hotels, restaurants, attractions or community posts) will show up here.</p>
+        <p class="small">Reported reviews (left on community posts) will show up here.</p>
       </div>
     </div>
   </main>
@@ -83,17 +91,17 @@
 </div>
 
 <script type="module">
-import { requireRole } from "../js/auth-guard.js?v=20261021";
-import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261021";
-import { mountIcons } from "../js/icons.js?v=20261021";
+import { requireRole } from "../js/auth-guard.js?v=20261106b";
+import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261114a";
+import { mountIcons } from "../js/icons.js?v=20261106c";
 import {
   listReportedPosts, approvePostReport, rejectPost, logModerationAction, countModerationToday, countModerationYesterday,
   listFlaggedReviews, approveReview, rejectReview,
-} from "../js/data.js?v=20261021";
+} from "../js/data.js?v=20261114c";
 import {
   number, timeAgo, escapeHtml, toast, setBusy, confirmDialog, openModal, closeModal, wireModalDismiss,
   statCard, plainCard, trendDelta, reporterLabel,
-} from "../js/ui.js?v=20261021";
+} from "../js/ui.js?v=20261113a";
 
 mountSidebarNav({ role: "admin", active: "moderation" });
 const session = await requireRole("admin", "login.html");
@@ -150,7 +158,7 @@ async function load() {
   }
   reports = posts;
   document.getElementById("statGrid").innerHTML = [
-    plainCard("Pending review", number(reports.length)),
+    plainCard("Pending review", number(reports.length), "clock"),
     statCard("Approved today", number(approvedToday), "file-check", trendDelta(approvedToday, approvedYesterday, "yesterday")),
     statCard("Rejected today", number(rejectedToday), "file-x", trendDelta(rejectedToday, rejectedYesterday, "yesterday")),
   ].join("");
@@ -160,7 +168,10 @@ async function load() {
 
 function renderList() {
   const q = document.getElementById("searchInput").value.trim().toLowerCase();
+  const sort = document.getElementById("sortFilter").value;
   const filtered = reports.filter((p) => !q || (p.title || "").toLowerCase().includes(q) || (p.author || "").toLowerCase().includes(q));
+  const reportedAtOf = (p) => (p.reportedAt?.toDate ? p.reportedAt.toDate().getTime() : 0);
+  filtered.sort((a, b) => (sort === "reported_asc" ? reportedAtOf(a) - reportedAtOf(b) : reportedAtOf(b) - reportedAtOf(a)));
   const list = document.getElementById("list");
   const empty = document.getElementById("emptyState");
   if (!filtered.length) {
@@ -230,7 +241,7 @@ async function act(kind, postId, btn) {
   setBusy(btn, true, "Working…");
   try {
     if (kind === "approve") await approvePostReport(postId);
-    else await rejectPost(postId);
+    else await rejectPost(postId, reports.find((r) => r.id === postId));
     await logModerationAction(kind === "approve" ? "approved" : "rejected", postId, session.uid);
     reports = reports.filter((r) => r.id !== postId);
     toast(kind === "approve" ? "Report dismissed — post stays live." : "Post removed.", "success");
@@ -242,6 +253,7 @@ async function act(kind, postId, btn) {
 }
 
 document.getElementById("searchInput").addEventListener("input", renderList);
+document.getElementById("sortFilter").addEventListener("change", renderList);
 
 // ==================== Reported Reviews tab ====================
 // Parallel to the Reported Posts logic above, but a review isn't a
@@ -272,7 +284,7 @@ async function loadReviews() {
   }
   flaggedReviews = items;
   document.getElementById("reviewStatGrid").innerHTML = [
-    plainCard("Pending review", number(flaggedReviews.length)),
+    plainCard("Pending review", number(flaggedReviews.length), "clock"),
     statCard("Approved today", number(approvedToday), "file-check", trendDelta(approvedToday, approvedYesterday, "yesterday")),
     statCard("Rejected today", number(rejectedToday), "file-x", trendDelta(rejectedToday, rejectedYesterday, "yesterday")),
   ].join("");
@@ -282,8 +294,11 @@ async function loadReviews() {
 
 function renderReviewList() {
   const q = document.getElementById("reviewSearchInput").value.trim().toLowerCase();
+  const sort = document.getElementById("reviewSortFilter").value;
   const filtered = flaggedReviews.filter((r) =>
     !q || (r.comment || "").toLowerCase().includes(q) || (r.authorName || "").toLowerCase().includes(q) || (r.parentName || "").toLowerCase().includes(q));
+  const reportedAtOf = (r) => (r.reportedAt?.toDate ? r.reportedAt.toDate().getTime() : 0);
+  filtered.sort((a, b) => (sort === "reported_asc" ? reportedAtOf(a) - reportedAtOf(b) : reportedAtOf(b) - reportedAtOf(a)));
   const list = document.getElementById("reviewList");
   const empty = document.getElementById("reviewEmptyState");
   if (!filtered.length) {
@@ -367,6 +382,7 @@ async function actOnReview(kind, reviewId, btn) {
 }
 
 document.getElementById("reviewSearchInput").addEventListener("input", renderReviewList);
+document.getElementById("reviewSortFilter").addEventListener("change", renderReviewList);
 </script>
 </body>
 </html>

@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Admin Profile — Voya Admin</title>
+<link rel="stylesheet" href="../css/tokens.css?v=20261105" />
+<link rel="stylesheet" href="../css/base.css?v=20261105" />
+<link rel="stylesheet" href="../css/layout.css?v=20261111a" />
+<link rel="stylesheet" href="../css/components.css?v=20261106g" />
+</head>
+<body>
+<div class="shell">
+  <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+  <aside class="sidebar" id="sidebar">
+    <img class="sidebar-brand" src="../img/voya-logo-white.png" alt="Voya" />
+    <div class="sidebar-user">
+      <div class="name" id="sbUserName">Loading…</div>
+      <div class="role" id="sbUserRole">Administrator</div>
+    </div>
+    <nav class="nav" id="sidebarNav"></nav>
+    <button class="sidebar-logout" id="logoutBtn"><span data-icon="log-out"></span>Log out</button>
+  </aside>
+
+  <main class="content">
+    <div class="topbar">
+      <div>
+        <button class="menu-toggle" id="menuToggle"><span data-icon="menu"></span></button>
+        <h1 class="h1">Admin Profile</h1>
+        <p class="subtitle">Your own admin account — name, email, and password.</p>
+      </div>
+      <button class="btn btn-outline" id="editBtn"><span data-icon="edit"></span>Edit</button>
+    </div>
+
+    <div class="card form-card">
+      <h3 class="h3" style="margin-bottom:18px;">Profile</h3>
+      <div class="form-grid">
+        <div class="field"><label>Full name</label><input class="input" id="nameField" readonly /></div>
+        <div class="field"><label>Email</label><input class="input" id="emailField" readonly disabled /></div>
+        <div class="field"><label>Role</label><input class="input" value="Administrator" readonly disabled /></div>
+        <div class="field"><label>Admin since</label><input class="input" id="sinceField" readonly disabled /></div>
+      </div>
+      <div class="form-actions" id="profileActions" style="display:none;">
+        <button class="btn btn-outline" id="discardBtn">Cancel</button>
+        <button class="btn btn-primary" id="saveBtn">Save changes</button>
+      </div>
+    </div>
+
+    <div class="card form-card">
+      <h3 class="h3" style="margin-bottom:18px;">Change password</h3>
+      <div class="field" style="max-width:360px;">
+        <label>Password</label>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <input class="input" value="••••••••••" readonly disabled style="flex:1;letter-spacing:3px;" />
+          <button class="btn btn-outline" id="editPasswordBtn"><span data-icon="edit"></span>Change password</button>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<div class="modal-backdrop" id="changePasswordModal">
+  <div class="modal" style="max-width:440px;">
+    <div class="modal-head"><h3 class="h2">Change password</h3><button class="modal-close" data-close><span data-icon="x"></span></button></div>
+    <p class="subtitle" style="margin-bottom:18px;">You'll need your current password to set a new one.</p>
+    <div class="field" style="margin-bottom:14px;"><label>Current password</label><input class="input" id="currentPassword" type="password" autocomplete="current-password" /></div>
+    <div class="field" style="margin-bottom:14px;"><label>New password</label><input class="input" id="newPassword" type="password" autocomplete="new-password" /><ul class="password-rules" id="newPasswordRules"></ul></div>
+    <div class="field" style="margin-bottom:20px;"><label>Confirm new password</label><input class="input" id="confirmPassword" type="password" autocomplete="new-password" /></div>
+    <div class="form-actions">
+      <button class="btn btn-outline" data-close>Cancel</button>
+      <button class="btn btn-primary" id="changePasswordBtn">Update password</button>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import { requireRole, authErrorMessage } from "../js/auth-guard.js?v=20261106b";
+import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261114a";
+import { mountIcons } from "../js/icons.js?v=20261106c";
+import { getAdminProfile, updateAdminProfile } from "../js/data.js?v=20261114c";
+import { fullDate, toast, setBusy, openModal, closeModal, wireModalDismiss, wirePasswordRules } from "../js/ui.js?v=20261114a";
+import { auth } from "../js/firebase-config.js?v=20261007";
+import {
+  EmailAuthProvider, reauthenticateWithCredential, updatePassword,
+} from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
+
+mountSidebarNav({ role: "admin", active: "settings" });
+const session = await requireRole("admin", "login.html");
+
+let profile = null;
+
+const EDITABLE_IDS = ["nameField"];
+function setEditing(on) {
+  EDITABLE_IDS.forEach((id) => { document.getElementById(id).readOnly = !on; });
+  document.getElementById("editBtn").style.display = on ? "none" : "";
+  document.getElementById("profileActions").style.display = on ? "flex" : "none";
+}
+
+if (session) {
+  setSidebarUser({ displayName: session.profile.name || "Admin", roleLabel: "Administrator" });
+  wireModalDismiss();
+  await load();
+}
+
+const { isPasswordValid: isNewPasswordValid } = wirePasswordRules("newPassword", "newPasswordRules");
+
+document.getElementById("editPasswordBtn").addEventListener("click", () => {
+  document.getElementById("currentPassword").value = "";
+  document.getElementById("newPassword").value = "";
+  document.getElementById("confirmPassword").value = "";
+  document.getElementById("newPasswordRules").innerHTML = "";
+  openModal("changePasswordModal");
+});
+
+async function load() {
+  profile = (await getAdminProfile(session.uid)) || session.profile;
+  document.getElementById("nameField").value = profile.name || "";
+  document.getElementById("emailField").value = profile.email || session.user.email || "";
+  document.getElementById("sinceField").value = profile.createdAt ? fullDate(profile.createdAt) : "—";
+  setEditing(false);
+  mountIcons(document);
+}
+
+document.getElementById("editBtn").addEventListener("click", () => setEditing(true));
+document.getElementById("discardBtn").addEventListener("click", () => load());
+
+document.getElementById("saveBtn").addEventListener("click", async () => {
+  const name = document.getElementById("nameField").value.trim();
+  if (!name) { toast("Name can't be empty.", "error"); return; }
+  const btn = document.getElementById("saveBtn");
+  setBusy(btn, true, "Saving…");
+  try {
+    await updateAdminProfile(session.uid, { name });
+    setSidebarUser({ displayName: name, roleLabel: "Administrator" });
+    toast("Profile updated.", "success");
+    await load();
+  } catch (err) {
+    toast(err.message || "Couldn't save.", "error");
+  } finally {
+    setBusy(btn, false);
+  }
+});
+
+document.getElementById("changePasswordBtn").addEventListener("click", async () => {
+  const current = document.getElementById("currentPassword").value;
+  const next = document.getElementById("newPassword").value;
+  const confirm = document.getElementById("confirmPassword").value;
+  if (!current || !next) { toast("Fill in both your current and new password.", "error"); return; }
+  if (!isNewPasswordValid()) { toast("Please meet all the password requirements shown below the field.", "error"); return; }
+  if (next !== confirm) { toast("New password and confirmation don't match.", "error"); return; }
+  const btn = document.getElementById("changePasswordBtn");
+  setBusy(btn, true, "Updating…");
+  try {
+    const user = auth.currentUser;
+    const cred = EmailAuthProvider.credential(user.email, current);
+    await reauthenticateWithCredential(user, cred);
+    await updatePassword(user, next);
+    document.getElementById("currentPassword").value = "";
+    document.getElementById("newPassword").value = "";
+    document.getElementById("confirmPassword").value = "";
+    closeModal("changePasswordModal");
+    toast("Password updated.", "success");
+  } catch (err) {
+    toast(authErrorMessage(err), "error");
+  } finally {
+    setBusy(btn, false);
+  }
+});
+</script>
+</body>
+</html>

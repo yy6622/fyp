@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Fix Missing Addresses — Voya Admin</title>
+<link rel="stylesheet" href="../css/tokens.css?v=20261006b" />
+<link rel="stylesheet" href="../css/base.css?v=20261006b" />
+<link rel="stylesheet" href="../css/layout.css?v=20261111a" />
+<link rel="stylesheet" href="../css/components.css?v=20261106g" />
+</head>
+<body>
+<div class="shell">
+  <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+  <aside class="sidebar" id="sidebar">
+    <img class="sidebar-brand" src="../img/voya-logo-white.png" alt="Voya" />
+    <div class="sidebar-user">
+      <div class="name" id="sbUserName">Loading…</div>
+      <div class="role" id="sbUserRole">Administrator</div>
+    </div>
+    <nav class="nav" id="sidebarNav"></nav>
+    <button class="sidebar-logout" id="logoutBtn"><span data-icon="log-out"></span>Log out</button>
+  </aside>
+
+  <main class="content">
+    <div class="topbar">
+      <div>
+        <button class="menu-toggle" id="menuToggle"><span data-icon="menu"></span></button>
+        <a href="attractions.html" class="inline-flex" style="color:var(--text-500);font-weight:700;font-size:13.5px;margin-bottom:10px;">
+          <span data-icon="arrow-left" data-icon-size="14"></span>Back to Places Management
+        </a>
+        <h1 class="h1">Fix Missing Addresses</h1>
+        <p class="subtitle">One-off tool: looks up a real full address (via Geoapify/OpenStreetMap) for every attraction or restaurant that doesn't have one yet, and saves it. Delete this page once you're done with it.</p>
+      </div>
+      <button class="btn btn-primary" id="runBtn" disabled>Run</button>
+    </div>
+
+    <div class="card card-pad" id="summaryCard">
+      <div class="skeleton" style="height:40px;"></div>
+    </div>
+
+    <div class="table-wrap scroll-x" style="margin-top:20px;">
+      <table class="data-table">
+        <thead><tr><th>Type</th><th>Name</th><th>Location</th><th>New address</th><th>Status</th></tr></thead>
+        <tbody id="tableBody"><tr><td colspan="5"><div class="skeleton" style="height:40px;"></div></td></tr></tbody>
+      </table>
+    </div>
+  </main>
+</div>
+
+<script type="module">
+import { requireRole } from "../js/auth-guard.js?v=20261106b";
+import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261114a";
+import { mountIcons } from "../js/icons.js?v=20261106c";
+import { listAttractions, listAllRestaurants, updateAttraction, updateRestaurant } from "../js/data.js?v=20261114c";
+import { escapeHtml, toast, setBusy } from "../js/ui.js?v=20261113a";
+import { findAddressOnly, reverseGeocodeAddress, hasApiKey } from "../js/places-import.js?v=20261106f";
+
+// Not in the sidebar nav — this is a run-it-once maintenance tool, same
+// pattern as the earlier translate-names.html backfill (see js/data.js's
+// comment on listAllRestaurants): reached by direct URL, used, then
+// deleted. "attractions" stays highlighted since that's conceptually
+// where this tool lives and where the Back link returns to.
+mountSidebarNav({ role: "admin", active: "attractions" });
+const session = await requireRole("admin", "login.html");
+
+let items = []; // { type, id, name, location, status }
+
+if (session) {
+  setSidebarUser({ displayName: session.profile.name || "Admin", roleLabel: "Administrator" });
+  if (!hasApiKey()) {
+    document.getElementById("summaryCard").innerHTML = `<p class="muted">Geoapify API key isn't set (js/places-config.js) — this tool needs it to look up addresses.</p>`;
+  } else {
+    await load();
+  }
+}
+
+function missingAddress(a) {
+  return !a.address || !String(a.address).trim();
+}
+
+// Most records store `location` as free text ("Tokyo, Japan"). A chunk of
+// the catalogue (mostly OSM-imported restaurants) stores it as a Firestore
+// GeoPoint instead -- real coordinates, just not a human-readable string.
+// Rendering that object directly gives "[object Object]", and feeding it
+// into a text geocode search would just search for that literal string, so
+// it needs its own path: reverse-geocode straight from the coordinates.
+function isGeoPoint(loc) {
+  return !!loc && typeof loc === "object" && typeof loc.latitude === "number" && typeof loc.longitude === "number";
+}
+
+function locationDisplay(loc) {
+  if (isGeoPoint(loc)) return `${loc.latitude.toFixed(5)}, ${loc.longitude.toFixed(5)} (coordinates only)`;
+  return loc ? String(loc) : "—";
+}
+
+async function load() {
+  const [attractions, restaurants] = await Promise.all([listAttractions(), listAllRestaurants()]);
+  items = [
+    ...attractions.filter(missingAddress).map((a) => ({ type: "Attraction", id: a.id, name: a.name || "—", locationRaw: a.location, locationText: locationDisplay(a.location), status: "Pending" })),
+    ...restaurants.filter(missingAddress).map((r) => ({ type: "Restaurant", id: r.id, name: r.name || "—", locationRaw: r.location, locationText: locationDisplay(r.location), status: "Pending" })),
+  ];
+  renderSummary();
+  renderTable();
+  document.getElementById("runBtn").disabled = !items.length;
+}
+
+function renderSummary() {
+  const left = items.filter((i) => i.status === "Pending").length;
+  document.getElementById("summaryCard").innerHTML = items.length
+    ? `<p>${items.length} record${items.length === 1 ? "" : "s"} with no address on file. ${left < items.length ? `${left} left to process.` : "Click Run to look them all up."}</p>`
+    : `<p class="muted">Nothing to do — every attraction and restaurant already has an address on file.</p>`;
+}
+
+function renderTable() {
+  const body = document.getElementById("tableBody");
+  if (!items.length) { body.innerHTML = `<tr><td colspan="5" class="muted">Nothing to show.</td></tr>`; return; }
+  body.innerHTML = items.map((i, idx) => `
+    <tr>
+      <td class="muted">${escapeHtml(i.type)}</td>
+      <td class="cell-strong">${escapeHtml(i.name)}</td>
+      <td class="muted">${escapeHtml(i.locationText)}</td>
+      <td class="muted" id="addr-${idx}">${i.newAddress ? escapeHtml(i.newAddress) : ""}</td>
+      <td id="status-${idx}">${escapeHtml(i.status)}</td>
+    </tr>`).join("");
+}
+
+document.getElementById("runBtn").addEventListener("click", async () => {
+  const btn = document.getElementById("runBtn");
+  setBusy(btn, true, "Running…");
+  let fixed = 0, skipped = 0, failed = 0;
+  for (let idx = 0; idx < items.length; idx++) {
+    const item = items[idx];
+    if (item.status !== "Pending") continue;
+    const statusCell = document.getElementById(`status-${idx}`);
+    if (statusCell) statusCell.textContent = "Looking up…";
+    try {
+      const address = isGeoPoint(item.locationRaw)
+        ? await reverseGeocodeAddress(item.locationRaw.latitude, item.locationRaw.longitude)
+        : await findAddressOnly(item.name, item.locationRaw);
+      if (address) {
+        if (item.type === "Attraction") await updateAttraction(item.id, { address });
+        else await updateRestaurant(item.id, { address });
+        item.newAddress = address;
+        item.status = "Done";
+        fixed++;
+      } else {
+        item.status = "No match found";
+        skipped++;
+      }
+    } catch (err) {
+      item.status = `Failed: ${err.message || "error"}`;
+      failed++;
+    }
+    const addrCell = document.getElementById(`addr-${idx}`);
+    if (addrCell) addrCell.textContent = item.newAddress || "";
+    if (statusCell) statusCell.textContent = item.status;
+    renderSummary();
+    // A polite gap between requests — this can be dozens of lookups in a
+    // row against a free-tier API, not a race.
+    await new Promise((r) => setTimeout(r, 300));
+  }
+  setBusy(btn, false);
+  btn.disabled = true;
+  toast(`Done — ${fixed} fixed, ${skipped} had no match, ${failed} failed.`, fixed ? "success" : "error");
+});
+</script>
+</body>
+</html>

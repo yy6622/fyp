@@ -6,8 +6,8 @@
 <title>Voya Admin — Log in</title>
 <link rel="stylesheet" href="../css/tokens.css?v=20261006b" />
 <link rel="stylesheet" href="../css/base.css?v=20261006b" />
-<link rel="stylesheet" href="../css/components.css?v=20261021c" />
-<link rel="stylesheet" href="../css/auth.css?v=20261006b" />
+<link rel="stylesheet" href="../css/components.css?v=20261106g" />
+<link rel="stylesheet" href="../css/auth.css?v=20261111a" />
 </head>
 <body>
 <div class="auth-shell">
@@ -33,7 +33,10 @@
         </div>
         <div class="auth-field">
           <label for="password">Password</label>
-          <input class="input" type="password" id="password" placeholder="Password" required autocomplete="current-password" />
+          <div class="password-input-wrap">
+            <input class="input" type="password" id="password" placeholder="Password" required autocomplete="current-password" />
+            <button type="button" class="password-toggle-btn" id="togglePassword" tabindex="-1" aria-label="Show password"><span data-icon="eye" data-icon-size="18"></span></button>
+          </div>
         </div>
         <label class="checkbox-row" style="margin-bottom:22px;">
           <input type="checkbox" id="remember" checked /> Remember me
@@ -45,15 +48,16 @@
 </div>
 
 <script type="module">
-import { mountIcons } from "../js/icons.js?v=20261021";
+import { mountIcons } from "../js/icons.js?v=20261106c";
 import { auth } from "../js/firebase-config.js?v=20261007";
-import { onAuthStateChanged, setPersistence, browserLocalPersistence, browserSessionPersistence } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
+import { onAuthStateChanged, setPersistence, browserLocalPersistence, browserSessionPersistence, signOut } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
 import { doc, getDoc } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
 import { db } from "../js/firebase-config.js?v=20261007";
-import { loginWithEmail, authErrorMessage } from "../js/auth-guard.js?v=20261021";
-import { setBusy } from "../js/ui.js?v=20261021";
+import { loginWithEmail, authErrorMessage } from "../js/auth-guard.js?v=20261106b";
+import { setBusy, wirePasswordToggle } from "../js/ui.js?v=20261113a";
 
 mountIcons(document);
+wirePasswordToggle("password", "togglePassword");
 
 const params = new URLSearchParams(location.search);
 const errBox = document.getElementById("authError");
@@ -82,6 +86,12 @@ document.getElementById("loginForm").addEventListener("submit", async (e) => {
     const user = await loginWithEmail(email, password);
     const snap = await getDoc(doc(db, "admins", user.uid));
     if (!snap.exists()) {
+      // loginWithEmail just succeeded, so this leaves a real signed-in
+      // session for an account with no admin role — close it instead of
+      // leaving it live (requireRole on every other page would catch
+      // this too, but the login page itself shouldn't leave the session
+      // open when it already knows the account isn't an admin).
+      await signOut(auth).catch(() => {});
       errBox.textContent = "That account isn't set up as an admin. Ask an existing admin to add you, or use the setup tool.";
       errBox.classList.add("show");
       setBusy(btn, false);

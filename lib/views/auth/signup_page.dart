@@ -5,6 +5,7 @@ import '../../controllers/auth_controller.dart';
 import '../../theme.dart';
 import '../onboarding/onboarding_wizard_page.dart';
 import 'auth_widgets.dart';
+import 'login_page.dart';
 import '../../services/verification_service.dart';
 import 'otp_verification_page.dart';
 
@@ -194,6 +195,21 @@ class _SignupPageState extends State<SignupPage> {
                             'Register',
                             style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white),
                           ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Center(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text('Already have an account? ', style: TextStyle(fontSize: 15, color: Colors.black)),
+                      GestureDetector(
+                        onTap: () => Navigator.of(context).push(
+                          MaterialPageRoute(builder: (_) => const LoginPage()),
+                        ),
+                        child: const Text('Log in', style: TextStyle(fontSize: 15, color: Color(0xFF0015FF))),
+                      ),
+                    ],
                   ),
                 ),
                 const SizedBox(height: 24),

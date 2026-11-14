@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../models/insurance_models.dart';
+import '../../services/currency_service.dart';
 import '../../theme.dart';
 import 'insurance_widgets.dart';
 import 'traveller_details_page.dart';
@@ -8,7 +9,21 @@ import 'traveller_details_page.dart';
 class InsurancePlanDetailPage extends StatelessWidget {
   final InsurancePlan plan;
   final String? tripId;
-  const InsurancePlanDetailPage({super.key, required this.plan, this.tripId});
+  // Pre-fills [TravellerDetailsPage] when this plan was reached from a
+  // quote/compare flow that already collected trip details, so the
+  // traveller doesn't have to re-enter dates or traveller count they just
+  // gave on [InsuranceQuotePage]/[InsurancePlanComparePage].
+  final int? initialTravellerCount;
+  final DateTime? initialTravelStart;
+  final DateTime? initialTravelEnd;
+  const InsurancePlanDetailPage({
+    super.key,
+    required this.plan,
+    this.tripId,
+    this.initialTravellerCount,
+    this.initialTravelStart,
+    this.initialTravelEnd,
+  });
 
   static const _palette = [
     (Icons.healing, Color(0xFF3AA089), Color(0xFFE1F3EE)),
@@ -51,8 +66,8 @@ class InsurancePlanDetailPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
-      appBar: const VoyaAppBar(
-        title: Text('Insurance', style: TextStyle(color: AppColors.navy, fontWeight: FontWeight.bold, fontSize: 18)),
+      appBar: VoyaAppBar(
+        title: const Text('Insurance', style: TextStyle(color: AppColors.navy, fontWeight: FontWeight.bold, fontSize: 18)),
       ),
       body: Column(
         children: [
@@ -83,9 +98,9 @@ class InsurancePlanDetailPage extends StatelessWidget {
                               crossAxisAlignment: CrossAxisAlignment.baseline,
                               textBaseline: TextBaseline.alphabetic,
                               children: [
-                                Text(plan.price, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.primary)),
+                                Text(plan.displayPrice(CurrencyService.instance.lastKnownUserCurrency), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.primary)),
                                 const SizedBox(width: 4),
-                                const Text('per trips', style: TextStyle(fontSize: 10, color: AppColors.textGrey)),
+                                Text(insurancePriceUnitLabel(plan.category), style: const TextStyle(fontSize: 10, color: AppColors.textGrey)),
                               ],
                             ),
                           ],
@@ -119,6 +134,26 @@ class InsurancePlanDetailPage extends StatelessWidget {
                     ),
                   ),
                 ],
+                if (plan.hasNationalityRestriction) ...[
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(color: const Color(0xFFFFF8EE), borderRadius: BorderRadius.circular(14), border: Border.all(color: const Color(0xFFFCE4BE))),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(Icons.info_outline, size: 18, color: Color(0xFFB8740A)),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'Only available to: ${plan.eligibleCountries.join(', ')}.',
+                            style: const TextStyle(fontSize: 12, color: AppColors.navy, height: 1.3),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 16),
                 if (plan.coverageItems.isNotEmpty)
                   Container(
@@ -138,7 +173,6 @@ class InsurancePlanDetailPage extends StatelessWidget {
                           Builder(builder: (context) {
                             final item = plan.coverageItems[i];
                             final visual = _coverageVisual(item.label, i);
-                            final amount = item.amount % 1 == 0 ? item.amount.toStringAsFixed(0) : item.amount.toStringAsFixed(2);
                             return Padding(
                               padding: const EdgeInsets.symmetric(vertical: 14),
                               child: Row(
@@ -159,7 +193,7 @@ class InsurancePlanDetailPage extends StatelessWidget {
                                       children: [
                                         const TextSpan(text: 'Up to '),
                                         TextSpan(
-                                          text: 'RM $amount',
+                                          text: CurrencyService.instance.format(item.amount, 'MYR', CurrencyService.instance.lastKnownUserCurrency),
                                           style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black),
                                         ),
                                       ],
@@ -188,8 +222,8 @@ class InsurancePlanDetailPage extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(plan.price, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.primary)),
-                      const Text('per trips', style: TextStyle(fontSize: 11, color: AppColors.textGrey)),
+                      Text(plan.displayPrice(CurrencyService.instance.lastKnownUserCurrency), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.primary)),
+                      Text(insurancePriceUnitLabel(plan.category), style: const TextStyle(fontSize: 11, color: AppColors.textGrey)),
                     ],
                   ),
                 ),
@@ -200,7 +234,13 @@ class InsurancePlanDetailPage extends StatelessWidget {
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                   ),
                   onPressed: () => Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => TravellerDetailsPage(plan: plan, tripId: tripId)),
+                    MaterialPageRoute(builder: (_) => TravellerDetailsPage(
+                    plan: plan,
+                    tripId: tripId,
+                    initialTravellerCount: initialTravellerCount,
+                    initialTravelStart: initialTravelStart,
+                    initialTravelEnd: initialTravelEnd,
+                  )),
                   ),
                   child: const Text('Enter Traveller', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
                 ),

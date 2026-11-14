@@ -18,6 +18,14 @@ class AppUser {
 
   final bool publicProfile;
 
+  // Overrides the home page's automatic "soonest upcoming trip" pick for
+  // the Next Adventure card (see home_page.dart's _buildAdventureCard) —
+  // set when the traveller explicitly switches which trip that card
+  // shows, so the choice survives closing and reopening the app. Falls
+  // back to the automatic pick when unset, or when it points at a trip
+  // that's no longer upcoming.
+  final String? pinnedTripId;
+
   const AppUser({
     required this.uid,
     required this.name,
@@ -32,6 +40,7 @@ class AppUser {
     this.lastLng,
     this.locationUpdatedAt,
     this.publicProfile = true,
+    this.pinnedTripId,
   });
 
   factory AppUser.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
@@ -50,6 +59,7 @@ class AppUser {
       lastLng: (data['lastLng'] as num?)?.toDouble(),
       locationUpdatedAt: (data['locationUpdatedAt'] as Timestamp?)?.toDate(),
       publicProfile: (data['publicProfile'] as bool?) ?? true,
+      pinnedTripId: data['pinnedTripId'] as String?,
     );
   }
 }
@@ -121,6 +131,12 @@ class UserRepository {
 
   Future<void> setPublicProfile(String uid, bool value) {
     return _users.doc(uid).update({'publicProfile': value});
+  }
+
+  /// See [AppUser.pinnedTripId]'s doc comment. Pass null to clear it and
+  /// go back to the automatic soonest-upcoming-trip pick.
+  Future<void> setPinnedTripId(String uid, String? tripId) {
+    return _users.doc(uid).update({'pinnedTripId': tripId});
   }
 
   Future<void> updateLocation(String uid, double lat, double lng) {

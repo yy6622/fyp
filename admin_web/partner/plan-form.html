@@ -1,0 +1,557 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Insurance Plan &mdash; Voya Insurance Partner</title>
+<link rel="stylesheet" href="../css/tokens.css?v=20261006b" />
+<link rel="stylesheet" href="../css/base.css?v=20261006b" />
+<link rel="stylesheet" href="../css/layout.css?v=20261111a" />
+<link rel="stylesheet" href="../css/components.css?v=20261106g" />
+</head>
+<body>
+<div class="shell">
+  <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+  <aside class="sidebar" id="sidebar">
+    <img class="sidebar-brand" src="../img/voya-logo-white.png" alt="Voya" />
+    <div class="sidebar-user">
+      <div class="name" id="sbUserName">Loading&hellip;</div>
+      <div class="role" id="sbUserRole">Partner workspace</div>
+    </div>
+    <nav class="nav" id="sidebarNav"></nav>
+    <button class="sidebar-logout" id="logoutBtn"><span data-icon="log-out"></span>Log out</button>
+  </aside>
+
+  <main class="content">
+    <div class="topbar">
+      <div>
+        <button class="menu-toggle" id="menuToggle"><span data-icon="menu"></span></button>
+        <a href="plans.html" class="inline-flex" id="backLink" style="color:var(--text-500);font-weight:700;font-size:13.5px;margin-bottom:10px;">
+          <span data-icon="arrow-left" data-icon-size="14"></span>Back to Insurance Plans
+        </a>
+        <h1 class="h1" id="pageTitle">Add plan</h1>
+        <p class="subtitle" id="pageSubtitle">Create and manage coverage for every journey</p>
+      </div>
+    </div>
+
+    <div class="dev-tool-bar" id="approvalBar" style="display:none;">
+      <span>Your organization is pending approval &mdash; you can't create or edit plans until an admin approves your account.</span>
+    </div>
+
+    <div class="card card-pad">
+      <div class="form-section">
+        <div class="form-section-title"><span data-icon="briefcase"></span>Plan details</div>
+        <div class="form-grid">
+          <div class="field" style="grid-column:1/-1;"><label>Plan name</label><input class="input" id="fName" placeholder="e.g. Travel Care Premium" /></div>
+          <div class="field">
+            <label>Trip type</label>
+            <select class="select" id="fType"><option value="Basic">Basic</option><option value="Annual">Annual</option></select>
+            <p class="hint" style="margin:6px 0 0;">Basic covers one trip's dates (priced per day). Annual covers unlimited trips within a year (flat yearly price).</p>
+          </div>
+          <div class="field">
+            <label id="fPremiumLabel">Premium per traveller / day (RM)</label>
+            <input class="input" id="fPremium" type="number" placeholder="12" />
+          </div>
+        </div>
+      </div>
+
+      <div class="form-section">
+        <div class="form-section-title"><span data-icon="doc-text"></span>App content</div>
+        <div class="field" style="margin-bottom:18px;">
+          <label>Key coverage</label>
+          <div class="chip-picker" id="coveragePresetsList" style="margin-bottom:10px;"></div>
+          <div id="coverageItemsList"></div>
+        </div>
+        <div class="field">
+          <label>Highlights</label>
+          <div class="chip-picker" id="highlightsPresetsList"></div>
+        </div>
+      </div>
+
+      <div class="form-section">
+        <div class="form-section-title"><span data-icon="shield"></span>Eligibility</div>
+        <div class="field" style="margin-bottom:18px;">
+          <label>Destinations covered <span style="color:var(--danger-500,#D14343);">*</span></label>
+          <p class="hint" style="margin:0 0 8px;">Required &mdash; pick every country this plan covers. Travellers searching a destination not picked here won't see this plan.</p>
+          <div class="chip-picker" id="destinationsList"></div>
+        </div>
+        <div class="field" style="margin-bottom:18px;">
+          <label>Eligible nationalities</label>
+          <p class="hint" style="margin:0 0 8px;">The traveller's passport/citizenship. Leave all unpicked to allow every nationality.</p>
+          <div class="chip-picker" id="eligibleCountriesList"></div>
+        </div>
+        <div class="form-grid" style="margin-bottom:4px;">
+          <div class="field">
+            <label>Minimum age</label>
+            <input class="input" id="fMinAge" type="number" min="0" placeholder="No minimum" />
+          </div>
+          <div class="field">
+            <label>Maximum age</label>
+            <input class="input" id="fMaxAge" type="number" min="0" placeholder="No maximum" />
+          </div>
+          <div class="field">
+            <label>Minimum trip length (days)</label>
+            <input class="input" id="fMinDuration" type="number" min="1" placeholder="No minimum" />
+          </div>
+          <div class="field">
+            <label>Maximum trip length (days)</label>
+            <input class="input" id="fMaxDuration" type="number" min="1" placeholder="No maximum" />
+          </div>
+        </div>
+        <p class="hint">Age is checked against each traveller's date of birth as of their trip's start date. Trip length is mostly meaningful for Basic plans &mdash; leave both blank for no restriction.</p>
+      </div>
+
+      <div class="form-section">
+        <div class="form-section-title"><span data-icon="shield-check"></span>Status</div>
+        <div id="statusBlock"></div>
+      </div>
+
+      <div class="form-actions" id="formActions">
+        <a class="btn btn-outline" id="cancelLink" href="plans.html">Cancel</a>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script type="module">
+import { requireRole } from "../js/auth-guard.js?v=20261106b";
+import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261114a";
+import { mountIcons } from "../js/icons.js?v=20261106c";
+import { getPlan, createPlan, setPlanStatus, sendInsuranceChatPlan } from "../js/data.js?v=20261114c";
+import { toast, setBusy, escapeHtml, statusBadge, confirmDialog } from "../js/ui.js?v=20261113a";
+import { COUNTRY_OPTIONS } from "../js/countries.js?v=20261113a";
+
+mountSidebarNav({ role: "partner", active: "plans" });
+const editingId = new URLSearchParams(location.search).get("id");
+// Set when this page was opened from a traveller's chat (message-detail.html's
+// "+ Create new plan for this traveller" button) instead of from Plans ->
+// Add -- on save, the new plan is sent straight into that thread and the
+// partner lands back on the conversation instead of the plans list, so a
+// bespoke plan for one traveller's requirement doesn't mean losing their
+// place in the chat. This path deliberately never shows the "Review
+// status" section below -- it's saved as a plain "draft" and sent
+// straight into the chat (never published for every traveller to see),
+// because InsuranceRepository.getPlan() (which fetches a chat-attached
+// plan) never gates on status.
+const returnChatId = new URLSearchParams(location.search).get("returnChatId");
+document.getElementById("pageTitle").textContent = editingId ? "Edit plan" : (returnChatId ? "Create plan for this traveller" : "Add plan");
+if (returnChatId) {
+  const backHref = `message-detail.html?id=${encodeURIComponent(returnChatId)}`;
+  document.getElementById("pageSubtitle").textContent = "This plan will be sent straight into your conversation once saved.";
+  document.getElementById("backLink").href = backHref;
+  document.getElementById("backLink").lastChild.textContent = "Back to conversation";
+  document.getElementById("cancelLink").href = backHref;
+}
+
+const session = await requireRole("partner", "login.html");
+
+// Draft state for the modal's repeatable "Key coverage" rows — edited in
+// place by renderCoverageItems()'s own listeners, read back into the
+// saved doc's `coverageItems` array on Save.
+let coverageItemsDraft = [];
+// A handful of coverage types almost every travel-insurance plan
+// includes — tapping one just adds that label to coverageItemsDraft so
+// the partner only has to type the RM amount. Anything not in this list
+// is added as a blank custom row via the dashed "+" box at the end of
+// the same chip row (mountChipRow below).
+const COVERAGE_PRESETS = [
+  "Medical Expenses (Overseas)",
+  "Medical Expenses (Malaysia)",
+  "Emergency Medical Evacuation & Repatriation",
+  "Trip Cancellation",
+  "Trip Curtailment",
+  "Travel Delay Compensation",
+  "Baggage Loss or Damage",
+  "Personal Accident (Death & Disablement)",
+  "Loss of Personal Money/Documents",
+  "Personal Liability",
+];
+// Each one is its own badge on the app's plan detail page
+// (InsurancePlan.highlights is a List<String>) -- unlike coverage these
+// have no extra amount to fill in, so picking/typing one adds it
+// straight away (see mountChipRow below).
+const HIGHLIGHT_PRESETS = [
+  "24/7 Support", "Cashless Claims", "Worldwide Coverage", "COVID-19 Coverage",
+  "Instant Approval", "No Medical Checkup", "Family Discount", "Annual Multi-Trip",
+];
+let highlightsDraft = [];
+
+// Same canonical list the app's own traveller-details picker uses
+// (lib/controllers/insurance_controller.dart's nationalityOptions, minus
+// "Other" -- restricting eligibility *to* "other" doesn't mean anything).
+const NATIONALITY_OPTIONS = [
+  "Malaysian", "Singaporean", "Indonesian", "Thai", "Filipino", "Vietnamese",
+  "Bruneian", "Chinese", "Japanese", "South Korean", "Indian", "British",
+  "American", "Australian",
+];
+let eligibleCountriesDraft = [];
+
+// Same real country list the traveller's own destination picker uses
+// (InsuranceQuotePage, via lib/data/countries.dart's kCountries) -- now
+// shared from js/countries.js so this, partner/register.html and
+// partner/organization.html can never drift apart.
+const DESTINATION_OPTIONS = COUNTRY_OPTIONS;
+let destinationsDraft = [];
+
+// Generic "pick a preset, or type your own" chip row: tap a chip to
+// toggle it in `selected`, or type something not in the list into the
+// dashed box at the end and press Enter -- used for Highlights and
+// Eligible nationalities below (not Key coverage, which needs an RM
+// amount per row rather than a plain on/off toggle). Mirrors
+// admin/attraction-form.html's mountPresetPicker, minus the
+// Firestore-backed shared-preset-list part this doesn't need.
+function mountChipRow(boxId, presets, selected, onChange) {
+  const box = document.getElementById(boxId);
+  function render() {
+    const options = [...presets];
+    selected.forEach((s) => { if (!options.includes(s)) options.push(s); });
+    box.innerHTML = options
+      .map((opt) => `<button type="button" class="chip-toggle${selected.includes(opt) ? " active" : ""}" data-tag="${escapeHtml(opt)}">${escapeHtml(opt)}</button>`)
+      .join("") + `<span class="chip-picker-add"><input placeholder="+ Add your own…" /></span>`;
+    box.querySelectorAll("[data-tag]").forEach((btn) =>
+      btn.addEventListener("click", () => {
+        const tag = btn.dataset.tag;
+        const i = selected.indexOf(tag);
+        if (i === -1) selected.push(tag); else selected.splice(i, 1);
+        onChange();
+        render();
+      }));
+    const addInput = box.querySelector(".chip-picker-add input");
+    addInput.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter") return;
+      e.preventDefault();
+      const value = addInput.value.trim();
+      if (!value || selected.includes(value)) return;
+      selected.push(value);
+      onChange();
+      render();
+    });
+  }
+  render();
+}
+
+
+function renderDestinations() {
+  mountChipRow("destinationsList", DESTINATION_OPTIONS, destinationsDraft, () => {});
+}
+
+function renderEligibleCountries() {
+  mountChipRow("eligibleCountriesList", NATIONALITY_OPTIONS, eligibleCountriesDraft, () => {});
+}
+
+function renderHighlights() {
+  mountChipRow("highlightsPresetsList", HIGHLIGHT_PRESETS, highlightsDraft, () => {});
+}
+
+function renderCoverageItems() {
+  const list = document.getElementById("coverageItemsList");
+  list.innerHTML = coverageItemsDraft.length
+    ? coverageItemsDraft.map((item, i) => `
+      <div style="display:flex; gap:8px; align-items:center; margin-bottom:8px;">
+        <input class="input" style="flex:2;" placeholder="e.g. Medical Expenses (Overseas)" value="${escapeHtml(item.label || "")}" data-cov-label="${i}" />
+        <input class="input" type="number" style="flex:1;" placeholder="RM amount" value="${item.amount ?? ""}" data-cov-amount="${i}" />
+        <button type="button" class="btn btn-danger-outline btn-sm" data-cov-remove="${i}"><span data-icon="trash" data-icon-size="14"></span></button>
+      </div>`).join("")
+    : "";
+  list.querySelectorAll("[data-cov-label]").forEach((el) =>
+    el.addEventListener("input", (e) => { coverageItemsDraft[Number(el.dataset.covLabel)].label = e.target.value; }));
+  list.querySelectorAll("[data-cov-amount]").forEach((el) =>
+    el.addEventListener("input", (e) => { coverageItemsDraft[Number(el.dataset.covAmount)].amount = e.target.value; }));
+  list.querySelectorAll("[data-cov-remove]").forEach((el) =>
+    el.addEventListener("click", () => { coverageItemsDraft.splice(Number(el.dataset.covRemove), 1); renderCoverageItems(); }));
+  mountIcons(list);
+  renderCoveragePresets();
+}
+
+// Same preset-chip-row idea as mountChipRow, but each "chip" here adds a
+// label+amount row below instead of just toggling a plain tag -- a
+// selected preset shows as a disabled checkmark chip (it's already a row
+// below), and the dashed "+" box adds a blank custom row.
+function renderCoveragePresets() {
+  const list = document.getElementById("coveragePresetsList");
+  list.innerHTML = COVERAGE_PRESETS.map((label, i) => {
+    const already = coverageItemsDraft.some((it) => (it.label || "").trim().toLowerCase() === label.toLowerCase());
+    return `<button type="button" class="chip-toggle${already ? " active" : ""}" data-preset="${i}" ${already ? "disabled" : ""}>${already ? "✓" : "+"} ${escapeHtml(label)}</button>`;
+  }).join("") + `<span class="chip-picker-add"><input placeholder="+ Add your own…" id="coverageCustomInput" /></span>`;
+  list.querySelectorAll("[data-preset]").forEach((el) =>
+    el.addEventListener("click", () => {
+      const label = COVERAGE_PRESETS[Number(el.dataset.preset)];
+      if (coverageItemsDraft.some((it) => (it.label || "").trim().toLowerCase() === label.toLowerCase())) return;
+      coverageItemsDraft.push({ label, amount: "" });
+      renderCoverageItems();
+    }));
+  const customInput = document.getElementById("coverageCustomInput");
+  customInput.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    const label = customInput.value.trim();
+    if (!label || coverageItemsDraft.some((it) => (it.label || "").trim().toLowerCase() === label.toLowerCase())) return;
+    coverageItemsDraft.push({ label, amount: "" });
+    renderCoverageItems();
+  });
+}
+
+let currentPlan = null;
+
+// Only an approved partner may create/edit a plan — firestore.rules
+// enforces this for real (insurance_plans create/update now check the
+// partner's own status), this just keeps the UI from offering an action
+// that would fail with a permission error (e.g. a direct link to this
+// page while still pending).
+const isApproved = session?.profile.status === "approved";
+
+if (session) {
+  setSidebarUser({ displayName: session.profile.companyName || "Partner", roleLabel: `${session.profile.companyName || "Insurance"} · Insurance Partner` });
+  if (!isApproved) {
+    document.getElementById("approvalBar").style.display = "flex";
+  }
+  await load();
+}
+
+// Basic plans charge per traveller per day of the actual trip
+// (lib/controllers/insurance_controller.dart's PaymentMethodController
+// multiplies this by the trip length), so the app's "pay" screen is only
+// honest if partners know that's what they're pricing here. Annual plans
+// cover unlimited trips within the year, so they stay a flat yearly price.
+function updatePremiumLabel() {
+  const isAnnual = document.getElementById("fType").value === "Annual";
+  document.getElementById("fPremiumLabel").textContent = isAnnual
+    ? "Premium per traveller / year (RM)"
+    : "Premium per traveller / day (RM)";
+}
+document.getElementById("fType").addEventListener("change", updatePremiumLabel);
+
+async function load() {
+  const p = editingId ? await getPlan(editingId) : null;
+  if (editingId && !p) {
+    toast("Couldn't find that plan.", "error");
+    location.href = "plans.html";
+    return;
+  }
+  currentPlan = p;
+  document.getElementById("fName").value = p?.name || "";
+  document.getElementById("fType").value = p?.tripType === "Annual" ? "Annual" : "Basic";
+  document.getElementById("fPremium").value = p?.premium || "";
+  document.getElementById("fMinAge").value = p?.minAge ?? "";
+  document.getElementById("fMaxAge").value = p?.maxAge ?? "";
+  document.getElementById("fMinDuration").value = p?.minTripDurationDays ?? "";
+  document.getElementById("fMaxDuration").value = p?.maxTripDurationDays ?? "";
+  updatePremiumLabel();
+  coverageItemsDraft = (p?.coverageItems || []).map((it) => ({ label: it.label || "", amount: it.amount ?? "" }));
+  renderCoverageItems();
+  highlightsDraft = [...(p?.highlights || [])];
+  renderHighlights();
+  eligibleCountriesDraft = [...(p?.eligibleCountries || [])];
+  renderEligibleCountries();
+  destinationsDraft = [...(p?.eligibleDestinations || [])];
+  renderDestinations();
+  renderStatusAndActions();
+  mountIcons(document);
+}
+
+/** Builds the "Status" section and the form's action button(s) -- both
+ * depend on exactly where this plan currently sits: active, inactive,
+ * suspended, or not saved yet (see firestore.rules' insurance_plans
+ * rule for the same states enforced server-side). Re-run after every
+ * load()/save() so the page always reflects the plan's real current
+ * state. */
+function renderStatusAndActions() {
+  const statusBlock = document.getElementById("statusBlock");
+  const actions = document.getElementById("formActions");
+  const cancelHtml = `<a class="btn btn-outline" id="cancelLink" href="${returnChatId ? `message-detail.html?id=${encodeURIComponent(returnChatId)}` : "plans.html"}">Cancel</a>`;
+
+  // The one-off chat-plan path never shows this review-status section at
+  // all (see the returnChatId doc comment above) -- a single plain Save
+  // button, same as before any of this existed.
+  if (returnChatId) {
+    statusBlock.innerHTML = `<p class="muted small">This is a one-off plan for a single traveller's chat.</p>`;
+    actions.innerHTML = cancelHtml + `<button class="btn btn-primary" id="saveBtn">Save &amp; send</button>`;
+    wireSaveButton("draft");
+    if (!isApproved) document.getElementById("saveBtn").style.display = "none";
+    return;
+  }
+
+  // No admin-approval queue any more -- the partner fully controls their
+  // own plan's status, toggling freely between "active" (visible,
+  // travellers can see and buy it) and "inactive" (saved, hidden) any
+  // time. "suspended" is a separate, admin-only state: once an admin
+  // suspends a plan, only an admin can lift it -- enforced in
+  // firestore.rules, not just here. ("published" is read as a synonym
+  // of "active" here too, for any plan still holding that pre-rename
+  // value until the one-time data migration runs.)
+  const rawStatus = currentPlan?.status || "active";
+  const status = rawStatus === "published" ? "active" : rawStatus;
+  let statusHtml = `<div style="margin-bottom:10px;">${statusBadge(status)}</div>`;
+  if (!editingId) {
+    statusHtml = `
+      <label for="createStatus">Status</label>
+      <select class="select" id="createStatus" style="margin-bottom:6px;">
+        <option value="active" selected>Active -- visible to travellers right away</option>
+        <option value="inactive">Inactive -- saved, but not visible to travellers yet</option>
+      </select>
+      <p class="muted small">You can change this later from the plan's edit page.</p>`;
+  } else if (status === "active") {
+    statusHtml += `<p class="muted small">Live -- travellers can see and buy this plan. Changes you save take effect immediately.</p>`;
+  } else if (status === "inactive") {
+    statusHtml += `<p class="muted small">Not visible to travellers right now. Activate it whenever you want travellers to see and buy it again.</p>`;
+  } else if (status === "suspended") {
+    statusHtml += `<p class="muted small">Not visible to travellers right now. You can still edit it, but only an admin can make it live again.</p>`;
+  }
+  statusBlock.innerHTML = statusHtml;
+
+  let buttonsHtml = "";
+  if (!editingId) {
+    buttonsHtml = `<button class="btn btn-primary" id="saveBtn">Save plan</button>`;
+  } else if (status === "active") {
+    buttonsHtml = `<button class="btn btn-danger-outline" id="deactivateBtn">Deactivate</button><button class="btn btn-primary" id="saveBtn">Save changes</button>`;
+  } else if (status === "inactive") {
+    buttonsHtml = `<button class="btn btn-primary" id="activateBtn">Activate</button><button class="btn btn-outline" id="saveBtn">Save changes</button>`;
+  } else {
+    // suspended -- content can still be edited and saved, but the save
+    // never changes status away from "suspended" itself; see
+    // wireSaveButton's call below.
+    buttonsHtml = `<button class="btn btn-primary" id="saveBtn">Save changes</button>`;
+  }
+  actions.innerHTML = cancelHtml + buttonsHtml;
+
+  if (!isApproved) {
+    actions.querySelectorAll("button:not([data-close])").forEach((b) => { if (b.id !== "cancelLink") b.style.display = "none"; });
+    return;
+  }
+
+  // New plan -> whatever the partner picked in the Status dropdown above
+  // (read at click time, since they can still change it before saving).
+  // Editing an active/inactive plan -> Save changes never flips between
+  // the two itself, that's what the Activate/Deactivate button is for.
+  // A suspended plan's Save button keeps it "suspended" -- the partner
+  // can fix its content, but firestore.rules blocks them from also
+  // changing status away from "suspended" in that same write; only an
+  // admin can.
+  if (document.getElementById("saveBtn")) {
+    wireSaveButton(
+      !editingId ? () => document.getElementById("createStatus").value : status,
+      "saveBtn"
+    );
+  }
+  const deactivateBtn = document.getElementById("deactivateBtn");
+  if (deactivateBtn) {
+    deactivateBtn.addEventListener("click", async () => {
+      const ok = await confirmDialog({ title: "Deactivate this plan?", body: "Travellers won't be able to buy it until you activate it again.", confirmText: "Deactivate", danger: true });
+      if (!ok) return;
+      setBusy(deactivateBtn, true, "Deactivating…");
+      try {
+        await setPlanStatus(editingId, "inactive", {});
+        toast("Plan deactivated.", "success");
+        await load();
+      } catch (err) {
+        toast(err.message || "Couldn't deactivate plan.", "error");
+        setBusy(deactivateBtn, false);
+      }
+    });
+  }
+  const activateBtn = document.getElementById("activateBtn");
+  if (activateBtn) {
+    activateBtn.addEventListener("click", async () => {
+      setBusy(activateBtn, true, "Activating…");
+      try {
+        await setPlanStatus(editingId, "active", {});
+        toast("Plan activated.", "success");
+        await load();
+      } catch (err) {
+        toast(err.message || "Couldn't activate plan.", "error");
+        setBusy(activateBtn, false);
+      }
+    });
+  }
+}
+
+function collectFormData() {
+  const name = document.getElementById("fName").value.trim();
+  if (!name) { toast("Plan name is required.", "error"); return null; }
+  const premium = Number(document.getElementById("fPremium").value);
+  if (!premium || premium <= 0) { toast("Premium is required and must be more than 0.", "error"); return null; }
+
+  if (!coverageItemsDraft.length) { toast("Add at least one Key coverage item.", "error"); return null; }
+  const incompleteCoverage = coverageItemsDraft.some((it) => !(it.label || "").trim() || !(Number(it.amount) > 0));
+  if (incompleteCoverage) { toast("Every Key coverage item needs both a label and an RM amount greater than 0.", "error"); return null; }
+  const coverageItems = coverageItemsDraft.map((it) => ({ label: it.label.trim(), amount: Number(it.amount) }));
+
+  if (!destinationsDraft.length) { toast("Pick at least one destination this plan covers.", "error"); return null; }
+
+  const minAge = document.getElementById("fMinAge").value !== "" ? Number(document.getElementById("fMinAge").value) : null;
+  const maxAge = document.getElementById("fMaxAge").value !== "" ? Number(document.getElementById("fMaxAge").value) : null;
+  if (minAge !== null && maxAge !== null && minAge > maxAge) { toast("Minimum age can't be greater than maximum age.", "error"); return null; }
+  const minDuration = document.getElementById("fMinDuration").value !== "" ? Number(document.getElementById("fMinDuration").value) : null;
+  const maxDuration = document.getElementById("fMaxDuration").value !== "" ? Number(document.getElementById("fMaxDuration").value) : null;
+  if (minDuration !== null && maxDuration !== null && minDuration > maxDuration) { toast("Minimum trip length can't be greater than maximum.", "error"); return null; }
+
+  const highlights = [...highlightsDraft];
+
+  const data = {
+    name,
+    tripType: document.getElementById("fType").value,
+    // The headline coverage figure is always the real sum of the itemized
+    // Key coverage list above — never a number typed in separately, so it
+    // can never say more (or less) than what's actually covered.
+    coverage: coverageItems.reduce((sum, it) => sum + it.amount, 0),
+    premium,
+    coverageItems,
+    highlights,
+    eligibleCountries: eligibleCountriesDraft,
+    eligibleDestinations: destinationsDraft,
+    minAge, maxAge,
+    minTripDurationDays: minDuration, maxTripDurationDays: maxDuration,
+    partnerId: session.uid,
+    providerName: session.profile.companyName || "Partner",
+    // Denormalized from the partner's own profile (Organization Profile
+    // page) so the rider's app can show the real logo on plan cards
+    // without an extra read per plan — see
+    // lib/repositories/insurance_repository.dart's _fromDoc.
+    providerLogoUrl: session.profile.logoUrl || "",
+  };
+  return data;
+}
+
+/** Wires a Save button to collect the form, write it with the given
+ * target status, and navigate away on success -- shared by every button
+ * renderStatusAndActions() can show (Save & send, Save plan, Save
+ * changes), so there's exactly one place that actually writes the plan
+ * doc. `status` can be a plain string, or (for the new-plan Status
+ * dropdown, which the partner can still change right up until they
+ * click Save) a function returning the status to use. */
+function wireSaveButton(status, btnId = "saveBtn") {
+  document.getElementById(btnId).addEventListener("click", async () => {
+    const data = collectFormData();
+    if (!data) return;
+    const resolvedStatus = typeof status === "function" ? status() : status;
+    const btn = document.getElementById(btnId);
+    setBusy(btn, true, "Saving…");
+    try {
+      const successToast = resolvedStatus === "draft" ? "Saved as draft."
+        : resolvedStatus === "inactive" ? "Plan saved as inactive -- not visible to travellers yet."
+        : resolvedStatus === "suspended" ? "Plan saved."
+        : "Plan saved and active.";
+      if (editingId) {
+        await setPlanStatus(editingId, resolvedStatus, data);
+        toast(successToast, "success");
+        await load();
+      } else {
+        const ref = await createPlan({ ...data, status: resolvedStatus });
+        if (returnChatId) {
+          await sendInsuranceChatPlan(returnChatId, session.uid, { id: ref.id, name: data.name });
+          toast("Plan created and sent.", "success");
+          location.href = `message-detail.html?id=${encodeURIComponent(returnChatId)}`;
+        } else {
+          toast(successToast, "success");
+          location.href = "plans.html";
+        }
+      }
+    } catch (err) {
+      toast(err.message || "Couldn't save plan.", "error");
+      setBusy(btn, false);
+    }
+  });
+}
+</script>
+</body>
+</html>

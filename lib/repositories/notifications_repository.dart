@@ -49,7 +49,23 @@ class NotificationsRepository {
   Stream<int> watchUnreadCount(String uid) =>
       _of(uid).where('read', isEqualTo: false).snapshots().map((snap) => snap.docs.length);
 
-  Future<void> markRead(String uid, String id) => _of(uid).doc(id).update({'read': true});
+  Future<void> markRead(String uid, String id) =>
+      _of(uid).doc(id).update({'read': true, 'readAt': FieldValue.serverTimestamp()});
+
+  /// Marks every unread notification as read in one go — called when the
+  /// traveller opens the Notifications page, so entering the page counts as
+  /// reading everything in it.
+  Future<void> markAllRead(String uid) async {
+    final unread = await _of(uid).where('read', isEqualTo: false).get();
+    if (unread.docs.isEmpty) return;
+    for (var i = 0; i < unread.docs.length; i += 450) {
+      final batch = FirebaseFirestore.instance.batch();
+      for (final doc in unread.docs.skip(i).take(450)) {
+        batch.update(doc.reference, {'read': true, 'readAt': FieldValue.serverTimestamp()});
+      }
+      await batch.commit();
+    }
+  }
 
   Future<void> delete(String uid, String id) => _of(uid).doc(id).delete();
 

@@ -1,0 +1,307 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Transactions — Voya Admin</title>
+<link rel="stylesheet" href="../css/tokens.css?v=20261006b" />
+<link rel="stylesheet" href="../css/base.css?v=20261006b" />
+<link rel="stylesheet" href="../css/layout.css?v=20261111a" />
+<link rel="stylesheet" href="../css/components.css?v=20261106g" />
+</head>
+<body>
+<div class="shell">
+  <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+  <aside class="sidebar" id="sidebar">
+    <img class="sidebar-brand" src="../img/voya-logo-white.png" alt="Voya" />
+    <div class="sidebar-user">
+      <div class="name" id="sbUserName">Loading…</div>
+      <div class="role" id="sbUserRole">Administrator</div>
+    </div>
+    <nav class="nav" id="sidebarNav"></nav>
+    <button class="sidebar-logout" id="logoutBtn"><span data-icon="log-out"></span>Log out</button>
+  </aside>
+
+  <main class="content">
+    <div class="topbar">
+      <div>
+        <button class="menu-toggle" id="menuToggle"><span data-icon="menu"></span></button>
+        <h1 class="h1">Transactions</h1>
+        <p class="subtitle">Every flight and hotel booking made through Voya</p>
+      </div>
+    </div>
+
+    <div class="tabs" id="txnTabs">
+      <button class="tab-btn active" data-tab="flight">Flights</button>
+      <button class="tab-btn" data-tab="hotel">Hotels</button>
+    </div>
+
+    <div id="flightPanel">
+      <div class="stat-grid" id="flightStatGrid"><div class="skeleton" style="height:90px;grid-column:1/-1;"></div></div>
+      <div class="filter-bar">
+        <div class="search-input-wrap"><span data-icon="search"></span><input class="input" id="flightSearchInput" placeholder="Search by traveller or reference…" /></div>
+        <select class="select" id="flightStatusFilter">
+          <option value="">All status</option>
+          <option value="confirmed">Confirmed</option>
+          <option value="pending">Pending</option>
+          <option value="cancelled">Cancelled</option>
+        </select>
+        <div class="inline-flex" style="gap:6px;">
+          <input type="date" class="input" id="flightDateFrom" style="width:150px;" title="Booked from" />
+          <span class="muted small">to</span>
+          <input type="date" class="input" id="flightDateTo" style="width:150px;" title="Booked to" />
+        </div>
+        <select class="select" id="flightSortFilter">
+          <option value="date_desc">Newest first</option>
+          <option value="date_asc">Oldest first</option>
+          <option value="price_desc">Amount: high to low</option>
+          <option value="price_asc">Amount: low to high</option>
+        </select>
+      </div>
+      <div class="table-wrap scroll-x">
+        <table class="data-table">
+          <thead><tr><th>Reference</th><th>Traveller</th><th>Flight</th><th>Amount</th><th>Status</th><th>Booked</th></tr></thead>
+          <tbody id="flightTableBody"><tr><td colspan="6"><div class="skeleton" style="height:40px;"></div></td></tr></tbody>
+        </table>
+        <div class="empty-state" id="flightEmptyState" style="display:none;">
+          <span data-icon="send" class="icon-lg"></span>
+          <div class="h3">No flight bookings yet</div>
+          <p class="small">Flights booked through Voya will show up here.</p>
+        </div>
+      </div>
+      <div class="table-foot">
+        <p class="small muted" id="flightResultsLabel"></p>
+        <div class="pagination" id="flightPagination"></div>
+      </div>
+    </div>
+
+    <div id="hotelPanel" style="display:none;">
+      <div class="stat-grid" id="hotelStatGrid"><div class="skeleton" style="height:90px;grid-column:1/-1;"></div></div>
+      <div class="filter-bar">
+        <div class="search-input-wrap"><span data-icon="search"></span><input class="input" id="hotelSearchInput" placeholder="Search by traveller or reference…" /></div>
+        <select class="select" id="hotelStatusFilter">
+          <option value="">All status</option>
+          <option value="confirmed">Confirmed</option>
+          <option value="pending">Pending</option>
+          <option value="cancelled">Cancelled</option>
+        </select>
+        <div class="inline-flex" style="gap:6px;">
+          <input type="date" class="input" id="hotelDateFrom" style="width:150px;" title="Booked from" />
+          <span class="muted small">to</span>
+          <input type="date" class="input" id="hotelDateTo" style="width:150px;" title="Booked to" />
+        </div>
+        <select class="select" id="hotelSortFilter">
+          <option value="date_desc">Newest first</option>
+          <option value="date_asc">Oldest first</option>
+          <option value="price_desc">Amount: high to low</option>
+          <option value="price_asc">Amount: low to high</option>
+        </select>
+      </div>
+      <div class="table-wrap scroll-x">
+        <table class="data-table">
+          <thead><tr><th>Reference</th><th>Traveller</th><th>Hotel</th><th>Stay</th><th>Amount</th><th>Status</th></tr></thead>
+          <tbody id="hotelTableBody"><tr><td colspan="6"><div class="skeleton" style="height:40px;"></div></td></tr></tbody>
+        </table>
+        <div class="empty-state" id="hotelEmptyState" style="display:none;">
+          <span data-icon="building" class="icon-lg"></span>
+          <div class="h3">No hotel bookings yet</div>
+          <p class="small">Hotels booked through Voya will show up here.</p>
+        </div>
+      </div>
+      <div class="table-foot">
+        <p class="small muted" id="hotelResultsLabel"></p>
+        <div class="pagination" id="hotelPagination"></div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<div class="modal-backdrop" id="txnModal">
+  <div class="modal">
+    <div class="modal-head"><h3 class="h2">Booking detail</h3><button class="modal-close" data-close><span data-icon="x"></span></button></div>
+    <div id="txnModalBody"></div>
+  </div>
+</div>
+
+<script type="module">
+import { requireRole } from "../js/auth-guard.js?v=20261106b";
+import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261114a";
+import { mountIcons } from "../js/icons.js?v=20261106c";
+import { listAllBookings } from "../js/data.js?v=20261114c";
+import { money, moneyExact, fullDate, timeAgo, statusBadge, escapeHtml, paginate, renderPager, statCard, trendDelta, countBefore, sumBefore, monthBounds, openModal, wireModalDismiss } from "../js/ui.js?v=20261113a";
+
+mountSidebarNav({ role: "admin", active: "transactions" });
+const session = await requireRole("admin", "login.html");
+const PAGE_SIZE = 8;
+
+// A booking's `trailing` field is a display-ready string like
+// "RM 420.00" (see lib/views/detail/booking_payment_page.dart's
+// addBooking call) — there's no separate numeric amount field, so stats
+// here parse it the same way lib/models/insurance_models.dart's
+// insurancePlanTotal() parses a plan's price string.
+function amountOf(b) { return parseFloat(String(b.trailing || "").replace(/[^0-9.]/g, "")) || 0; }
+
+let all = [], flights = [], hotels = [];
+let flightFiltered = [], hotelFiltered = [];
+let flightPage = 1, hotelPage = 1;
+
+if (session) {
+  setSidebarUser({ displayName: session.profile.name || "Admin", roleLabel: "Administrator" });
+  wireModalDismiss();
+  wireTabs();
+  await load();
+}
+
+async function load() {
+  all = await listAllBookings();
+  flights = all.filter((b) => b.type === "flight");
+  hotels = all.filter((b) => b.type === "hotel");
+  renderStats("flight", flights);
+  renderStats("hotel", hotels);
+  applyFilters("flight");
+  applyFilters("hotel");
+  mountIcons(document);
+}
+
+function renderStats(kind, items) {
+  const confirmed = items.filter((t) => (t.status || "").toLowerCase() === "confirmed");
+  const gross = confirmed.reduce((s, t) => s + amountOf(t), 0);
+  const { start: thisMonthStart } = monthBounds(0);
+  const totalDelta = trendDelta(items.length, countBefore(items, "createdAt", thisMonthStart));
+  const grossDelta = trendDelta(gross, sumBefore(confirmed, "createdAt", amountOf, thisMonthStart));
+  document.getElementById(`${kind}StatGrid`).innerHTML = [
+    statCard(`Total ${kind === "flight" ? "flight" : "hotel"} bookings`, items.length.toLocaleString("en-MY"), kind === "flight" ? "send" : "building", totalDelta),
+    statCard("Confirmed", confirmed.length.toLocaleString("en-MY"), "check-circle", null),
+    statCard("Gross value", money(gross), "coin", grossDelta),
+  ].join("");
+}
+
+function wireTabs() {
+  document.querySelectorAll("#txnTabs [data-tab]").forEach((btn) => btn.addEventListener("click", () => {
+    document.querySelectorAll("#txnTabs [data-tab]").forEach((b) => b.classList.toggle("active", b === btn));
+    document.getElementById("flightPanel").style.display = btn.dataset.tab === "flight" ? "" : "none";
+    document.getElementById("hotelPanel").style.display = btn.dataset.tab === "hotel" ? "" : "none";
+  }));
+}
+
+function sortBookings(list, sort) {
+  const sorted = [...list];
+  const dateOf = (t) => (t.createdAt?.toDate ? t.createdAt.toDate().getTime() : 0);
+  if (sort === "price_desc") sorted.sort((a, b) => amountOf(b) - amountOf(a));
+  else if (sort === "price_asc") sorted.sort((a, b) => amountOf(a) - amountOf(b));
+  else if (sort === "date_asc") sorted.sort((a, b) => dateOf(a) - dateOf(b));
+  else sorted.sort((a, b) => dateOf(b) - dateOf(a)); // date_desc, and the default
+  return sorted;
+}
+
+function applyFilters(kind) {
+  const source = kind === "flight" ? flights : hotels;
+  const q = document.getElementById(`${kind}SearchInput`).value.trim().toLowerCase();
+  const status = document.getElementById(`${kind}StatusFilter`).value;
+  const from = document.getElementById(`${kind}DateFrom`).value ? new Date(document.getElementById(`${kind}DateFrom`).value) : null;
+  const to = document.getElementById(`${kind}DateTo`).value ? new Date(document.getElementById(`${kind}DateTo`).value + "T23:59:59") : null;
+  const sort = document.getElementById(`${kind}SortFilter`).value;
+  let result = source.filter((t) => {
+    // Matches the same fallback the Reference column itself displays
+    // (t.bookingRef || t.id) -- bookingRef is an optional field the
+    // traveller may have left blank (see add_flight_page.dart /
+    // add_hotel_page.dart), so plenty of real rows legitimately show
+    // their raw doc id as the Reference instead; search has to accept
+    // that exact string too, or typing precisely what's on screen would
+    // never find the row.
+    const matchesQ = !q || (t.guestName || "").toLowerCase().includes(q) || (t.bookingRef || t.id || "").toLowerCase().includes(q);
+    const matchesStatus = !status || (t.status || "").toLowerCase() === status;
+    const bookedAt = t.createdAt?.toDate ? t.createdAt.toDate() : null;
+    const matchesFrom = !from || (bookedAt && bookedAt >= from);
+    const matchesTo = !to || (bookedAt && bookedAt <= to);
+    return matchesQ && matchesStatus && matchesFrom && matchesTo;
+  });
+  result = sortBookings(result, sort);
+  if (kind === "flight") { flightFiltered = result; flightPage = 1; renderFlightTable(); }
+  else { hotelFiltered = result; hotelPage = 1; renderHotelTable(); }
+}
+
+function renderFlightTable() {
+  const { pageItems, pages, total } = paginate(flightFiltered, flightPage, PAGE_SIZE);
+  const body = document.getElementById("flightTableBody");
+  const empty = document.getElementById("flightEmptyState");
+  if (!pageItems.length) { body.innerHTML = ""; empty.style.display = "block"; }
+  else {
+    empty.style.display = "none";
+    body.innerHTML = pageItems.map((t) => `
+      <tr style="cursor:pointer;" data-open="${t.id}">
+        <td class="cell-strong">${escapeHtml(t.bookingRef || t.id)}</td>
+        <td>${escapeHtml(t.guestName || "—")}</td>
+        <td class="muted">${escapeHtml(t.title || "—")}</td>
+        <td class="muted">${moneyExact(amountOf(t))}</td>
+        <td>${statusBadge(t.status)}</td>
+        <td class="muted small">${t.createdAt ? timeAgo(t.createdAt) : "—"}</td>
+      </tr>`).join("");
+    body.querySelectorAll("[data-open]").forEach((row) => row.addEventListener("click", () => openDetail(row.dataset.open)));
+  }
+  document.getElementById("flightResultsLabel").textContent = total
+    ? `Showing ${(flightPage - 1) * PAGE_SIZE + 1} to ${Math.min(flightPage * PAGE_SIZE, total)} of ${total} results` : "No results";
+  renderPager("flightPagination", { page: flightPage, pages }, (n) => { flightPage = n; renderFlightTable(); });
+  mountIcons(document);
+}
+
+function renderHotelTable() {
+  const { pageItems, pages, total } = paginate(hotelFiltered, hotelPage, PAGE_SIZE);
+  const body = document.getElementById("hotelTableBody");
+  const empty = document.getElementById("hotelEmptyState");
+  if (!pageItems.length) { body.innerHTML = ""; empty.style.display = "block"; }
+  else {
+    empty.style.display = "none";
+    body.innerHTML = pageItems.map((t) => `
+      <tr style="cursor:pointer;" data-open="${t.id}">
+        <td class="cell-strong">${escapeHtml(t.bookingRef || t.id)}</td>
+        <td>${escapeHtml(t.guestName || "—")}</td>
+        <td class="muted">${escapeHtml(t.title || "—")}</td>
+        <td class="muted small">${escapeHtml(t.checkIn || "—")} – ${escapeHtml(t.checkOut || "—")}</td>
+        <td class="muted">${moneyExact(amountOf(t))}</td>
+        <td>${statusBadge(t.status)}</td>
+      </tr>`).join("");
+    body.querySelectorAll("[data-open]").forEach((row) => row.addEventListener("click", () => openDetail(row.dataset.open)));
+  }
+  document.getElementById("hotelResultsLabel").textContent = total
+    ? `Showing ${(hotelPage - 1) * PAGE_SIZE + 1} to ${Math.min(hotelPage * PAGE_SIZE, total)} of ${total} results` : "No results";
+  renderPager("hotelPagination", { page: hotelPage, pages }, (n) => { hotelPage = n; renderHotelTable(); });
+  mountIcons(document);
+}
+
+function openDetail(id) {
+  const t = all.find((x) => x.id === id);
+  if (!t) return;
+  const row = (label, value) => `<div class="field" style="margin-bottom:12px;"><label>${label}</label><p class="value">${value}</p></div>`;
+  document.getElementById("txnModalBody").innerHTML = `
+    <div class="form-grid">
+      ${row("Reference", escapeHtml(t.bookingRef || t.id))}
+      ${row("Status", statusBadge(t.status))}
+      ${row("Traveller", escapeHtml(t.guestName || "—"))}
+      ${row("Passport/ID", escapeHtml(t.guestIdNumber || "—"))}
+      ${row("Email", escapeHtml(t.guestEmail || "—"))}
+      ${row("Phone", escapeHtml(t.guestPhone || "—"))}
+      ${row(t.type === "flight" ? "Flight" : "Hotel", escapeHtml(t.title || "—"))}
+      ${row("Details", escapeHtml(t.subtitle || "—"))}
+      ${t.type === "hotel" ? row("Stay", `${escapeHtml(t.checkIn || "—")} – ${escapeHtml(t.checkOut || "—")}`) : ""}
+      ${t.specialRequests ? row("Special requests", escapeHtml(t.specialRequests)) : ""}
+      ${row("Amount", moneyExact(amountOf(t)))}
+      ${row("Booked", fullDate(t.createdAt))}
+    </div>`;
+  mountIcons(document.getElementById("txnModalBody"));
+  openModal("txnModal");
+}
+
+document.getElementById("flightSearchInput").addEventListener("input", () => applyFilters("flight"));
+document.getElementById("flightStatusFilter").addEventListener("change", () => applyFilters("flight"));
+document.getElementById("flightDateFrom").addEventListener("change", () => applyFilters("flight"));
+document.getElementById("flightDateTo").addEventListener("change", () => applyFilters("flight"));
+document.getElementById("flightSortFilter").addEventListener("change", () => applyFilters("flight"));
+document.getElementById("hotelSearchInput").addEventListener("input", () => applyFilters("hotel"));
+document.getElementById("hotelStatusFilter").addEventListener("change", () => applyFilters("hotel"));
+document.getElementById("hotelDateFrom").addEventListener("change", () => applyFilters("hotel"));
+document.getElementById("hotelDateTo").addEventListener("change", () => applyFilters("hotel"));
+document.getElementById("hotelSortFilter").addEventListener("change", () => applyFilters("hotel"));
+</script>
+</body>
+</html>

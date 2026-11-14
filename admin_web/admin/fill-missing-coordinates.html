@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Fill Missing Coordinates — Voya Admin</title>
+<link rel="stylesheet" href="../css/tokens.css?v=20261006b" />
+<link rel="stylesheet" href="../css/base.css?v=20261006b" />
+<link rel="stylesheet" href="../css/layout.css?v=20261111a" />
+<link rel="stylesheet" href="../css/components.css?v=20261106g" />
+</head>
+<body>
+<div class="shell">
+  <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+  <aside class="sidebar" id="sidebar">
+    <img class="sidebar-brand" src="../img/voya-logo-white.png" alt="Voya" />
+    <div class="sidebar-user">
+      <div class="name" id="sbUserName">Loading…</div>
+      <div class="role" id="sbUserRole">Administrator</div>
+    </div>
+    <nav class="nav" id="sidebarNav"></nav>
+    <button class="sidebar-logout" id="logoutBtn"><span data-icon="log-out"></span>Log out</button>
+  </aside>
+
+  <main class="content">
+    <div class="topbar">
+      <div>
+        <button class="menu-toggle" id="menuToggle"><span data-icon="menu"></span></button>
+        <a href="attractions.html" class="inline-flex" style="color:var(--text-500);font-weight:700;font-size:13.5px;margin-bottom:10px;">
+          <span data-icon="arrow-left" data-icon-size="14"></span>Back to Places Management
+        </a>
+        <h1 class="h1">Fill Missing Coordinates</h1>
+        <p class="subtitle">One-off tool: looks up real lat/lng (via Geoapify/OpenStreetMap, same API already used by <code>fix-missing-addresses.html</code>) for every attraction, restaurant and hotel that doesn't have one yet, and saves it (<code>lat</code>/<code>lng</code> only — nothing else is touched). Without this, Optimise's geographic area-grouping has nothing to work with for these records. Free Geoapify tier is 3,000 lookups/day — if this run stops partway because of that, reload tomorrow to pick up the rest. Delete this page once you're done with it.</p>
+      </div>
+      <button class="btn btn-primary" id="runBtn" disabled>Run</button>
+    </div>
+
+    <div class="card card-pad" id="summaryCard">
+      <div class="skeleton" style="height:60px;"></div>
+    </div>
+
+    <div class="card card-pad" style="margin-top:16px;">
+      <label class="inline-flex" style="gap:8px;cursor:pointer;">
+        <input type="checkbox" id="reachableOnly" checked />
+        <span class="small">Only fix records with a working <code>destinationQuery</code> (i.e. ones the app can actually surface in search) — unchecking this also geocodes records that are currently unreachable anyway, which just spends quota for no visible benefit today.</span>
+      </label>
+    </div>
+
+    <div class="card card-pad" style="margin-top:16px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+      <p class="small muted" id="runStatus" style="margin:0;">Scanning…</p>
+      <button class="btn btn-outline" id="stopBtn" disabled>Stop</button>
+    </div>
+
+    <div class="table-wrap scroll-x" style="margin-top:16px;max-height:460px;overflow-y:auto;">
+      <table class="data-table">
+        <thead><tr><th>Type</th><th>Name</th><th>Searched</th><th>Result</th></tr></thead>
+        <tbody id="tableBody"><tr><td colspan="4" style="color:var(--text-500);">Not started.</td></tr></tbody>
+      </table>
+    </div>
+  </main>
+</div>
+
+<script type="module">
+import { requireRole } from "../js/auth-guard.js?v=20261106b";
+import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261114a";
+import { mountIcons } from "../js/icons.js?v=20261106c";
+import { escapeHtml, toast, setBusy } from "../js/ui.js?v=20261113a";
+import { db } from "../js/firebase-config.js?v=20261007";
+import { collection, getDocs, writeBatch, doc } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
+import { findCoordinatesOnly, hasApiKey } from "../js/places-import.js?v=20261112a";
+
+// Not in the sidebar nav — this is a run-it-once maintenance tool, same
+// pattern as fix-missing-addresses.html: reached by direct URL, used, then
+// deleted. "attractions" stays highlighted since that's conceptually where
+// this tool lives and where the Back link returns to.
+mountSidebarNav({ role: "admin", active: "attractions" });
+const session = await requireRole("admin", "login.html");
+
+const COLLECTIONS = [
+  { col: "catalog_attractions", type: "Attraction" },
+  { col: "catalog_restaurants", type: "Restaurant" },
+  { col: "catalog_hotels", type: "Hotel" },
+];
+
+let items = []; // { col, type, id, name, location, address, status }
+let stopRequested = false;
+
+if (session) {
+  setSidebarUser({ displayName: session.profile.name || "Admin", roleLabel: "Administrator" });
+  if (!hasApiKey()) {
+    document.getElementById("summaryCard").innerHTML = `<p class="muted">Geoapify API key isn't set (js/places-config.js) — this tool needs it to look up coordinates.</p>`;
+  } else {
+    document.getElementById("reachableOnly").addEventListener("change", load);
+    await load();
+  }
+}
+
+function missingLatLng(data) {
+  return typeof data.lat !== "number" || typeof data.lng !== "number";
+}
+
+async function load() {
+  const reachableOnly = document.getElementById("reachableOnly").checked;
+  document.getElementById("summaryCard").innerHTML = `<div class="skeleton" style="height:60px;"></div>`;
+  items = [];
+  for (const { col, type } of COLLECTIONS) {
+    const snap = await getDocs(collection(db, col));
+    snap.forEach((d) => {
+      const data = d.data();
+      if (!missingLatLng(data)) return;
+      if (reachableOnly && !data.destinationQuery) return;
+      items.push({ col, type, id: d.id, name: data.name || "—", location: data.location || "", address: data.address || "", status: "Pending" });
+    });
+  }
+  renderSummary();
+  renderTable();
+  document.getElementById("runBtn").disabled = !items.length;
+}
+
+function renderSummary() {
+  const reachableOnly = document.getElementById("reachableOnly").checked;
+  document.getElementById("summaryCard").innerHTML = items.length
+    ? `<p>${items.length.toLocaleString()} record${items.length === 1 ? "" : "s"} missing lat/lng${reachableOnly ? " (reachable ones only)" : ""}. At Geoapify's free-tier rate this run can do up to ~3,000 before hitting today's quota.</p>`
+    : `<p class="muted">Nothing to do — every${reachableOnly ? " reachable" : ""} record already has coordinates.</p>`;
+}
+
+function renderTable() {
+  const body = document.getElementById("tableBody");
+  if (!items.length) { body.innerHTML = `<tr><td colspan="4" class="muted">Nothing to show.</td></tr>`; return; }
+  body.innerHTML = items.slice(0, 500).map((i, idx) => `
+    <tr>
+      <td class="muted">${escapeHtml(i.type)}</td>
+      <td class="cell-strong">${escapeHtml(i.name)}</td>
+      <td class="muted" id="searched-${idx}"></td>
+      <td id="status-${idx}">${escapeHtml(i.status)}</td>
+    </tr>`).join("") + (items.length > 500 ? `<tr><td colspan="4" class="muted">…and ${(items.length - 500).toLocaleString()} more (not rendered, but will still be processed).</td></tr>` : "");
+}
+
+document.getElementById("stopBtn").addEventListener("click", () => { stopRequested = true; });
+
+document.getElementById("runBtn").addEventListener("click", async () => {
+  stopRequested = false;
+  const runBtn = document.getElementById("runBtn");
+  const stopBtn = document.getElementById("stopBtn");
+  const runStatus = document.getElementById("runStatus");
+  setBusy(runBtn, true, "Running…");
+  stopBtn.disabled = false;
+
+  let fixed = 0, skipped = 0, failed = 0, consecutiveFailures = 0;
+  let pendingWrites = [];
+  const flush = async () => {
+    if (!pendingWrites.length) return;
+    const batch = writeBatch(db);
+    for (const { col, id, lat, lng } of pendingWrites) {
+      batch.set(doc(db, col, id), { lat, lng }, { merge: true });
+    }
+    await batch.commit();
+    pendingWrites = [];
+  };
+
+  for (let idx = 0; idx < items.length; idx++) {
+    if (stopRequested) break;
+    const item = items[idx];
+    const searchedCell = document.getElementById(`searched-${idx}`);
+    const statusCell = document.getElementById(`status-${idx}`);
+    const searchText = item.address || [item.name, item.location].filter(Boolean).join(", ");
+    if (searchedCell) searchedCell.textContent = searchText;
+    if (statusCell) statusCell.textContent = "Looking up…";
+    try {
+      const coords = await findCoordinatesOnly(item.name, item.location, item.address);
+      if (coords) {
+        pendingWrites.push({ col: item.col, id: item.id, lat: coords.lat, lng: coords.lng });
+        item.status = `Found (${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)})`;
+        fixed++;
+        consecutiveFailures = 0;
+      } else {
+        item.status = "No match found";
+        skipped++;
+      }
+    } catch (err) {
+      item.status = `Failed: ${err.message || "error"}`;
+      failed++;
+      consecutiveFailures++;
+    }
+    if (statusCell) statusCell.textContent = item.status;
+    runStatus.textContent = `${idx + 1} / ${items.length} processed — ${fixed} found, ${skipped} no match, ${failed} failed.`;
+    if (pendingWrites.length >= 200) await flush();
+
+    // Geoapify's free tier returns HTTP 401/429 once the day's 3,000-lookup
+    // quota is used up — every subsequent call fails the same way, so 15
+    // failures in a row (not just one flaky request) means "stop and come
+    // back tomorrow", not "keep burning through the rest of the list".
+    if (consecutiveFailures >= 15) {
+      runStatus.textContent = `Stopped — ${consecutiveFailures} lookups in a row failed, which usually means today's free Geoapify quota is used up. Reload this page tomorrow to pick up the rest (${(items.length - idx - 1).toLocaleString()} left).`;
+      break;
+    }
+    await new Promise((r) => setTimeout(r, 300));
+  }
+  await flush();
+  if (!stopRequested && consecutiveFailures < 15) {
+    runStatus.textContent = `Done — ${fixed.toLocaleString()} fixed, ${skipped.toLocaleString()} had no match, ${failed.toLocaleString()} failed.`;
+  } else if (stopRequested) {
+    runStatus.textContent = `Stopped by request. ${fixed.toLocaleString()} fixed this run — reload the page to resume with the rest.`;
+  }
+  setBusy(runBtn, false);
+  runBtn.disabled = true;
+  stopBtn.disabled = true;
+  toast(`Coordinates: ${fixed.toLocaleString()} records written this run.`, fixed ? "success" : "error");
+});
+</script>
+</body>
+</html>

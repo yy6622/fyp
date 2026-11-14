@@ -207,16 +207,21 @@ function dayFrom(texts, days) {
 
 async function buildItinerary({ messages, members, days, plan, saved, catalog = [], destination = "", model,
   decisions = null, window = null, hasHotel = false, flights = [], hotelStays = [], savedHotels = [], lookupNeed = null,
-  foodPreference = "", accommodation = "" }) {
-  const { knownPlaces } = require("./planner/places");
+  foodPreference = "", accommodation = "", votes = [], interests = [] }) {
+  const { knownPlaces, norm } = require("./planner/places");
   const { tripLogistics } = require("./planner/logistics_plan");
   const { decide, stanceOf } = require("./planner/decide");
   const { schedule } = require("./planner/schedule");
-  const { placeFits, genericPlace, matchesFoodPreference } = require("./planner/needs");
+  const { placeFits, genericPlace, matchesFoodPreference, matchesInterests } = require("./planner/needs");
   const s = summarise(messages, model, members);
   const planItems = Object.keys(plan).flatMap((k) => (plan[k] || []).map((it) => ({ ...it, day: Number(k) })));
   const known = knownPlaces({ destination: destinationOf(destination, messages), saved, catalog,
     planned: planItems.map((it) => ({ name: it.label, location: it.location, icon: it.icon })) });
+  // A vote like "第几天去极乐寺" -> "Day 3" is never linked to any chat
+  // DiscussionItem, so it never reaches trip.discussionDecisions -- this is
+  // the only way the model sees it. See planner/vote_days.js for why.
+  const { voteDayAssignments } = require("./planner/vote_days");
+  const voteDayByPlace = voteDayAssignments({ votes, known, days });
   const d = decide({ messages, s, known, members, decisions });
   const lp = tripLogistics({ flights, hotelStays, days, window, messages });
   window = lp.window;
@@ -230,7 +235,8 @@ async function buildItinerary({ messages, members, days, plan, saved, catalog = 
   for (const p of d.places) {
     const inPlan = planItemFor(p.place, planItems);
     const mentions = p.mentions.map((id) => mentionText.get(id));
-    let day = dayFrom(mentions, days);
+    const votedDay = voteDayByPlace.get(norm(p.place.name));
+    let day = votedDay || dayFrom(mentions, days);
     const replyDay = day ? null : dayFrom(p.dayText.filter((t) => !/(不想|不要|别|怕|not|don'?t|won'?t)/i.test(t)), days);
     const fullDay = (p.place.hours || 0) >= 6;
     if (!day && replyDay && !(fullDay && days.length > 2 && (replyDay === 1 || replyDay === days.length))) day = replyDay;
@@ -276,18 +282,28 @@ async function buildItinerary({ messages, members, days, plan, saved, catalog = 
     const free = (pl) => !taken.has(`place:${normalize(pl.name)}`) && !planItemFor(pl, planItems);
     const savedFits = known.places.filter((pl) => pl.saved && placeFits(pl, n.need, city) && free(pl));
     const fit = n.need.food && foodPreference
-      ? savedFits.find((pl) => matchesFoodPreference(pl, foodPreference)) || savedFits[0]
-      : savedFits[0];
+      ? savedFits.find((pl) => matchesFoodPreference(pl, foodPreference)) || savedFits.find((pl) => matchesInterests(pl, interests)) || savedFits[0]
+      : savedFits.find((pl) => matchesInterests(pl, interests)) || savedFits[0];
     const districts = new Set(toPlan.map((p) => p.place.district).filter(Boolean));
     const voyaPick = fit ? null : known.places
       .filter((pl) => !pl.saved && placeFits(pl, n.need, city) && free(pl))
       .sort((a, b) =>
         (n.need.food && foodPreference ? Number(matchesFoodPreference(b, foodPreference)) - Number(matchesFoodPreference(a, foodPreference)) : 0) ||
+        (Number(matchesInterests(b, interests)) - Number(matchesInterests(a, interests))) ||
         Number(districts.has(b.district)) - Number(districts.has(a.district)) ||
         Number(b.source === "catalog") - Number(a.source === "catalog"))[0];
     const who = n.proposer;
+    // A "local food"/food need whose name doesn't literally match a cuisine
+    // keyword (placeFits) still deserves a real restaurant over a bare
+    // "Local restaurant" placeholder — so before trying OSM or giving up,
+    // take any unused restaurant Voya already knows about in this city.
+    const looseFoodPick = (!fit && !voyaPick && n.need.food) ? known.places
+      .filter((pl) => pl.icon === "food" && free(pl))
+      .sort((a, b) =>
+        Number(districts.has(b.district)) - Number(districts.has(a.district)) ||
+        Number(b.source === "catalog") - Number(a.source === "catalog"))[0] || null : null;
     let osmPick = null;
-    if (!fit && !voyaPick && n.status === "confirmed" && !n.conditional && lookupNeed) {
+    if (!fit && !voyaPick && !looseFoodPick && n.status === "confirmed" && !n.conditional && lookupNeed) {
       const { fromCatalog } = require("./planner/places");
       const found = fromCatalog(await lookupNeed(n.need, city), "osm").filter(free);
       osmPick = found.find((pl) => placeFits(pl, n.need, city)) || found[0] || null;
@@ -295,7 +311,7 @@ async function buildItinerary({ messages, members, days, plan, saved, catalog = 
         icon: n.need.icon || osmPick.icon };
     }
     if (n.status === "confirmed" && !n.conditional) {
-      const pick = fit || voyaPick || osmPick || genericPlace(n.need);
+      const pick = fit || voyaPick || looseFoodPick || osmPick || genericPlace(n.need);
       const key = `place:${normalize(pick.name)}`;
       taken.add(key);
       const mentions = n.mentions.map((id) => mentionText.get(id));
@@ -306,6 +322,7 @@ async function buildItinerary({ messages, members, days, plan, saved, catalog = 
         partners: n.partners.filter((k) => k.startsWith("place:")),
         reason: fit ? `${wanted} · picked from your saved list`
           : voyaPick ? `${wanted} · Voya's pick in ${String(city).split(",")[0] || "this city"} (not saved yet)`
+            : looseFoodPick ? `${wanted} · a restaurant in ${String(city).split(",")[0] || "this city"} you might like (not saved yet)`
             : osmPick ? `${wanted} · found nearby on OpenStreetMap (not saved yet)`
             : `${wanted} · no place picked yet, swap in one you like` });
       continue;
@@ -317,6 +334,38 @@ async function buildItinerary({ messages, members, days, plan, saved, catalog = 
           : `${who} wants this · save one in Explore and run AI Summarise again`,
       saved: fit ? fit.saved.name : "",
     });
+  }
+
+  // Trip-creation interest points (Beach/City/Nature/Adventure/Culture/
+  // Shopping/Relaxation -- see matchesInterests's own comment for why
+  // Food/Nightlife aren't included) that nothing in the chat ever acted
+  // on: rather than leaving them with zero effect on Summarise whenever
+  // nobody happened to discuss something matching, suggest up to 2
+  // already-known places (saved or Voya's own catalog -- never an OSM
+  // lookup, since nothing here was actually asked for) that match a
+  // declared interest and aren't already planned or already an idea.
+  // These land as `ideas` (the same soft-suggestion bucket as the
+  // backup/pending items above), NEVER `answer.add` -- a declared
+  // interest alone never schedules anything by itself, only surfaces
+  // something to consider.
+  if (interests.length) {
+    const alreadySuggested = new Set(ideas.map((i) => normalize(i.label)));
+    const interestPicks = known.places
+      .filter((pl) =>
+        pl.icon !== "food" && // restaurants are a separate recommendation list (cuisine tags, not category tags) -- see interest_mapping.dart's own doc comment for why Food/Nightlife aren't in INTEREST_WORDS either
+        !planItemFor(pl, planItems) &&
+        !taken.has(`place:${normalize(pl.name)}`) &&
+        !alreadySuggested.has(normalize(pl.name)) &&
+        matchesInterests(pl, interests))
+      .sort((a, b) => Number(!!b.saved) - Number(!!a.saved) || Number(b.source === "catalog") - Number(a.source === "catalog"))
+      .slice(0, 2);
+    for (const pick of interestPicks) {
+      ideas.push({
+        label: pick.name,
+        hint: `Matches your trip's interests · ${pick.saved ? "saved" : "not saved yet"} · nobody asked for this in chat, just a suggestion`,
+        saved: pick.saved ? pick.saved.name : "",
+      });
+    }
   }
 
   let checkIn = lp.checkIn;

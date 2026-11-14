@@ -4,10 +4,13 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../models/insurance_models.dart';
 import '../repositories/booking_repository.dart';
 import '../repositories/catalog_repository.dart';
 import '../repositories/friends_repository.dart';
+import '../repositories/insurance_repository.dart';
 import '../repositories/user_repository.dart';
+import '../services/currency_service.dart';
 import '../services/attraction_report_service.dart';
 import '../services/auth_service.dart';
 import '../services/location_service.dart';
@@ -212,7 +215,7 @@ class HistoryController extends ChangeNotifier {
 
   StreamSubscription<List<BookingEntry>>? _flightSub;
   StreamSubscription<List<BookingEntry>>? _hotelSub;
-  StreamSubscription<List<BookingEntry>>? _insuranceSub;
+  StreamSubscription<List<InsuranceTransaction>>? _insuranceSub;
 
   HistoryController() {
     final uid = AuthService.instance.currentUser?.uid;
@@ -227,8 +230,12 @@ class HistoryController extends ChangeNotifier {
         _loadingHotel = false;
         notifyListeners();
       });
-      _insuranceSub = BookingRepository.instance.watchBookings(uid, type: 'insurance').listen((list) {
-        _insuranceBookings = list;
+      // Reads straight from insurance_transactions (the single place an
+      // insurance purchase is now stored) instead of a mirrored
+      // users/{uid}/bookings doc -- see InsuranceRepository
+      // .watchTransactionsForBuyer()'s doc comment.
+      _insuranceSub = InsuranceRepository.instance.watchTransactionsForBuyer(uid).listen((list) {
+        _insuranceBookings = list.map(_bookingEntryFromTransaction).toList();
         _loadingInsurance = false;
         notifyListeners();
       });
@@ -237,6 +244,36 @@ class HistoryController extends ChangeNotifier {
       _loadingHotel = false;
       _loadingInsurance = false;
     }
+  }
+
+  /// Adapts an [InsuranceTransaction] into the same [BookingEntry] shape
+  /// the Insurance History tab (and HistoryInsuranceDetailPage, via
+  /// history_page.dart's _openHistoryDetail) already expects, so neither
+  /// of those had to change when the underlying read source did. Field
+  /// choices mirror exactly what payment_method_page.dart used to write
+  /// into the now-removed users/{uid}/bookings mirror doc.
+  BookingEntry _bookingEntryFromTransaction(InsuranceTransaction t) {
+    final currencyLabel = CurrencyService.instance.displayLabel(t.currencyCode.isEmpty ? 'MYR' : t.currencyCode);
+    return BookingEntry(
+      id: t.id,
+      type: 'insurance',
+      title: t.planName,
+      subtitle: 'Policy #${t.policyNumber.isNotEmpty ? t.policyNumber : t.txnRef}',
+      trailing: '$currencyLabel ${t.premium.toStringAsFixed(2)}',
+      bookingRef: t.txnRef,
+      status: t.status == 'paid' ? 'Confirmed' : t.status,
+      guestName: t.travellerName.isNotEmpty ? t.travellerName : t.customerName,
+      guestEmail: t.travellerEmail,
+      guestPhone: t.travellerPhone,
+      guestIdNumber: t.travellerIdNumber,
+      coverage: t.coverage,
+      transactionId: t.id,
+      purchasedAt: t.createdAt,
+      partnerId: t.partnerId,
+      providerName: t.providerName,
+      travelStart: t.travelStart,
+      travelEnd: t.travelEnd,
+    );
   }
 
   void setTab(HistoryTab tab) {

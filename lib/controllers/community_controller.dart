@@ -112,7 +112,7 @@ class CommunityController extends ChangeNotifier {
     if (_tagAffinity.isEmpty) return const [];
     final topTags = _tagAffinity.keys.toSet();
     final scored = _posts
-        .where((p) => p.tags.any(topTags.contains))
+        .where((p) => !p.reportedByMe && p.tags.any(topTags.contains))
         .map((p) => (post: p, score: p.tags.where(topTags.contains).length))
         .toList()
       ..sort((a, b) => b.score.compareTo(a.score));
@@ -239,9 +239,6 @@ class CreatePostController extends ChangeNotifier {
   bool _allowComments = true;
   bool get allowComments => _allowComments;
 
-  bool _allowShare = true;
-  bool get allowShare => _allowShare;
-
   bool _publishing = false;
   bool get publishing => _publishing;
 
@@ -250,11 +247,6 @@ class CreatePostController extends ChangeNotifier {
 
   void setAllowComments(bool v) {
     _allowComments = v;
-    notifyListeners();
-  }
-
-  void setAllowShare(bool v) {
-    _allowShare = v;
     notifyListeners();
   }
 

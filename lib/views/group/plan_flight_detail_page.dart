@@ -70,7 +70,6 @@ class _PlanFlightDetailPageState extends State<PlanFlightDetailPage> {
     ('E-Ticket', Icons.confirmation_number_outlined),
     ('Boarding Pass', Icons.airplane_ticket_outlined),
     ('Passport Scan', Icons.badge_outlined),
-    ('Travel Insurance', Icons.shield_outlined),
   ];
 
   @override
@@ -236,20 +235,7 @@ class _PlanFlightDetailPageState extends State<PlanFlightDetailPage> {
       padding: const EdgeInsets.all(20),
       children: [
         if (widget.contactEmail.isNotEmpty || widget.contactPhone.isNotEmpty) ...[
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            decoration: BoxDecoration(color: AppColors.chipGrey, borderRadius: BorderRadius.circular(12)),
-            child: Row(
-              children: [
-                const Icon(Icons.contact_mail_outlined, size: 18, color: AppColors.primary),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text('${widget.contactEmail}${widget.contactEmail.isNotEmpty && widget.contactPhone.isNotEmpty ? ' · ' : ''}${widget.contactPhone}',
-                      style: const TextStyle(fontSize: 12.5, color: Colors.black)),
-                ),
-              ],
-            ),
-          ),
+          _contactCard(),
           const SizedBox(height: 10),
         ],
         for (int i = 0; i < widget.passengers.length; i++) ...[
@@ -260,42 +246,91 @@ class _PlanFlightDetailPageState extends State<PlanFlightDetailPage> {
     );
   }
 
-  Widget _passengerCard(int index, PassengerDetail? detail) {
-    final name = widget.passengers[index];
-    final initial = name.trim().isNotEmpty ? name.trim()[0].toUpperCase() : '?';
+  Widget _contactCard() {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(color: AppColors.chipGrey, borderRadius: BorderRadius.circular(12)),
-      child: Row(
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          CircleAvatar(
-            radius: 16,
-            backgroundColor: AppColors.primary.withValues(alpha: 0.15),
-            child: Text(initial, style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 13)),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(name.isEmpty ? 'Passenger ${index + 1}' : name, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.black)),
-                if (detail != null) ...[
-                  const SizedBox(height: 4),
-                  Text(
-                    'DOB: ${detail.dob != null ? _formatDate(detail.dob!) : '—'} · ${detail.nationality ?? '—'}',
-                    style: const TextStyle(fontSize: 11.5, color: AppColors.textGrey),
-                  ),
-                  Text(
-                    'Passport ${detail.passportNumber.isEmpty ? '—' : detail.passportNumber}'
-                    '${detail.passportExpiry != null ? ' (exp. ${_formatDate(detail.passportExpiry!)})' : ''}',
-                    style: const TextStyle(fontSize: 11.5, color: AppColors.textGrey),
-                  ),
-                ],
-              ],
-            ),
-          ),
+          if (widget.contactEmail.isNotEmpty) _contactRow(Icons.email_outlined, 'Email', widget.contactEmail),
+          if (widget.contactEmail.isNotEmpty && widget.contactPhone.isNotEmpty) const SizedBox(height: 12),
+          if (widget.contactPhone.isNotEmpty) _contactRow(Icons.call_outlined, 'Phone', widget.contactPhone),
         ],
+      ),
+    );
+  }
+
+  Widget _contactRow(IconData icon, String label, String value) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Container(
+          width: 32,
+          height: 32,
+          decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+          alignment: Alignment.center,
+          child: Icon(icon, size: 15, color: AppColors.primary),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label, style: const TextStyle(fontSize: 10.5, color: AppColors.textGrey)),
+              const SizedBox(height: 1),
+              Text(value, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.black)),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _passengerCard(int index, PassengerDetail? detail) {
+    final name = widget.passengers[index];
+    final initial = name.trim().isNotEmpty ? name.trim()[0].toUpperCase() : '?';
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: () => Navigator.of(context).push(MaterialPageRoute(
+        builder: (_) => _PassengerInfoPage(name: name.isEmpty ? 'Passenger ${index + 1}' : name, detail: detail),
+      )),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(color: AppColors.chipGrey, borderRadius: BorderRadius.circular(12)),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            CircleAvatar(
+              radius: 16,
+              backgroundColor: AppColors.primary.withValues(alpha: 0.15),
+              child: Text(initial, style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 13)),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(name.isEmpty ? 'Passenger ${index + 1}' : name, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.black)),
+                  if (detail != null) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      'DOB: ${detail.dob != null ? _formatDate(detail.dob!) : '—'} · ${detail.nationality ?? '—'}',
+                      style: const TextStyle(fontSize: 11.5, color: AppColors.textGrey),
+                    ),
+                    Text(
+                      'Passport ${detail.passportNumber.isEmpty ? '—' : detail.passportNumber}'
+                      '${detail.passportExpiry != null ? ' (exp. ${_formatDate(detail.passportExpiry!)})' : ''}',
+                      style: const TextStyle(fontSize: 11.5, color: AppColors.textGrey),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(width: 6),
+            const Icon(Icons.chevron_right, size: 18, color: AppColors.textGrey),
+          ],
+        ),
       ),
     );
   }
@@ -402,5 +437,87 @@ class _PlanFlightDetailPageState extends State<PlanFlightDetailPage> {
       setState(() => _uploading.remove(docType));
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Upload failed: $e')));
     }
+  }
+}
+
+class _PassengerInfoPage extends StatelessWidget {
+  final String name;
+  final PassengerDetail? detail;
+  const _PassengerInfoPage({required this.name, required this.detail});
+
+  static const _monthNames = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+  ];
+  String _formatDate(DateTime d) => '${d.day} ${_monthNames[d.month - 1]} ${d.year}';
+
+  @override
+  Widget build(BuildContext context) {
+    final initial = name.trim().isNotEmpty ? name.trim()[0].toUpperCase() : '?';
+    final d = detail;
+    return Scaffold(
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 0,
+        iconTheme: const IconThemeData(color: AppColors.navy),
+        title: const Text('Passenger', style: TextStyle(color: AppColors.navy, fontWeight: FontWeight.bold, fontSize: 18)),
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(20),
+        children: [
+          Row(
+            children: [
+              CircleAvatar(
+                radius: 26,
+                backgroundColor: AppColors.primary.withValues(alpha: 0.15),
+                child: Text(initial, style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 20)),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Text(name, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: AppColors.navy)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          Container(
+            clipBehavior: Clip.antiAlias,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0xFFECECEC)),
+            ),
+            child: Column(
+              children: [
+                _field('Date of Birth', d?.dob != null ? _formatDate(d!.dob!) : 'Not specified'),
+                _field('Nationality', d?.nationality?.isNotEmpty == true ? d!.nationality! : 'Not specified'),
+                _field('Passport Number', d != null && d.passportNumber.isNotEmpty ? d.passportNumber : 'Not specified'),
+                _field('Passport Expiry', d?.passportExpiry != null ? _formatDate(d!.passportExpiry!) : 'Not specified', last: true),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _field(String label, String value, {bool last = false}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        border: last ? null : const Border(bottom: BorderSide(color: Color(0xFFE4E4E4))),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: const TextStyle(fontSize: 12.5, color: AppColors.textGrey)),
+          Flexible(
+            child: Text(value,
+                textAlign: TextAlign.right,
+                style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: Colors.black)),
+          ),
+        ],
+      ),
+    );
   }
 }

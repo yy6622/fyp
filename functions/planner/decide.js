@@ -138,7 +138,7 @@ function decide({ messages, s, known, members = [], decisions = null }) {
       key: it.key, kind: it.kind, name: it.name, place: it.place,
       status: effectiveStatus(decision, status),
       decided: decision ? { status: decision.status, byName: decision.byName || "", memberNames: decision.memberNames || [],
-        voteTitle: decision.voteTitle || "" } : null,
+        voteTitle: decision.voteTitle || "", voteId: decision.voteId || "" } : null,
       proposer: it.proposer, support, against, hesitant,
       messageId: ownId, sourceMessageId: it.messageId, mentions: it.mentions,
       dayText: it.dayText, timeText: it.timeText, partners: [...it.partners],

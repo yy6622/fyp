@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart' as ll;
 
@@ -251,12 +252,13 @@ class _NearByPageState extends State<NearByPage> {
         child: Icon(_iconFor(place.category), color: AppColors.textGrey, size: 22),
       );
     }
-    return Image.network(
-      place.image,
+    return CachedNetworkImage(
+      imageUrl: place.image,
       width: 56,
       height: 56,
       fit: BoxFit.cover,
-      errorBuilder: (_, __, ___) => Container(
+      placeholder: (_, __) => Container(width: 56, height: 56, color: AppColors.chipGrey),
+      errorWidget: (_, __, ___) => Container(
         width: 56,
         height: 56,
         decoration: BoxDecoration(color: AppColors.chipGrey, borderRadius: BorderRadius.circular(12)),
@@ -288,14 +290,6 @@ class _NearByPageState extends State<NearByPage> {
                   Text(place.name, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold, color: Colors.black)),
                   const SizedBox(height: 4),
                   Text(place.categoryLabel, style: const TextStyle(fontSize: 11, color: AppColors.textGrey)),
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      const Icon(Icons.star, size: 13, color: AppColors.orange),
-                      const SizedBox(width: 4),
-                      Text(place.rating, style: const TextStyle(fontSize: 11, color: AppColors.textGrey)),
-                    ],
-                  ),
                 ],
               ),
             ),

@@ -30,6 +30,7 @@ const RAW = {
   "chevron-left": '<path d="M15 5l-7 7 7 7"/>',
   "chevron-right": '<path d="M9 5l7 7-7 7"/>',
   mail: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/>',
+  send: '<path d="M4 12l16-8-6 16-2.5-6.5z"/><path d="M14 13.5L4 12"/>',
   phone: '<path d="M6.2 3h3l1.4 4.7-2.2 1.4a12.7 12.7 0 0 0 6.3 6.3l1.4-2.2L20.8 15v3a2 2 0 0 1-2 2C11 20 4 13 4 5.2a2 2 0 0 1 2-2z"/>',
   "map-pin": '<path d="M12 21s7-6.4 7-12a7 7 0 0 0-14 0c0 5.6 7 12 7 12z"/><circle cx="12" cy="9" r="2.3"/>',
   flag: '<path d="M5 3v18"/><path d="M5 4h11l-2 3 2 3H5"/>',
@@ -37,6 +38,7 @@ const RAW = {
   trash: '<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/><path d="M10 11v6M14 11v6"/>',
   edit: '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M14.5 5.5l4 4"/>',
   eye: '<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/>',
+  "eye-off": '<path d="M3 3l18 18"/><path d="M10.6 5.2A11 11 0 0 1 12 5c6.4 0 10 7 10 7a18.3 18.3 0 0 1-3.6 4.6M7.4 7.4C4.5 9.1 2 12 2 12s3.6 7 10 7a9.9 9.9 0 0 0 3.6-.7"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/>',
   "alert-triangle": '<path d="M12 4.2l9.3 15.8H2.7z"/><path d="M12 10v4"/><circle cx="12" cy="16.8" r=".2" fill="currentColor" stroke="currentColor"/>',
   "doc-text": '<path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4"/><path d="M9.4 12h5.2M9.4 15.5h5.2"/>',
   briefcase: '<rect x="3" y="8" width="18" height="12" rx="2"/><path d="M8 8V6a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M3 13h18"/>',
@@ -45,6 +47,7 @@ const RAW = {
   menu: '<path d="M4 6h16M4 12h16M4 18h16"/>',
   refresh: '<path d="M4.5 12a7.5 7.5 0 0 1 13.2-5"/><path d="M19.5 12a7.5 7.5 0 0 1-13.2 5"/><path d="M17.2 4.6v4.1h-4.1M6.8 19.4v-4.1h4.1"/>',
   play: '<path d="M8 5.5v13l11-6.5z"/>',
+  image: '<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10.5" r="1.6"/><path d="M3 16.5l5-5 4 4 3-3 6 6"/>',
 };
 
 // Gear (settings icon) built with trig so the teeth are always even.

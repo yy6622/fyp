@@ -35,3 +35,18 @@ const List<MalaysiaAirport> kMalaysiaAirports = [
   MalaysiaAirport(iataCode: 'SDK', name: 'Sandakan Airport', city: 'Sandakan, Sabah', latitude: 5.9012, longitude: 118.0592),
   MalaysiaAirport(iataCode: 'TWU', name: 'Tawau Airport', city: 'Tawau, Sabah', latitude: 4.3208, longitude: 118.1279),
 ];
+
+/// "Kuala Lumpur (KUL)" for a known Malaysian airport code, or the bare
+/// code itself for anything else (a traveller can route-search to/from
+/// any airport worldwide via Duffel's own suggestions -- see
+/// filter_page.dart's route search -- so a code that isn't in this
+/// Malaysia-only list is expected, not an error). Mirrors
+/// account_setting_page.dart's own private _airportLabel exactly, so
+/// the Home Airport setting and the flight Filter sheet's default
+/// "From" always read identically for the same code.
+String malaysiaAirportLabel(String iataCode) {
+  for (final a in kMalaysiaAirports) {
+    if (a.iataCode == iataCode) return '${a.city.split(',').first} (${a.iataCode})';
+  }
+  return iataCode;
+}

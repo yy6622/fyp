@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:developer' as developer;
 
 import 'package:http/http.dart' as http;
 
@@ -66,7 +67,43 @@ class RollingGoApiService {
         continue;
       }
     }
-    return parsed;
+    return _filterToExpectedCountry(parsed, resolvedQuery);
+  }
+
+  // RollingGo's own "City" place matching is loose — it can return hotels
+  // from the wrong city/country for a query, and the only location signal
+  // it gives back per hotel is a free-text name/address string (no
+  // structured city/country field), so there is nothing more precise to
+  // filter on. This re-filters its result locally: drop a hotel only when
+  // its name/address explicitly names a DIFFERENT country from our own
+  // known-country list than the one being searched — never on absence of
+  // the expected country (plenty of real addresses, e.g. "23rd Floor,
+  // Tower A, Huaqiang Plaza...", never mention the city/country at all).
+  // If every result would get dropped, trust RollingGo's own match instead
+  // of regressing to "No hotels found" over what's probably a false
+  // positive in this filter.
+  List<DuffelStayResult> _filterToExpectedCountry(List<DuffelStayResult> results, String resolvedQuery) {
+    final expected = _expectedCountryKey(resolvedQuery);
+    if (expected == null) return results;
+    final filtered = results.where((h) => !_mentionsOtherCountry('${h.name} ${h.address}', expected)).toList();
+    return filtered.isEmpty && results.isNotEmpty ? results : filtered;
+  }
+
+  String? _expectedCountryKey(String resolvedQuery) {
+    final whole = resolvedQuery.trim().toLowerCase();
+    if (kCountryGateways.containsKey(whole)) return whole;
+    final lastPart = resolvedQuery.split(',').last.trim().toLowerCase();
+    if (kCountryGateways.containsKey(lastPart)) return lastPart;
+    return null;
+  }
+
+  bool _mentionsOtherCountry(String text, String expectedCountryKey) {
+    final lower = text.toLowerCase();
+    for (final key in kCountryGateways.keys) {
+      if (key == expectedCountryKey) continue;
+      if (RegExp(r"(?<![a-z])" + RegExp.escape(key) + r"(?![a-z])").hasMatch(lower)) return true;
+    }
+    return false;
   }
 
   String _dateOnly(DateTime d) =>
@@ -92,7 +129,8 @@ class RollingGoApiService {
           )
           .timeout(const Duration(seconds: 15));
     } catch (e) {
-      throw RollingGoApiException('Could not reach RollingGo: $e');
+      developer.log('RollingGo request failed: $e', name: 'RollingGoApiService');
+      throw const RollingGoApiException("Couldn't reach the hotel search service. Check your connection and try again.");
     }
     if (res.statusCode < 200 || res.statusCode >= 300) {
       throw RollingGoApiException('RollingGo request failed (${res.statusCode}).');
@@ -131,7 +169,8 @@ class RollingGoApiService {
           )
           .timeout(const Duration(seconds: 25));
     } catch (e) {
-      throw RollingGoApiException('Could not reach RollingGo: $e');
+      developer.log('RollingGo request failed: $e', name: 'RollingGoApiService');
+      throw const RollingGoApiException("Couldn't reach the hotel search service. Check your connection and try again.");
     }
     if (res.statusCode < 200 || res.statusCode >= 300) {
       throw RollingGoApiException('RollingGo request failed (${res.statusCode}).');

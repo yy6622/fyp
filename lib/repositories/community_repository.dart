@@ -149,6 +149,14 @@ class CommunityRepository {
       'reportReason': reason,
       'reportedAt': FieldValue.serverTimestamp(),
       'reportCount': FieldValue.increment(1),
+      // A separate running list of every uid that has ever reported this
+      // post, alongside `reportedBy` above (which only ever holds the
+      // MOST RECENT reporter, for admin's moderation display -- see
+      // admin_web/js/ui.js's reporterLabel()). This is what
+      // CommunityPost.reportedByMe checks, so "don't recommend a post
+      // back to someone who reported it" is correct even after a second
+      // person reports the same post and overwrites `reportedBy`.
+      'reporterIds': FieldValue.arrayUnion([reportedByUid]),
     });
   }
 
@@ -223,6 +231,7 @@ class CommunityRepository {
       viewCount: (data['viewCount'] as num?)?.toInt() ?? 0,
       uniqueViewerCount: (data['uniqueViewerCount'] as num?)?.toInt() ?? 0,
       reportCount: (data['reportCount'] as num?)?.toInt() ?? 0,
+      reportedByMe: (data['reporterIds'] as List?)?.contains(myUid) ?? false,
       autoFlagged: data['autoFlagged'] == true,
       tags: List<String>.from(data['tags'] as List? ?? const []),
     );

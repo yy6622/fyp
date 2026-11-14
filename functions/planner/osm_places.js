@@ -31,6 +31,7 @@ const LOCAL_CUISINE_TAG = { TH: "thai", MY: "malaysian|malay", SG: "singaporean|
 const isFood = (kind) => ["street food", "cafe", "brunch", "dessert", "dumplings", "local food"].includes(kind);
 const norm = (s) => String(s || "").trim().toLowerCase();
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const titleCase = (s) => String(s || "").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 
 function km(aLat, aLon, bLat, bLon) {
   const r = Math.PI / 180;
@@ -64,6 +65,11 @@ function overpassQuery(kind, lat, lon, country) {
   return `[out:json][timeout:8];(${parts});out center tags 40;`;
 }
 
+// Raw OSM rows, straight off Overpass -- not yet in the catalog_attractions /
+// catalog_restaurants display schema. toCatalogDoc() below converts one of
+// these into the same shape the app's own live refresh writes, so a place
+// found here and a place found by a traveller browsing Explore converge on
+// one document (same id scheme: "osm_<n|w|r><id>") instead of two.
 function rowsFromOverpass(elements, kind, { lat, lon, country, city }) {
   const seen = new Set();
   const rows = [];
@@ -92,7 +98,6 @@ function rowsFromOverpass(elements, kind, { lat, lon, country, city }) {
         wikipedia: tags.wikipedia || "",
         openingHours: tags.opening_hours || "",
         cuisine: tags.cuisine || "",
-        source: "voya-osm",
       },
     });
   }
@@ -100,45 +105,69 @@ function rowsFromOverpass(elements, kind, { lat, lon, country, city }) {
   return rows.slice(0, KEEP);
 }
 
-function toPlace(d, kind) {
+// Builds the exact document that gets written to (and later read back from)
+// catalog_attractions / catalog_restaurants -- the one and only collection
+// this feature keeps data in. "needKey" is this specific need (e.g.
+// "TH:museum") so a future trip to the same country can reuse the same
+// document without a fresh Overpass call; "destinationKey" tags it for the
+// current trip's own Explore-style display lookup.
+function toCatalogDoc(d, kind, destinationKey, needKey) {
   const name = (d.nameEn && d.nameEn.trim()) || d.name;
-  return {
-    name, type: d.type === "restaurant" || isFood(kind) ? "restaurant" : "attraction",
-    location: d.city || "", district: d.district || "", lat: d.lat, lng: d.lng,
-    category: String(d.category || kind).replace(/_/g, " "),
-    categories: [kind], cuisineTags: d.cuisine ? String(d.cuisine).split(/[;,]/) : [],
+  const nameLocal = d.name && d.name.trim() && d.name.trim() !== name ? d.name.trim() : null;
+  const food = d.type === "restaurant" || isFood(kind);
+  const { FieldValue } = require("firebase-admin/firestore");
+  const common = {
+    name,
+    ...(nameLocal ? { nameLocal } : {}),
+    location: d.city || "",
+    address: d.district || "",
+    lat: d.lat, lng: d.lng,
+    website: d.website || "",
+    openingHours: d.openingHours || "",
+    phone: "",
+    description: "",
+    rating: "New",
+    reviews: "0",
+    destinationQuery: destinationKey,
+    ...(d.country ? { country: d.country } : {}),
+    ...(needKey ? { needKeys: FieldValue.arrayUnion(needKey) } : {}),
+    source: "voya-summarise",
   };
+  if (food) {
+    const cuisineTags = d.cuisine ? String(d.cuisine).split(/[;,]/).map(titleCase) : [titleCase(kind)];
+    return { collection: "catalog_restaurants", doc: { ...common, priceRange: "", cuisineTags } };
+  }
+  const cat = titleCase(d.category || kind);
+  return { collection: "catalog_attractions", doc: { ...common, category: cat, categories: [cat], price: "" } };
 }
 
-const titleCase = (s) => String(s || "").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-
-async function mirrorToCatalog(db, rows, destination, kind) {
-  const key = String(destination || "").trim().toLowerCase();
-  if (!key || !rows.length) return;
-  const batch = db.batch();
-  for (const { id, data: d } of rows) {
-    const name = (d.nameEn && d.nameEn.trim()) || d.name;
-    const food = d.type === "restaurant" || isFood(kind);
-    const common = { name, location: String(destination).trim(), destinationQuery: key, website: d.website || "",
-      openingHours: d.openingHours || "", address: d.district || "", phone: "", description: "", rating: "New", reviews: "0",
-      lat: d.lat, lng: d.lng, district: d.district || "", ...(d.imageUrl ? { image: d.imageUrl } : {}), source: "voya-summarise" };
-    if (food) {
-      batch.set(db.collection("catalog_restaurants").doc(`place_${id}`), { ...common, priceRange: "",
-        cuisineTags: d.cuisine ? String(d.cuisine).split(/[;,]/).map(titleCase) : [titleCase(kind)] }, { merge: true });
-    } else {
-      const cat = titleCase(d.category || kind);
-      batch.set(db.collection("catalog_attractions").doc(`place_${id}`), { ...common, category: cat, categories: [cat], price: "" },
-        { merge: true });
-    }
-  }
-  await batch.commit().catch((err) => console.error("catalog mirror failed", err.message));
+// Shape handed to the itinerary builder -- unchanged regardless of whether
+// the place came from an existing catalog doc or a fresh OSM find, so
+// needs.js/schedule.js don't need to know which.
+function toPlace(d, kind) {
+  const food = d.collectionHint === "catalog_restaurants" || (d.cuisineTags !== undefined) || isFood(kind);
+  return {
+    name: d.name,
+    type: food ? "restaurant" : "attraction",
+    location: d.location || "",
+    district: d.address || d.district || "",
+    lat: d.lat, lng: d.lng,
+    category: String((Array.isArray(d.categories) && d.categories[0]) || d.category || kind).replace(/_/g, " "),
+    categories: [kind],
+    cuisineTags: Array.isArray(d.cuisineTags) ? d.cuisineTags : (d.cuisine ? String(d.cuisine).split(/[;,]/) : []),
+  };
 }
 
 function makeNeedLookup({ db, destination, fetchJson = getJson, maxLookups = 4, now = () => new Date() }) {
   const tripDestination = String(destination || "").trim();
+  const destinationKey = tripDestination.toLowerCase();
   let cityP = null;
-  let countryRows = null;
   let osmCalls = 0;
+  // One lazily-loaded, per-country cache per collection -- loaded at most
+  // once each per lookupNeed() run, same cost as the old catalog_places
+  // query, just split across the two real display collections instead of
+  // a separate reference one.
+  const countryRowsByCollection = {};
   const city = async (name) => {
     if (!cityP) {
       const where = String(name || destination || "").trim();
@@ -155,21 +184,37 @@ function makeNeedLookup({ db, destination, fetchJson = getJson, maxLookups = 4, 
     return cityP;
   };
 
+  const loadCountryRows = (collectionName, country) => {
+    const cacheKey = `${collectionName}:${country}`;
+    if (!countryRowsByCollection[cacheKey]) {
+      countryRowsByCollection[cacheKey] = db.collection(collectionName).where("country", "==", country).limit(800).get()
+        .then((s) => s.docs.map((d) => ({ ...d.data(), _id: d.id, _collection: collectionName }))).catch(() => []);
+    }
+    return countryRowsByCollection[cacheKey];
+  };
+
   return async function lookupNeed(need, cityName) {
     try {
       const c = await city(cityName);
       if (!c || !c.country) return [];
       const key = `${c.country}:${need.kind}`;
-      if (!countryRows) {
-        countryRows = db.collection("catalog_places").where("country", "==", c.country).limit(800).get()
-          .then((s) => s.docs.map((d) => ({ ...d.data(), _id: d.id }))).catch(() => []);
-      }
-      const near = (await countryRows).filter((d) => d.lat != null && d.lng != null && km(c.lat, c.lon, d.lat, d.lng) <= RADIUS_M / 1000 + 3);
+      const collectionName = isFood(need.kind) ? "catalog_restaurants" : "catalog_attractions";
+      const rows = await loadCountryRows(collectionName, c.country);
+      const near = rows.filter((d) => d.lat != null && d.lng != null && km(c.lat, c.lon, d.lat, d.lng) <= RADIUS_M / 1000 + 3);
       const known = near.filter((d) => (Array.isArray(d.needKeys) && d.needKeys.includes(key)) ||
-        need.fits.test(`${d.name} ${d.nameEn || ""} ${String(d.category || "").replace(/_/g, " ")}`));
+        need.fits.test(`${d.name || ""} ${d.nameLocal || ""} ${String((Array.isArray(d.categories) && d.categories[0]) || d.category || "").replace(/_/g, " ")}`));
       if (known.length) {
         const top = known.slice(0, KEEP);
-        await mirrorToCatalog(db, top.map((d) => ({ id: d._id, data: d })), tripDestination || c.city, need.kind);
+        const { FieldValue } = require("firebase-admin/firestore");
+        const batch = db.batch();
+        for (const d of top) {
+          // Already live in the one display collection -- just stamp this
+          // trip's destination on it (and remember the need-match for next
+          // time) instead of writing a second copy anywhere.
+          batch.set(db.collection(d._collection).doc(d._id),
+            { destinationQuery: destinationKey, needKeys: FieldValue.arrayUnion(key) }, { merge: true });
+        }
+        await batch.commit().catch((err) => console.error("catalog stamp failed", err.message));
         return top.map((d) => toPlace(d, need.kind));
       }
 
@@ -180,17 +225,17 @@ function makeNeedLookup({ db, destination, fetchJson = getJson, maxLookups = 4, 
       if (osmCalls > 1) await sleep(300);
       const r = await fetchJson(OVERPASS, { method: "POST", body: `data=${encodeURIComponent(q)}`,
         headers: { "Content-Type": "application/x-www-form-urlencoded" } });
-      const rows = rowsFromOverpass(r && r.elements, need.kind, c);
-      if (!rows.length) return [];
-      const { FieldValue } = require("firebase-admin/firestore");
+      const found = rowsFromOverpass(r && r.elements, need.kind, c);
+      if (!found.length) return [];
       const batch = db.batch();
-      for (const row of rows) {
-        batch.set(db.collection("catalog_places").doc(row.id),
-          { ...row.data, needKeys: FieldValue.arrayUnion(key), fetchedAt: now() }, { merge: true });
+      const builtDocs = [];
+      for (const row of found) {
+        const { collection, doc } = toCatalogDoc(row.data, need.kind, destinationKey, key);
+        batch.set(db.collection(collection).doc(row.id), { ...doc, fetchedAt: now() }, { merge: true });
+        builtDocs.push(doc);
       }
-      await batch.commit().catch((err) => console.error("catalog_places write failed", err.message));
-      await mirrorToCatalog(db, rows, tripDestination || c.city, need.kind);
-      return rows.map((row) => toPlace(row.data, need.kind));
+      await batch.commit().catch((err) => console.error("catalog write failed", err.message));
+      return builtDocs.map((d) => toPlace(d, need.kind));
     } catch (err) {
       console.error("lookupNeed failed", need && need.kind, err && err.message);
       return [];
@@ -198,4 +243,4 @@ function makeNeedLookup({ db, destination, fetchJson = getJson, maxLookups = 4, 
   };
 }
 
-module.exports = { makeNeedLookup, overpassQuery, rowsFromOverpass, toPlace, mirrorToCatalog, OSM_QUERY };
+module.exports = { makeNeedLookup, overpassQuery, rowsFromOverpass, toCatalogDoc, toPlace, OSM_QUERY };
