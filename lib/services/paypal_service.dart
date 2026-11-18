@@ -10,11 +10,6 @@ class PayPalPaymentException implements Exception {
   String toString() => message;
 }
 
-/// Mirrors StripeService.payWithSheet's contract (same return type, same
-/// exception type's role in the caller's try/on blocks) so every page that
-/// already branches on StripeService for the "Credit / Debit Card" option
-/// can branch on this the same way for "PayPal" -- see
-/// PaymentMethodOption in payment_method_picker.dart.
 class PayPalService {
   PayPalService._();
   static final PayPalService instance = PayPalService._();

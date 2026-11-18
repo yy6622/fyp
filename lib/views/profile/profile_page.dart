@@ -23,9 +23,6 @@ class ProfilePage extends StatefulWidget {
 class _ProfilePageState extends State<ProfilePage> {
   final ProfileController controller = ProfileController();
 
-  // Community Post, Insurance Messages and Report new attraction spot moved
-  // to the homepage (replacing the "Let AI Plan" banner there) -- they sat
-  // oddly among account-settings rows here.
   List<ProfileMenuItem> get _menuItems => [
     ProfileMenuItem(Icons.person_outline, 'Account Setting', () => _push(const AccountSettingPage())),
     ProfileMenuItem(Icons.history, 'History', () => _push(const HistoryPage())),

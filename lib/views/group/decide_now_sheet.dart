@@ -135,14 +135,6 @@ class _DecideNowSheetState extends State<_DecideNowSheet> {
 
   bool? _chatLean(DiscussionItem it) => VoteResolutionService.instance.chatLean(it);
 
-  /// Reads the poll's result against this item's own chat sentiment and, when
-  /// they agree (or the chat never had a clear lean), finalizes the decision
-  /// automatically — except a plan-affecting item (attraction/transport)
-  /// that the poll says to go with still needs a day and time, which only a
-  /// person can pick, so that case is left for a manual "Agree" tap instead
-  /// of being silently confirmed with no slot. When the poll is tied, or
-  /// disagrees with how the chat leaned, this does nothing — Agree / Skip
-  /// stay on screen so a person makes the call themselves.
   void _maybeAutoResolve(DiscussionItem it, TripVote vote) {
     if (_done.containsKey(it.messageId) || _busy != null) return;
     final pollAgrees = _pollVerdict(it, vote);
@@ -159,10 +151,6 @@ class _DecideNowSheetState extends State<_DecideNowSheet> {
     });
   }
 
-  /// null = nothing worth flagging yet. Otherwise one line: either a
-  /// conflict (poll vs. chat, or a tie) that needs a person to pick, or —
-  /// for a plan-affecting item the poll already says to go with — a nudge
-  /// that it's just waiting on a day and time via the Agree button.
   String? _pollHint(DiscussionItem it, TripVote vote) {
     if (vote.isTie) return "Poll's tied — pick one below.";
     final pollAgrees = _pollVerdict(it, vote);
@@ -203,7 +191,9 @@ class _DecideNowSheetState extends State<_DecideNowSheet> {
                   ),
                 TextField(
                   controller: label,
-                  decoration: const InputDecoration(labelText: 'Activity'),
+                  decoration: InputDecoration(label: Text.rich(TextSpan(text: 'Activity', children: const [
+                    TextSpan(text: ' *', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.w700)),
+                  ]))),
                   onChanged: (_) => setD(() {}),
                 ),
                 const SizedBox(height: 10),

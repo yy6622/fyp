@@ -21,8 +21,6 @@ class DetailPageHotel extends StatefulWidget {
   final List<String> amenities;
   final String? checkInPolicyTime;
   final String? checkOutPolicyTime;
-  final bool saved;
-  final VoidCallback? onToggleSave;
 
   const DetailPageHotel({
     super.key,
@@ -38,8 +36,6 @@ class DetailPageHotel extends StatefulWidget {
     this.amenities = const [],
     this.checkInPolicyTime,
     this.checkOutPolicyTime,
-    this.saved = false,
-    this.onToggleSave,
   });
 
   @override
@@ -49,19 +45,6 @@ class DetailPageHotel extends StatefulWidget {
 class _DetailPageHotelState extends State<DetailPageHotel> {
   late DateTime? _checkIn = widget.checkIn;
   late DateTime? _checkOut = widget.checkOut;
-  late bool _saved = widget.saved;
-
-  // The flight/hotel favourite backend (CatalogRepository.saveDuffelFlight /
-  // saveDuffelStay) only ever creates a saved record once — there's no
-  // matching "unsave" call available from a live search result (only from
-  // the already-saved record in Saved Items, which has its own Firestore
-  // doc id). So this can only ever go outline -> filled, never back, to
-  // avoid the heart showing "unsaved" while the backend still has it saved.
-  void _toggleSave() {
-    if (_saved) return;
-    setState(() => _saved = true);
-    widget.onToggleSave?.call();
-  }
 
   @override
   void initState() {
@@ -151,8 +134,6 @@ class _DetailPageHotelState extends State<DetailPageHotel> {
                 price: widget.pricePerNight,
                 priceSuffix: 'per night',
                 buttonLabel: 'Select Hotel',
-                saved: _saved,
-                onToggleSave: widget.onToggleSave == null ? null : _toggleSave,
                 bookingType: 'hotel',
                 bookingTitle: widget.name,
                 bookingSubtitle: widget.location,

@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
+import '../../models/duffel_models.dart';
 import '../../models/review_models.dart';
+import '../../repositories/review_helpers.dart' show ReviewSubmitOutcome;
 import '../../repositories/user_repository.dart';
 import '../../services/auth_service.dart';
 import '../../services/format_utils.dart';
@@ -18,7 +20,15 @@ class DetailHeader extends StatelessWidget {
   final String? imageUrl;
   final String? logoUrl;
   final bool showHero;
-  const DetailHeader({super.key, required this.title, this.imageUrl, this.logoUrl, this.showHero = true});
+  final IconData fallbackIcon;
+  const DetailHeader({
+    super.key,
+    required this.title,
+    this.imageUrl,
+    this.logoUrl,
+    this.showHero = true,
+    this.fallbackIcon = Icons.image_outlined,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -90,7 +100,7 @@ class DetailHeader extends StatelessWidget {
         width: double.infinity,
         color: AppColors.chipGrey,
         alignment: Alignment.center,
-        child: _fallbackIcon(Icons.image_outlined),
+        child: _fallbackIcon(fallbackIcon),
       );
 
   Widget _fallbackIcon(IconData icon) => Icon(icon, size: 44, color: AppColors.textGrey);
@@ -155,9 +165,26 @@ class BookingBar extends StatelessWidget {
   final String tripId;
   final DateTime? checkIn;
   final DateTime? checkOut;
+  final List<DuffelOfferPassenger> offerPassengers;
+  final double offerTotalAmount;
+  final String offerTotalCurrency;
+  final DateTime? departureAt;
+  // Flight-only -- everything the booking summary needs to show a real
+  // itinerary (route, times, duration, airline, cabin) before payment,
+  // not just the thin "KUL -> TFU / 22 Nov 18:45" bookingTitle/Subtitle.
+  final String? fromCode;
+  final String? fromCity;
+  final String? toCode;
+  final String? toCity;
+  final String? flightDate;
+  final String? depTime;
+  final String? arrTime;
+  final String? duration;
+  final String? stops;
+  final String? airline;
+  final String? airlineLogoUrl;
+  final String? cabinClass;
   final Future<void> Function(BookingConfirmation confirmation)? onPaid;
-  final bool saved;
-  final VoidCallback? onToggleSave;
   const BookingBar({
     super.key,
     required this.price,
@@ -170,9 +197,23 @@ class BookingBar extends StatelessWidget {
     this.tripId = '',
     this.checkIn,
     this.checkOut,
+    this.offerPassengers = const [],
+    this.offerTotalAmount = 0,
+    this.offerTotalCurrency = '',
+    this.departureAt,
+    this.fromCode,
+    this.fromCity,
+    this.toCode,
+    this.toCity,
+    this.flightDate,
+    this.depTime,
+    this.arrTime,
+    this.duration,
+    this.stops,
+    this.airline,
+    this.airlineLogoUrl,
+    this.cabinClass,
     this.onPaid,
-    this.saved = false,
-    this.onToggleSave,
   });
 
   @override
@@ -194,10 +235,6 @@ class BookingBar extends StatelessWidget {
               ],
             ),
           ),
-          if (onToggleSave != null) ...[
-            SaveHeartBox(saved: saved, onTap: onToggleSave),
-            const SizedBox(width: 10),
-          ],
           ElevatedButton(
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primary,
@@ -220,6 +257,22 @@ class BookingBar extends StatelessWidget {
                         bookingSubtitle: bookingSubtitle,
                         refId: refId,
                         tripId: tripId,
+                        offerPassengers: offerPassengers,
+                        offerTotalAmount: offerTotalAmount,
+                        offerTotalCurrency: offerTotalCurrency,
+                        departureAt: departureAt,
+                        fromCode: fromCode,
+                        fromCity: fromCity,
+                        toCode: toCode,
+                        toCity: toCity,
+                        flightDate: flightDate,
+                        depTime: depTime,
+                        arrTime: arrTime,
+                        duration: duration,
+                        stops: stops,
+                        airline: airline,
+                        airlineLogoUrl: airlineLogoUrl,
+                        cabinClass: cabinClass,
                         onPaid: onPaid,
                       )
                     : HotelGuestDetailsPage(
@@ -246,10 +299,6 @@ class BookingBar extends StatelessWidget {
   }
 }
 
-/// A small icon-only "save to favourites" control: a grey rounded box with
-/// a heart outline, filled red once saved. Used in the bottom action bar of
-/// every catalog detail page (flight, hotel, attraction, restaurant) instead
-/// of a big labelled button, so the bar stays focused on one primary action.
 class SaveHeartBox extends StatelessWidget {
   final bool saved;
   final VoidCallback? onTap;
@@ -312,6 +361,7 @@ class AmenityIcon extends StatelessWidget {
 }
 
 class ReviewData {
+  final String authorId;
   final String name;
   final String flag;
   final String country;
@@ -320,6 +370,7 @@ class ReviewData {
   final String timeAgo;
   final bool autoFlagged;
   const ReviewData({
+    this.authorId = '',
     required this.name,
     this.flag = '',
     this.country = '',
@@ -331,6 +382,7 @@ class ReviewData {
 }
 
 ReviewData reviewDataFromPlace(PlaceReview r) => ReviewData(
+      authorId: r.authorId,
       name: r.authorName,
       rating: r.rating,
       comment: r.comment,
@@ -407,7 +459,7 @@ class ReviewCard extends StatelessWidget {
 Future<void> showWriteReviewDialog(
   BuildContext context, {
   required String title,
-  required Future<bool> Function({required String authorId, required String authorName, required int rating, required String comment}) onSubmit,
+  required Future<ReviewSubmitOutcome> Function({required String authorId, required String authorName, required int rating, required String comment}) onSubmit,
 }) async {
   final uid = AuthService.instance.currentUser?.uid;
   if (uid == null) return;
@@ -427,10 +479,15 @@ Future<void> showWriteReviewDialog(
   final comment = commentController.text.trim();
   final profile = await UserRepository.instance.fetchProfile(uid);
   final name = (profile != null && profile.name.isNotEmpty) ? profile.name : 'Traveller';
-  final flagged = await onSubmit(authorId: uid, authorName: name, rating: rating, comment: comment);
-  if (flagged && context.mounted) {
+  final outcome = await onSubmit(authorId: uid, authorName: name, rating: rating, comment: comment);
+  if (!context.mounted) return;
+  if (outcome == ReviewSubmitOutcome.pendingModeration) {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Your review was submitted and is pending moderation review.')),
+    );
+  } else if (outcome == ReviewSubmitOutcome.alreadyReviewed) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("You've already reviewed this — each traveller can only leave one review, and reviews can't be edited once submitted.")),
     );
   }
 }
@@ -439,8 +496,9 @@ class ReviewsSection extends StatelessWidget {
   final String title;
   final String ratingSummary;
   final Stream<List<ReviewData>> reviewsStream;
-  final Future<bool> Function({required String authorId, required String authorName, required int rating, required String comment}) onSubmitReview;
+  final Future<ReviewSubmitOutcome> Function({required String authorId, required String authorName, required int rating, required String comment}) onSubmitReview;
   final bool allowWriting;
+  final String myUid;
   const ReviewsSection({
     super.key,
     required this.title,
@@ -448,9 +506,16 @@ class ReviewsSection extends StatelessWidget {
     required this.reviewsStream,
     required this.onSubmitReview,
     this.allowWriting = true,
+    this.myUid = '',
   });
 
-  void _onWriteReviewTap(BuildContext context) {
+  void _onWriteReviewTap(BuildContext context, bool alreadyReviewed) {
+    if (alreadyReviewed) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("You've already reviewed this — each traveller can only leave one review.")),
+      );
+      return;
+    }
     showWriteReviewDialog(context, title: 'Rate & Review', onSubmit: onSubmitReview);
   }
 
@@ -460,6 +525,7 @@ class ReviewsSection extends StatelessWidget {
       stream: reviewsStream,
       builder: (context, snapshot) {
         final reviews = snapshot.data ?? const [];
+        final alreadyReviewed = myUid.isNotEmpty && reviews.any((r) => r.authorId == myUid);
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -471,10 +537,14 @@ class ReviewsSection extends StatelessWidget {
                   children: [
                     if (allowWriting)
                       GestureDetector(
-                        onTap: () => _onWriteReviewTap(context),
-                        child: const Text(
-                          'Write a Review',
-                          style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: AppColors.primary),
+                        onTap: () => _onWriteReviewTap(context, alreadyReviewed),
+                        child: Text(
+                          alreadyReviewed ? 'You reviewed this' : 'Write a Review',
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w600,
+                            color: alreadyReviewed ? AppColors.textGrey : AppColors.primary,
+                          ),
                         ),
                       ),
                     if (reviews.length > 3) ...[

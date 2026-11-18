@@ -179,6 +179,20 @@ table.data-table { width: 100%; border-collapse: collapse; font-size: 14px; min-
 
 /* ---------------- Bars (simple css chart) ---------------- */
 .bars { display: flex; align-items: flex-end; gap: 14px; height: 220px; padding-top: 10px; }
+
+/* Cards that hold a bar chart (see .bars below): when this card sits next
+   to a taller sibling in a stretch grid, the extra height used to show up
+   as blank space BELOW the month labels, because the card's children were
+   plain block flow. Making the card a flex column and pushing the chart
+   block to the bottom with margin-top:auto moves that blank space above
+   the chart instead, so the bars/labels stay flush with the bottom of the
+   card no matter how tall the row stretches it. */
+.chart-card { display: flex; flex-direction: column; }
+/* Grow the chart itself to fill the stretched card's height (instead of
+   just pushing a still-220px chart down with blank space above it) --
+   the bars are already percentage-height relative to this container, so
+   they get visibly taller as this grows, not just repositioned. */
+.chart-card .bars { flex: 1 1 auto; height: auto; min-height: 160px; }
 .bars .bar-col { position: relative; flex: 1; display: flex; align-items: flex-end; justify-content: center; height: 100%; cursor: default; }
 .bars .bar { width: 60%; max-width: 34px; border-radius: 6px 6px 0 0; background: var(--teal-600); transition: height .4s ease; }
 .bars .bar.alt { background: var(--accent-indigo); }
@@ -270,6 +284,18 @@ table.data-table { width: 100%; border-collapse: collapse; font-size: 14px; min-
   width: 8px; height: 8px; border-radius: 50%;
   background: #ff4d4f; border: 2px solid #fff;
 }
+
+/* A table row that needs the admin's attention -- e.g. a newly
+   registered partner awaiting approval. A light amber left-border +
+   background tint, so the row stands out at a glance in a list that
+   might otherwise bury it among several approved/suspended rows, on
+   top of (not instead of) its own status badge in the Status column. */
+.row-needs-attention {
+  background: var(--amber-bg);
+  box-shadow: inset 3px 0 0 var(--amber-text);
+}
+.row-needs-attention:hover { background: var(--amber-bg); filter: brightness(0.97); }
+
 
 /* ---------------- Misc ---------------- */
 .avatar-fallback {

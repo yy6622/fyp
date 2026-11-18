@@ -47,7 +47,7 @@ async function loadSavedPlaces(db, tripId, memberIds) {
 
 async function loadVotes(db, tripId) {
   const snap = await db.collection("trips").doc(tripId).collection("votes").get();
-  return snap.docs.map((d) => d.data());
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 }
 
 async function loadSavedHotels(db, tripId, memberIds) {
@@ -173,11 +173,6 @@ exports.generateItinerary = onCall({ timeoutSeconds: 120, memory: "512MiB" }, as
     decisions: trip.discussionDecisions || null,
     foodPreference: trip.foodPreference || "",
     accommodation: trip.accommodation || "",
-    // Trip-creation interest points (Beach/City/Nature/Adventure/Culture/
-    // Shopping/Nightlife/Relaxation/Food) -- see planner/needs.js's
-    // matchesInterests for how buildItinerary uses these as a tiebreaker
-    // among candidates that already fit something actually discussed in
-    // chat. Never overwrites or invents a need on its own.
     interests: Array.isArray(trip.interests) ? trip.interests : [],
     votes,
   };
@@ -215,6 +210,7 @@ exports.generateItinerary = onCall({ timeoutSeconds: 120, memory: "512MiB" }, as
     update: resolved.update.map((u) => ({ ...u, fromDayIndex: dayIndex(u.fromDay), toDayIndex: dayIndex(u.toDay) })),
     remove: resolved.remove.map((r) => ({ ...r, dayIndex: dayIndex(r.day) })),
     unresolved: resolved.unresolved,
+    tiedVotes: built.tiedVotes || [],
     ideas: (built.ideas || []).slice(0, 8),
     logistics: {
       fixed: ((built.logistics && built.logistics.fixed) || []).map((f) => ({ ...f, dayIndex: dayIndex(f.day) })),

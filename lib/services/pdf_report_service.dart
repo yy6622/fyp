@@ -25,18 +25,6 @@ Future<Uint8List> _buildExpenseReportIsolateEntry(_ReportBuildArgs args) {
 class PdfReportService {
   PdfReportService._();
 
-  /// Same output as [buildExpenseReport], but runs the actual PDF layout/draw
-  /// work on a background isolate so it doesn't freeze the UI thread —
-  /// without this, the "Generate Report" loading spinner stops animating and
-  /// the app looks hung for as long as the PDF takes to build.
-  ///
-  /// The logo asset is loaded here, on the calling (UI) isolate, BEFORE
-  /// spawning the background isolate: `rootBundle` needs `ServicesBinding`,
-  /// which only exists on the isolate that ran `runApp()` — a bare
-  /// `compute()` isolate doesn't have it (that's what `BackgroundIsolateBinaryMessenger.ensureInitialized`
-  /// sets up a binary messenger for, but not a full ServicesBinding/rootBundle).
-  /// So the background isolate only ever does pure Dart PDF drawing with
-  /// bytes it's handed — no asset/platform-channel access needed there.
   static Future<Uint8List> buildExpenseReportInBackground(ExpensesReportSnapshot snapshot) async {
     final logo = await _logoBytes();
     return compute(_buildExpenseReportIsolateEntry, _ReportBuildArgs(logo, snapshot));

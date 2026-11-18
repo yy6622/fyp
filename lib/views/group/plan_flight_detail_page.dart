@@ -460,6 +460,7 @@ class _PassengerInfoPage extends StatelessWidget {
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
+        centerTitle: true,
         iconTheme: const IconThemeData(color: AppColors.navy),
         title: const Text('Passenger', style: TextStyle(color: AppColors.navy, fontWeight: FontWeight.bold, fontSize: 18)),
       ),

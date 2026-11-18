@@ -1,7 +1,3 @@
-// Deletes read notifications older than 30 days (users/{uid}/notifications).
-// Unread notifications are never touched here, however old — only ones the
-// traveller has actually seen (read: true) age out, so nothing unread
-// disappears on them silently.
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { initializeApp, getApps } = require("firebase-admin/app");
 const { getFirestore } = require("firebase-admin/firestore");

@@ -63,10 +63,6 @@ class OnboardingController extends ChangeNotifier {
   bool savingPhone = false;
   String? phoneError;
 
-  // Phone, country and currency are required -- the app relies on all
-  // three being set (bookings prefill from them, Insurance will soon
-  // price and filter plans by them) so unlike the avatar/add-friend
-  // steps, this one can't just silently move on when left blank.
   Future<void> savePhoneAndNext() async {
     final phone = phoneController.text.trim();
     if (phone.isEmpty) {
@@ -164,6 +160,7 @@ class OnboardingController extends ChangeNotifier {
       FriendRequestStatus.alreadyRequested => 'Friend request to ${outcome.name} is already pending.',
       FriendRequestStatus.isSelf => "That's your own account.",
       FriendRequestStatus.noMatch => "Couldn't find anyone with that email or username.",
+      FriendRequestStatus.blocked => "You've blocked ${outcome.name} — unblock them first to send a request.",
     };
     if (outcome.status != FriendRequestStatus.noMatch && outcome.status != FriendRequestStatus.isSelf) {
       friendQueryController.clear();

@@ -266,10 +266,6 @@ class _CommunityPageState extends State<CommunityPage> {
                   const Text('Share your travel story',
                       style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 4),
-                  // The "Create Post" button that used to sit here was a second,
-                  // redundant way to do exactly what the page's own compose FAB
-                  // (_buildComposeFab) already does -- removed rather than kept
-                  // as decoration.
                   const Text('Inspire others and unlock your first\nhot travel content.',
                       style: TextStyle(color: Colors.white70, fontSize: 11)),
                 ],
@@ -306,79 +302,6 @@ class _CommunityPageState extends State<CommunityPage> {
     );
   }
 
-  Widget _buildRecommendedSection(List<CommunityPost> recommended) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 20),
-          child: Text('Recommended for you', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.black)),
-        ),
-        const SizedBox(height: 10),
-        SizedBox(
-          height: 128,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            itemCount: recommended.length,
-            separatorBuilder: (_, __) => const SizedBox(width: 10),
-            itemBuilder: (context, i) => _recommendedCard(recommended[i]),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _recommendedCard(CommunityPost post) {
-    return GestureDetector(
-      onTap: () => _openDetail(post),
-      child: Container(
-        width: 170,
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: const Color(0xFFECECEC)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(post.title,
-                maxLines: 1, overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.black)),
-            const SizedBox(height: 4),
-            Row(
-              children: [
-                const Icon(Icons.location_on_outlined, size: 12, color: AppColors.primary),
-                const SizedBox(width: 2),
-                Expanded(
-                  child: Text(post.location,
-                      maxLines: 1, overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 10.5, color: AppColors.primary)),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            if (post.tags.isNotEmpty)
-              Wrap(
-                spacing: 4,
-                runSpacing: 4,
-                children: post.tags.take(2).map((t) => _tagChip(t, dense: true)).toList(),
-              ),
-            const Spacer(),
-            Row(
-              children: [
-                Icon(post.liked ? Icons.favorite : Icons.favorite_border, size: 13, color: post.liked ? Colors.redAccent : AppColors.textGrey),
-                const SizedBox(width: 4),
-                Text('${post.likes}', style: const TextStyle(fontSize: 10.5, color: AppColors.textGrey)),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _tagChip(String tag, {bool dense = false}) {
     final active = controller.activeTagFilter == tag;
     return GestureDetector(
@@ -403,7 +326,6 @@ class _CommunityPageState extends State<CommunityPage> {
 
   Widget _buildScrollableBody() {
     final posts = controller.filteredPosts;
-    final recommended = controller.recommendedPosts;
     return CustomScrollView(
       slivers: [
         SliverToBoxAdapter(
@@ -417,10 +339,6 @@ class _CommunityPageState extends State<CommunityPage> {
               ],
               const SizedBox(height: 12),
               _buildStoryBanner(),
-              if (recommended.isNotEmpty) ...[
-                const SizedBox(height: 18),
-                _buildRecommendedSection(recommended),
-              ],
               const SizedBox(height: 14),
             ],
           ),
@@ -664,7 +582,7 @@ class _CommunityPageState extends State<CommunityPage> {
           style: TextStyle(fontSize: 12, color: AppColors.textGrey),
         ),
         const SizedBox(height: 14),
-        niceDialogField(reasonCtrl, 'Reason', autofocus: true),
+        niceDialogField(reasonCtrl, 'Reason', autofocus: true, required: true),
       ],
     );
     if (result != true) return;

@@ -91,6 +91,8 @@ class _FriendsPageState extends State<FriendsPage> {
         return "That's your own account";
       case FriendRequestStatus.noMatch:
         return 'No Voya user found for "$query"';
+      case FriendRequestStatus.blocked:
+        return "You've blocked ${outcome.name} — unblock them first to send a request";
     }
   }
 

@@ -194,12 +194,6 @@ class DiscussionSummaryService {
     final stats = ((data['stats'] as Map?) ?? const {}).cast<String, dynamic>();
     final pending = [for (final i in rows(data['pending'])) item(i)];
 
-    // Apply any poll results that have concluded since the last fetch
-    // (e.g. the group finished voting without anyone reopening Decide Now)
-    // before handing the summary back, so AI Summarise -- and, once a day
-    // & time is set, Optimise -- see the real outcome instead of a stale
-    // "voting" status. A tie or a poll-vs-chat disagreement is left as a
-    // conflict for the traveller to resolve manually.
     final outcome = await VoteResolutionService.instance.resolvePending(tripId, pending);
     if (outcome.anyResolved && depth < 2) {
       return _fetch(tripId, depth: depth + 1);

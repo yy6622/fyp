@@ -154,7 +154,7 @@ void main() {
     final info = await CountryEmergencyRepository.instance.forDestination('Bangkok, Thailand');
     expect(info.police, '191');
     expect(info.ambulance, '1669');
-    expect(info.isGenericFallback, isFalse);
+    expect(info.isUnavailable, isFalse);
   });
 
   testWidgets('TC46 Admin edits emergency info and travellers see the new number', (tester) async {

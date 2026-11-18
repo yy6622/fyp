@@ -50,40 +50,6 @@ extension ExploreCategoryMeta on ExploreCategory {
   }
 }
 
-class FlightData {
-  final String depTime, arrTime, duration, from, to, stops, price, fareType;
-  final String airline;
-  final String flightNo;
-  final String date;
-  const FlightData({
-    required this.depTime,
-    required this.arrTime,
-    required this.duration,
-    required this.from,
-    required this.to,
-    required this.stops,
-    required this.price,
-    required this.fareType,
-    this.airline = '',
-    this.flightNo = '',
-    this.date = '',
-  });
-}
-
-class HotelData {
-  final String name, location, rating, reviews, price, image;
-  final List<String> amenities;
-  const HotelData({
-    required this.name,
-    required this.location,
-    required this.rating,
-    required this.reviews,
-    required this.price,
-    required this.image,
-    this.amenities = const [],
-  });
-}
-
 class AttractionFees {
   final String? adult, child, senior;
   const AttractionFees({this.adult, this.child, this.senior});
@@ -149,11 +115,6 @@ class RestaurantData {
   final double? lat;
   final double? lng;
 
-  /// Straight-line km from the destination's geocoded center, computed
-  /// once at OSM-import time (CatalogRepository._refreshRestaurantsFromOsm)
-  /// — same field/units as AttractionData.distanceKm, added so
-  /// RestaurantRecommendation.distanceScore has a real signal instead of
-  /// always falling back to neutral.
   final double? distanceKm;
 
   const RestaurantData({

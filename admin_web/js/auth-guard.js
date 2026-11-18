@@ -17,22 +17,6 @@ function waitForUser() {
   });
 }
 
-/**
- * Blocks page render until we know the signed-in user really has `role`
- * ('admin' | 'partner'). Redirects to `loginUrl` otherwise. Returns
- * { user, uid, profile } on success (profile = the admins/insurance_partners doc).
- *
- * For role: "partner", also redirects to partner/notifications.html when
- * their status is "rejected" — so no partner page (dashboard, plans,
- * claims, ...) is reachable while rejected, not just the dashboard's old
- * small banner. Rejected stays rejected — there's no automatic status
- * change over time; only an admin re-approving them moves it. Pass
- * { skipStatusGate: true } from notifications.html itself, so that page
- * can actually show the message instead of redirecting to itself forever
- * (notifications.html is also a normal, always-reachable nav item for an
- * approved/pending/suspended partner — the gate only forces the redirect
- * while rejected).
- */
 export async function requireRole(role, loginUrl, { skipStatusGate = false, allowPending = false } = {}) {
   const user = await waitForUser();
   if (!user) {
@@ -46,6 +30,13 @@ export async function requireRole(role, loginUrl, { skipStatusGate = false, allo
     location.replace(loginUrl + (loginUrl.includes("?") ? "&" : "?") + "err=not-authorized");
     return null;
   }
+  if (role === "partner") {
+    await user.reload().catch(() => {});
+    if (!user.emailVerified) {
+      location.replace("verify-email.html");
+      return null;
+    }
+  }
   let profile = snap.data();
   if (role === "partner" && !skipStatusGate) {
     if (profile.status === "rejected") {
@@ -53,13 +44,6 @@ export async function requireRole(role, loginUrl, { skipStatusGate = false, allo
       return null;
     }
   }
-  // Separate from the rejected gate above (and NOT bypassed by
-  // skipStatusGate, which notifications.html uses only to avoid a
-  // redirect loop for rejected partners) -- a partner who has never
-  // been approved yet is confined to dashboard.html, which itself shows
-  // only the "Pending approval" message, until an admin approves them.
-  // dashboard.html is the one page that passes allowPending: true so it
-  // doesn't redirect into itself.
   if (role === "partner" && profile.status === "pending" && !allowPending) {
     location.replace("dashboard.html");
     return null;
@@ -87,12 +71,6 @@ export async function registerWithRole(role, email, password, profileData) {
       createdAt: serverTimestamp(),
     });
   } catch (err) {
-    // The role-doc write can fail even after a real Auth account was just
-    // created — e.g. setup-admin.html's admins/{uid} create rule requires
-    // isAdmin(), which is false for anyone but the very first admin. Left
-    // alone, that silently leaves a real, permanent Auth account with no
-    // role doc at all — not an admin, not a partner, just dangling. Clean
-    // it up so a failed signup leaves nothing behind.
     await cred.user.delete().catch(() => {});
     throw err;
   }

@@ -1,11 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-import '../data/emergency_info.dart';
-
 class CountryEmergencyInfo {
-  final String police;
-  final String ambulance;
-  final String fire;
+  final String? police;
+  final String? ambulance;
+  final String? fire;
   final String? missionName;
   final String? address;
   final List<String> officeLines;
@@ -13,65 +11,49 @@ class CountryEmergencyInfo {
   final String? email;
   final String embassyPhotoUrl;
 
-  final bool isGenericFallback;
+  /// True when Firestore has no doc at all for this country. There is no
+  /// hardcoded fallback behind this anymore (removed 2026-11-17, at the
+  /// user's request -- a wrong/outdated guess is worse than an honest "we
+  /// don't have this yet"), so a null field genuinely means "unknown", not
+  /// "falling back to something else".
+  final bool isUnavailable;
 
   const CountryEmergencyInfo({
-    required this.police,
-    required this.ambulance,
-    required this.fire,
+    this.police,
+    this.ambulance,
+    this.fire,
     this.missionName,
     this.address,
     this.officeLines = const [],
     this.emergencyPhone,
     this.email,
     this.embassyPhotoUrl = '',
-    this.isGenericFallback = false,
+    this.isUnavailable = false,
   });
 
   bool get hasEmbassy => (missionName ?? '').isNotEmpty;
 
-  factory CountryEmergencyInfo.fromStatic(String key) {
-    final numbers = kEmergencyNumbersByCountry[key];
-    final embassy = kEmbassyInfoByCountry[key];
-    return CountryEmergencyInfo(
-      police: (numbers ?? kFallbackEmergencyNumbers).police,
-      ambulance: (numbers ?? kFallbackEmergencyNumbers).ambulance,
-      fire: (numbers ?? kFallbackEmergencyNumbers).fire,
-      missionName: embassy?.missionName,
-      address: embassy?.address,
-      officeLines: embassy?.officeLines ?? const [],
-      emergencyPhone: embassy?.emergencyPhone,
-      email: embassy?.email,
-      isGenericFallback: numbers == null,
-    );
-  }
+  const CountryEmergencyInfo.unavailable() : this(isUnavailable: true);
 
-  factory CountryEmergencyInfo._fromDoc(Map<String, dynamic> data, String key) {
-    final fallback = CountryEmergencyInfo.fromStatic(key);
+  factory CountryEmergencyInfo._fromDoc(Map<String, dynamic> data) {
     final rawLines = data['officeLines'];
     final officeLines = rawLines is List ? rawLines.whereType<String>().toList() : const <String>[];
     return CountryEmergencyInfo(
-      police: _nonEmpty(data['police'], fallback.police),
-      ambulance: _nonEmpty(data['ambulance'], fallback.ambulance),
-      fire: _nonEmpty(data['fire'], fallback.fire),
-      missionName: _nonEmptyOrNull(data['missionName'], fallback.missionName),
-      address: _nonEmptyOrNull(data['address'], fallback.address),
-      officeLines: officeLines.isNotEmpty ? officeLines : fallback.officeLines,
-      emergencyPhone: _nonEmptyOrNull(data['emergencyPhone'], fallback.emergencyPhone),
-      email: _nonEmptyOrNull(data['email'], fallback.email),
+      police: _nonEmptyOrNull(data['police']),
+      ambulance: _nonEmptyOrNull(data['ambulance']),
+      fire: _nonEmptyOrNull(data['fire']),
+      missionName: _nonEmptyOrNull(data['missionName']),
+      address: _nonEmptyOrNull(data['address']),
+      officeLines: officeLines,
+      emergencyPhone: _nonEmptyOrNull(data['emergencyPhone']),
+      email: _nonEmptyOrNull(data['email']),
       embassyPhotoUrl: data['embassyPhotoUrl'] is String ? data['embassyPhotoUrl'] as String : '',
-      isGenericFallback: false,
     );
   }
 
-  static String _nonEmpty(dynamic value, String fallback) {
+  static String? _nonEmptyOrNull(dynamic value) {
     if (value is String && value.trim().isNotEmpty) return value;
-    return fallback;
-  }
-
-  static String? _nonEmptyOrNull(dynamic value, String? fallback) {
-    if (value is String && value.trim().isNotEmpty) return value;
-    return fallback;
+    return null;
   }
 }
 
@@ -92,16 +74,16 @@ class CountryEmergencyRepository {
 
   Future<CountryEmergencyInfo> forDestination(String destination) async {
     final key = _countryKeyFor(destination);
-    if (key.isEmpty) return CountryEmergencyInfo.fromStatic(key);
+    if (key.isEmpty) return const CountryEmergencyInfo.unavailable();
     try {
       final snap = await _col.doc(key).get();
       final data = snap.data();
       if (snap.exists && data != null) {
-        return CountryEmergencyInfo._fromDoc(data, key);
+        return CountryEmergencyInfo._fromDoc(data);
       }
     } catch (_) {
     }
-    return CountryEmergencyInfo.fromStatic(key);
+    return const CountryEmergencyInfo.unavailable();
   }
 
   Future<EmbassyRecord?> embassyFor(String destination, String homeCountry) async {
@@ -116,10 +98,9 @@ class CountryEmergencyRepository {
       }
     } catch (_) {
     }
-    if (homeKey == 'malaysia') {
-      final info = kEmbassyInfoByCountry[destKey];
-      if (info != null) return EmbassyRecord._fromStaticInfo(info);
-    }
+    // No fallback -- Firestore (via the admin console's Embassies tab) is
+    // the only source. A null here means the UI shows its own honest "we
+    // don't have verified details yet" state instead of guessing.
     return null;
   }
 }
@@ -152,17 +133,6 @@ class EmbassyRecord {
       emergencyPhone: (rawPhone is String && rawPhone.trim().isNotEmpty) ? rawPhone.trim() : null,
       email: (data['email'] as String?)?.trim() ?? '',
       embassyPhotoUrl: data['embassyPhotoUrl'] is String ? data['embassyPhotoUrl'] as String : '',
-    );
-  }
-
-  factory EmbassyRecord._fromStaticInfo(EmbassyInfo info) {
-    return EmbassyRecord(
-      missionName: info.missionName,
-      address: info.address,
-      officeLines: info.officeLines,
-      emergencyPhone: info.emergencyPhone,
-      email: info.email,
-      embassyPhotoUrl: '',
     );
   }
 }

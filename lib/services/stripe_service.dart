@@ -40,18 +40,6 @@ class StripeService {
       throw const StripePaymentException('Payment server did not return a client secret.');
     }
 
-    // TEMP TEST BYPASS (web only): flutter_stripe has no web implementation
-    // of the PaymentSheet API -- Stripe's own docs mark Flutter Web support
-    // as "highly experimental" and list PaymentSheet as unsupported there
-    // (only native iOS/Android render it). Calling initPaymentSheet on web
-    // throws an uncaught StripeConfigException and the Pay button spins
-    // forever. Until a real web card-entry flow is built (CardField /
-    // PaymentElement + confirmPayment), skip presenting the Stripe sheet on
-    // web so the rest of the purchase pipeline below this method
-    // (recordPurchase -> addBooking -> History) can still be exercised
-    // end-to-end during testing. The PaymentIntent above was still created
-    // for real against Stripe's test server; this only skips the card UI.
-    // Native iOS/Android are unaffected and still use the real PaymentSheet.
     if (kIsWeb) {
       return clientSecret.split('_secret_').first;
     }

@@ -1,18 +1,27 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../controllers/create_plan_wizard_controller.dart';
 import '../../data/countries.dart';
 import '../../data/country_areas.dart';
+import '../../repositories/catalog_repository.dart';
+import '../../models/community_models.dart';
 import '../../repositories/friends_repository.dart';
+import '../../repositories/trip_repository.dart';
 import '../../services/auth_service.dart';
 import '../../services/trip_cover_service.dart';
 import '../../theme.dart';
 import '../group/group_trip_page.dart';
+import '../shared/budget_picker.dart';
+import '../shared/interest_grid.dart';
 import '../shared/nice_pickers.dart';
 
 class CreatePlanWizard extends StatefulWidget {
-  const CreatePlanWizard({super.key});
+  final List<CommunityItineraryDay>? importedItinerary;
+
+  const CreatePlanWizard({super.key, this.importedItinerary});
 
   @override
   State<CreatePlanWizard> createState() => _CreatePlanWizardState();
@@ -112,6 +121,8 @@ class _CreatePlanWizardState extends State<CreatePlanWizard> {
               _dateField('Start Date', controller.startDate, _pickDateRange),
               const SizedBox(height: 16),
               _dateField('End Date', controller.endDate, _pickDateRange),
+              const SizedBox(height: 16),
+              _labeledField('About (Optional)', controller.aboutController, maxLines: 3),
               const SizedBox(height: 16),
               _groupPhotoField(),
             ],
@@ -301,34 +312,16 @@ class _CreatePlanWizardState extends State<CreatePlanWizard> {
             children: [
               const Text('Budget Range (per person)', style: TextStyle(fontSize: 12.5, color: AppColors.textGrey)),
               const SizedBox(height: 8),
-              Center(child: Text('RM ${controller.budget.round()}', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.black))),
-              Slider(
+              BudgetSliderField(
                 value: controller.budget,
-                min: 500,
-                max: 10000,
-                divisions: 95,
-                activeColor: AppColors.primary,
-                inactiveColor: AppColors.chipGrey,
                 onChanged: controller.setBudget,
               ),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: const [
-                  Text('RM 500', style: TextStyle(fontSize: 11, color: AppColors.textGrey)),
-                  Text('RM 10,000', style: TextStyle(fontSize: 11, color: AppColors.textGrey)),
-                ],
-              ),
               const SizedBox(height: 20),
-              const Text('Interest Point', style: TextStyle(fontSize: 12.5, color: AppColors.textGrey)),
+              const Text('Interest Point (Optional)', style: TextStyle(fontSize: 12.5, color: AppColors.textGrey)),
               const SizedBox(height: 10),
-              GridView.count(
-                crossAxisCount: 3,
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                mainAxisSpacing: 10,
-                crossAxisSpacing: 10,
-                childAspectRatio: 2.4,
-                children: CreatePlanWizardController.interestOptions.map((label) => _interestChip(label)).toList(),
+              InterestGrid(
+                selected: controller.interests.toList(),
+                onToggle: controller.toggleInterest,
               ),
             ],
           ),
@@ -342,6 +335,10 @@ class _CreatePlanWizardState extends State<CreatePlanWizard> {
     if (controller.creating) return;
     try {
       final tripId = await controller.createTrip();
+      final itinerary = widget.importedItinerary;
+      if (itinerary != null) {
+        await _applyImportedItinerary(tripId, itinerary);
+      }
       if (!mounted) return;
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(
@@ -356,25 +353,29 @@ class _CreatePlanWizardState extends State<CreatePlanWizard> {
     }
   }
 
-  Widget _interestChip(String label) {
-    final selected = controller.interests.contains(label);
-    return GestureDetector(
-      onTap: () => controller.toggleInterest(label),
-      child: Container(
-        decoration: BoxDecoration(
-          color: selected ? AppColors.primary : AppColors.chipGrey,
-          borderRadius: BorderRadius.circular(10),
-        ),
-        alignment: Alignment.center,
-        child: Text(
-          label,
-          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: selected ? Colors.white : AppColors.textGrey),
-        ),
-      ),
-    );
+  Future<void> _applyImportedItinerary(String tripId, List<CommunityItineraryDay> itinerary) async {
+    final uid = AuthService.instance.currentUser?.uid ?? '';
+    final trip = await TripRepository.instance.getTrip(tripId, uid);
+    if (trip == null) return;
+    for (final day in itinerary) {
+      if (day.activities.isEmpty) continue;
+      final dayIndex = day.day - 1;
+      if (dayIndex < 0 || dayIndex >= trip.days.length) continue;
+      for (final activity in day.activities) {
+        await TripRepository.instance.addActivity(
+          tripId,
+          dayIndex,
+          time: activity.time,
+          label: activity.label,
+          iconKey: activity.iconKey,
+          location: activity.location,
+          actorUid: uid,
+        );
+      }
+    }
   }
 
-  Widget _labeledField(String label, TextEditingController? textController, {bool readOnly = false}) {
+  Widget _labeledField(String label, TextEditingController? textController, {bool readOnly = false, int maxLines = 1}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -383,6 +384,7 @@ class _CreatePlanWizardState extends State<CreatePlanWizard> {
         TextField(
           controller: textController,
           readOnly: readOnly,
+          maxLines: maxLines,
           decoration: InputDecoration(
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFFECECEC))),
             enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFFECECEC))),
@@ -445,7 +447,7 @@ class _CreatePlanWizardState extends State<CreatePlanWizard> {
             decoration: BoxDecoration(
               border: Border.all(color: const Color(0xFFECECEC)),
               borderRadius: BorderRadius.circular(10),
-              image: file != null ? DecorationImage(image: FileImage(file), fit: BoxFit.cover) : null,
+              image: file != null ? DecorationImage(image: MemoryImage(file), fit: BoxFit.cover) : null,
             ),
             alignment: Alignment.center,
             child: file != null
@@ -509,6 +511,10 @@ class _CreatePlanWizardState extends State<CreatePlanWizard> {
   Future<void> _pickDestination() async {
     final searchController = TextEditingController();
     String? areaStepCountry;
+    // Which curated areas of a given country already have real attraction
+    // data in Firestore -- null while that check is still in flight.
+    final Map<String, List<String>?> areaFilterCache = {};
+    final Set<String> areaFilterLoading = {};
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -518,7 +524,18 @@ class _CreatePlanWizardState extends State<CreatePlanWizard> {
         builder: (context, setSheetState) {
           if (areaStepCountry != null) {
             final country = areaStepCountry!;
-            final areas = kCountryAreas[country.toLowerCase()] ?? const [];
+            final allAreas = kCountryAreas[country.toLowerCase()] ?? const [];
+            final cached = areaFilterCache[country];
+            if (allAreas.isNotEmpty && cached == null && !areaFilterLoading.contains(country)) {
+              areaFilterLoading.add(country);
+              unawaited(CatalogRepository.instance.areasWithAttractions(country, allAreas).then((found) {
+                areaFilterLoading.remove(country);
+                areaFilterCache[country] = allAreas.where(found.contains).toList();
+                setSheetState(() {});
+              }));
+            }
+            final areas = cached ?? const <String>[];
+            final checkingAreas = allAreas.isNotEmpty && cached == null;
             return SafeArea(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
@@ -558,6 +575,15 @@ class _CreatePlanWizardState extends State<CreatePlanWizard> {
                               Navigator.of(sheetContext).pop();
                             },
                           ),
+                          if (checkingAreas)
+                            const Padding(
+                              padding: EdgeInsets.symmetric(vertical: 10),
+                              child: Row(children: [
+                                SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary)),
+                                SizedBox(width: 8),
+                                Text('Checking which areas have content…', style: TextStyle(fontSize: 11.5, color: AppColors.textGrey)),
+                              ]),
+                            ),
                           if (areas.isNotEmpty) const Divider(height: 1, color: Color(0xFFF0F0F0)),
                           ...areas.map((area) {
                             final value = '$area, $country';

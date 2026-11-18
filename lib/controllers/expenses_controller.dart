@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
+import '../data/country_gateways.dart';
 import '../repositories/trip_repository.dart';
 import '../services/auth_service.dart';
 import '../services/receipt_ocr_service.dart';
@@ -232,11 +233,6 @@ class AddExpenseController extends ChangeNotifier {
   AddExpenseController({required this.tripId, required this.trip}) {
     selectedUids = trip.memberIds.toSet();
     if (trip.destination.trim().isNotEmpty) location = trip.destination.trim();
-    // Solo trip -- nobody else to split this with or remind about it, so
-    // there's no decision to surface in the UI at all (see
-    // expense_details_form_page.dart, which hides the Split Method and
-    // Reminder rows for the same reason). selectedUids already resolves
-    // to just the one member on its own either way.
     if (trip.memberIds.length <= 1) reminder = false;
   }
 
@@ -254,7 +250,12 @@ class AddExpenseController extends ChangeNotifier {
     notifyListeners();
   }
 
-  bool splitEqually = true;
+  // No default on purpose -- a multi-member trip must explicitly pick
+  // Equally vs Itemized rather than silently inheriting "Equally"; a
+  // solo trip never shows this choice at all (see the `memberIds.length
+  // > 1` guard in expense_details_form_page.dart) so it just stays null
+  // and is treated the same as "Equally" everywhere below.
+  bool? splitEqually;
   late Set<String> selectedUids;
   final List<ReceiptItem> items = [];
 
@@ -331,23 +332,123 @@ class AddExpenseController extends ChangeNotifier {
     _scanningReceipt = true;
     notifyListeners();
     try {
-      final result = await ReceiptOcrService.instance.scan(photo);
+      // The trip's own destination tells us what currency a receipt was
+      // almost certainly paid in (a Japan trip -> JPY) -- far more
+      // reliable than trying to OCR a currency symbol off the photo
+      // itself, which the receipt may not even show clearly. Falls back
+      // to null (treated as MYR, unchanged from before this existed) for
+      // a Malaysia trip or an unrecognised destination.
+      final localCurrency = currencyForDestination(trip.destination);
+      final result = await ReceiptOcrService.instance.scan(photo, localCurrency: localCurrency);
+
+      // Prefill the title from the store name -- only when the traveller
+      // hasn't already typed one, so a re-scan never clobbers their own
+      // edit. This is a best-effort OCR guess (ReceiptOcrService.storeName
+      // docs its limits), so it's left fully editable either way.
+      if (result.storeName != null && titleController.text.trim().isEmpty) {
+        titleController.text = result.storeName!;
+      }
+      // Transparency for a converted receipt: the amount recorded (and
+      // used in every budget/split calculation) is always MYR, but the
+      // traveller paid in local cash -- show what that actually was so
+      // the converted figure doesn't look like it came from nowhere.
+      if (result.originalCurrency != null && result.originalTotal != null && noteController.text.trim().isEmpty) {
+        noteController.text = 'Paid ${result.originalTotal!.toStringAsFixed(0)} ${result.originalCurrency} '
+            '(converted to RM ${(result.total ?? 0).toStringAsFixed(2)})';
+      }
+      // Only while category is still at its untouched default -- never
+      // overrides a category the traveller already picked themselves.
+      if (category == 'Food & Drinks' && result.guessedCategory != null) {
+        category = result.guessedCategory!;
+      }
+      final consistencyNote = result.looksConsistent
+          ? ''
+          : ' (the amounts on this scan don\'t quite add up — please double-check them)';
+      // A voucher/loyalty/coupon discount isn't something any one item or
+      // person "owns" either, same as tax -- it's split equally across
+      // every trip member rather than pro-rated per item, so it's called
+      // out here once rather than silently folded into a smaller total.
+      final discountNote = (result.discount ?? 0) > 0.01
+          ? ' (RM ${result.discount!.toStringAsFixed(2)} voucher/loyalty discount applied, split equally)'
+          : '';
+
       if (result.items.isNotEmpty) {
+        if (trip.memberIds.length <= 1) {
+          // Solo trip: there's no one to itemize a split between, and the
+          // whole "Split Equally / Itemized" row (plus the only way to
+          // reach the per-item assignee picker) is hidden for a 1-member
+          // trip -- see expense_details_form_page.dart's `memberIds.length
+          // > 1` guard. Switching into itemized mode here would leave every
+          // item's assigneeUids permanently empty with no UI left to fix
+          // it, which is exactly the "every item needs someone to pay for
+          // it" dead end this used to hit. Just total the scanned items
+          // instead and stay in (the only available) Split Equally mode.
+          final sum = (result.items.fold<double>(0, (s, i) => s + i.price) + (result.tax ?? 0) - (result.discount ?? 0))
+              .clamp(0.0, double.infinity);
+          amountController.text = sum.toStringAsFixed(2);
+          return 'Found ${result.items.length} item${result.items.length == 1 ? '' : 's'} on your receipt, '
+              'totalling RM ${sum.toStringAsFixed(2)}$consistencyNote$discountNote — review it before saving.';
+        }
         items
           ..clear()
           ..addAll(result.items.map((i) => ReceiptItem(label: i.label, price: i.price)));
-        splitEqually = false;
-        return 'Found ${items.length} item${items.length == 1 ? '' : 's'} on your receipt — '
-            'review them and pick who\'s splitting each one.';
+        // Tax/GST/SST/service-charge lines are deliberately excluded from
+        // the item list above (they're not something any one item/person
+        // "owns"), but they're real money that was paid. ReceiptOcrService
+        // now tags that figure directly as `tax` when it recognised a
+        // dedicated tax/charge line; fall back to "total minus item sum"
+        // only when it didn't (e.g. a receipt that prints just one grand
+        // total with no separate tax line) so the difference isn't
+        // silently lost either way. The discount (if any) is added back
+        // on here first, since `result.total` is already net of it --
+        // without that, a discounted receipt with no separate tax line
+        // would make this fallback read as a smaller (or even negative)
+        // "tax" than was really charged.
+        final itemSum = result.items.fold<double>(0, (s, i) => s + i.price);
+        final extra = result.tax ?? ((result.total != null ? result.total! - itemSum : 0.0) + (result.discount ?? 0));
+        if (extra > 0.01) {
+          items.add(ReceiptItem(label: 'Tax & Service Charge', price: extra, assigneeUids: trip.memberIds.toSet()));
+        }
+        // Voucher/loyalty discount, split equally across every member --
+        // see discountNote above. Stored as a negative-price item so the
+        // itemized total (items.fold) nets out to what was actually paid,
+        // same mechanism tax above uses, just subtracting instead of
+        // adding.
+        if ((result.discount ?? 0) > 0.01) {
+          items.add(ReceiptItem(label: 'Voucher/Loyalty Discount', price: -result.discount!, assigneeUids: trip.memberIds.toSet()));
+        }
+        // Deliberately NOT setting splitEqually here. Every split choice on
+        // this form is meant to be an explicit tap, never a silent default
+        // (see the field's own doc comment above, and
+        // expense_details_form_page.dart's `splitEqually == null` ->
+        // "Choose a split method" submit guard) -- a scan shouldn't be the
+        // one path that quietly skips that. The items list is already
+        // populated, so picking "Itemized" afterwards shows them exactly
+        // as scanned; nothing is lost by waiting for that tap.
+        return 'Found ${items.length} item${items.length == 1 ? '' : 's'} on your receipt$consistencyNote$discountNote — '
+            'choose a split method to review them.';
       }
       if (result.total != null) {
         amountController.text = result.total!.toStringAsFixed(2);
-        return 'Found a total of RM ${result.total!.toStringAsFixed(2)} — review it and choose who to split with.';
+        return 'Found a total of RM ${result.total!.toStringAsFixed(2)}$consistencyNote — review it and choose who to split with.';
+      }
+      if (result.error == 'not a receipt') {
+        // Distinct from the generic failure below -- this fires when the
+        // photo plainly has no price/total/tax text anywhere on it at
+        // all, i.e. it's very likely not a receipt in the first place
+        // (a selfie, a landscape, a random document), so the traveller
+        // should be told that plainly instead of being left thinking the
+        // scanner just glitched on a real receipt.
+        return "That doesn't look like a receipt image. Please upload a photo of the actual receipt, or enter the details manually.";
       }
       if (result.error != null) {
-        return "Couldn't scan this receipt (${result.error}) — please enter the details manually.";
+        // The photo does look money-shaped (it has price text, a total,
+        // etc.) but couldn't be read cleanly -- most often blur, glare, or
+        // a bad angle. Unlike the "not a receipt" message above, the fix
+        // here is a better photo, not manual entry, so say that first.
+        return "This photo is too blurry to read clearly. Please retake or upload a clearer photo of the receipt, or enter the details manually.";
       }
-      return "Couldn't read this receipt automatically — please enter the details manually.";
+      return "This photo is too blurry to read clearly. Please retake or upload a clearer photo of the receipt, or enter the details manually.";
     } finally {
       _scanningReceipt = false;
       notifyListeners();
@@ -355,12 +456,12 @@ class AddExpenseController extends ChangeNotifier {
   }
 
   double get amount {
-    if (splitEqually) return double.tryParse(amountController.text.trim()) ?? 0;
-    return items.fold(0.0, (s, i) => s + i.price);
+    if (splitEqually == false) return items.fold(0.0, (s, i) => s + i.price);
+    return double.tryParse(amountController.text.trim()) ?? 0;
   }
 
   Map<String, double> _computeShares() {
-    if (!splitEqually) {
+    if (splitEqually == false) {
       if (items.isEmpty || items.any((i) => i.assigneeUids.isEmpty)) return {};
       return splitExpenseItemized([for (final i in items) (price: i.price, assigneeUids: i.assigneeUids)]);
     }
@@ -376,7 +477,11 @@ class AddExpenseController extends ChangeNotifier {
     final amt = amount;
     final shares = _computeShares();
     if (amt <= 0 || amt > 1000000 || shares.isEmpty) return false;
-    if (!splitEqually && items.any((i) => i.assigneeUids.isEmpty)) return false;
+    // A solo trip never shows the split-method choice at all, so it has
+    // nothing to pick -- only a multi-member trip must explicitly choose
+    // before this can submit.
+    if (splitEqually == null && trip.memberIds.length > 1) return false;
+    if (splitEqually == false && items.any((i) => i.assigneeUids.isEmpty)) return false;
     _submitting = true;
     notifyListeners();
     try {
@@ -406,9 +511,9 @@ class AddExpenseController extends ChangeNotifier {
         paidByName: myName,
         participants: participants,
         receiptImageUrl: receiptImageUrl,
-        items: splitEqually
-            ? const []
-            : items.map((i) => ExpenseLineItem(label: i.label, price: i.price, assigneeUids: i.assigneeUids.toList())).toList(),
+        items: splitEqually == false
+            ? items.map((i) => ExpenseLineItem(label: i.label, price: i.price, assigneeUids: i.assigneeUids.toList())).toList()
+            : const [],
         sendReminder: reminder,
       );
       return true;

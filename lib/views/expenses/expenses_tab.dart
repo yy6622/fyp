@@ -105,10 +105,6 @@ class _ExpensesTabState extends State<ExpensesTab> {
   }
 
   Widget _generateReportButton(BuildContext context) {
-    // Solo trip -- there's no "everyone's bills" vs "just my share"
-    // distinction to ask about (they're the only member, so a Group
-    // Report and a Personal Report would be identical), so this skips
-    // straight to the PDF instead of showing that choice.
     final soloTrip = (controller.trip?.memberIds.length ?? 2) <= 1;
     return TextButton.icon(
       onPressed: controller.loading

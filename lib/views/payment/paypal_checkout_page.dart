@@ -3,18 +3,6 @@ import 'package:webview_flutter/webview_flutter.dart';
 
 import '../../theme.dart';
 
-/// Opens PayPal's (sandbox) approval page for one order inside the app.
-/// PayPal's web checkout flow always needs a return_url/cancel_url to send
-/// the browser back to once the payer approves or cancels; since a WebView
-/// can't host a real HTTPS endpoint, the Cloud Function (functions/paypal.js)
-/// uses the custom scheme voyaapp://paypal-return / voyaapp://paypal-cancel
-/// instead, and this page's NavigationDelegate intercepts them before the
-/// WebView ever actually tries (and fails) to load an unknown scheme.
-///
-/// Pops `true` if the traveller approved (PayPal bounced to the return
-/// scheme), `false` on cancel or on closing the sheet manually -- the caller
-/// (PayPalService.payWithPayPal) still has to call captureOrder itself:
-/// approval alone does not move any money.
 class PayPalCheckoutPage extends StatefulWidget {
   final String approveUrl;
   const PayPalCheckoutPage({super.key, required this.approveUrl});
@@ -69,6 +57,7 @@ class _PayPalCheckoutPageState extends State<PayPalCheckoutPage> {
         appBar: AppBar(
           backgroundColor: Colors.white,
           elevation: 0,
+          centerTitle: true,
           iconTheme: const IconThemeData(color: AppColors.navy),
           title: const Text(
             'PayPal',

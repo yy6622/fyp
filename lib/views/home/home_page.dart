@@ -178,21 +178,38 @@ class HomePage extends StatelessWidget {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.white,
+      // The sheet's content used to be a plain, non-scrolling Column --
+      // fine for 1-2 upcoming trips, but a traveller with several upcoming
+      // trips overflowed the bottom of the sheet (RenderFlex overflow).
+      // isScrollControlled + a max-height box + a scrollable list fixes
+      // that while keeping the short-list look unchanged.
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (sheetContext) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('Your Upcoming Trips', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.navy)),
-              const SizedBox(height: 4),
-              const Text("Pick one to open — the home card will remember your choice next time.", style: TextStyle(fontSize: 12, color: AppColors.textGrey)),
-              const SizedBox(height: 14),
-              ...upcoming.map((t) => _tripSwitcherRow(sheetContext, uid, t, selected: t.id == currentTripId)),
-              const SizedBox(height: 8),
-            ],
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: MediaQuery.of(sheetContext).size.height * 0.7),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Your Upcoming Trips', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.navy)),
+                const SizedBox(height: 4),
+                const Text("Pick one to open — the home card will remember your choice next time.", style: TextStyle(fontSize: 12, color: AppColors.textGrey)),
+                const SizedBox(height: 14),
+                Flexible(
+                  child: SingleChildScrollView(
+                    child: Column(
+                      children: [
+                        for (final t in upcoming) _tripSwitcherRow(sheetContext, uid, t, selected: t.id == currentTripId),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+              ],
+            ),
           ),
         ),
       ),
@@ -283,11 +300,6 @@ class HomePage extends StatelessWidget {
     final daysToGo = start == null ? null : start.difference(today).inDays;
     final ongoing = daysToGo != null && daysToGo <= 0;
     return GestureDetector(
-      // One upcoming trip: tapping the card opens it directly, same as
-      // before. More than one: tapping opens the switcher sheet so there
-      // is something to choose between — each row there both pins and
-      // opens the chosen trip (see _tripSwitcherRow), so entering a trip
-      // never needs more than this one tap either way.
       onTap: () => upcoming.length > 1
           ? _showTripSwitcherSheet(context, uid, upcoming, trip.id)
           : Navigator.of(context).push(MaterialPageRoute(builder: (_) => GroupTripPage(tripId: trip.id))),
@@ -395,11 +407,6 @@ class HomePage extends StatelessWidget {
     return Container(height: 23, width: 1, color: const Color(0xFFE0E0E0));
   }
 
-  // ---------------- AI banner ----------------
-  // Community Post, Insurance Messages and Report new attraction spot used
-  // to live on the Profile page, which felt like an odd place for them --
-  // moved here, replacing the old "Let AI Plan" banner (Create Plan is
-  // already reachable from the Next Adventure card and the Plan tab).
   Widget _buildQuickLinksRow(BuildContext context) {
     final uid = AuthService.instance.currentUser?.uid ?? '';
     return Padding(
@@ -458,10 +465,6 @@ class HomePage extends StatelessWidget {
     required VoidCallback onTap,
     bool badge = false,
   }) {
-    // Shrunk from the original (34px icon circle, 12px vertical padding) --
-    // the row read as three oversized tiles competing with the trip card
-    // above them. Smaller icon + tighter padding reads as a row of compact
-    // quick links instead.
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -495,10 +498,6 @@ class HomePage extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 5),
-            // Fixed 2-line height regardless of how many lines this
-            // particular label actually wraps to ('My Post' is one line,
-            // 'Report New Attraction' is two) -- otherwise the three cards
-            // in the row end up visibly different heights.
             SizedBox(
               height: 24,
               child: Center(
@@ -695,13 +694,6 @@ class HomePage extends StatelessWidget {
     );
   }
 
-  // Shows insurers, not individual plans -- matches
-  // insurance_partner_list_page.dart's deliberate partner-first design (its
-  // own doc comment: "no 'browse all plans' shortcut... a plan is only ever
-  // shown once a partner has been chosen"). This tile used to stream
-  // InsuranceRepository.watchPlans() straight onto the homepage, which
-  // skipped that flow entirely; now it mirrors the "View All" header right
-  // above, which already pointed at InsurancePartnerListPage.
   Widget _buildInsuranceList() {
     return SizedBox(
       height: 110,
@@ -758,13 +750,6 @@ class _InsurancePartnerTile extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: AppColors.navy),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              partner.activePlanCount == 1 ? '1 plan available' : '${partner.activePlanCount} plans available',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 10.5, color: AppColors.textGrey),
             ),
           ],
         ),

@@ -6,11 +6,6 @@ import 'insurance_chat_page.dart';
 import 'insurance_partner_list_page.dart' show partnerLogo;
 import 'insurance_quote_page.dart';
 
-/// Shows one insurer's profile — real registration/contact details from
-/// their own `insurance_partners` doc, nothing invented — with two ways
-/// forward: message them directly, or move on to a quote. This is the
-/// "communicate" step the partner-first flow asked for: a traveller can
-/// talk to the actual insurer before ever committing to a plan.
 class InsurancePartnerDetailPage extends StatelessWidget {
   final InsurancePartner partner;
   final String? tripId;
@@ -45,11 +40,6 @@ class InsurancePartnerDetailPage extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(partner.companyName, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: AppColors.navy)),
-                          const SizedBox(height: 4),
-                          Text(
-                            partner.activePlanCount == 1 ? '1 plan available' : '${partner.activePlanCount} plans available',
-                            style: const TextStyle(fontSize: 12, color: AppColors.textGrey),
-                          ),
                         ],
                       ),
                     ),

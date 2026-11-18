@@ -92,10 +92,6 @@ class _OnboardingWizardPageState extends State<OnboardingWizardPage> {
               ],
             ),
           ),
-          // Phone, country and currency (steps 1-3) are required now, so
-          // there's no "skip the rest of this" escape hatch while one of
-          // them is on screen -- only the avatar step and the optional
-          // add-friend step at the end can be skipped this way.
           if (controller.step == 0 || controller.step == 4)
             TextButton(
               onPressed: _finish,

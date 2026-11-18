@@ -1,19 +1,3 @@
-// Email verification codes (FR04): one system for three jobs.
-//
-//  - signup:  a 6-digit code proves the traveller owns the email address.
-//  - login:   on a device that is not trusted (new phone, or 30 days since the
-//             last code) a code is needed before the app opens. A correct code
-//             trusts that device for 30 days.
-//  - step-up: change password, change email and delete account ask for a
-//             fresh code. A correct code allows that one action for 10
-//             minutes. (Payment deliberately does NOT use this -- FR04 is
-//             login-only 2FA; see the Nov 2026 session doc for why an
-//             earlier version of this app wrongly gated every payment
-//             behind a code too.)
-//
-// Codes are created and checked only here, on the server. Firestore keeps a
-// SHA-256 hash of the code, never the code itself, and the security rules stop
-// the app from reading or writing these documents.
 const crypto = require("crypto");
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { initializeApp, getApps } = require("firebase-admin/app");
@@ -94,10 +78,6 @@ function makeHandlers({ db, auth, sendMail, now = () => Date.now() }) {
       await ref.delete();
       throw new HttpsError("resource-exhausted", "Too many wrong codes. Tap Resend code for a new one.");
     }
-    // saved.hash should always be a 64-char hex string written by send()
-    // above, but "|| \"\"" keeps Buffer.from from throwing outright if a
-    // record is ever malformed -- that just reads as a wrong code instead
-    // of crashing the whole call as an opaque "internal" error.
     const given = Buffer.from(hashCode(uid, purpose, code));
     const expected = Buffer.from(saved.hash || "");
     if (given.length !== expected.length || !crypto.timingSafeEqual(given, expected)) {
@@ -109,17 +89,17 @@ function makeHandlers({ db, auth, sendMail, now = () => Date.now() }) {
       throw new HttpsError("permission-denied", left > 0 ? `Wrong code. ${left} attempt(s) left.` : "Wrong code. Tap Resend code for a new one.");
     }
 
-    // The code itself was right. Everything below is bookkeeping, not
-    // verification -- if any of it throws, the code record is deliberately
-    // kept (not deleted) so a retry of this same, still-correct code
-    // succeeds once the underlying hiccup clears, instead of leaving the
-    // traveller stuck needing a brand new code for a problem resending
-    // can't fix.
     const device = cleanDeviceId(deviceId);
     try {
       if (purpose === "signup") {
         await auth.updateUser(uid, { emailVerified: true });
-        await db.collection("users").doc(uid).set({ emailVerified: true }, { merge: true });
+        const partnerRef = db.collection("insurance_partners").doc(uid);
+        const partnerDoc = await partnerRef.get();
+        if (partnerDoc.exists) {
+          await partnerRef.set({ emailVerified: true }, { merge: true });
+        } else {
+          await db.collection("users").doc(uid).set({ emailVerified: true }, { merge: true });
+        }
       }
       if ((purpose === "signup" || purpose === "login") && device) {
         await db.collection("users").doc(uid).collection("trusted_devices").doc(device).set({

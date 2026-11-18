@@ -98,12 +98,29 @@ class AiItineraryFixed {
   const AiItineraryFixed({required this.day, required this.time, required this.label, required this.kind});
 }
 
+class AiItineraryTiedVoteOption {
+  final String id;
+  final String label;
+  final int votes;
+  const AiItineraryTiedVoteOption({required this.id, required this.label, required this.votes});
+}
+
+/// A poll with a genuine tie -- shown so the group can break it right here
+/// in the sheet instead of having to go find the poll in the Vote tab.
+class AiItineraryTiedVote {
+  final String voteId;
+  final String title;
+  final List<AiItineraryTiedVoteOption> options;
+  const AiItineraryTiedVote({required this.voteId, required this.title, required this.options});
+}
+
 class AiItineraryResult {
   final List<AiItineraryAdd> add;
   final List<AiItineraryUpdate> update;
   final List<AiItineraryRemove> remove;
 
   final List<String> unresolved;
+  final List<AiItineraryTiedVote> tiedVotes;
   final List<AiItineraryIdea> ideas;
 
   final List<AiItineraryFixed> fixed;
@@ -117,6 +134,7 @@ class AiItineraryResult {
     required this.update,
     required this.remove,
     required this.unresolved,
+    this.tiedVotes = const [],
     this.ideas = const [],
     this.fixed = const [],
     this.flightsBooked = false,
@@ -125,7 +143,7 @@ class AiItineraryResult {
     required this.savedCount,
   });
 
-  bool get isEmpty => add.isEmpty && update.isEmpty && remove.isEmpty && unresolved.isEmpty && ideas.isEmpty;
+  bool get isEmpty => add.isEmpty && update.isEmpty && remove.isEmpty && unresolved.isEmpty && tiedVotes.isEmpty && ideas.isEmpty;
 }
 
 class ItineraryAiException implements Exception {
@@ -245,6 +263,7 @@ class ItineraryAiService extends ChangeNotifier {
               toDayIndex: number(m, 'toDayIndex'),
               oldTime: str(m, 'oldTime'),
               newTime: str(m, 'newTime'),
+              reason: str(m, 'reason'),
             ),
       ],
       remove: [
@@ -259,6 +278,23 @@ class ItineraryAiService extends ChangeNotifier {
             ),
       ],
       unresolved: [for (final u in (data['unresolved'] as List? ?? const [])) u.toString()],
+      tiedVotes: [
+        for (final m in rows('tiedVotes'))
+          if (str(m, 'voteId').isNotEmpty)
+            AiItineraryTiedVote(
+              voteId: str(m, 'voteId'),
+              title: str(m, 'title'),
+              options: [
+                for (final raw in (m['options'] as List? ?? const []))
+                  if (raw is Map)
+                    AiItineraryTiedVoteOption(
+                      id: (raw['id'] as String?) ?? '',
+                      label: (raw['label'] as String?) ?? '',
+                      votes: (raw['votes'] as num?)?.toInt() ?? 0,
+                    ),
+              ],
+            ),
+      ],
       ideas: [
         for (final m in rows('ideas'))
           if (str(m, 'label').isNotEmpty) AiItineraryIdea(label: str(m, 'label'), hint: str(m, 'hint'), saved: str(m, 'saved')),

@@ -9,6 +9,7 @@ import '../../repositories/trip_repository.dart';
 import '../../services/auth_service.dart';
 import '../../theme.dart';
 import '../detail/detail_widgets.dart';
+import '../create_plan/create_plan_wizard.dart';
 import '../shared/nice_dialog.dart';
 import 'author_profile_page.dart';
 import 'community_page.dart';
@@ -83,7 +84,7 @@ class _CommunityPostDetailPageState extends State<CommunityPostDetailPage> {
           style: TextStyle(fontSize: 12, color: AppColors.textGrey),
         ),
         const SizedBox(height: 14),
-        niceDialogField(reasonCtrl, 'Reason', autofocus: true),
+        niceDialogField(reasonCtrl, 'Reason', autofocus: true, required: true),
       ],
     );
     if (result != true) return;
@@ -434,14 +435,25 @@ class _CommunityPostDetailPageState extends State<CommunityPostDetailPage> {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Sign in to add this to your own plan.')));
       return;
     }
-    final trips = await TripRepository.instance.watchMyTrips(myUid).first;
+    final allTrips = await TripRepository.instance.watchMyTrips(myUid).first;
+    // Past plans only live on the Plan tab -- don't offer them as an
+    // import target either.
+    final trips = allTrips.where((t) => !t.isInactive).toList();
     if (!mounted) return;
     if (trips.isEmpty) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('You don\'t have a trip to add this to yet — create one first.')));
+      // Nothing to add it to yet -- rather than dead-ending on "create one
+      // first" and leaving the user to find their own way there, open the
+      // normal create-plan flow directly with this itinerary pre-filled.
+      Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => CreatePlanWizard(importedItinerary: post.itinerary)),
+      );
       return;
     }
-    final selected = await showModalBottomSheet<Trip>(
+    // Object? (not Trip?) because the sheet can also resolve to the
+    // literal string below when "Create New Plan" is tapped -- a Trip
+    // from the list and "start a new one instead" share one sheet.
+    const createNew = '__create_new_plan__';
+    final selected = await showModalBottomSheet<Object>(
       context: context,
       backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(18))),
@@ -457,6 +469,13 @@ class _CommunityPostDetailPageState extends State<CommunityPostDetailPage> {
                 padding: EdgeInsets.fromLTRB(20, 18, 20, 6),
                 child: Text('Add to which trip?', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.navy)),
               ),
+              ListTile(
+                leading: const Icon(Icons.add_circle_outline, color: AppColors.primary),
+                title: const Text('Create New Plan', style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: AppColors.primary)),
+                subtitle: const Text('Starts a new trip with this itinerary already in it.', style: TextStyle(fontSize: 11.5, color: AppColors.textGrey)),
+                onTap: () => Navigator.of(sheetCtx).pop(createNew),
+              ),
+              const Divider(height: 1),
               Flexible(
                 child: ListView(
                   shrinkWrap: true,
@@ -475,19 +494,26 @@ class _CommunityPostDetailPageState extends State<CommunityPostDetailPage> {
       ),
     );
     if (selected == null || !mounted) return;
+    if (selected == createNew) {
+      Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => CreatePlanWizard(importedItinerary: post.itinerary)),
+      );
+      return;
+    }
+    final selectedTrip = selected as Trip;
 
     var added = 0;
     var skippedDays = 0;
     for (final day in post.itinerary) {
       if (day.activities.isEmpty) continue;
       final dayIndex = day.day - 1;
-      if (dayIndex < 0 || dayIndex >= selected.days.length) {
+      if (dayIndex < 0 || dayIndex >= selectedTrip.days.length) {
         skippedDays++;
         continue;
       }
       for (final activity in day.activities) {
         await TripRepository.instance.addActivity(
-          selected.id,
+          selectedTrip.id,
           dayIndex,
           time: activity.time,
           label: activity.label,
@@ -500,8 +526,8 @@ class _CommunityPostDetailPageState extends State<CommunityPostDetailPage> {
     }
     if (!mounted) return;
     final message = skippedDays > 0
-        ? 'Added $added ${added == 1 ? "activity" : "activities"} to "${selected.name}" ($skippedDays day${skippedDays == 1 ? "" : "s"} skipped — that trip is shorter than this itinerary).'
-        : 'Added $added ${added == 1 ? "activity" : "activities"} to "${selected.name}".';
+        ? 'Added $added ${added == 1 ? "activity" : "activities"} to "${selectedTrip.name}" ($skippedDays day${skippedDays == 1 ? "" : "s"} skipped — that trip is shorter than this itinerary).'
+        : 'Added $added ${added == 1 ? "activity" : "activities"} to "${selectedTrip.name}".';
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 
@@ -590,6 +616,7 @@ class _CommunityPostDetailPageState extends State<CommunityPostDetailPage> {
       title: post.title,
       ratingSummary: '${post.avgRating.toStringAsFixed(1)} (${_compactCount(post.ratingCount)})',
       reviewsStream: CommunityRepository.instance.watchReviews(post.id, myUid: _myUid).map((list) => list.map(reviewDataFromPlace).toList()),
+      myUid: _myUid,
       onSubmitReview: ({required authorId, required authorName, required rating, required comment}) => CommunityRepository.instance.addReview(
         post.id,
         authorId: authorId,

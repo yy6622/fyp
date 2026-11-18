@@ -57,7 +57,6 @@ class _MainPageState extends State<MainPage> {
     final uid = AuthService.instance.currentUser?.uid;
     if (uid != null) {
       _profileSub = UserRepository.instance.watchProfile(uid).listen((user) {
-        CurrencyService.instance.lastKnownUserCurrency = user?.currencyCode;
         _wantsTracking = user?.shareLocation ?? false;
         if (_wantsTracking && !_tracking) {
           _startTracking(uid);

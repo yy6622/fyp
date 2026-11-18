@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 
 import '../models/insurance_models.dart';
 import '../repositories/insurance_repository.dart';
-import '../services/currency_service.dart';
 import 'booking_details_controller.dart' show isValidEmailFormat, isValidPhoneFormat, isValidPassportFormat, isValidICFormat;
 
 /// Controller for [InsurancePartnerListPage] — the entry point of the
@@ -37,11 +36,6 @@ class InsurancePartnerListController extends ChangeNotifier {
   }
 }
 
-/// Controller for [InsuranceQuotePage] — Step 1 of the purchase flow
-/// (collect destination/dates/traveller count and compute a quote),
-/// mirroring how a real insurer's "Get a Quote" page works before any plan
-/// is shown. Reuses [TravellerDetailsController]'s traveller-count clamp
-/// values so quote and checkout never disagree on min/max travellers.
 class InsuranceQuoteController extends ChangeNotifier {
   String destination;
   DateTime? travelStart;
@@ -103,10 +97,6 @@ class InsuranceListController extends ChangeNotifier {
     });
   }
 
-  // No category filter here (there's no filter-chip UI for it) -- this is
-  // just every published plan InsuranceRepository.watchPlans() streamed
-  // down. Kept as `filtered` rather than renamed to `plans` so
-  // InsurancePlanComparePage, its one caller, didn't need touching too.
   List<InsurancePlan> get filtered => _plans;
 
   @override
@@ -201,12 +191,6 @@ class TravellerDetailsController extends ChangeNotifier {
     travellers[index].phone = value;
   }
 
-  /// [plan] is passed in (rather than held on the controller) so a plan
-  /// that restricts [InsurancePlan.eligibleCountries] can't be bought for a
-  /// traveller it doesn't cover — the nationality picker already only
-  /// offers eligible nationalities when the plan restricts them (see
-  /// TravellerDetailsPage._pickNationality), but this is checked again
-  /// here as the real gate before payment, in case that ever disagrees.
   String? validate(InsurancePlan plan) {
     if (travelStart == null || travelEnd == null) return 'Please select your travel dates.';
     if (travelEnd!.isBefore(travelStart!)) return 'Travel end date must be on or after the start date.';
@@ -260,18 +244,11 @@ class PaymentMethodController extends ChangeNotifier {
   final int travellerCount;
   final DateTime travelStart;
   final DateTime travelEnd;
-  // The plan's own price is always set by its partner in MYR (see
-  // InsurancePlan.priceAmountMyr) -- this is what turns every amount below
-  // into whatever the traveller actually prefers, same as the hotel/flight
-  // checkout already does. Null (the default before CurrencyService has
-  // ever resolved one) just means "MYR", same as leaving it off there.
-  final String? userCurrency;
   PaymentMethodController({
     required this.plan,
     required this.travellerCount,
     required this.travelStart,
     required this.travelEnd,
-    this.userCurrency,
   });
 
   static const methods = [
@@ -285,29 +262,19 @@ class PaymentMethodController extends ChangeNotifier {
   String _method = 'Credit / Debit Card';
   String get method => _method;
 
-  double get unitPrice => CurrencyService.instance.convertOrSame(plan.priceAmountMyr, from: 'MYR', to: userCurrency);
+  // Always plain MYR -- no profile-currency conversion for insurance
+  // premiums (removed per product decision).
+  double get unitPrice => plan.priceAmountMyr;
 
-  /// Number of days the plan is priced for. Single Trip / Family plans
-  /// charge per day of the actual trip (inclusive of both ends, minimum 1
-  /// day); Annual plans are a flat yearly price, so this is always 1.
-  /// Shared with the quote/compare screens via [insuranceCoverageDays] so
-  /// the price shown before checkout always matches what's charged here.
   int get coverageDays => insuranceCoverageDays(plan.category, travelStart, travelEnd).toInt();
 
   double get subtotal => unitPrice * travellerCount * coverageDays;
 
-  /// Flat default service fee added on top of the subtotal, in MYR --
-  /// [serviceFee] stays the fixed MYR amount every plan is actually quoted
-  /// against; [serviceFeeConverted] is what's actually added to [total]
-  /// and shown, converted the same as everything else here.
   static const double serviceFee = 2.0;
-  double get serviceFeeConverted => CurrencyService.instance.convertOrSame(serviceFee, from: 'MYR', to: userCurrency);
-  double get total => subtotal + serviceFeeConverted;
+  double get total => subtotal + serviceFee;
 
-  /// The 3-letter code to actually charge Stripe/PayPal in -- defaults to
-  /// MYR (what every plan is quoted in) when the traveller has no
-  /// resolved currency preference yet.
-  String get chargeCurrencyCode => (userCurrency == null || userCurrency!.isEmpty) ? 'MYR' : userCurrency!;
+  /// Every plan is quoted and charged in MYR.
+  String get chargeCurrencyCode => 'MYR';
 
   void setMethod(String value) {
     _method = value;

@@ -22,6 +22,7 @@ class BookingEntry {
   final DateTime? purchasedAt;
   final String partnerId;
   final String providerName;
+  final String externalOrderId;
   final DateTime? travelStart;
   final DateTime? travelEnd;
   const BookingEntry({
@@ -46,6 +47,7 @@ class BookingEntry {
     this.purchasedAt,
     this.partnerId = '',
     this.providerName = '',
+    this.externalOrderId = '',
     this.travelStart,
     this.travelEnd,
   });
@@ -82,6 +84,7 @@ class BookingRepository {
               purchasedAt: (d.data()['createdAt'] as Timestamp?)?.toDate(),
               partnerId: (d.data()['partnerId'] as String?) ?? '',
               providerName: (d.data()['providerName'] as String?) ?? '',
+              externalOrderId: (d.data()['externalOrderId'] as String?) ?? '',
               travelStart: (d.data()['travelStart'] as Timestamp?)?.toDate(),
               travelEnd: (d.data()['travelEnd'] as Timestamp?)?.toDate(),
             ))
@@ -114,6 +117,7 @@ class BookingRepository {
     String transactionId = '',
     String partnerId = '',
     String providerName = '',
+    String externalOrderId = '',
     DateTime? travelStart,
     DateTime? travelEnd,
   }) async {
@@ -136,6 +140,7 @@ class BookingRepository {
       if (transactionId.isNotEmpty) 'transactionId': transactionId,
       if (partnerId.isNotEmpty) 'partnerId': partnerId,
       if (providerName.isNotEmpty) 'providerName': providerName,
+      if (externalOrderId.isNotEmpty) 'externalOrderId': externalOrderId,
       if (travelStart != null) 'travelStart': Timestamp.fromDate(travelStart),
       if (travelEnd != null) 'travelEnd': Timestamp.fromDate(travelEnd),
       'createdAt': FieldValue.serverTimestamp(),

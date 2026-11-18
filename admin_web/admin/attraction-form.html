@@ -123,47 +123,29 @@
 </div>
 
 <script type="module">
-import { requireRole } from "../js/auth-guard.js?v=20261106b";
+import { requireRole } from "../js/auth-guard.js?v=20261115a";
 import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261114a";
 import { mountIcons } from "../js/icons.js?v=20261106c";
 import {
   getAttraction, newAttractionRef, createAttraction, updateAttraction,
   uploadAttractionImage, deleteAttractionImage, markPlaceSuggestionAdded,
   getTagPresets, addTagPreset, listAttractions,
-} from "../js/data.js?v=20261114c";
-import { escapeHtml, toast, setBusy, isValidImageFile, confirmDialog } from "../js/ui.js?v=20261113a";
+} from "../js/data.js?v=20261117a";
+import { escapeHtml, toast, setBusy, isValidImageFile, confirmDialog } from "../js/ui.js?v=20261115a";
 import { findAndFillFromOsm, hasApiKey } from "../js/places-import.js?v=20261106f";
 
 mountSidebarNav({ role: "admin", active: "attractions" });
 const session = await requireRole("admin", "login.html");
 const editingId = new URLSearchParams(location.search).get("id");
-// Set when this page was opened from Content Moderation's Place
-// Suggestions tab ("Add as Attraction") — see applySuggestionPrefill()
-// below and the save handler's markPlaceSuggestionAdded() call, which is
-// what actually closes out the suggestion once this new attraction is
-// saved (not before — backing out of this form leaves it pending).
 let suggestionId = null;
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 let categoriesTag, facilitiesTag, highlightsTag;
 let osmSourcePlaceId = null;
 let osmSource = null;
-// Hoisted up from right before wireImagePicker()'s definition — populateForm()
-// (called from the bootstrap block below) calls resetImages(), which touches
-// these immediately, and `let` bindings aren't initialized until their own
-// declaration line runs. Declaring them textually later threw "Cannot access
-// 'imageItems' before initialization" on every single page load (add AND
-// edit), which aborted the rest of this module's top-level execution —
-// including the saveBtn click listener near the bottom of the file, so
-// "Save attraction" silently had no handler at all.
 let imageItems = []; // { id, kind: 'existing'|'new', url?, file?, previewUrl? }
 let coverId = null;
 let nextImageId = 1;
 let removedExistingUrls = [];
-// Hoisted for the same reason as imageItems/coverId above: populateForm()
-// (called from the bootstrap block right below) builds the category/
-// facility pickers immediately, which needs these preset lists already
-// initialized — declaring them later (textually, next to mountPresetPicker)
-// threw the exact same "Cannot access before initialization" TDZ error.
 const CATEGORY_TAG_PRESETS = [
   "Historic Site", "Temple", "Shrine", "Museum", "Art & Culture", "Viewpoint",
   "Garden", "Park", "Nature Reserve", "Zoo", "Aquarium", "Theme Park",
@@ -234,11 +216,6 @@ function mountTagInput(boxId, initialTags = []) {
   return { getTags: () => tags, setTags: (next) => { tags = [...next]; render(); } };
 }
 
-// Fills Name/Location/a cover photo from a traveller's "Report New
-// Attraction" submission (see Content Moderation's Place Suggestions
-// tab) — only the fields that submission actually has. Everything else
-// (category, facilities, hours, fees…) is left for the admin to fill in
-// normally, same as a blank new attraction.
 function applySuggestionPrefill() {
   const params = new URLSearchParams(location.search);
   if (params.get("fromSuggestion") !== "1") return;
@@ -261,19 +238,6 @@ function applySuggestionPrefill() {
   document.getElementById("suggestionBanner").style.display = "block";
 }
 
-// Preset chip-picker (click to toggle) — for categories/facilities, where
-// the admin should pick from a known, consistent set instead of typing
-// free text that drifts ("Toilet" vs "toilets" vs "Public Restroom"). A
-// legacy tag outside the preset list is kept (appended) so editing an
-// older attraction never silently drops data. On top of the hardcoded
-// starter list, this also loads whatever extra tags admins have added
-// before (tag_presets/{firestoreKey}) and lets the admin add a brand new
-// one through the dashed "+ add" box at the end — typed once, saved to
-// that same doc, and from then on it's a normal clickable option for
-// every future attraction too, not just this one (same pattern as
-// restaurant-form.html's mountCuisinePicker — Nov 2026). Highlights stays
-// free-text below (mountTagInput) since highlights are inherently
-// specific to each place.
 function mountPresetPicker(boxId, presets, initialTags = [], firestoreKey = null) {
   const box = document.getElementById(boxId);
   const options = [...presets];
@@ -486,13 +450,6 @@ function readFees() {
   return { price, fees };
 }
 
-// ==================== Find on OpenStreetMap (auto-fill) ====================
-// One free-text lookup (a name like "Senso-ji Temple" or just a location
-// like "Asakusa, Tokyo") against Geoapify's Geocoding API — built on
-// OpenStreetMap data — then a Place Details call for the matched place to
-// pull in website/phone/opening hours/an image where OSM has them. Nothing
-// is swept or bulk-imported here; this fills THIS form only, and the admin
-// reviews/edits everything before clicking Save, same as any other field.
 function wireOsmFind() {
   document.getElementById("osmFindBtn").addEventListener("click", async () => {
     const btn = document.getElementById("osmFindBtn");
@@ -563,10 +520,6 @@ function populateForm(a) {
   osmSourcePlaceId = a?.sourcePlaceId || null;
   osmSource = a?.source || null;
 
-  // Merges the legacy single `category` field into the picker's initial
-  // selection too (in case an older record's `categories` array somehow
-  // doesn't already include it) — editing an old attraction should never
-  // silently lose its category.
   const allCategories = [...new Set([a?.category, ...(a?.categories || [])].filter(Boolean))];
   categoriesTag = mountPresetPicker("categoriesBox", CATEGORY_TAG_PRESETS, allCategories, "attraction_category");
   facilitiesTag = mountPresetPicker("facilitiesBox", FACILITY_PRESETS, a?.facilities || [], "attraction_facility");
@@ -603,22 +556,20 @@ document.getElementById("saveBtn").addEventListener("click", async () => {
   if (!name) { toast("Name is required.", "error"); return; }
   const pickedCategories = categoriesTag.getTags();
   if (!pickedCategories.length) { toast("Pick at least one category.", "error"); return; }
-  // The first picked tag doubles as the single `category` field a lot of
-  // the app still reads directly (attraction cards, chat context, etc.) —
-  // see mountPresetPicker's render(), which always lists tags in a fixed
-  // preset order, so this is deterministic even though the UI itself is
-  // a plain multi-select with no separate "primary" concept anymore.
   const category = pickedCategories[0];
   const locationValue = document.getElementById("fLocation").value.trim();
   if (!locationValue) { toast("Location is required.", "error"); return; }
 
-  // Same name + same location already exists elsewhere in the catalogue —
-  // almost always an accidental double entry (re-adding a suggestion that
-  // was already added, OSM search pulling in something already catalogued,
-  // etc.), so warn and let the admin confirm rather than silently creating
-  // a duplicate attraction card in Explore.
+  const btn = document.getElementById("saveBtn");
+  // Give immediate feedback the moment Save is clicked -- previously there
+  // was no busy state at all while the duplicate check below was running,
+  // so on a slow connection or a large catalog the button could look
+  // completely unresponsive for several seconds before anything visible
+  // happened (the confirm dialog, or "Saving...").
+  setBusy(btn, true, "Checking…");
   const dup = await findDuplicateAttraction(name, locationValue);
   if (dup) {
+    setBusy(btn, false);
     const proceed = await confirmDialog({
       title: "This looks like a duplicate",
       body: `"${dup.name}" already exists at "${dup.location}". Save this one anyway?`,
@@ -628,7 +579,6 @@ document.getElementById("saveBtn").addEventListener("click", async () => {
     if (!proceed) return;
   }
 
-  const btn = document.getElementById("saveBtn");
   setBusy(btn, true, "Saving…");
   try {
     const ref = editingId ? { id: editingId } : newAttractionRef();

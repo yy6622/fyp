@@ -106,18 +106,18 @@
 </div>
 
 <script type="module">
-import { requireRole } from "../js/auth-guard.js?v=20261106b";
+import { requireRole } from "../js/auth-guard.js?v=20261115a";
 import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261114a";
 import { mountIcons } from "../js/icons.js?v=20261106c";
 import {
   listAttractions, deleteAttraction, listAllRestaurants, deleteRestaurant,
   listPlaceSuggestions, rejectPlaceSuggestion, logModerationAction, countModerationToday, countModerationYesterday,
   countPlaceSuggestions,
-} from "../js/data.js?v=20261114c";
+} from "../js/data.js?v=20261117a";
 import {
   number, shortDate, fullDate, timeAgo, statusBadge, escapeHtml, paginate, renderPager, toast, confirmDialog, setBusy,
   statCard, plainCard, trendDelta, openModal, closeModal, wireModalDismiss,
-} from "../js/ui.js?v=20261113a";
+} from "../js/ui.js?v=20261115a";
 
 mountSidebarNav({ role: "admin", active: "attractions" });
 const session = await requireRole("admin", "login.html");
@@ -133,17 +133,6 @@ const PAGE_SIZE = 8;
 const cache = {};
 let placeSuggestions = [];
 
-// catalog_restaurants carries docs from two different writers with two
-// different field conventions (camelCase live-refresh vs. snake_case bulk
-// import — see lib/repositories/catalog_repository.dart's big comment on
-// this). These read-only display helpers mirror that same fallback logic
-// so this table shows real data regardless of which writer wrote a given
-// restaurant doc, without changing anything on disk.
-// The Location column already shows "City, Country" (or just one of
-// those) as free text — reusing that exact string for the Country filter
-// keeps the filter's values consistent with what's on screen, instead of
-// introducing a second, differently-formatted country field (catalog docs
-// carry a few: a bare ISO code on some writers, nothing at all on others).
 function countryFromLocation(location) {
   const parts = (location || "").split(",").map((s) => s.trim()).filter(Boolean);
   return parts.length ? parts[parts.length - 1] : "";
@@ -205,15 +194,6 @@ const TABS = {
     stats(items) {
       const active = items.filter((a) => a.status === "active");
       const inactive = items.filter((a) => a.status === "inactive").length;
-      // No trend line on Attractions/Active (Nov 2026): these are almost
-      // entirely seeded by the Flutter app's OpenStreetMap refresh
-      // (CatalogRepository._refreshAttractionsFromOsm), which never
-      // writes a createdAt — so a "vs last month" comparison always had
-      // nothing to compare against and silently claimed "New this
-      // month" on every single load, which was actively misleading
-      // rather than merely empty. Same resolution as the User
-      // Management Suspended card: no honest baseline, so no delta,
-      // rather than a fake one.
       return [
         plainCard("Attractions", number(items.length), "map-pin"),
         plainCard("Active", number(active.length), "sparkle"),
@@ -278,17 +258,6 @@ const TABS = {
     categoryLabel: "cuisine",
     categoryOf(r) { return restaurantCuisineTags(r); },
     stats(items) {
-      // No trend line on Restaurants, for the same reason as Attractions'
-      // stats() above — catalog_restaurants is seeded the same
-      // OSM-refresh way and never gets a createdAt either.
-      // Real/Generic/No-photo used to live here, but "No photo" sits at 0
-      // in practice (the bulk-import enrichment pipeline backfills *an*
-      // image for almost everything), so it told the admin nothing — a
-      // permanently-dead stat. Catalog breadth (how many cuisines/cities
-      // are actually covered) and data completeness (rows missing the
-      // cuisine/location a traveller would actually want to see) are the
-      // genuinely actionable numbers for a 3,700+-row auto-imported
-      // catalogue, so those replace it.
       const cuisineSet = new Set();
       const destSet = new Set();
       let missingDetails = 0;
@@ -309,10 +278,6 @@ const TABS = {
     detail(r) {
       const row = (label, value) => `<div class="field" style="margin-bottom:12px;"><label>${label}</label><p class="value">${value}</p></div>`;
       const website = r.website || "";
-      // Restaurants never display a photo here (same as the app's Explore/detail
-      // pages) — the catalog's restaurant photos are bulk-import stock images
-      // shared across many unrelated restaurants, not that restaurant's own real
-      // photo, so showing one here would be just as misleading as in the app.
       return `
         <div class="form-grid">
           ${row("Name", escapeHtml(r.name || "—"))}
@@ -365,10 +330,6 @@ async function refreshSuggestionsTabDot() {
   }
 }
 
-/** Swaps the standard table view (filter bar + table + pagination + the
- * per-tab "Add …" button) for the Place Suggestions card list — these two
- * views don't share markup, unlike Attractions/Restaurants which share
- * the same table shape via TABS[] config. */
 function showSuggestionsView() {
   document.getElementById("addBtn").style.display = "none";
   document.querySelector(".filter-bar").style.display = "none";
@@ -540,16 +501,6 @@ document.querySelectorAll("#placesTabs .tab-btn").forEach((b) => b.addEventListe
   }
 }));
 
-// ==================== Place Suggestions tab ====================
-// Not part of TABS[] above — a suggestion isn't an attraction or
-// restaurant yet, just a traveller's raw submission (name/location/photo/
-// description) waiting on a decision, so it gets its own card-list view
-// instead of forcing it into the shared data-table shape. "Accepting"
-// hands the submitted details to attraction-form.html/restaurant-form.html
-// (via sessionStorage) so the admin finishes it on that form normally —
-// js/data.js's markPlaceSuggestionAdded() is what actually closes out the
-// suggestion, called once that new record is actually saved, so a
-// suggestion the admin opened but backed out of stays pending here.
 async function loadSuggestions() {
   let items, addedToday, rejectedToday, addedYesterday, rejectedYesterday;
   try {

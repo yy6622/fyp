@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../config/secrets.dart';
+import 'demo_mode_service.dart';
 
 
 class TrafficRoute {
@@ -50,6 +51,13 @@ class TrafficService {
     required double toLat,
     required double toLon,
   }) async {
+    if (DemoModeService.instance.enabled) {
+      return const TrafficRoute(
+        travelTimeSeconds: DemoModeService.demoTravelTimeSeconds,
+        lengthMeters: DemoModeService.demoLengthMeters,
+        staticDurationSeconds: DemoModeService.demoStaticDurationSeconds,
+      );
+    }
     if (googleRoutesApiKey.isEmpty) return null;
     final key = '${_point(fromLat, fromLon)}>${_point(toLat, toLon)}';
     final cached = _routeCache[key];

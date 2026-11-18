@@ -18,6 +18,8 @@ class ActivityItem {
   final int total;
   final bool votedByMe;
   final List<String> forMemberUids;
+
+  final String sourceRef;
   const ActivityItem({
     this.id = '',
     required this.time,
@@ -28,18 +30,13 @@ class ActivityItem {
     required this.total,
     this.votedByMe = false,
     this.forMemberUids = const [],
+    this.sourceRef = '',
   });
 }
 
 List<String> effectiveActivityMembers(ActivityItem item, List<String> allMemberIds) =>
     item.forMemberUids.isEmpty ? allMemberIds : item.forMemberUids;
 
-// Keyword guess at whether an activity happens indoors, used to decide
-// whether a bad-weather/traffic nudge is even worth showing for a day (no
-// point suggesting a re-optimise for rain when nothing that day is outdoors).
-// Returns true (confidently indoor), false (confidently outdoor), or null
-// (can't tell) — callers should treat null as "not confidently indoor" so a
-// day with unclassifiable activities still gets the nudge as before.
 final RegExp _indoorWords = RegExp(
   r'(museum|gallery|mall|shopping (centre|center)|department store|supermarket|'
   r'cinema|movie|theatre|theater|aquarium|planetarium|arcade|bowling|karaoke|'
@@ -63,8 +60,6 @@ bool? isLikelyIndoor(String label) {
   return null; // no match, or both matched (ambiguous) — unknown either way
 }
 
-/// True only when every activity in [items] is confidently indoor — an empty
-/// list is not "all indoor" (nothing to be confident about).
 bool allActivitiesLikelyIndoor(List<ActivityItem> items) =>
     items.isNotEmpty && items.every((a) => isLikelyIndoor(a.label) == true);
 

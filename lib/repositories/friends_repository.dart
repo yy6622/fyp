@@ -9,7 +9,7 @@ class FriendEntry {
   const FriendEntry({required this.uid, required this.name});
 }
 
-enum FriendRequestStatus { sent, autoAccepted, alreadyFriends, alreadyRequested, isSelf, noMatch }
+enum FriendRequestStatus { sent, autoAccepted, alreadyFriends, alreadyRequested, isSelf, noMatch, blocked }
 
 class FriendRequestOutcome {
   final FriendRequestStatus status;
@@ -30,11 +30,6 @@ class FriendsRepository {
   CollectionReference<Map<String, dynamic>> get _requests => FirebaseFirestore.instance.collection('friendRequests');
   String _reqId(String fromUid, String toUid) => '${fromUid}_$toUid';
 
-  // Defensive: a friend/blocked list must never contain the viewer's own
-  // uid. Normal writes (sendFriendRequest's isSelf guard, respondToFriendRequest)
-  // never add self, but this filters out any stray self-entry regardless of
-  // how it got into Firestore, so the UI can never show "yourself" as your
-  // own friend or as a pickable traveller candidate.
   List<FriendEntry> _toEntries(QuerySnapshot<Map<String, dynamic>> snap, {String? excludeUid}) => snap.docs
       .where((d) => d.id != excludeUid)
       .map((d) => FriendEntry(uid: d.id, name: (d.data()['name'] as String?) ?? ''))
@@ -67,6 +62,16 @@ class FriendsRepository {
     final match = await UserRepository.instance.findByEmailOrName(query);
     if (match == null) return const FriendRequestOutcome(status: FriendRequestStatus.noMatch);
     if (match.uid == myUid) return const FriendRequestOutcome(status: FriendRequestStatus.isSelf);
+
+    // You blocked them -- refuse outright rather than letting a request go
+    // through. (We can't see whether *they* blocked *us* -- Firestore
+    // rules keep a user's own blocked/ subcollection private to them --
+    // so that direction still results in a normal pending request on
+    // their side, which they can simply decline.)
+    final iBlockedThem = await _blockedOf(myUid).doc(match.uid).get();
+    if (iBlockedThem.exists) {
+      return FriendRequestOutcome(status: FriendRequestStatus.blocked, name: match.name);
+    }
 
     final alreadyFriend = await _friendsOf(myUid).doc(match.uid).get();
     if (alreadyFriend.exists) {

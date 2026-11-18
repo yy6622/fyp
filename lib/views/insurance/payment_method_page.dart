@@ -7,7 +7,6 @@ import '../../repositories/insurance_repository.dart';
 import '../../repositories/trip_repository.dart';
 import '../../repositories/user_repository.dart';
 import '../../services/auth_service.dart';
-import '../../services/currency_service.dart';
 import '../../services/paypal_service.dart';
 import '../../services/stripe_service.dart';
 import '../../theme.dart';
@@ -20,6 +19,12 @@ class PaymentMethodPage extends StatefulWidget {
   final int travellerCount;
   final List<TravellerData> travellers;
   final String? tripId;
+  // The destination picked on InsuranceQuotePage for a standalone (no
+  // trip) purchase -- see InsurancePlanDetailPage.destination. Takes
+  // priority over the trip's own destination in _confirmPayment below,
+  // since it's what the traveller actually chose for THIS purchase (a
+  // trip, if any, may since have changed its destination).
+  final String? destination;
   final DateTime travelStart;
   final DateTime travelEnd;
   const PaymentMethodPage({
@@ -28,6 +33,7 @@ class PaymentMethodPage extends StatefulWidget {
     required this.travellerCount,
     this.travellers = const [],
     this.tripId,
+    this.destination,
     required this.travelStart,
     required this.travelEnd,
   });
@@ -42,12 +48,13 @@ class _PaymentMethodPageState extends State<PaymentMethodPage> {
     travellerCount: widget.travellerCount,
     travelStart: widget.travelStart,
     travelEnd: widget.travelEnd,
-    userCurrency: CurrencyService.instance.lastKnownUserCurrency,
   );
   bool _paying = false;
   PaymentMethodOption _method = PaymentMethodOption.card;
 
-  String get _currencyLabel => CurrencyService.instance.displayLabel(controller.chargeCurrencyCode);
+  // Every plan is quoted and charged in MYR -- no profile-currency
+  // conversion for insurance (removed per product decision).
+  static const String _currencyLabel = 'RM';
 
   @override
   void dispose() {
@@ -94,7 +101,7 @@ class _PaymentMethodPageState extends State<PaymentMethodPage> {
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.end,
                           children: [
-                            Text(widget.plan.displayPrice(controller.userCurrency), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.primary)),
+                            Text(widget.plan.displayPrice, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.primary)),
                             Text(insurancePriceUnitLabel(widget.plan.category),
                                 style: const TextStyle(fontSize: 10, color: AppColors.textGrey)),
                           ],
@@ -118,7 +125,7 @@ class _PaymentMethodPageState extends State<PaymentMethodPage> {
                         : '$_currencyLabel ${controller.unitPrice.toStringAsFixed(2)} × ${widget.travellerCount} traveller(s)',
                     '$_currencyLabel ${controller.subtotal.toStringAsFixed(2)}',
                   ),
-                  _summaryRow('Service Fee', '$_currencyLabel ${controller.serviceFeeConverted.toStringAsFixed(2)}'),
+                  _summaryRow('Service Fee', '$_currencyLabel ${PaymentMethodController.serviceFee.toStringAsFixed(2)}'),
                   const SizedBox(height: 8),
                   const Divider(color: Color(0xFFECECEC)),
                   _summaryRow('Total Amount', '$_currencyLabel ${controller.total.toStringAsFixed(2)}', bold: true),
@@ -187,14 +194,6 @@ class _PaymentMethodPageState extends State<PaymentMethodPage> {
     }
 
     final policyNumber = 'INS-$paymentRef';
-    // user.displayName only ever gets set by Firebase Auth itself for a
-    // Google sign-in -- an email/password signup never calls
-    // updateDisplayName, so it's always empty for those accounts. Reading
-    // it here meant the admin's "Customer" column showed a real name for
-    // some rows and a bare email for others depending on how that one
-    // traveller happened to sign up. The traveller's own profile name
-    // (set at signup for every sign-in method -- see UserRepository) is
-    // the one source that's actually always there.
     String? profileName;
     try {
       profileName = (await UserRepository.instance.fetchProfile(uid))?.name.trim();
@@ -204,28 +203,21 @@ class _PaymentMethodPageState extends State<PaymentMethodPage> {
     final customerName = (profileName?.isNotEmpty ?? false)
         ? profileName!
         : (user?.displayName?.trim().isNotEmpty == true ? user!.displayName!.trim() : (user?.email ?? 'Voya user'));
-    // The buyer's own account name/email stays the transaction's
-    // customerName (who can file a claim/refund). The actual insured
-    // traveller(s) — collected on TravellerDetailsPage and otherwise
-    // discarded after travellerCount is read off them — are what the
-    // booking's History page should show, same as a flight booking shows
-    // each passenger rather than just whoever paid.
     final travellerNames = widget.travellers.map((t) => t.name.trim()).where((n) => n.isNotEmpty).join(', ');
     final travellerIdNumbers = widget.travellers.map((t) => t.identityNumber.trim()).where((n) => n.isNotEmpty).join(', ');
     final leadTravellerEmail = widget.travellers.isNotEmpty ? widget.travellers.first.email.trim() : '';
     final leadTravellerPhone = widget.travellers.isNotEmpty ? widget.travellers.first.phone.trim() : '';
-    String purchaseDestination = '';
+    // Prefer the destination the traveller actually picked for THIS
+    // purchase (from InsuranceQuotePage, threaded through via widget.destination)
+    // over re-deriving it from the trip -- a standalone quote has no trip
+    // at all, which is exactly the case that was silently recording an
+    // empty destination (shown as "--" on the admin side) before this.
+    String purchaseDestination = widget.destination?.trim() ?? '';
     try {
-      if (widget.tripId != null && widget.tripId!.isNotEmpty) {
+      if (purchaseDestination.isEmpty && widget.tripId != null && widget.tripId!.isNotEmpty) {
         final trip = await TripRepository.instance.getTrip(widget.tripId!, uid);
         purchaseDestination = trip?.destination ?? '';
       }
-      // Single write: insurance_transactions is now the only place a
-      // purchase is stored (it used to also be mirrored into
-      // users/{uid}/bookings purely so the History page had somewhere
-      // to read guest details from -- HistoryController now reads
-      // straight from InsuranceRepository.watchTransactionsForBuyer()
-      // instead, so the traveller fields have to be recorded here).
       final transactionId = await InsuranceRepository.instance.recordPurchase(
         plan: widget.plan,
         buyerId: uid,
@@ -303,23 +295,37 @@ class _PaymentMethodPageState extends State<PaymentMethodPage> {
   }
 
   Widget _summaryRow(String label, String value, {bool bold = false, Color? color}) {
+    // Both sides are wrapped in Expanded (rather than left as bare Text
+    // widgets in a spaceBetween Row) so a long breakdown label (e.g. "RM
+    // x/day x N day(s) x M traveller(s)") or a very large price never
+    // overflows the row horizontally -- it wraps onto a second line
+    // instead, which is safe for a payment screen (nothing gets clipped
+    // or hidden).
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label,
-              style: TextStyle(
-                fontSize: bold ? 15 : 13,
-                fontWeight: bold ? FontWeight.bold : FontWeight.normal,
-                color: bold ? AppColors.navy : AppColors.textGrey,
-              )),
-          Text(value,
-              style: TextStyle(
-                fontSize: bold ? 17 : 13,
-                fontWeight: bold ? FontWeight.bold : FontWeight.w600,
-                color: color ?? (bold ? AppColors.primary : Colors.black87),
-              )),
+          Expanded(
+            flex: 3,
+            child: Text(label,
+                style: TextStyle(
+                  fontSize: bold ? 15 : 13,
+                  fontWeight: bold ? FontWeight.bold : FontWeight.normal,
+                  color: bold ? AppColors.navy : AppColors.textGrey,
+                )),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            flex: 2,
+            child: Text(value,
+                textAlign: TextAlign.right,
+                style: TextStyle(
+                  fontSize: bold ? 17 : 13,
+                  fontWeight: bold ? FontWeight.bold : FontWeight.w600,
+                  color: color ?? (bold ? AppColors.primary : Colors.black87),
+                )),
+          ),
         ],
       ),
     );

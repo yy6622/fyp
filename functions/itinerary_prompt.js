@@ -50,7 +50,7 @@ function parseItineraryAnswer(text, dayCount) {
       icon: ICONS.includes(it.icon) ? it.icon : "activity",
       saved: it.saved === true,
       known: it.known === true,
-      source: ["saved", "voya", "catalog", "pattern"].includes(it.source) ? it.source : "",
+      source: ["saved", "voya", "catalog", "pattern", "booked", "generic", "suggested"].includes(it.source) ? it.source : "",
       reason: cleanText(it.reason, 140),
     });
   }
@@ -61,7 +61,7 @@ function parseItineraryAnswer(text, dayCount) {
     const label = cleanText(it.label, 80);
     const time = cleanText(it.time, 5);
     if (!label || !TIME_RE.test(time) || !validDay(it.from_day, dayCount) || !validDay(it.day, dayCount)) continue;
-    update.push({ label, from_day: it.from_day, day: it.day, time });
+    update.push({ label, from_day: it.from_day, day: it.day, time, reason: cleanText(it.reason, 140) });
   }
 
   const remove = [];
@@ -122,6 +122,7 @@ function resolveItineraryAnswer(answer, saved, plan) {
       toDay: u.day,
       oldTime: item.time,
       newTime: u.time,
+      reason: u.reason || "",
     });
   }
 
@@ -146,7 +147,7 @@ function resolveItineraryAnswer(answer, saved, plan) {
       icon: match && match.type === "restaurant" ? "food" : a.icon,
       inSavedList: Boolean(match),
       warnNotSaved: !match && !logistics && !a.known,
-      source: match ? "saved" : a.source || "",
+      source: match && a.source !== "suggested" ? "saved" : a.source || "",
       reason: a.reason || "",
       alreadyInPlan: dayItems(a.day).some((it) => samePlace(it.label, label)),
     });

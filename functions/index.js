@@ -64,3 +64,7 @@ exports.moderateText = require("./content_moderation").moderateText;
 const paypal = require("./paypal");
 exports.createPaypalOrder = paypal.createPaypalOrder;
 exports.capturePaypalOrder = paypal.capturePaypalOrder;
+
+const conditionWatch = require("./condition_watch");
+exports.conditionWatch = conditionWatch.conditionWatch;
+

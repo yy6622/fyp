@@ -6,6 +6,7 @@ import '../../models/day_plan_models.dart';
 import '../../repositories/trip_plan_edits.dart';
 import '../../repositories/trip_repository.dart';
 import '../../services/itinerary_ai_service.dart';
+import '../../services/auth_service.dart';
 import '../../services/discussion_summary_service.dart';
 import 'decide_now_sheet.dart';
 import '../../theme.dart';
@@ -107,6 +108,11 @@ class _AiItinerarySheetState extends State<_AiItinerarySheet> {
   bool _applying = false;
   String? _applyError;
 
+  /// "voteId:optionId" of a tie-break vote currently being cast, so only
+  /// that one button shows a spinner while the others stay tappable.
+  String? _votingTieOption;
+  String? _tieVoteError;
+
   @override
   void initState() {
     super.initState();
@@ -145,6 +151,45 @@ class _AiItinerarySheetState extends State<_AiItinerarySheet> {
     DiscussionSummaryService.instance.start(widget.controller.tripId);
     ItineraryAiService.instance.clear(widget.controller.tripId);
     ItineraryAiService.instance.start(widget.controller.tripId);
+  }
+
+  /// Lets the group settle a tied poll right here instead of hunting it
+  /// down in the Vote tab. This is a DECISION, not another ballot --
+  /// whoever taps almost always already voted in this exact poll (that's
+  /// often how the tie happened), so this calls TripRepository.decideVote,
+  /// not castVote, and never hits "you have already voted". Re-runs AI
+  /// Summarise afterwards so the sheet reflects the now-resolved result.
+  Future<void> _decideTieVote(String voteId, String optionId) async {
+    final key = '$voteId:$optionId';
+    if (_votingTieOption != null) return;
+    setState(() {
+      _votingTieOption = key;
+      _tieVoteError = null;
+    });
+    String? error;
+    try {
+      final uid = AuthService.instance.currentUser?.uid ?? '';
+      await TripRepository.instance.decideVote(widget.controller.tripId, voteId, optionId, uid);
+    } on StateError catch (e) {
+      error = e.message;
+    } catch (_) {
+      error = "Couldn't settle that poll. Please try again.";
+    }
+    if (!mounted) return;
+    if (error != null) {
+      // Shown inline, not via ScaffoldMessenger: this widget's context is a
+      // modal-bottom-sheet route, which is a sibling overlay of the page's
+      // own Scaffold, not a descendant of it -- ScaffoldMessenger.of(context)
+      // from here throws (no ScaffoldMessenger found) instead of showing
+      // anything, exactly like _applyError below already has to work around.
+      setState(() {
+        _votingTieOption = null;
+        _tieVoteError = error;
+      });
+    } else {
+      setState(() => _votingTieOption = null);
+      _regenerate();
+    }
   }
 
   void _discard() {
@@ -386,14 +431,25 @@ class _AiItinerarySheetState extends State<_AiItinerarySheet> {
           _sectionTitle('Take out of the plan', hint: 'The group agreed to drop these. Tick to remove.'),
           for (var i = 0; i < result.remove.length; i++) _removeRow(result.remove[i], 'r$i'),
         ],
-        if (result.unresolved.isNotEmpty) ...[
+        if (result.unresolved.isNotEmpty || result.tiedVotes.isNotEmpty) ...[
           _undecidedHeader(),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [for (final name in result.unresolved) _chip(name, Icons.help_outline, AppColors.orange)],
-          ),
+          if (result.tiedVotes.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            for (final tie in result.tiedVotes) _tiedVoteCard(tie),
+            if (_tieVoteError != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Text(_tieVoteError!, style: const TextStyle(fontSize: 12, color: Colors.redAccent)),
+              ),
+          ],
+          if (result.unresolved.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [for (final name in result.unresolved) _chip(name, Icons.help_outline, AppColors.orange)],
+            ),
+          ],
         ],
         if (result.ideas.isNotEmpty) ...[
           _sectionTitle('Ideas without a place yet'),
@@ -410,10 +466,6 @@ class _AiItinerarySheetState extends State<_AiItinerarySheet> {
       builder: (context, job, _) {
         final summary = job.status == DiscussionSummaryStatus.ready ? job.result : null;
         final open = summary == null ? 0 : summary.pending.where((p) => p.decided?.status != 'voting').length;
-        // A poll that's tied, or that disagrees with how the chat leaned,
-        // stays at 'voting' with no automatic answer -- that's still
-        // something a traveller needs to tap into Decide Now for, not a
-        // quiet "In a poll" wait, so it counts toward the badge too.
         final conflicts = summary?.conflictCount ?? 0;
         final needsAttention = open + conflicts;
         return Padding(
@@ -473,6 +525,61 @@ class _AiItinerarySheetState extends State<_AiItinerarySheet> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _tiedVoteCard(AiItineraryTiedVote tie) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.orange.withOpacity(0.35)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.how_to_vote_outlined, size: 15, color: AppColors.orange),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text('"${tie.title}" is tied — pick one to settle it',
+                    style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: AppColors.navy)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final option in tie.options)
+                _tieOptionButton(tie.voteId, option),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _tieOptionButton(String voteId, AiItineraryTiedVoteOption option) {
+    final key = '$voteId:${option.id}';
+    final busy = _votingTieOption == key;
+    final disabled = _votingTieOption != null;
+    return OutlinedButton(
+      onPressed: disabled ? null : () => _decideTieVote(voteId, option.id),
+      style: OutlinedButton.styleFrom(
+        visualDensity: VisualDensity.compact,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        side: const BorderSide(color: AppColors.orange),
+        foregroundColor: AppColors.navy,
+      ),
+      child: busy
+          ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.orange))
+          : Text('${option.label} · ${option.votes}',
+              style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600)),
     );
   }
 
@@ -562,11 +669,7 @@ class _AiItinerarySheetState extends State<_AiItinerarySheet> {
   Widget _thumb(AiItineraryAdd a) {
     final probe = ActivityItem(time: a.time, icon: iconForKey(a.iconKey), label: a.label, voted: 0, total: 0);
     final c = widget.controller;
-    // Restaurant photos are deliberately not shown here -- matches the
-    // same decision already applied to the plan's own activity card
-    // (group_trip_page.dart's _activityRestaurantBody has no thumbnail,
-    // unlike the hotel/attraction bodies, which keep theirs).
-    final url = c.attractionForActivity(probe)?.image ?? c.hotelForActivity(probe)?.image ?? '';
+    final url = c.attractionForActivity(probe)?.image ?? '';
     final fallback = Container(
       width: 44,
       height: 44,
@@ -628,6 +731,7 @@ class _AiItinerarySheetState extends State<_AiItinerarySheet> {
                       if (a.fromSaved) ...[const SizedBox(width: 6), _badge('Saved', _green)],
                       if (a.source == 'booked') ...[const SizedBox(width: 6), _badge('Booked', AppColors.navy)],
                       if (a.source == 'generic') ...[const SizedBox(width: 6), _badge('Pick a place', AppColors.orange)],
+                      if (a.source == 'suggested') ...[const SizedBox(width: 6), _badge('Suggested for you', AppColors.primary)],
                     ],
                   ),
                   if (a.location.isNotEmpty)
@@ -642,9 +746,10 @@ class _AiItinerarySheetState extends State<_AiItinerarySheet> {
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Padding(
-                            padding: EdgeInsets.only(top: 1),
-                            child: Icon(Icons.chat_bubble_outline, size: 11, color: AppColors.textGrey),
+                          Padding(
+                            padding: const EdgeInsets.only(top: 1),
+                            child: Icon(a.source == 'suggested' ? Icons.lightbulb_outline : Icons.chat_bubble_outline,
+                                size: 11, color: AppColors.textGrey),
                           ),
                           const SizedBox(width: 4),
                           Expanded(
@@ -657,12 +762,6 @@ class _AiItinerarySheetState extends State<_AiItinerarySheet> {
                     const Padding(
                       padding: EdgeInsets.only(top: 4),
                       child: Text('Already in your plan', style: TextStyle(fontSize: 11, color: AppColors.textGrey)),
-                    )
-                  else if (a.warnNotSaved && a.source == 'pattern')
-                    const Padding(
-                      padding: EdgeInsets.only(top: 4),
-                      child: Text('Name taken from the chat — check it before you go',
-                          style: TextStyle(fontSize: 11, color: AppColors.orange)),
                     ),
                 ],
               ),
@@ -758,7 +857,24 @@ class _AiItinerarySheetState extends State<_AiItinerarySheet> {
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.navy)),
                   const SizedBox(height: 2),
-                  Text(u.changesDay ? 'Moved here from $from' : 'New time (was $from)', style: const TextStyle(fontSize: 11.5, color: AppColors.textGrey)),
+                  Text(u.changesDay ? 'Moved here from $from' : 'Time changed from $from', style: const TextStyle(fontSize: 11.5, color: AppColors.textGrey)),
+                  if (u.reason.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Padding(
+                            padding: EdgeInsets.only(top: 1),
+                            child: Icon(Icons.chat_bubble_outline, size: 11, color: AppColors.textGrey),
+                          ),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(u.reason, style: const TextStyle(fontSize: 11, color: AppColors.textGrey, height: 1.3)),
+                          ),
+                        ],
+                      ),
+                    ),
                 ],
               ),
             ),

@@ -105,8 +105,44 @@ exports.optimiseItinerary = onCall({ timeoutSeconds: 60, memory: "256MiB" }, asy
   ]);
   const votes = votesSnap ? votesSnap.docs.map((d) => d.data()) : [];
   const groupByArea = !(request.data && request.data.groupByArea === false);
+
+  // Client-computed forecast rain windows, keyed by day number (1-based,
+  // matching `plan`'s own keys) -- [[startMin, endMin], ...] per day. Fully
+  // optional and untrusted: sanitised to a plain {dayNumber: pairs} object
+  // of finite-number [start, end] pairs, anything else is dropped rather
+  // than allowed to reach the scheduler.
+  const rawRainWindows = (request.data && request.data.rainWindows) || {};
+  const rainWindows = {};
+  if (rawRainWindows && typeof rawRainWindows === "object") {
+    for (const [key, value] of Object.entries(rawRainWindows)) {
+      const dayNum = Number(key);
+      if (!Number.isInteger(dayNum) || !Array.isArray(value)) continue;
+      const pairs = value
+        .filter((w) => Array.isArray(w) && w.length === 2 && Number.isFinite(w[0]) && Number.isFinite(w[1]) && w[0] < w[1])
+        .map((w) => [Math.max(0, Math.floor(w[0])), Math.min(24 * 60, Math.ceil(w[1]))]);
+      if (pairs.length) rainWindows[String(dayNum)] = pairs;
+    }
+  }
+
+  // Client-reported legs that are *currently* measured as congested
+  // (today only -- there is no hour-by-hour traffic forecast the way
+  // there is for rain), by the two plan item ids either side of that leg,
+  // plus how many minutes over the typical drive time it currently is.
+  // Untrusted: both ids must belong to a real item somewhere in this
+  // trip's own plan, and extraMinutes is clamped to a sane range.
+  const validItemIds = new Set(Object.values(plan).flat().map((it) => it.id));
+  const rawCongestedLegs = (request.data && request.data.congestedLegs) || [];
+  const congestedLegs = Array.isArray(rawCongestedLegs)
+    ? rawCongestedLegs
+        .filter((l) => l && typeof l.fromItemId === "string" && typeof l.toItemId === "string" &&
+          validItemIds.has(l.fromItemId) && validItemIds.has(l.toItemId) && l.fromItemId !== l.toItemId)
+        .slice(0, 50)
+        .map((l) => ({ fromItemId: l.fromItemId, toItemId: l.toItemId,
+          extraMinutes: Math.max(0, Math.min(90, Math.round(Number(l.extraMinutes) || 0))) }))
+    : [];
+
   const result = optimisePlan(plan, {
-    mode, onlyDay, window, days, saved, catalog, groupByArea, votes,
+    mode, onlyDay, window, days, saved, catalog, groupByArea, votes, rainWindows, congestedLegs,
     destination: trip.destination || "",
     flights: Array.isArray(trip.flights) ? trip.flights : [],
     hotelStays: Array.isArray(trip.hotelStays) ? trip.hotelStays : [],

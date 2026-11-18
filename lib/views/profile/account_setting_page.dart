@@ -3,11 +3,12 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../controllers/profile_controller.dart';
 import '../../data/countries.dart';
-import '../../data/malaysia_airports.dart';
+import '../../data/airports.dart';
 import '../../data/popular_destinations.dart';
 import '../../repositories/user_repository.dart';
 import '../../services/auth_service.dart';
 import '../../services/avatar_service.dart';
+import '../../services/demo_mode_service.dart';
 import '../../services/location_service.dart';
 import '../../theme.dart';
 import '../auth/login_page.dart';
@@ -94,32 +95,14 @@ class _AccountSettingPageState extends State<AccountSettingPage> {
     await UserRepository.instance.updateProfile(uid, country: picked.name);
   }
 
-  Future<void> _changeCurrency() async {
-    final picked = await showModalBottomSheet<CurrencyOption>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (ctx) => _PickerSheet<CurrencyOption>(
-        title: 'Currency',
-        items: kCurrencies,
-        labelOf: (c) => c.code,
-        trailingOf: (c) => c.symbol,
-      ),
-    );
-    if (picked == null) return;
-    final uid = AuthService.instance.currentUser?.uid;
-    if (uid == null) return;
-    await UserRepository.instance.updateProfile(uid, currencyCode: picked.code);
-  }
-
   Future<void> _changeHomeAirport() async {
-    final picked = await showModalBottomSheet<MalaysiaAirport>(
+    final homeCountry = controller.profile?.country ?? '';
+    final picked = await showModalBottomSheet<Airport>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (ctx) => const _HomeAirportPickerSheet(),
+      builder: (ctx) => _HomeAirportPickerSheet(homeCountry: homeCountry),
     );
     if (picked == null) return;
     final uid = AuthService.instance.currentUser?.uid;
@@ -135,7 +118,7 @@ class _AccountSettingPageState extends State<AccountSettingPage> {
       headerIcon: Icons.edit_outlined,
       confirmLabel: 'Save',
       fieldsBuilder: (ctx, setState) => [
-        niceDialogField(ctrl, label, autofocus: true),
+        niceDialogField(ctrl, label, autofocus: true, required: true),
       ],
     );
     if (result != true) return;
@@ -160,9 +143,9 @@ class _AccountSettingPageState extends State<AccountSettingPage> {
       headerIcon: Icons.lock_outline,
       confirmLabel: 'Save',
       fieldsBuilder: (ctx, setState) => [
-        niceDialogField(currentCtrl, 'Current Password', obscureText: true, autofocus: true),
-        niceDialogField(newCtrl, 'New Password', obscureText: true),
-        niceDialogField(confirmCtrl, 'Confirm New Password', obscureText: true),
+        niceDialogField(currentCtrl, 'Current Password', obscureText: true, autofocus: true, required: true),
+        niceDialogField(newCtrl, 'New Password', obscureText: true, required: true),
+        niceDialogField(confirmCtrl, 'Confirm New Password', obscureText: true, required: true),
       ],
     );
     if (result != true || !mounted) return;
@@ -195,8 +178,8 @@ class _AccountSettingPageState extends State<AccountSettingPage> {
       headerIcon: Icons.email_outlined,
       confirmLabel: 'Send Verification',
       fieldsBuilder: (ctx, setState) => [
-        niceDialogField(newEmailCtrl, 'New Email', keyboardType: TextInputType.emailAddress, autofocus: true),
-        niceDialogField(currentCtrl, 'Current Password', obscureText: true),
+        niceDialogField(newEmailCtrl, 'New Email', keyboardType: TextInputType.emailAddress, autofocus: true, required: true),
+        niceDialogField(currentCtrl, 'Current Password', obscureText: true, required: true),
       ],
     );
     if (result != true || !mounted) return;
@@ -235,7 +218,7 @@ class _AccountSettingPageState extends State<AccountSettingPage> {
       headerIcon: Icons.lock_outline,
       confirmLabel: 'Delete Account',
       fieldsBuilder: (ctx, setState) => [
-        niceDialogField(passwordCtrl, 'Current Password', obscureText: true, autofocus: true),
+        niceDialogField(passwordCtrl, 'Current Password', obscureText: true, autofocus: true, required: true),
       ],
     );
     if (verified != true || !mounted) return;
@@ -272,9 +255,21 @@ class _AccountSettingPageState extends State<AccountSettingPage> {
       ],
     );
     if (result != true) return;
+    final trimmed = value.trim();
+    if (trimmed.isNotEmpty) {
+      // trimmed looks like "+<dialCode> <localNumber>" (see PhoneInputField._emit) —
+      // validate just the local-number digit count, not the leading dial code.
+      final parts = trimmed.split(' ');
+      final localDigits = (parts.length > 1 ? parts.sublist(1).join('') : parts.first).replaceAll(RegExp(r'[^0-9]'), '');
+      if (localDigits.length < 6 || localDigits.length > 14) {
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please enter a valid phone number.')));
+        return;
+      }
+    }
     final uid = AuthService.instance.currentUser?.uid;
     if (uid == null) return;
-    await UserRepository.instance.updateProfile(uid, phone: value.trim());
+    await UserRepository.instance.updateProfile(uid, phone: trimmed);
   }
 
   @override
@@ -289,8 +284,7 @@ class _AccountSettingPageState extends State<AccountSettingPage> {
           final email = profile?.email ?? (AuthService.instance.currentUser?.email ?? '');
           final phone = (profile?.phone.isNotEmpty ?? false) ? profile!.phone : 'Not set';
           final country = (profile?.country.isNotEmpty ?? false) ? profile!.country : 'Not set';
-          final currency = (profile?.currencyCode.isNotEmpty ?? false) ? profile!.currencyCode : 'Not set';
-          final homeAirport = malaysiaAirportLabel((profile?.homeAirportCode.isNotEmpty ?? false) ? profile!.homeAirportCode : kDefaultHomeAirport);
+          final homeAirport = airportLabel((profile?.homeAirportCode.isNotEmpty ?? false) ? profile!.homeAirportCode : kDefaultHomeAirport);
           return ListView(
             children: [
               profileNavRow('Username', username, onTap: () => _editField(label: 'Username', current: username, field: 'name')),
@@ -322,8 +316,17 @@ class _AccountSettingPageState extends State<AccountSettingPage> {
               profileNavRow('Email', email, onTap: () => _changeEmail(email)),
               profileNavRow('Phone Number', phone, onTap: () => _editPhone(phone)),
               profileNavRow('Country / Region', country, onTap: _changeCountry),
-              profileNavRow('Currency', currency, onTap: _changeCurrency),
               profileNavRow('Home Airport', homeAirport, onTap: _changeHomeAirport),
+              if (DemoModeService.instance.isAllowedForCurrentUser)
+                ListenableBuilder(
+                  listenable: DemoModeService.instance,
+                  builder: (context, _) => _switchTile(
+                    'Demo Mode',
+                    'Simulated for demo: shows stormy weather and heavy traffic instead of live data',
+                    DemoModeService.instance.enabled,
+                    (value) => DemoModeService.instance.setEnabled(value),
+                  ),
+                ),
               const SizedBox(height: 24),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -346,10 +349,33 @@ class _AccountSettingPageState extends State<AccountSettingPage> {
       ),
     );
   }
+
+  Widget _switchTile(String title, String subtitle, bool value, ValueChanged<bool> onChanged) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+      decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: Color(0xFFE4E4E4)))),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: Colors.black)),
+                const SizedBox(height: 2),
+                Text(subtitle, style: const TextStyle(fontSize: 11, color: AppColors.textGrey)),
+              ],
+            ),
+          ),
+          Switch(value: value, activeColor: AppColors.primary, onChanged: onChanged),
+        ],
+      ),
+    );
+  }
 }
 
 class _HomeAirportPickerSheet extends StatefulWidget {
-  const _HomeAirportPickerSheet();
+  final String homeCountry;
+  const _HomeAirportPickerSheet({required this.homeCountry});
 
   @override
   State<_HomeAirportPickerSheet> createState() => _HomeAirportPickerSheetState();
@@ -366,7 +392,7 @@ class _HomeAirportPickerSheetState extends State<_HomeAirportPickerSheet> {
   }
 
   Future<void> _lookup() async {
-    final result = await LocationService.instance.suggestNearestAirport();
+    final result = await LocationService.instance.suggestNearestAirport(homeCountry: widget.homeCountry);
     if (mounted) setState(() => _result = result);
     if (mounted) setState(() => _loading = false);
   }
@@ -389,9 +415,14 @@ class _HomeAirportPickerSheetState extends State<_HomeAirportPickerSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final nearby = _result?.rankedByDistanceKm?.take(3).toList() ?? const <MapEntry<MalaysiaAirport, double>>[];
+    final nearby = _result?.rankedByDistanceKm?.take(3).toList() ?? const <MapEntry<Airport, double>>[];
     final nearbyCodes = nearby.map((e) => e.key.iataCode).toSet();
-    final rest = kMalaysiaAirports.where((a) => !nearbyCodes.contains(a.iataCode)).toList();
+    final grouped = kAirportsByCountry;
+    final homeCountry = widget.homeCountry.trim();
+    // Rest of the user's own country (profile's Country / Region), minus whatever's already in NEAR YOU.
+    final homeRest = (grouped[homeCountry] ?? const <Airport>[]).where((a) => !nearbyCodes.contains(a.iataCode)).toList();
+    // Everything else, grouped by country, alphabetically — so a global list stays browsable.
+    final otherCountries = grouped.keys.where((c) => c != homeCountry).toList()..sort();
     final message = _statusMessage;
 
     return SafeArea(
@@ -420,7 +451,7 @@ class _HomeAirportPickerSheetState extends State<_HomeAirportPickerSheet> {
                 child: Text(message, style: const TextStyle(fontSize: 11.5, color: AppColors.textGrey)),
               ),
             ConstrainedBox(
-              constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.5),
+              constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.6),
               child: ListView(
                 shrinkWrap: true,
                 children: [
@@ -432,7 +463,25 @@ class _HomeAirportPickerSheetState extends State<_HomeAirportPickerSheet> {
                     ...nearby.map((e) => _airportTile(e.key, distanceKm: e.value)),
                     const Divider(height: 20),
                   ],
-                  ...rest.map((a) => _airportTile(a)),
+                  if (homeRest.isNotEmpty) ...[
+                    Padding(
+                      padding: const EdgeInsets.only(left: 4, bottom: 2),
+                      child: Text(
+                        homeCountry.isEmpty ? 'MORE AIRPORTS' : homeCountry.toUpperCase(),
+                        style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: AppColors.textGrey, letterSpacing: 0.4),
+                      ),
+                    ),
+                    ...homeRest.map((a) => _airportTile(a)),
+                    const Divider(height: 20),
+                  ],
+                  for (final c in otherCountries) ...[
+                    Padding(
+                      padding: const EdgeInsets.only(left: 4, bottom: 2),
+                      child: Text(c.toUpperCase(), style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: AppColors.textGrey, letterSpacing: 0.4)),
+                    ),
+                    ...grouped[c]!.map((a) => _airportTile(a)),
+                    const SizedBox(height: 10),
+                  ],
                 ],
               ),
             ),
@@ -442,7 +491,7 @@ class _HomeAirportPickerSheetState extends State<_HomeAirportPickerSheet> {
     );
   }
 
-  Widget _airportTile(MalaysiaAirport airport, {double? distanceKm}) {
+  Widget _airportTile(Airport airport, {double? distanceKm}) {
     return ListTile(
       leading: const Icon(Icons.flight_takeoff, size: 18, color: AppColors.primary),
       title: Text(airport.city.split(',').first, style: const TextStyle(fontSize: 13.5)),

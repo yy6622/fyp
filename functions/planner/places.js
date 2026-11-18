@@ -76,10 +76,6 @@ function knownPlaces({ destination, saved = [], catalog = [], planned = [] }) {
   for (const p of base.places) add({ ...p, source: "voya", saved: null });
   for (const p of fromCatalog(catalog, "catalog")) add(p);
   for (const p of fromCatalog(saved, "saved")) add(p);
-  // Items already in the plan are places too, even when the place list does not
-  // know them (a custom activity like "Disneyland"). Without this, "no
-  // Disneyland" could not be matched and was counted against the place
-  // discussed just before it (TC27b).
   const custom = (planned || []).filter((it) => it && it.name && String(it.name).trim().length >= 4
     && !GENERIC_PLAN_LABEL.test(String(it.name).trim()));
   for (const p of fromCatalog(custom, "plan")) {

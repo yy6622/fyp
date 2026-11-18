@@ -1,7 +1,3 @@
-// Emails a real confirmation after an insurance purchase — this is what
-// payment_method_page.dart's "A copy of your policy has been sent to your
-// email" message actually triggers (previously that line was just text with
-// nothing behind it; the sendPolicyEmail call now makes it true).
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { initializeApp, getApps } = require("firebase-admin/app");
 const { gmailUser, gmailAppPassword, sendMail } = require("./mailer");

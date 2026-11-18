@@ -57,12 +57,6 @@ export function confirmDialog({ title, body, confirmText = "Confirm", danger = f
   });
 }
 
-/**
- * Same shape as confirmDialog, plus a free-text textarea (e.g. "why are
- * you rejecting this?"). Resolves { confirmed, value } — value is the
- * trimmed textarea text ("" if left blank or the dialog was cancelled).
- * Pass required:true to block confirming with an empty field.
- */
 export function promptDialog({ title, body, label, placeholder = "", confirmText = "Confirm", danger = false, required = false }) {
   return new Promise((resolve) => {
     const backdrop = document.createElement("div");
@@ -108,15 +102,6 @@ export function promptDialog({ title, body, label, placeholder = "", confirmText
   });
 }
 
-/**
- * FR04 step-up: emails a 6-digit code to the signed-in user for `purpose`
- * ("change_password", "change_email", "delete_account", "payment") and
- * asks them to enter it before a sensitive action proceeds. Mirrors the
- * Flutter app's confirmWithEmailCode() so every account on Voya — admin,
- * insurance partner, or traveller — goes through the same check, not
- * just a "type your current password" prompt. Resolves true once the
- * code is verified, false if the admin/partner cancels.
- */
 export function emailCodeStepUp(purpose, { title = "Confirm it's you", body = "We're emailing a 6-digit code to your account's email address. Enter it below to continue." } = {}) {
   return new Promise((resolve) => {
     const backdrop = document.createElement("div");
@@ -168,11 +153,6 @@ export function emailCodeStepUp(purpose, { title = "Confirm it's you", body = "W
       }, 1000);
     }
 
-    // Sends the code — called once right away when the dialog opens, and
-    // again whenever Resend is clicked. A failed send (e.g. a resend
-    // before the 60s cooldown server-side) just surfaces the error and
-    // leaves Resend clickable again, rather than stranding the admin
-    // with no way to ask for a fresh code.
     async function sendCode({ isResend }) {
       resendBtn.disabled = true;
       try {
@@ -212,14 +192,6 @@ export function emailCodeStepUp(purpose, { title = "Confirm it's you", body = "W
   });
 }
 
-/**
- * Read-only detail popup: a title + a list of {label, value} rows (value
- * can be HTML, e.g. a statusBadge() call), plus optional footer buttons
- * ({ text, className, onClick, close: true }) — close:true closes the
- * popup before calling onClick, for actions like Approve/Reject that
- * should act on the underlying row, not just the popup. Used for the
- * "click a row to see full details" pattern (insurance partners, etc.).
- */
 export function detailDialog({ title, subtitle, rows, actions = [] }) {
   return new Promise((resolve) => {
     const backdrop = document.createElement("div");
@@ -336,13 +308,6 @@ export function initials(name) {
   return (parts[0][0] + (parts[1]?.[0] || "")).toUpperCase();
 }
 
-/** `reportedBy` on a reported post/review is a real traveller's uid for a
- * human "Report" tap, or the literal string "system" for content the AI
- * filter auto-flagged at creation time (see CommunityRepository.createPost
- * / review_helpers.dart's addReviewFor in the Flutter app) — shown here as
- * a readable label instead of the raw sentinel either way. Shared by
- * admin/content-moderation.html and admin/notifications.html so both name
- * the same reporter the same way. */
 export function reporterLabel(item) {
   return item.reportedBy === "system" ? "AI content filter" : (item.reportedBy || "a traveller");
 }
@@ -366,14 +331,6 @@ export function escapeHtml(str) {
   }[c]));
 }
 
-// ==================== Field validation ====================
-// Small, shared format checks for the handful of field types that appear
-// across several admin/partner forms (email addresses, phone/emergency
-// numbers). Kept deliberately loose — these forms cover real numbers from
-// every country Voya operates in, which don't share one digit count or
-// format, so the check is "does this look like a phone number at all"
-// (digits, spaces, +, -, (), x for extensions) rather than a strict
-// country-specific pattern that would reject legitimate real numbers.
 export function isValidEmail(str) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(str || "").trim());
 }
@@ -382,10 +339,6 @@ export function isPlausiblePhone(str) {
   return /^[0-9+()\-.\sx]{2,}$/i.test(s) && /\d/.test(s);
 }
 
-/** Wires a show/hide eye button next to a password field — click toggles
- * the input's type between "password" and "text" and swaps the icon to
- * match. Used on every page a password is typed (admin + partner login,
- * partner register's password and confirm-password fields). */
 export function wirePasswordToggle(inputId, btnId) {
   const input = document.getElementById(inputId);
   const btn = document.getElementById(btnId);
@@ -398,12 +351,6 @@ export function wirePasswordToggle(inputId, btnId) {
   });
 }
 
-// The same four password rules the Flutter traveller signup page enforces
-// (lib/controllers/auth_controller.dart's SignupController) -- mirrored
-// here so every password field across admin_web (partner register,
-// admin/partner change-password) shows the identical live checklist and
-// actually enforces the same rule set, instead of the old weak
-// "length < 8" submit-time-only check.
 export function passwordRuleChecks(password) {
   const p = password || "";
   const lengthOk = p.length >= 8 && p.length <= 12;
@@ -426,11 +373,6 @@ const PASSWORD_RULE_LABELS = [
   ["hasSpecial", "Contain 1 special character '-!@#$%^&*'"],
 ];
 
-/** Wires a live ✓/✕ password-rule checklist below a password field,
- * matching the Flutter signup page's wording and rules exactly. Renders
- * the checklist into listEl on every keystroke and returns a
- * isPasswordValid() function the caller's submit handler should check
- * instead of any ad-hoc length test. */
 export function wirePasswordRules(inputId, listId) {
   const input = document.getElementById(inputId);
   const list = document.getElementById(listId);
@@ -453,14 +395,6 @@ export function wirePasswordRules(inputId, listId) {
   return { isPasswordValid: () => passwordRuleChecks(input.value).allOk };
 }
 
-// The <input accept="image/*"> attribute only filters what the OS's own
-// file-picker dialog shows — it does nothing once a file is actually
-// selected, so a renamed file, a drag-and-drop, or the dialog's own
-// "All files" option can still hand back a .csv (or anything else) for a
-// "photo" field with nothing catching it. This checks the browser-
-// sniffed MIME type instead (which a renamed extension can't fake) plus
-// a size cap, and every photo/logo upload flow in admin_web calls it
-// before accepting a picked file.
 const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
 export function isValidImageFile(file, maxSizeMB = 8) {
   if (!file) return { ok: false, reason: "No file selected." };
@@ -482,14 +416,6 @@ export function paginate(items, page, pageSize) {
   return { pageItems: items.slice(start, start + pageSize), page: safePage, pages, total };
 }
 
-/**
- * Renders a pager into #<containerId>: prev/next arrows plus up to
- * `windowSize` page-number buttons (default 5), sliding so the current page
- * stays roughly centered instead of listing every page — a list with 26
- * pages only ever shows 5 numbers at once, not all 26. `onPage(n)` is
- * called with the target page when a number or an arrow is clicked; the
- * caller re-renders (table + pager) from there, same as before this existed.
- */
 export function renderPager(containerId, { page, pages }, onPage, windowSize = 5) {
   const pager = document.getElementById(containerId);
   if (!pager) return;
@@ -511,24 +437,6 @@ export function renderPager(containerId, { page, pages }, onPage, windowSize = 5
   mountIcons(pager);
 }
 
-/**
- * Renders a dependency-free horizontal grouped-bar comparison chart into
- * #<containerId> — no chart library, just divs sized by percentage. `rows`
- * is [{ label, values: [n1, n2, ...] }], one entry per category (e.g. a
- * status); `series` is [{ label, color }] in the same order as each row's
- * `values` (e.g. Claims vs Refunds). All bars share one scale (the max
- * value across every row/series) so lengths stay comparable at a glance.
- * Used by the Report Design pages (admin/reports.html, partner/reports.html)
- * for things like "claims vs refunds by status" — a plain bar chart would
- * need a library this no-build-step project doesn't have; this is the
- * lightest thing that still reads as a chart.
- */
-// ---------------- Real "vs last month" stat-card deltas ----------------
-// Shared by every stat card across admin/partner pages — replaces what
-// used to be a hardcoded "↑ 2.4% from last month" everywhere. A metric
-// with no honest baseline to compare against (a "pending" queue, or a
-// status with no date correlation at all) should render via plainCard()
-// instead of statCard() rather than fake a delta for it.
 export function monthBounds(monthsAgo = 0) {
   const now = new Date();
   const start = new Date(now.getFullYear(), now.getMonth() - monthsAgo, 1);
@@ -566,12 +474,6 @@ export function countBetween(items, dateField, start, end) {
     return d && d >= start && d < end;
   }).length;
 }
-/** For a claim/refund-shaped item (status + a timeline[] of {status, at}),
- * the date it actually reached its CURRENT status — not when it was
- * created. Falls back to createdAt when there's no matching timeline
- * entry (e.g. still "new"). Lets a "claims approved this month" delta
- * bucket by when something was approved, not when it happened to be
- * filed. */
 export function statusChangedAt(item) {
   const entry = (item.timeline || []).find((t) => t.status === item.status);
   if (entry) {
@@ -618,12 +520,9 @@ export function statCard(label, value, icon, delta) {
   const deltaHtml = delta ? `<div class="stat-delta${delta.up === false ? " down" : ""}">${delta.text}</div>` : "";
   return `<div class="card stat-card"><div class="stat-top"><div class="stat-icon"><span data-icon="${icon}"></span></div><div class="stat-label">${label}</div></div><div class="stat-value">${value}</div>${deltaHtml}</div>`;
 }
-/** Stat card with no delta line — for a metric with no honest baseline
- * to compare against (a "pending" queue, a status with no real temporal
- * correlation, e.g. "Suspended"). Still carries an icon like statCard()
- * so every stat card in the row looks the same shape. */
-export function plainCard(label, value, icon) {
-  return `<div class="card stat-card"><div class="stat-top"><div class="stat-icon"><span data-icon="${icon}"></span></div><div class="stat-label">${label}</div></div><div class="stat-value">${value}</div></div>`;
+export function plainCard(label, value, icon, href) {
+  const clickableAttrs = href ? ` onclick="location.href='${href}'" style="cursor:pointer;" title="Click to review"` : "";
+  return `<div class="card stat-card"${clickableAttrs}><div class="stat-top"><div class="stat-icon"><span data-icon="${icon}"></span></div><div class="stat-label">${label}</div></div><div class="stat-value">${value}</div></div>`;
 }
 
 export function renderComparisonBars(containerId, rows, series) {
@@ -652,20 +551,7 @@ export function renderComparisonBars(containerId, rows, series) {
   el.innerHTML = `<div style="display:flex;gap:16px;margin-bottom:14px;font-size:12px;">${legend}</div>${body}`;
 }
 
-// ==================== Shared report date-range picker ====================
-// Used by every "From ... To ..." report (admin/reports.html's three
-// tabs, partner/reports.html) so picking a reporting period looks and
-// behaves identically everywhere, instead of each report page carrying
-// its own slightly-different copy.
 
-/** Earliest date any report's range can start from (Aug 2026 is as far
- * back as a report is meant to go — the admin asked for this directly,
- * Nov 2026) and the latest it can end at (today — a report can't cover
- * days that haven't happened yet). wireDateRangeBar applies both as a
- * real <input min/max> (blocks the native date picker from offering an
- * out-of-range day) and as a JS clamp on every change (covers a date
- * typed in by hand, which min/max alone doesn't always catch
- * consistently across browsers). */
 export const REPORT_MIN_DATE = new Date(2026, 7, 1);
 export function reportMaxDate() {
   const d = new Date();
@@ -673,10 +559,6 @@ export function reportMaxDate() {
   return d;
 }
 
-/** One {label, start, end} entry per calendar month touched by [start,
- * end] — the shared x-axis for every report tab's monthly chart. A month
- * is included if any part of it falls inside the selected range, so a
- * partial first/last month still gets its own labeled column. */
 export function monthsBetween(start, end) {
   const months = [];
   let cursor = new Date(start.getFullYear(), start.getMonth(), 1);
@@ -690,23 +572,11 @@ export function monthsBetween(start, end) {
   return months;
 }
 
-/** True if a Firestore Timestamp field on `item` falls inside [start, end]
- * (both inclusive — `end` is always set to 23:59:59.999 on its calendar
- * day by wireDateRangeBar, so "To 6 Nov 2026" includes everything that
- * happened on 6 Nov). */
 export function inRange(item, dateField, start, end) {
   const d = item[dateField]?.toDate ? item[dateField].toDate() : null;
   return !!d && d >= start && d <= end;
 }
 
-/** Shared "From ... To ..." date-range filter bar. Sets both inputs to
- * `defaultStart`/`defaultEnd` (clamped into [REPORT_MIN_DATE,
- * reportMaxDate()]), swaps them back in sync if the admin/partner picks
- * an end date before the start date, writes a human-readable
- * "1 Jun 2026 – 6 Nov 2026" hint into `hintId` (if given), and calls
- * `onChange(start, end)` once immediately and again on every change —
- * `end` always carries 23:59:59.999 so a same-day range (From and To
- * both today) still matches today's records. */
 export function wireDateRangeBar(startId, endId, hintId, { defaultStart, defaultEnd = new Date() }, onChange) {
   const startInput = document.getElementById(startId);
   const endInput = document.getElementById(endId);

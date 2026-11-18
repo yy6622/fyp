@@ -52,20 +52,16 @@
 </div>
 
 <script type="module">
-import { requireRole } from "../js/auth-guard.js?v=20261106b";
+import { requireRole } from "../js/auth-guard.js?v=20261115a";
 import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261114a";
 import { mountIcons } from "../js/icons.js?v=20261106c";
-import { listTransactions, listClaims, listRefunds, listPlans, listPartners, listUsers, listAllPosts, listPostViewStats, listPostViewers } from "../js/data.js?v=20261114c";
-import { money, moneyExact, number, escapeHtml, renderComparisonBars, monthsBetween, inRange, wireDateRangeBar } from "../js/ui.js?v=20261113a";
+import { listTransactions, listClaims, listRefunds, listPlans, listPartners, listUsers, listAllPosts, listPostViewStats, listPostViewers } from "../js/data.js?v=20261117a";
+import { money, moneyExact, number, escapeHtml, renderComparisonBars, monthsBetween, inRange, wireDateRangeBar } from "../js/ui.js?v=20261115a";
 import { exportReportPdf, exportReportExcel } from "../js/report-export.js?v=20261007f";
 
 mountSidebarNav({ role: "admin", active: "reports" });
 const session = await requireRole("admin", "login.html");
 let category = "posts";
-// Which sub-page of "User Account Reports" is showing — the spec keeps
-// Traveller and Insurance Partner on separate detailed pages rather than
-// one combined table, so the volume difference between the two account
-// types doesn't drown the (much smaller) partner numbers out.
 let uarSubTab = "traveller";
 let uarRange = null; // last {start, end} picked on the User Account Reports date-range bar, shared by both its sub-tabs
 let data = null; // last computed report model for the active category, for export
@@ -116,13 +112,6 @@ function monthBounds(monthsAgo = 0) {
   return { start, end };
 }
 
-/** Real "vs last month" delta for a stat card — replaces what used to be
- * a hardcoded "↑ 2.4%" on every card. `current`/`previous` are whatever
- * comparable pair the caller computed (a monthly flow, or a point-in-time
- * count as of a month ago — see each load*() function for which, since
- * that differs per metric). Returns null when there's no honest baseline
- * to compare against, so the caller omits the delta line entirely rather
- * than show a placeholder. */
 function monthDelta(current, previous) {
   if (current === null || current === undefined || previous === null || previous === undefined) return null;
   if (previous === 0) return current === 0 ? null : { text: "New this month", up: true };
@@ -132,10 +121,6 @@ function monthDelta(current, previous) {
   return { text: `${up ? "↑" : "↓"} ${Math.abs(pct).toFixed(1)}% from last month`, up };
 }
 
-/** Same as [monthDelta], but for a value that's already a percentage
- * (e.g. an approval rate) — shown as a point difference rather than a
- * relative percentage change of a percentage, which would read as
- * confusing (e.g. "40% → 44%" is "+4 pts", not "+10%"). */
 function pointDelta(current, previous) {
   if (current === null || current === undefined || previous === null || previous === undefined) return null;
   const diff = current - previous;
@@ -144,10 +129,6 @@ function pointDelta(current, previous) {
   return { text: `${up ? "↑" : "↓"} ${Math.abs(diff).toFixed(1)} pts from last month`, up };
 }
 
-/** Sums valueFn(item) over items whose [dateField] Timestamp falls inside
- * the calendar month `monthsAgo` months before now (0 = this month, 1 =
- * last month) — the building block for every "monthly flow" delta
- * (revenue, purchase count, post views, ...). */
 function sumInMonth(items, dateField, valueFn, monthsAgo) {
   const { start, end } = monthBounds(monthsAgo);
   return items.reduce((s, item) => {
@@ -170,10 +151,6 @@ function countBefore(items, dateField, cutoff) {
   }).length;
 }
 
-/** Counts items whose [dateField] Timestamp falls inside [start, end) —
- * used by User Account Reports' cohort/month-bucket logic below, where
- * countInMonth's fixed "N months ago" framing doesn't fit (that report is
- * year-to-date, not a rolling window). */
 function countBetween(items, dateField, start, end) {
   return items.filter((item) => {
     const d = item[dateField]?.toDate ? item[dateField].toDate() : null;
@@ -185,11 +162,6 @@ function plainCard(label, value, icon) {
   return `<div class="card stat-card"><div class="stat-top"><div class="stat-icon"><span data-icon="${icon}"></span></div><div class="stat-label">${label}</div></div><div class="stat-value">${value}</div></div>`;
 }
 
-/** Shared failure state for every report tab's load*() function — a
- * permission-denied read (e.g. Firestore rules not deployed yet) or any
- * other fetch error used to leave the tab stuck on its grey skeleton
- * forever with no indication anything had gone wrong. This replaces that
- * with a visible message instead. */
 function renderLoadError(err) {
   document.getElementById("reportBody").innerHTML = `
     <div class="card card-pad">
@@ -234,8 +206,8 @@ async function renderInsuranceOperations() {
       <p class="small muted" id="rangeHint" style="margin-left:auto;"></p>
     </div>
     <div class="stat-grid" id="statGrid"><div class="skeleton" style="height:90px;grid-column:1/-1;"></div></div>
-    <div style="display:grid;grid-template-columns:1.4fr 1fr;gap:20px;align-items:start;" class="detail-grid">
-      <div class="card card-pad">
+    <div style="display:grid;grid-template-columns:1.4fr 1fr;gap:20px;align-items:stretch;" class="detail-grid">
+      <div class="card card-pad chart-card">
         <h3 class="h3" style="margin-bottom:18px;">Monthly Insurance Purchases</h3>
         <div class="bars" id="purchaseBars"></div>
         <div class="bars-labels" id="purchaseLabels"></div>
@@ -268,12 +240,6 @@ async function loadInsuranceOperations(start, end) {
     renderLoadError(err);
     return;
   }
-  // Snapshot stats (as of the selected end date) vs. flow stats (within
-  // the selected [start, end] window) — see [inRange]/[wireDateRangeBar].
-  // Registered partners / Active plans are running totals with no
-  // historical status log to replay, so they're shown "as of" the end
-  // date rather than restricted to the window; purchases/value/claims/
-  // refunds are genuine period activity.
   const partnersAsOfEnd = partners.filter((p) => { const d = p.createdAt?.toDate ? p.createdAt.toDate() : null; return !d || d <= end; });
   const activePlans = plans.filter((p) => p.status === "active" && (!p.createdAt?.toDate || p.createdAt.toDate() <= end));
   const paidInRange = txns.filter((t) => t.status === "paid" && inRange(t, "createdAt", start, end));
@@ -283,10 +249,6 @@ async function loadInsuranceOperations(start, end) {
   const pendingClaims = claimsInRange.filter((c) => c.status === "new" || c.status === "under_review").length;
   const pendingRefunds = refundsInRange.filter((r) => r.status === "new" || r.status === "under_review").length;
 
-  // Real month-over-month deltas (see monthDelta/sumInMonth/countBefore,
-  // defined near the top of this file) — always "this calendar month vs
-  // last" as a live trend pulse, computed from the full, unwindowed data,
-  // independent of the selected reporting window above.
   const { start: ioThisMonthStart } = monthBounds(0);
   const allPaid = txns.filter((t) => t.status === "paid");
   const partnersDelta = monthDelta(partners.length, countBefore(partners, "createdAt", ioThisMonthStart));
@@ -357,15 +319,11 @@ async function loadInsuranceOperations(start, end) {
     monthList, providerRows,
     period: { start, end },
     claimStatusCounts: claimCounts,
+    refundStatusCounts: refundCounts,
     avgProcessingDaysAll: avgProcessingDays([...claimsInRange, ...refundsInRange]),
   };
 }
 
-/** Community Post Analysis Report — see Report Design spec. Post
- * "destination" is the post's `location` field: the only place-ish value
- * a post carries (set from the attached itinerary's title at compose
- * time, or "Unknown" with nothing attached — see
- * CommunityRepository.createPost). */
 async function renderCommunityPostAnalysis() {
   document.getElementById("reportBody").innerHTML = `
     <div class="filter-bar">
@@ -378,13 +336,13 @@ async function renderCommunityPostAnalysis() {
       <p class="small muted" id="postsRangeHint" style="margin-left:auto;"></p>
     </div>
     <div class="stat-grid" id="postsStatGrid"><div class="skeleton" style="height:90px;grid-column:1/-1;"></div></div>
-    <div style="display:grid;grid-template-columns:1.4fr 1fr;gap:20px;align-items:start;" class="detail-grid">
-      <div class="card card-pad">
+    <div style="display:grid;grid-template-columns:1.4fr 1fr;gap:20px;align-items:stretch;" class="detail-grid">
+      <div class="card card-pad chart-card">
         <h3 class="h3" style="margin-bottom:18px;">Monthly Post Views</h3>
         <div class="bars" id="postsTrendBars"></div>
         <div class="bars-labels" id="postsTrendLabels"></div>
       </div>
-      <div class="card card-pad">
+      <div class="card card-pad chart-card">
         <h3 class="h3" style="margin-bottom:18px;">Views by Destination</h3>
         <div class="bars" id="postsDestBars"></div>
         <div class="bars-labels" id="postsDestLabels"></div>
@@ -415,12 +373,6 @@ async function loadCommunityPostAnalysis(start, end) {
     return;
   }
 
-  // Everything below is scoped to the selected [start, end] window —
-  // "Published posts" and the detail table list only posts created
-  // inside it, and views/unique-viewers are summed only over the months
-  // it covers (see monthList) — except the month-over-month deltas
-  // further down, which always compare live calendar months as a trend
-  // pulse, independent of whatever window is selected here.
   const postsInRange = posts.filter((p) => inRange(p, "createdAt", start, end));
   const totalPosts = postsInRange.length;
   const allRatingValues = postsInRange.flatMap((p) => Object.values(p.ratings || {}).map((v) => Number(v) || 0));
@@ -432,12 +384,6 @@ async function loadCommunityPostAnalysis(start, end) {
   const monthList = monthsBetween(start, end).map((m) => ({ ...m, views: statsByKey[keyFor(m.start)] || 0 }));
   const totalViews = monthList.reduce((s, m) => s + m.views, 0);
 
-  // One entry per uid: the EARLIEST view of anything they've ever opened
-  // (the min of their viewer-marker docs' firstViewedAt, across every
-  // post — see listPostViewers()). "Unique viewers" counts only those
-  // whose earliest-ever view falls inside the selected window, so a
-  // returning viewer whose first view was in an earlier period isn't
-  // counted again.
   const firstSeenByUid = {};
   viewerRecords.forEach((r) => {
     const d = r.firstViewedAt?.toDate ? r.firstViewedAt.toDate() : null;
@@ -446,13 +392,6 @@ async function loadCommunityPostAnalysis(start, end) {
   });
   const totalUniqueViewers = Object.values(firstSeenByUid).filter((d) => d >= start && d <= end).length;
 
-  // Real month-over-month deltas (see monthDelta/monthBounds/countBefore,
-  // defined near the top of this file), computed from the full,
-  // unwindowed data as a live "vs last month" trend pulse, independent
-  // of the selected reporting window above. Average rating has no
-  // per-rating timestamp to compare against — ratings are stored as a
-  // single {uid: stars} map with no history — so its delta is honestly
-  // left out (null) rather than guessed.
   const { start: pcThisMonthStart } = monthBounds(0);
   const viewsDelta = monthDelta(statsByKey[keyFor(pcThisMonthStart)] || 0, statsByKey[keyFor(monthBounds(1).start)] || 0);
   const uniqueViewersDelta = monthDelta(
@@ -472,10 +411,6 @@ async function loadCommunityPostAnalysis(start, end) {
   document.getElementById("postsTrendBars").innerHTML = monthList.map((m, i) => `<div class="bar-col" data-tooltip="${m.label}: ${number(m.views)} view${m.views === 1 ? "" : "s"}"><div class="bar${i % 2 ? " alt" : ""}" style="height:${Math.max(6, (m.views / maxViews) * 100)}%"></div></div>`).join("");
   document.getElementById("postsTrendLabels").innerHTML = monthList.map((m) => `<span>${m.label.split(" ")[0]}</span>`).join("");
 
-  // Views by destination — summed from each in-range post's own
-  // viewCount (lifetime, not windowed — a post's viewCount has no
-  // monthly breakdown per-post, only the platform-wide aggregate above),
-  // grouped by its `location` field.
   const byDest = {};
   postsInRange.forEach((p) => {
     const dest = p.location || "Unknown";
@@ -618,9 +553,12 @@ function exportInsuranceOperationsPdf() {
       values: data.monthList.map((m) => m.count),
     },
     barChart: {
-      title: "Claims by Status",
+      title: "Claim & Refund Status Distribution",
       labels: ["Pending", "In Progress", "Approved", "Rejected"],
-      values: data.claimStatusCounts,
+      series: [
+        { label: "Claims", values: data.claimStatusCounts },
+        { label: "Refunds", values: data.refundStatusCounts },
+      ],
       horizontal: true,
     },
     table: {
@@ -660,13 +598,6 @@ function exportInsuranceOperationsExcel() {
   });
 }
 
-/** User Account Reports — see Report Design spec. Traveller and Insurance
- * Partner stay on separate sub-pages (see `uarSubTab`) rather than one
- * combined table, since the two account types' volumes aren't comparable.
- * Shares one start-date/end-date bar across both sub-pages (see
- * `uarRange`) — same picker, same behavior as the other two report tabs
- * (Nov 2026), replacing the year-to-date-only framing this report used
- * to be locked to. */
 async function renderUserAccountReports() {
   document.getElementById("reportBody").innerHTML = `
     <div class="filter-bar" style="margin-bottom:20px;flex-wrap:wrap;">
@@ -705,13 +636,13 @@ async function renderUserAccountSubPage() {
 async function renderTravellerAccountReport() {
   document.getElementById("uarSubBody").innerHTML = `
     <div class="stat-grid" id="travStatGrid"><div class="skeleton" style="height:90px;grid-column:1/-1;"></div></div>
-    <div style="display:grid;grid-template-columns:1.4fr 1fr;gap:20px;align-items:start;" class="detail-grid">
-      <div class="card card-pad">
+    <div style="display:grid;grid-template-columns:1.4fr 1fr;gap:20px;align-items:stretch;" class="detail-grid">
+      <div class="card card-pad chart-card">
         <h3 class="h3" style="margin-bottom:18px;">Monthly Traveller Registrations</h3>
         <div class="bars" id="travTrendBars"></div>
         <div class="bars-labels" id="travTrendLabels"></div>
       </div>
-      <div class="card card-pad">
+      <div class="card card-pad chart-card">
         <h3 class="h3" style="margin-bottom:18px;">Year-End Account Status</h3>
         <div class="bars" id="travStatusBars"></div>
         <div class="bars-labels" id="travStatusLabels"></div>
@@ -740,10 +671,6 @@ async function loadTravellerAccountReport() {
   }
   const statusOf = (u) => u.status || "active";
   const createdAtOf = (u) => (u.createdAt?.toDate ? u.createdAt.toDate() : null);
-  // Total/active/inactive/suspended are shown "as of" the selected end
-  // date (a running snapshot, like Insurance Operations' Registered
-  // partners) since there's no historical status log to replay; New
-  // registrations is the genuine flow within [start, end].
   const usersAsOfEnd = users.filter((u) => { const d = createdAtOf(u); return !d || d <= end; });
   const totalTravellers = usersAsOfEnd.length;
   const activeUsers = usersAsOfEnd.filter((u) => statusOf(u) === "active").length;
@@ -752,13 +679,6 @@ async function loadTravellerAccountReport() {
 
   const newRegistrations = countBetween(users, "createdAt", start, end);
 
-  // Real month-over-month deltas (see monthDelta/monthBounds/countBefore/
-  // countInMonth, defined near the top of this file) — a live "vs last
-  // calendar month" trend pulse, computed from the full, unwindowed
-  // data, independent of the selected reporting window above. Active
-  // users has no historical status log to replay, so its delta
-  // approximates "how many of today's active travellers already had
-  // that same current state before this month".
   const { start: travThisMonthStart } = monthBounds(0);
   const totalDelta = monthDelta(users.length, countBefore(users, "createdAt", travThisMonthStart));
   const newRegDelta = monthDelta(countInMonth(users, "createdAt", 0), countInMonth(users, "createdAt", 1));
@@ -784,11 +704,6 @@ async function loadTravellerAccountReport() {
   document.getElementById("travStatusBars").innerHTML = statusEntries.map(([label, v], i) => `<div class="bar-col" data-tooltip="${label}: ${number(v)} traveller${v === 1 ? "" : "s"}"><div class="bar${i % 2 ? " alt" : ""}" style="height:${Math.max(6, (v / maxStatus) * 100)}%"></div></div>`).join("");
   document.getElementById("travStatusLabels").innerHTML = statusEntries.map(([label]) => `<span>${label}</span>`).join("");
 
-  // Monthly detail — the last 3 columns approximate "as of end of that
-  // month" using each traveller's CURRENT status (no historical status
-  // log exists to replay, same approximation as the deltas above). Total
-  // row sums New Registrations but takes the LATEST value for the 3
-  // cumulative columns, since those aren't additive across months.
   const detailRows = months.map((m) => ({
     label: m.label,
     newRegistrations: m.count,
@@ -825,7 +740,7 @@ async function loadTravellerAccountReport() {
 async function renderPartnerAccountReport() {
   document.getElementById("uarSubBody").innerHTML = `
     <div class="stat-grid" id="partStatGrid"><div class="skeleton" style="height:90px;grid-column:1/-1;"></div></div>
-    <div class="card card-pad" style="margin-bottom:20px;">
+    <div class="card card-pad chart-card" style="margin-bottom:20px;">
       <h3 class="h3" style="margin-bottom:18px;">Monthly Insurance Partner Registrations</h3>
       <div class="bars" id="partTrendBars"></div>
       <div class="bars-labels" id="partTrendLabels"></div>
@@ -885,11 +800,6 @@ async function loadPartnerAccountReport() {
   document.getElementById("partTrendBars").innerHTML = months.map((m, i) => `<div class="bar-col" data-tooltip="${m.label}: ${number(m.count)} partner${m.count === 1 ? "" : "s"}"><div class="bar${i % 2 ? " alt" : ""}" style="height:${Math.max(6, (m.count / maxCount) * 100)}%"></div></div>`).join("");
   document.getElementById("partTrendLabels").innerHTML = months.map((m) => `<span style="font-size:10.5px;">${m.label.split(" ")[0]}</span>`).join("");
 
-  // Cohort-based (not cumulative): each month's registrants bucketed by
-  // CURRENT status, so Active+Inactive+Rejected reconciles exactly with
-  // that month's own New Registrations total — unlike the traveller
-  // table above, this doesn't need the "as of end of month" approximation
-  // since every partner falls into exactly one bucket per cohort.
   const detailRows = months.map((m) => {
     const cohort = partners.filter((p) => createdAtOf(p) && createdAtOf(p) >= m.start && createdAtOf(p) < m.end);
     return {

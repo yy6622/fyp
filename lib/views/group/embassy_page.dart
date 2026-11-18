@@ -1,13 +1,16 @@
 import 'package:flutter/material.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../../data/emergency_info.dart';
 import '../../repositories/country_emergency_repository.dart';
 import '../../repositories/user_repository.dart';
 import '../../services/auth_service.dart';
 import '../../theme.dart';
+import '../detail/detail_widgets.dart';
 import '../shared/contact_launcher.dart';
+
+// Kept here (rather than a shared data file) since this is the only place
+// it's used -- the "we don't have verified details yet" fallback link.
+const kMalaysianMissionsDirectoryUrl = 'https://www.kln.gov.my/web/guest/overseas-missions';
 
 class EmbassyPage extends StatefulWidget {
   final String destination;
@@ -40,24 +43,37 @@ class _EmbassyPageState extends State<EmbassyPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
-      appBar: const VoyaAppBar(
-        title: Text('Embassy', style: TextStyle(color: AppColors.navy, fontWeight: FontWeight.bold, fontSize: 19)),
-      ),
-      body: FutureBuilder<_EmbassyPageData>(
-        future: _future,
-        builder: (context, snapshot) {
-          if (!snapshot.hasData) {
-            return const Center(child: CircularProgressIndicator(color: AppColors.primary));
-          }
-          final data = snapshot.data!;
-          return data.embassy == null ? _notAvailable(context, data.homeCountry) : _embassyDetail(data.embassy!, data.homeCountry);
-        },
+      body: SafeArea(
+        child: FutureBuilder<_EmbassyPageData>(
+          future: _future,
+          builder: (context, snapshot) {
+            if (!snapshot.hasData) {
+              return const Column(
+                children: [
+                  DetailHeader(title: 'Embassy', showHero: false),
+                  Expanded(child: Center(child: CircularProgressIndicator(color: AppColors.primary))),
+                ],
+              );
+            }
+            final data = snapshot.data!;
+            return data.embassy == null ? _notAvailable(context, data.homeCountry) : _embassyDetail(data.embassy!, data.homeCountry);
+          },
+        ),
       ),
     );
   }
 
   Widget _notAvailable(BuildContext context, String homeCountry) {
     final isMalaysia = homeCountry.trim().toLowerCase() == 'malaysia';
+    return Column(
+      children: [
+        const DetailHeader(title: 'Embassy', showHero: false),
+        Expanded(child: _notAvailableBody(context, homeCountry, isMalaysia)),
+      ],
+    );
+  }
+
+  Widget _notAvailableBody(BuildContext context, String homeCountry, bool isMalaysia) {
     return ListView(
       padding: const EdgeInsets.all(24),
       children: [
@@ -99,11 +115,22 @@ class _EmbassyPageState extends State<EmbassyPage> {
   }
 
   Widget _embassyDetail(EmbassyRecord info, String homeCountry) {
-    return ListView(
-      padding: const EdgeInsets.all(20),
+    return Column(
       children: [
-        _photoOrIcon(info.embassyPhotoUrl),
-        const SizedBox(height: 10),
+        DetailHeader(
+          title: 'Embassy',
+          imageUrl: info.embassyPhotoUrl.isEmpty ? null : info.embassyPhotoUrl,
+          fallbackIcon: Icons.account_balance,
+        ),
+        Expanded(child: _embassyDetailBody(info, homeCountry)),
+      ],
+    );
+  }
+
+  Widget _embassyDetailBody(EmbassyRecord info, String homeCountry) {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+      children: [
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
           decoration: BoxDecoration(color: AppColors.chipGrey, borderRadius: BorderRadius.circular(20)),
@@ -129,27 +156,6 @@ class _EmbassyPageState extends State<EmbassyPage> {
           ],
         ),
       ],
-    );
-  }
-
-  Widget _photoOrIcon(String photoUrl) {
-    final placeholder = Container(
-      width: 64,
-      height: 64,
-      decoration: const BoxDecoration(color: AppColors.chipGrey, shape: BoxShape.circle),
-      alignment: Alignment.center,
-      child: const Icon(Icons.account_balance, color: AppColors.navy, size: 30),
-    );
-    if (photoUrl.isEmpty) return placeholder;
-    return ClipOval(
-      child: CachedNetworkImage(
-        imageUrl: photoUrl,
-        width: 64,
-        height: 64,
-        fit: BoxFit.cover,
-        errorWidget: (_, __, ___) => placeholder,
-        placeholder: (context, url) => placeholder,
-      ),
     );
   }
 

@@ -394,8 +394,22 @@ service cloud.firestore {
         // write to change the poll's title, deadline, allowMultipleChoice,
         // etc. — mirroring the `/expenses/{expenseId}` rule's
         // hasOnly(['participants']) pattern below.
-        allow update: if isTripMember(tripId) &&
-          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['options']);
+        //
+        // The second branch is TripRepository.decideVote (the AI Summarise
+        // sheet's tie-break buttons): settling a tie is a DECISION, not
+        // another ballot, so it deliberately writes different fields
+        // (decidedOptionId/decidedBy/decidedAt) instead of touching
+        // `options` — without this branch every one of those writes was
+        // rejected here as "not just `options`", surfacing in the app as
+        // "Couldn't settle that poll." decidedBy must be the caller's own
+        // uid (no deciding on someone else's behalf) and decidedOptionId
+        // must name a real option on this poll.
+        allow update: if isTripMember(tripId) && (
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['options']) ||
+          (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['decidedOptionId', 'decidedBy', 'decidedAt']) &&
+           request.resource.data.decidedBy == request.auth.uid &&
+           request.resource.data.decidedOptionId in resource.data.options)
+        );
         // Only ever deleted as part of TripRepository.deleteTrip's cascade
         // cleanup (FR12) — no single-vote delete exists elsewhere.
         allow delete: if isTripOwner(tripId);

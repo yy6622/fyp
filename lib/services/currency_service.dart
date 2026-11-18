@@ -16,7 +16,6 @@ class CurrencyService {
 
   bool get hasRates => _ratesPerUsd != null;
 
-  String? lastKnownUserCurrency;
 
   Future<void> ensureRatesLoaded() {
     if (_ratesPerUsd != null && _fetchedAt != null && DateTime.now().difference(_fetchedAt!) < _ttl) {
@@ -79,12 +78,6 @@ class CurrencyService {
     return amount / fromRate * toRate;
   }
 
-  /// Same as [convert], but for a caller that needs a real number no
-  /// matter what -- not just a display string -- such as the actual
-  /// amount charged to a card. Falls back to [amount] unchanged (still
-  /// denominated in [from]) when [to] is missing or rates aren't loaded
-  /// yet, rather than handing back null and forcing every call site to
-  /// repeat that fallback itself.
   double convertOrSame(double amount, {required String from, String? to}) {
     if (to == null || to.isEmpty) return amount;
     return convert(amount, from: from, to: to) ?? amount;

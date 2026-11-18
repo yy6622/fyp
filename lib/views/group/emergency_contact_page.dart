@@ -30,16 +30,17 @@ class _EmergencyContactPageState extends State<EmergencyContactPage> {
             return const Center(child: CircularProgressIndicator(color: AppColors.primary));
           }
           final numbers = snapshot.data!;
+          final allMissing = numbers.police == null && numbers.ambulance == null && numbers.fire == null;
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              if (numbers.isGenericFallback)
+              if (allMissing)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 12),
                   child: Text(
                     widget.destination.isEmpty
-                        ? "This trip has no destination set yet, so 112 — the universal GSM emergency number — is shown below."
-                        : "We don't have ${widget.destination}'s specific local numbers yet, so 112 — the universal GSM emergency number, which works in most countries — is shown below.",
+                        ? "This trip has no destination set yet, so there's no emergency number to show."
+                        : "We don't have ${widget.destination}'s emergency numbers yet.",
                     style: const TextStyle(fontSize: 11.5, color: AppColors.textGrey, height: 1.4),
                   ),
                 ),
@@ -55,7 +56,8 @@ class _EmergencyContactPageState extends State<EmergencyContactPage> {
     );
   }
 
-  Widget _contactRow(BuildContext context, IconData icon, String label, String number) {
+  Widget _contactRow(BuildContext context, IconData icon, String label, String? number) {
+    final available = number != null && number.isNotEmpty;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 10),
       child: Row(
@@ -74,13 +76,16 @@ class _EmergencyContactPageState extends State<EmergencyContactPage> {
               children: [
                 Text(label, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.black)),
                 const SizedBox(height: 2),
-                Text(number, style: const TextStyle(fontSize: 11.5, color: AppColors.textGrey)),
+                Text(
+                  available ? number : 'Not available yet',
+                  style: TextStyle(fontSize: 11.5, color: available ? AppColors.textGrey : AppColors.textGrey.withValues(alpha: 0.6)),
+                ),
               ],
             ),
           ),
           IconButton(
-            icon: const Icon(Icons.call, color: AppColors.primary),
-            onPressed: () => confirmAndLaunch(context, ContactAction.call, number),
+            icon: Icon(Icons.call, color: available ? AppColors.primary : AppColors.textGrey.withValues(alpha: 0.4)),
+            onPressed: available ? () => confirmAndLaunch(context, ContactAction.call, number) : null,
           ),
         ],
       ),

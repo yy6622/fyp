@@ -23,10 +23,6 @@ export const db = getFirestore(app);
 export const storage = getStorage(app);
 export const functions = getFunctions(app);
 
-// Test mode for the automated web tests (tests/web/). Opening any page once
-// with ?emulator=1 switches this browser tab to the local Firebase emulators
-// (firebase emulators:start) for the rest of the session; ?emulator=0 switches
-// back. Without the flag nothing changes and the console uses the live project.
 let useEmulator = false;
 try {
   const flag = new URLSearchParams(location.search).get("emulator");

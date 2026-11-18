@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../controllers/booking_details_controller.dart';
 import '../../controllers/insurance_controller.dart' show nationalityOptions;
+import '../../models/duffel_models.dart';
 import '../../repositories/trip_repository.dart';
 import '../../repositories/user_repository.dart';
 import '../../services/auth_service.dart';
@@ -26,6 +27,22 @@ class FlightPassengerDetailsPage extends StatefulWidget {
   final String bookingSubtitle;
   final String refId;
   final String tripId;
+  final List<DuffelOfferPassenger> offerPassengers;
+  final double offerTotalAmount;
+  final String offerTotalCurrency;
+  final DateTime? departureAt;
+  final String? fromCode;
+  final String? fromCity;
+  final String? toCode;
+  final String? toCity;
+  final String? flightDate;
+  final String? depTime;
+  final String? arrTime;
+  final String? duration;
+  final String? stops;
+  final String? airline;
+  final String? airlineLogoUrl;
+  final String? cabinClass;
   final Future<void> Function(BookingConfirmation confirmation)? onPaid;
 
   const FlightPassengerDetailsPage({
@@ -39,6 +56,22 @@ class FlightPassengerDetailsPage extends StatefulWidget {
     required this.bookingSubtitle,
     this.refId = '',
     this.tripId = '',
+    this.offerPassengers = const [],
+    this.offerTotalAmount = 0,
+    this.offerTotalCurrency = '',
+    this.departureAt,
+    this.fromCode,
+    this.fromCity,
+    this.toCode,
+    this.toCity,
+    this.flightDate,
+    this.depTime,
+    this.arrTime,
+    this.duration,
+    this.stops,
+    this.airline,
+    this.airlineLogoUrl,
+    this.cabinClass,
     this.onPaid,
   });
 
@@ -47,10 +80,10 @@ class FlightPassengerDetailsPage extends StatefulWidget {
 }
 
 class _FlightPassengerDetailsPageState extends State<FlightPassengerDetailsPage> {
-  final FlightPassengerDetailsController controller = FlightPassengerDetailsController();
+  late final FlightPassengerDetailsController controller;
 
-  final List<TextEditingController> _nameCtrls = [TextEditingController()];
-  final List<TextEditingController> _passportCtrls = [TextEditingController()];
+  late final List<TextEditingController> _nameCtrls;
+  late final List<TextEditingController> _passportCtrls;
   final TextEditingController _emailCtrl = TextEditingController();
   final TextEditingController _phoneCtrl = TextEditingController();
 
@@ -58,9 +91,20 @@ class _FlightPassengerDetailsPageState extends State<FlightPassengerDetailsPage>
   Set<String> _forMemberUids = {};
   int _phoneFieldVersion = 0;
 
+  bool get _offerLocked => widget.offerPassengers.isNotEmpty;
+
   @override
   void initState() {
     super.initState();
+    final lockedCount = _offerLocked ? widget.offerPassengers.length : 1;
+    controller = FlightPassengerDetailsController(
+      initialQuantity: lockedCount,
+      minQuantity: _offerLocked ? lockedCount : 1,
+      maxQuantity: _offerLocked ? lockedCount : 9,
+      departureAt: widget.departureAt,
+    );
+    _nameCtrls = List.generate(lockedCount, (_) => TextEditingController());
+    _passportCtrls = List.generate(lockedCount, (_) => TextEditingController());
     if (widget.tripId.isNotEmpty) {
       final uid = AuthService.instance.currentUser?.uid ?? '';
       TripRepository.instance.watchTrip(widget.tripId, uid).first.then((trip) {
@@ -144,10 +188,31 @@ class _FlightPassengerDetailsPageState extends State<FlightPassengerDetailsPage>
         refId: widget.refId,
         tripId: widget.tripId,
         quantity: controller.quantity,
+        // unitPrice here is the Duffel offer's full total_amount, already
+        // covering every passenger and leg -- NOT a per-passenger price.
+        // Without this, the payment page's unitPrice * quantity math
+        // doubled (or worse) the real charge whenever there was more than
+        // one passenger. See BookingPaymentController.priceIsTotal.
+        priceIsTotal: true,
+        offerPassengers: widget.offerPassengers,
+        offerTotalAmount: widget.offerTotalAmount,
+        offerTotalCurrency: widget.offerTotalCurrency,
         passengerDetails: controller.passengers,
         contactEmail: controller.contactEmail.trim(),
         contactPhone: controller.contactPhone.trim(),
         forMemberUids: _forMemberUids.toList(),
+        fromCode: widget.fromCode,
+        fromCity: widget.fromCity,
+        toCode: widget.toCode,
+        toCity: widget.toCity,
+        flightDate: widget.flightDate,
+        depTime: widget.depTime,
+        arrTime: widget.arrTime,
+        duration: widget.duration,
+        stops: widget.stops,
+        airline: widget.airline,
+        airlineLogoUrl: widget.airlineLogoUrl,
+        cabinClass: widget.cabinClass,
         onPaid: widget.onPaid,
       ),
     ));
@@ -160,6 +225,7 @@ class _FlightPassengerDetailsPageState extends State<FlightPassengerDetailsPage>
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
+        centerTitle: true,
         iconTheme: const IconThemeData(color: AppColors.navy),
         title: const Text('Passenger Details', style: TextStyle(color: AppColors.navy, fontWeight: FontWeight.bold, fontSize: 18)),
       ),
@@ -188,8 +254,12 @@ class _FlightPassengerDetailsPageState extends State<FlightPassengerDetailsPage>
                             _passengerStepper(),
                           ],
                         ),
-                        const Text('One full passenger record per seat, as a real airline booking requires.',
-                            style: TextStyle(fontSize: 11, color: AppColors.textGrey)),
+                        Text(
+                          _offerLocked
+                              ? 'One full passenger record per seat, as a real airline booking requires. Matches the ${controller.passengers.length} passenger(s) you searched for.'
+                              : 'One full passenger record per seat, as a real airline booking requires.',
+                          style: const TextStyle(fontSize: 11, color: AppColors.textGrey),
+                        ),
                         for (int i = 0; i < controller.passengers.length; i++) ...[
                           const SizedBox(height: 16),
                           _passengerFields(i),
@@ -202,12 +272,13 @@ class _FlightPassengerDetailsPageState extends State<FlightPassengerDetailsPage>
                             style: TextStyle(fontSize: 11, color: AppColors.textGrey)),
                         const SizedBox(height: 10),
                         niceDialogField(_emailCtrl, 'Email', icon: Icons.email_outlined, keyboardType: TextInputType.emailAddress,
-                            onTap: null),
+                            onTap: null, required: true),
                         const SizedBox(height: 12),
                         PhoneInputField(
                           key: ValueKey(_phoneFieldVersion),
                           initialValue: _phoneCtrl.text,
                           onChanged: (v) => _phoneCtrl.text = v,
+                          required: true,
                         ),
                         const SizedBox(height: 12),
                       ],
@@ -242,6 +313,21 @@ class _FlightPassengerDetailsPageState extends State<FlightPassengerDetailsPage>
   }
 
   Widget _passengerStepper() {
+    // When the offer is locked (always true for a real flight search —
+    // Duffel's fare is priced for an exact headcount), +/- can never
+    // actually do anything: both buttons would just sit there disabled,
+    // which reads as broken rather than as "intentionally fixed". Show a
+    // plain count instead; the text under this row already explains why
+    // it matches what was searched for. Only render the real +/- stepper
+    // for the (currently theoretical) unlocked case.
+    if (_offerLocked) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(color: AppColors.chipGrey, borderRadius: BorderRadius.circular(16)),
+        child: Text('${controller.passengers.length} ${controller.passengers.length == 1 ? 'passenger' : 'passengers'}',
+            style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: AppColors.navy)),
+      );
+    }
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -278,6 +364,8 @@ class _FlightPassengerDetailsPageState extends State<FlightPassengerDetailsPage>
         const SizedBox(height: 8),
         _textField(_nameCtrls[index], 'Full Name (as in passport)', onChanged: (v) => controller.setName(index, v)),
         const SizedBox(height: 10),
+        _pickerField('Gender', p.gender, onTap: () => _pickGender(index)),
+        const SizedBox(height: 10),
         _pickerField(
           'Date of Birth',
           p.dob == null ? null : _formatDate(p.dob!),
@@ -293,11 +381,16 @@ class _FlightPassengerDetailsPageState extends State<FlightPassengerDetailsPage>
           p.passportExpiry == null ? null : _formatDate(p.passportExpiry!),
           onTap: () => _pickPassportExpiry(index),
         ),
+        const SizedBox(height: 4),
+        Text(
+          'Must stay valid for at least 6 months after ${controller.departureAt != null ? 'the flight departs' : 'today'}.',
+          style: const TextStyle(fontSize: 11, color: AppColors.textGrey),
+        ),
       ],
     );
   }
 
-  Widget _textField(TextEditingController ctrl, String label, {required ValueChanged<String> onChanged}) {
+  Widget _textField(TextEditingController ctrl, String label, {required ValueChanged<String> onChanged, bool required = true}) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10)),
@@ -305,7 +398,12 @@ class _FlightPassengerDetailsPageState extends State<FlightPassengerDetailsPage>
         controller: ctrl,
         onChanged: onChanged,
         decoration: InputDecoration(
-          labelText: label,
+          label: required
+              ? Text.rich(TextSpan(text: label, children: const [
+                  TextSpan(text: ' *', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.w700)),
+                ]))
+              : null,
+          labelText: required ? null : label,
           labelStyle: const TextStyle(fontSize: 13.5, color: AppColors.textGrey),
           border: InputBorder.none,
           isDense: true,
@@ -315,7 +413,7 @@ class _FlightPassengerDetailsPageState extends State<FlightPassengerDetailsPage>
     );
   }
 
-  Widget _pickerField(String label, String? value, {required VoidCallback onTap}) {
+  Widget _pickerField(String label, String? value, {required VoidCallback onTap, bool required = true}) {
     return InkWell(
       borderRadius: BorderRadius.circular(10),
       onTap: onTap,
@@ -325,7 +423,14 @@ class _FlightPassengerDetailsPageState extends State<FlightPassengerDetailsPage>
         child: Row(
           children: [
             Expanded(
-              child: Text(value ?? label, style: TextStyle(fontSize: 13.5, color: value == null ? AppColors.textGrey : Colors.black)),
+              child: value != null
+                  ? Text(value, style: const TextStyle(fontSize: 13.5, color: Colors.black))
+                  : Text.rich(
+                      TextSpan(text: label, children: [
+                        if (required) const TextSpan(text: ' *', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.w700)),
+                      ]),
+                      style: const TextStyle(fontSize: 13.5, color: AppColors.textGrey),
+                    ),
             ),
             const Icon(Icons.keyboard_arrow_down, size: 18, color: AppColors.textGrey),
           ],
@@ -349,15 +454,46 @@ class _FlightPassengerDetailsPageState extends State<FlightPassengerDetailsPage>
   }
 
   Future<void> _pickPassportExpiry(int index) async {
-    final now = DateTime.now();
+    final minExpiry = controller.minPassportExpiry;
+    final existing = controller.passengers[index].passportExpiry;
     final picked = await showVoyaDatePicker(
       context: context,
-      initialDate: controller.passengers[index].passportExpiry ?? DateTime(now.year + 2, now.month, now.day),
-      firstDate: now,
-      lastDate: DateTime(now.year + 20),
+      initialDate: (existing != null && !existing.isBefore(minExpiry)) ? existing : minExpiry,
+      firstDate: minExpiry,
+      lastDate: DateTime(minExpiry.year + 20, minExpiry.month, minExpiry.day),
       title: 'Passport Expiry Date',
     );
     if (picked != null) controller.setPassportExpiry(index, picked);
+  }
+
+  Future<void> _pickGender(int index) async {
+    const genderOptions = ['Male', 'Female'];
+    final picked = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (_) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(20, 16, 20, 8),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text('Gender', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.navy)),
+              ),
+            ),
+            for (final option in genderOptions)
+              ListTile(
+                title: Text(option, style: const TextStyle(fontSize: 13.5, color: Colors.black)),
+                trailing: option == controller.passengers[index].gender ? const Icon(Icons.check, color: AppColors.primary) : null,
+                onTap: () => Navigator.of(context).pop(option),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (picked != null) controller.setGender(index, picked);
   }
 
   Future<void> _pickNationality(int index) async {

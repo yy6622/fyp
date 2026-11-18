@@ -39,8 +39,8 @@
     </div>
     <div class="stat-grid" id="statGrid"><div class="skeleton" style="height:90px;grid-column:1/-1;"></div></div>
 
-    <div style="display:grid;grid-template-columns:1.6fr 1fr;gap:20px;align-items:start;" class="detail-grid">
-      <div class="card card-pad">
+    <div style="display:grid;grid-template-columns:1.6fr 1fr;gap:20px;align-items:stretch;" class="detail-grid">
+      <div class="card card-pad chart-card">
         <h3 class="h3" style="margin-bottom:18px;">Premium Trend</h3>
         <div class="bars" id="chartBars"></div>
         <div class="bars-labels" id="chartLabels"></div>
@@ -54,11 +54,11 @@
 </div>
 
 <script type="module">
-import { requireRole } from "../js/auth-guard.js?v=20261106b";
+import { requireRole } from "../js/auth-guard.js?v=20261115a";
 import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261114a";
 import { mountIcons } from "../js/icons.js?v=20261106c";
 import { listTransactions, listClaims, listRefunds, listPlans } from "../js/data.js?v=20261114c";
-import { money, moneyExact, number, statusBadge, escapeHtml, timeAgo, toast, setBusy, statCard, plainCard, trendDelta, pointDelta, sumInMonth, countInMonth, monthBounds, rateOf } from "../js/ui.js?v=20261113a";
+import { money, moneyExact, number, statusBadge, escapeHtml, timeAgo, toast, setBusy, statCard, plainCard, trendDelta, pointDelta, sumInMonth, countInMonth, monthBounds, rateOf } from "../js/ui.js?v=20261115a";
 
 mountSidebarNav({ role: "partner", active: "dashboard" });
 const session = await requireRole("partner", "login.html", { allowPending: true });
@@ -69,10 +69,6 @@ if (session) {
   const params = new URLSearchParams(location.search);
   if (params.get("welcome")) toast("Welcome to Voya! Your organization is now in the queue for admin approval.", "success");
   if (session.profile.status === "pending") {
-    // Confined here (requireRole redirects every other partner page back
-    // to this one while pending) -- so this page shows ONLY the pending
-    // message above, nothing else, rather than real stats/charts/claims
-    // for an organization that isn't approved to operate yet.
     lockToPendingOnly();
   } else {
     await load();
@@ -87,17 +83,8 @@ function lockToPendingOnly() {
   if (detailGrid) detailGrid.style.display = "none";
 }
 
-// Same idea as admin/overview.html's bell — a red dot only when
-// something is actually waiting on the partner, here meaning a
-// newly-submitted claim or refund that hasn't been looked at yet
-// (status "new"). A live, independent count rather than reusing load()'s
-// own claims fetch, same fire-and-forget pattern as the admin version.
 function loadNotifBell() {
   const bell = document.getElementById("notifBell");
-  // Like the admin side's bell: always opens Notifications, not the
-  // underlying list page directly — Notifications is where the new
-  // claims/refunds actually get listed one by one with a link into each,
-  // same as admin's bell -> admin/notifications.html pattern.
   bell.addEventListener("click", () => { location.href = "notifications.html"; });
   Promise.all([
     listClaims(session.uid).catch(() => []),
@@ -119,11 +106,6 @@ function loadNotifBell() {
   });
 }
 
-// Doubles as this page's "notification button" (the admin side's
-// equivalent is the bell on admin/overview.html) — only an
-// approved/pending/suspended partner ever sees the Dashboard at all (a
-// rejected one is redirected to Notifications before this runs),
-// so this only ever needs to tell those three apart.
 function showStatusBar(status) {
   if (status === "approved") return;
   const text = status === "suspended"

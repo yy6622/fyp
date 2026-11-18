@@ -40,18 +40,18 @@
     </div>
     <div class="empty-state" id="emptyState" style="display:none;">
       <span data-icon="mail" class="icon-lg"></span>
-      <div class="h3">No messages yet</div>
-      <p class="small">When a traveller messages you about a plan or policy, it'll show up here.</p>
+      <div class="h3" id="emptyTitle">No messages yet</div>
+      <p class="small" id="emptyBody">When a traveller messages you about a plan or policy, it'll show up here.</p>
     </div>
   </main>
 </div>
 
 <script type="module">
-import { requireRole } from "../js/auth-guard.js?v=20261106b";
+import { requireRole } from "../js/auth-guard.js?v=20261115a";
 import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261114a";
 import { mountIcons } from "../js/icons.js?v=20261106c";
 import { listInsuranceChats } from "../js/data.js?v=20261114c";
-import { escapeHtml, timeAgo } from "../js/ui.js?v=20261113a";
+import { escapeHtml, timeAgo } from "../js/ui.js?v=20261115a";
 
 mountSidebarNav({ role: "partner", active: "messages" });
 const session = await requireRole("partner", "login.html");
@@ -98,6 +98,11 @@ function renderTable() {
     list.innerHTML = "";
     list.style.display = "none";
     empty.style.display = "block";
+    const hasAnyChats = chats.length > 0;
+    document.getElementById("emptyTitle").textContent = hasAnyChats ? "No matches found" : "No messages yet";
+    document.getElementById("emptyBody").textContent = hasAnyChats
+      ? "Try a different search."
+      : "When a traveller messages you about a plan or policy, it'll show up here.";
     return;
   }
   list.style.display = "flex";

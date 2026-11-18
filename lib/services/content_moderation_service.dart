@@ -13,20 +13,6 @@ class ContentModerationService {
   ContentModerationService._();
   static final ContentModerationService instance = ContentModerationService._();
 
-  // The remote classifier call (OpenAI's Moderation API — a dedicated
-  // content-moderation classifier with fixed categories + confidence scores,
-  // not free-text LLM judgment, and free to call) runs server-side in the
-  // `moderateText` Cloud Function (functions/content_moderation.js), not
-  // from this client directly. Two reasons: OpenAI's /v1/moderations
-  // endpoint sends no CORS headers, so a browser (Flutter web) request to it
-  // is blocked outright before it even leaves the page; and this keeps the
-  // OpenAI key out of the client bundle entirely.
-  //
-  // Obvious profanity is still caught locally first, so moderation still
-  // works offline / if the Cloud Function is ever unreachable, and the
-  // common case doesn't need a network round-trip at all. The remote
-  // classifier then handles everything subtler (hate speech, harassment,
-  // sexual content, violence, self-harm, etc.), including other languages.
   static final RegExp _localProfanity = RegExp(
     r'\b(fuck\w*|shit\w*|bullshit|crap|bitch\w*|bastard\w*|asshole\w*|dickhead\w*|moron\w*|idiot\w*|'
     r'retard\w*|cunt\w*|wanker\w*|motherfuck\w*|stfu|wtf|pukimak|puki|bodoh|sial|celaka|lancau)\b',

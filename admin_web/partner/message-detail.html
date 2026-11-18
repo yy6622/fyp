@@ -62,11 +62,11 @@
 </div>
 
 <script type="module">
-import { requireRole } from "../js/auth-guard.js?v=20261106b";
+import { requireRole } from "../js/auth-guard.js?v=20261115a";
 import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261114a";
 import { mountIcons } from "../js/icons.js?v=20261106c";
 import { getInsuranceChat, listInsuranceChatMessages, sendInsuranceChatMessage, sendInsuranceChatPlan, markInsuranceChatReadByPartner, listPlans, getPlan } from "../js/data.js?v=20261114c";
-import { escapeHtml, timeAgo, moneyExact, toast, setBusy, openModal, closeModal, wireModalDismiss, detailDialog } from "../js/ui.js?v=20261113a";
+import { escapeHtml, timeAgo, moneyExact, toast, setBusy, openModal, closeModal, wireModalDismiss, detailDialog } from "../js/ui.js?v=20261115a";
 
 mountSidebarNav({ role: "partner", active: "messages" });
 const session = await requireRole("partner", "login.html");
@@ -87,11 +87,6 @@ if (session) {
   } else {
     await load(true);
     await markInsuranceChatReadByPartner(chatId).catch(() => {});
-    // Light polling so a reply the traveller sends while this page is open
-    // shows up without the partner having to refresh — this console has
-    // no realtime listeners elsewhere, so a short interval keeps this
-    // page consistent with that (simpler than introducing onSnapshot
-    // just for this one page).
     pollTimer = setInterval(() => load(false), 5000);
   }
 }

@@ -96,11 +96,11 @@
 </div>
 
 <script type="module">
-import { requireRole } from "../js/auth-guard.js?v=20261106b";
+import { requireRole } from "../js/auth-guard.js?v=20261115a";
 import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261114a";
 import { mountIcons } from "../js/icons.js?v=20261106c";
-import { getRestaurant, newRestaurantRef, createRestaurant, updateRestaurant, getTagPresets, addTagPreset, markPlaceSuggestionAdded } from "../js/data.js?v=20261114c";
-import { escapeHtml, toast, setBusy } from "../js/ui.js?v=20261113a";
+import { getRestaurant, newRestaurantRef, createRestaurant, updateRestaurant, getTagPresets, addTagPreset, markPlaceSuggestionAdded } from "../js/data.js?v=20261117a";
+import { escapeHtml, toast, setBusy } from "../js/ui.js?v=20261115a";
 import { findAndFillRestaurantFromOsm, hasApiKey } from "../js/places-import.js?v=20261106f";
 
 mountSidebarNav({ role: "admin", active: "attractions" });
@@ -109,25 +109,8 @@ const editingId = new URLSearchParams(location.search).get("id");
 let cuisineTag;
 let osmSourcePlaceId = null;
 let osmSource = null;
-// Set when this page was opened from Content Moderation's Place
-// Suggestions tab ("Add as Restaurant") — see applySuggestionPrefill()
-// below. markPlaceSuggestionAdded() in the save handler is what actually
-// closes out the suggestion, once this new restaurant is saved (not
-// before — backing out of this form leaves it pending).
 let suggestionId = null;
-// There's deliberately no manual photo field on this form (removed per
-// the admin's own request — see js/data.js's catalog-restaurants comment)
-// so a photo never has a field to show up in; it's still carried through
-// to the saved record automatically, the same way an OSM-found photo
-// already was meant to be, just invisibly. Set by either
-// applySuggestionPrefill() (a traveller's submitted photo) or
-// applyOsmResult() (OpenStreetMap/Wikipedia's photo for this place).
 let prefillImage = null;
-// Hoisted above the bootstrap block below for the same reason as
-// attraction-form.html's equivalent — see that file's comment. Declaring
-// this below (textually next to mountCuisinePicker, where it reads most
-// naturally) threw "Cannot access 'CUISINE_PRESETS' before initialization"
-// on every page load, which silently broke the Save button entirely.
 const CUISINE_PRESETS = [
   "Japanese", "Chinese", "Malay", "Indian", "Western", "Thai", "Korean", "Italian",
   "Vietnamese", "Seafood", "Cafe & Dessert", "Fast Food", "Vegetarian", "Halal",
@@ -153,16 +136,6 @@ if (session) {
   }
 }
 
-// ==================== Cuisine picker — starter list + admin-added tags, click to toggle ====================
-// CUISINE_PRESETS (hoisted above) is only the starter list shipped in the
-// code, so the picker is never empty on a brand-new install. On top of
-// that, this loads whatever cuisines admins have added before (from
-// tag_presets/restaurant_cuisine) and lets the admin add a brand new one
-// through the dashed "+ add" box at the end — typed once, saved to that
-// same doc, and from then on it's a normal clickable option for every
-// future restaurant too, not just this one. A legacy tag already on this
-// restaurant that isn't in either list is still kept (appended) so editing
-// an old record never silently drops data.
 function mountCuisinePicker(boxId, initialTags = [], firestoreKey = "restaurant_cuisine") {
   const box = document.getElementById(boxId);
   const options = [...CUISINE_PRESETS];
@@ -255,11 +228,6 @@ function applyOsmResult(result) {
   }
 }
 
-// Fills Name/Location/Description/a cover photo from a traveller's
-// "Report New Attraction" submission (see Content Moderation's Place
-// Suggestions tab) — only the fields that submission actually has.
-// Cuisine tags, hours, price range etc. are left for the admin to fill
-// in normally, same as a blank new restaurant.
 function applySuggestionPrefill() {
   const params = new URLSearchParams(location.search);
   if (params.get("fromSuggestion") !== "1") return;
@@ -277,11 +245,6 @@ function applySuggestionPrefill() {
   document.getElementById("suggestionBanner").style.display = "block";
 }
 
-// Reads both field conventions catalog_restaurants' two writers use (see
-// lib/repositories/catalog_repository.dart) so editing a legacy
-// snake_case/bulk-import doc here starts from its real existing values,
-// not blanks. Always SAVES in the modern camelCase convention regardless
-// of which one the doc started with (see save handler below).
 function populateForm(r) {
   document.getElementById("fName").value = r?.name || "";
   document.getElementById("fLocation").value = (typeof r?.location === "string" ? r.location : "") || (r?.city && r?.country ? `${r.city}, ${r.country}` : "") || r?.city || r?.country || "";

@@ -145,8 +145,8 @@ class _ItemizedSplitPageState extends State<ItemizedSplitPage> {
       title: 'Add Item',
       headerIcon: Icons.receipt_long_outlined,
       fieldsBuilder: (ctx, setState) => [
-        niceDialogField(label, 'Item', icon: Icons.label_outline, autofocus: true),
-        niceDialogField(price, 'Price (RM)', icon: Icons.payments_outlined, keyboardType: const TextInputType.numberWithOptions(decimal: true)),
+        niceDialogField(label, 'Item', icon: Icons.label_outline, autofocus: true, required: true),
+        niceDialogField(price, 'Price (RM)', icon: Icons.payments_outlined, keyboardType: const TextInputType.numberWithOptions(decimal: true), required: true),
       ],
     );
     if (result != true) return;
@@ -167,8 +167,8 @@ class _ItemizedSplitPageState extends State<ItemizedSplitPage> {
       headerIcon: Icons.edit_outlined,
       confirmLabel: 'Save',
       fieldsBuilder: (ctx, setState) => [
-        niceDialogField(label, 'Item', icon: Icons.label_outline, autofocus: true),
-        niceDialogField(price, 'Price (RM)', icon: Icons.payments_outlined, keyboardType: const TextInputType.numberWithOptions(decimal: true)),
+        niceDialogField(label, 'Item', icon: Icons.label_outline, autofocus: true, required: true),
+        niceDialogField(price, 'Price (RM)', icon: Icons.payments_outlined, keyboardType: const TextInputType.numberWithOptions(decimal: true), required: true),
       ],
     );
     if (result != true) return;

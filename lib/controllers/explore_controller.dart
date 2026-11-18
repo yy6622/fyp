@@ -27,11 +27,6 @@ class ExploreController extends ChangeNotifier {
         final code = (profile?.homeAirportCode.isNotEmpty ?? false) ? profile!.homeAirportCode : kDefaultHomeAirport;
         final changed = code != _homeAirportCode;
         _homeAirportCode = code;
-        final newCurrency = profile?.currencyCode ?? '';
-        if (newCurrency != userCurrencyCode) {
-          userCurrencyCode = newCurrency;
-          notifyListeners();
-        }
         _hasLoadedProfile = true;
         if (!_hasRunInitialSearch) {
           _maybeRunInitialSearch();
@@ -41,8 +36,9 @@ class ExploreController extends ChangeNotifier {
       });
       _tripsSub = TripRepository.instance.watchMyTrips(_uid).listen((v) {
         final previousSignature = _tripSignature(selectedTrip);
-        trips = v;
-        if (selectedTripIndex >= v.length) selectedTripIndex = 0;
+        // Past plans only live on the Plan tab -- hide them here.
+        trips = v.where((t) => !t.isInactive).toList();
+        if (selectedTripIndex >= trips.length) selectedTripIndex = 0;
         notifyListeners();
         _hasLoadedTrips = true;
         if (!_hasRunInitialSearch) {
@@ -84,28 +80,12 @@ class ExploreController extends ChangeNotifier {
   String _homeAirportCode = kDefaultHomeAirport;
   StreamSubscription<AppUser?>? _profileSub;
 
-  /// The traveller's saved departure airport (Account Settings > Home
-  /// Airport), or [kDefaultHomeAirport] if they never set one. Read-only
-  /// here -- changing it goes through UserRepository.updateProfile, the
-  /// same as the settings page itself does.
   String get homeAirportCode => _homeAirportCode;
 
-  /// What the current flight results are actually a search for -- set by
-  /// every successful [searchFlights] call, including the automatic ones
-  /// (trip selection, a typed keyword). Lets the Filter sheet's route
-  /// search (filter_page.dart) default its From/To fields to "whatever
-  /// produced the results you're looking at right now" instead of always
-  /// resetting to the home airport + no destination.
   String? lastFlightOrigin;
   String? lastFlightDestinationQuery;
   String? lastFlightDestinationLabel;
 
-  /// Traveller counts/cabin for every flight search this controller runs
-  /// -- previously hardcoded (1 adult, economy) inside
-  /// DuffelApiService.searchFlights itself; now a real, user-changeable
-  /// setting (Filter sheet's Travelers & Cabin picker, filter_page.dart)
-  /// that persists across searches the same way [_homeAirportCode] does,
-  /// rather than resetting every time a new search runs.
   int flightAdults = 1;
   List<int> flightChildAges = const [];
   String flightCabinClass = 'economy';
@@ -122,10 +102,13 @@ class ExploreController extends ChangeNotifier {
   /// reuse it exactly rather than guessing a different one.
   DateTime get defaultDepartureDate => selectedTrip?.startDate ?? DateTime.now().add(const Duration(days: 30));
 
-  String userCurrencyCode = '';
-
-  String formatPrice(double amount, String providerCurrency) =>
-      CurrencyService.instance.format(amount, providerCurrency, userCurrencyCode.isNotEmpty ? userCurrencyCode : null);
+  /// Always shows the price converted to MYR (RM). The app no longer lets
+  /// the traveller pick a personal display currency -- every price is
+  /// normalized to MYR so flight/hotel cards are consistent app-wide.
+  String formatPrice(double amount, String providerCurrency) {
+    final myr = CurrencyService.instance.convert(amount, from: providerCurrency, to: 'MYR');
+    return 'RM ${(myr ?? amount).toStringAsFixed(0)}';
+  }
 
   String? _tripSignature(Trip? t) => t == null ? null : '${t.id}|${t.destination}|${t.startDate}|${t.endDate}';
 
@@ -205,12 +188,6 @@ class ExploreController extends ChangeNotifier {
   Map<String, int> get restaurantAffinity => _restaurantAffinity;
   Map<String, int> get hotelAmenityAffinity => _hotelAmenityAffinity;
 
-  /// [attractionAffinity] blended with the selected trip's declared
-  /// interest points (see interest_mapping.dart) -- what
-  /// AttractionRecommendation should actually rank by, so the interests
-  /// picked when the trip was created keep nudging results even before
-  /// any real save/view behaviour exists, and keep nudging afterwards
-  /// rather than being forgotten once real behaviour takes over.
   Map<String, int> get attractionAffinityForRanking =>
       blendInterestsIntoAffinity(_attractionAffinity, selectedTrip?.interests ?? const []);
 
@@ -270,14 +247,6 @@ class ExploreController extends ChangeNotifier {
 
   bool isManualSearch = false;
 
-
-  // Maps the search result's own id (offer.id / searchResultId) to the
-  // Firestore doc created for it by saveDuffelFlight/saveDuffelStay, so a
-  // second tap on the same heart icon (toggleFlightSaved/toggleHotelSaved)
-  // knows which doc to delete again instead of only ever being able to
-  // create a new one.
-  final Map<String, String> savedFlightIds = {};
-  final Map<String, String> savedStayIds = {};
 
   Future<void> _runDefaultSearches() async {
     isManualSearch = false;
@@ -364,20 +333,6 @@ class ExploreController extends ChangeNotifier {
   DateTime? lastHotelCheckIn;
   DateTime? lastHotelCheckOut;
 
-  /// [filterQuery], when given, keeps only results that actually relate to
-  /// what was typed — RollingGo only ever searches by city/place
-  /// (`placeType: 'City'`), so a typed keyword that isn't really a place
-  /// (a hotel's own name, a random word) still gets "resolved" to *some*
-  /// unrelated city instead of correctly finding nothing, and every hotel
-  /// it hands back belongs to that wrong city. Rather than trying to
-  /// predict that before calling RollingGo, we call it as normal and then
-  /// check its own results: a hotel's `address` almost always contains the
-  /// city/place name it's actually in, so a genuine destination search
-  /// (e.g. "Paris") keeps matching hotels, while a mis-resolved one is
-  /// left with nothing whose address *or name* mentions the typed text,
-  /// and correctly comes back empty. `name` is checked too so a search for
-  /// a specific hotel's own name still matches it when it's in the
-  /// (correctly or incorrectly resolved) result set.
   Future<void> searchHotels({
     required String destinationQuery,
     required DateTime checkIn,
@@ -414,40 +369,6 @@ class ExploreController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> toggleFlightSaved(DuffelFlightOffer offer) async {
-    final tripId = selectedTrip?.id;
-    if (tripId == null || _uid.isEmpty) return;
-    final existingDocId = savedFlightIds[offer.id];
-    if (existingDocId != null) {
-      savedFlightIds.remove(offer.id);
-      notifyListeners();
-      await CatalogRepository.instance.removeSavedFlight(existingDocId);
-      return;
-    }
-    // Optimistic placeholder so a second rapid tap (before the add()
-    // round-trip resolves) is still read as "already saved" rather than
-    // firing a duplicate save; replaced with the real doc id below.
-    savedFlightIds[offer.id] = '';
-    notifyListeners();
-    final docId = await CatalogRepository.instance.saveDuffelFlight(offer, uid: _uid, tripId: tripId);
-    if (savedFlightIds.containsKey(offer.id)) {
-      savedFlightIds[offer.id] = docId;
-      notifyListeners();
-    }
-  }
-
-  // True when [query] is a real place Duffel/RollingGo could actually be
-  // searched by — a country from kCountries, or an area/city inside one
-  // from kCountryAreas (matches the exact set the traveller's own
-  // destination pickers, e.g. InsuranceQuotePage, offer) — case
-  // insensitive, and also matching "Area, Country" as typed by some
-  // pickers. Flights/hotels have no "search by name" mode on either API,
-  // so a query that ISN'T a real destination (a restaurant's name, say)
-  // can only ever produce unrelated results there; this is checked before
-  // running that search at all, regardless of which category tab is
-  // selected, so the fix isn't "don't search flights/hotels on this tab"
-  // but "don't search flights/hotels with a query that isn't a
-  // destination, full stop."
   bool _looksLikeKnownDestination(String query) {
     final q = query.trim().toLowerCase();
     if (q.isEmpty) return false;
@@ -467,10 +388,6 @@ class ExploreController extends ChangeNotifier {
     if (_looksLikeKnownDestination(query)) {
       unawaited(_searchDestinationBoundCategories(query));
     } else {
-      // Not a real destination -- flights/hotels have nothing meaningful
-      // to show for this query (see _looksLikeKnownDestination's doc
-      // comment), so clear out whatever they were last showing instead
-      // of leaving an unrelated, stale result list on screen.
       flightResults = [];
       hotelResults = [];
       flightResultsLabel = query;
@@ -481,12 +398,6 @@ class ExploreController extends ChangeNotifier {
     unawaited(_loadBannerImage(query));
   }
 
-  /// Flights and hotels can only ever be searched by destination — there's
-  /// no "find a hotel by its own name" mode on either API — so a typed
-  /// keyword is handed to both as-is, the same as picking a real
-  /// destination. [searchHotels] post-filters whatever RollingGo actually
-  /// returns against the typed text (see its own doc comment) so a keyword
-  /// that isn't really a place doesn't surface unrelated hotels.
   Future<void> _searchDestinationBoundCategories(String query) async {
     final wantFlights = _selectedCategory == ExploreCategory.flights || _selectedCategory == ExploreCategory.all;
     final wantHotels = _selectedCategory == ExploreCategory.accommodation || _selectedCategory == ExploreCategory.all;
@@ -505,13 +416,6 @@ class ExploreController extends ChangeNotifier {
     }
   }
 
-  /// A typed keyword almost always means an attraction/restaurant's actual
-  /// NAME ("Petronas Towers", "KFC"), not the city/country it's filed
-  /// under — [_resubscribePlaces] only ever matched the latter, which is
-  /// why manual-search results used to look completely unrelated to what
-  /// was typed. One-shot name search (see
-  /// [CatalogRepository.searchAttractionsByName]) replaces the live
-  /// destination subscription for the duration of a manual search.
   Future<void> _searchPlacesByKeyword(String query) async {
     _attractionsSub?.cancel();
     _restaurantsSub?.cancel();
@@ -539,25 +443,6 @@ class ExploreController extends ChangeNotifier {
   void clearManualSearch() {
     if (!isManualSearch) return;
     _runDefaultSearches();
-  }
-
-  Future<void> toggleHotelSaved(DuffelStayResult stay) async {
-    final tripId = selectedTrip?.id;
-    if (tripId == null || _uid.isEmpty) return;
-    final existingDocId = savedStayIds[stay.searchResultId];
-    if (existingDocId != null) {
-      savedStayIds.remove(stay.searchResultId);
-      notifyListeners();
-      await CatalogRepository.instance.removeSavedStay(existingDocId);
-      return;
-    }
-    savedStayIds[stay.searchResultId] = '';
-    notifyListeners();
-    final docId = await CatalogRepository.instance.saveDuffelStay(stay, uid: _uid, tripId: tripId);
-    if (savedStayIds.containsKey(stay.searchResultId)) {
-      savedStayIds[stay.searchResultId] = docId;
-      notifyListeners();
-    }
   }
 
   Future<void> toggleAttractionFavorite(CatalogAttraction attraction) {

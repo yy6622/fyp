@@ -6,7 +6,6 @@ import '../../controllers/group_settings_controller.dart';
 import '../../services/trip_cover_service.dart';
 import '../../theme.dart';
 import '../shared/nice_dialog.dart';
-import 'travel_preferences_page.dart';
 
 class GroupSettingPage extends StatefulWidget {
   final String tripId;
@@ -41,10 +40,7 @@ class _GroupSettingPageState extends State<GroupSettingPage> {
             _photoRow(),
             _navRow('Group About', controller.trip?.about ?? '',
                 onTap: () => _editField('Group About', controller.aboutController, controller.saveAbout)),
-            _navRow('Travel Preferences', '', onTap: () => Navigator.of(context)
-                .push(MaterialPageRoute(builder: (_) => TravelPreferencesPage(tripId: widget.tripId)))),
             _navRow('Notification', controller.notificationOption, onTap: () => _pickNotificationOption()),
-            _switchRow('Pin Chat', controller.pinChat, controller.setPinChat),
             _switchRow(
               'Real-Time Location',
               controller.realTimeLocation,
@@ -92,7 +88,7 @@ class _GroupSettingPageState extends State<GroupSettingPage> {
       headerIcon: Icons.edit_outlined,
       confirmLabel: 'Save',
       fieldsBuilder: (ctx, setState) => [
-        niceDialogField(fieldController, label, autofocus: true, maxLines: label == 'Group About' ? 3 : 1),
+        niceDialogField(fieldController, label, autofocus: true, maxLines: label == 'Group About' ? 3 : 1, required: label != 'Group About'),
       ],
     );
     if (result == true) {

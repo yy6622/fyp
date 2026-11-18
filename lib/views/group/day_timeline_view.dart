@@ -7,7 +7,7 @@ import '../../theme.dart';
 const double _hourHeight = 88.0;
 const double _rulerWidth = 56.0;
 const int _minutesPerDay = 24 * 60;
-const int _snapMinutes = 5;
+const int _snapMinutes = 30;
 const int _maxMinutes = _minutesPerDay - _snapMinutes;
 
 double _minutesToY(int minutes) => minutes / 60 * _hourHeight;
@@ -50,22 +50,8 @@ class DayTimelineView extends StatefulWidget {
   final List<ActivityItem> items;
   final void Function(ActivityItem item) onDelete;
 
-  // Shown centered over the (still-mounted) scrollable viewport when
-  // [items] is empty, instead of the caller swapping this whole widget
-  // out for a plain placeholder -- that swap used to unmount the
-  // SingleChildScrollView keyed by [viewportKey], which silently broke
-  // every drop onto an empty day (GroupTripPage's hit-testing had
-  // nothing to find). Null hides it.
   final String? emptyHint;
 
-  // The viewport key + scroll controller are owned by the parent (not
-  // created here) so they stay the same object across a day switch: a
-  // LongPressDraggable's drag session lives on past the widget that
-  // started it (Flutter keeps its recognizer alive while a drag is
-  // active even if that widget is removed from the tree), so when the
-  // parent swaps which day is on screen mid-drag, it still needs a
-  // stable handle on "whichever timeline viewport is mounted right now"
-  // to translate the drop position into a time slot.
   final GlobalKey viewportKey;
   final ScrollController scrollController;
 
@@ -124,20 +110,25 @@ class _DayTimelineViewState extends State<DayTimelineView> {
                 controller: widget.scrollController,
                 child: SizedBox(
                   height: totalHeight,
-                  child: Stack(
-                    children: [
-                      for (var h = 0; h < 24; h++) _hourRow(h),
-                      for (final item in widget.items)
-                        _TimelineChip(
-                          key: ValueKey(item.id),
-                          item: item,
-                          minutes: _hhmmToMinutes(item.time),
-                          onDelete: () => widget.onDelete(item),
-                          onDragStarted: () => widget.onItemDragStarted?.call(item),
-                          onDragUpdate: (pos) => widget.onItemDragUpdate?.call(pos),
-                          onDragEnd: () => widget.onItemDragEnd?.call(item),
-                        ),
-                    ],
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      // Group items that land on the exact same time so they
+                      // can be laid out side-by-side instead of one chip
+                      // fully overlapping (and hiding) the other.
+                      final byMinute = <int, List<ActivityItem>>{};
+                      for (final it in widget.items) {
+                        byMinute.putIfAbsent(_hhmmToMinutes(it.time), () => []).add(it);
+                      }
+                      final availableSpan =
+                          (constraints.maxWidth - _rulerWidth - 8).clamp(0.0, double.infinity);
+                      return Stack(
+                        children: [
+                          for (var h = 0; h < 24; h++) _hourRow(h),
+                          for (final item in widget.items)
+                            _buildChip(item, byMinute, availableSpan),
+                        ],
+                      );
+                    },
                   ),
                 ),
               ),
@@ -160,6 +151,30 @@ class _DayTimelineViewState extends State<DayTimelineView> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildChip(
+    ActivityItem item,
+    Map<int, List<ActivityItem>> byMinute,
+    double availableSpan,
+  ) {
+    final group = byMinute[_hhmmToMinutes(item.time)]!;
+    final columnCount = group.length;
+    final columnIndex = columnCount > 1 ? group.indexWhere((it) => it.id == item.id) : 0;
+    final columnWidth = columnCount > 1 ? availableSpan / columnCount : null;
+    final left = _rulerWidth + 8 + (columnWidth != null ? columnIndex * columnWidth : 0);
+    final width = columnWidth != null ? (columnWidth - 6).clamp(0.0, double.infinity) : null;
+    return _TimelineChip(
+      key: ValueKey(item.id),
+      item: item,
+      minutes: _hhmmToMinutes(item.time),
+      left: left,
+      width: width,
+      onDelete: () => widget.onDelete(item),
+      onDragStarted: () => widget.onItemDragStarted?.call(item),
+      onDragUpdate: (pos) => widget.onItemDragUpdate?.call(pos),
+      onDragEnd: () => widget.onItemDragEnd?.call(item),
     );
   }
 
@@ -200,6 +215,8 @@ class _DayTimelineViewState extends State<DayTimelineView> {
 class _TimelineChip extends StatelessWidget {
   final ActivityItem item;
   final int minutes;
+  final double left;
+  final double? width;
   final VoidCallback onDelete;
   final VoidCallback? onDragStarted;
   final void Function(Offset globalPosition)? onDragUpdate;
@@ -209,6 +226,8 @@ class _TimelineChip extends StatelessWidget {
     super.key,
     required this.item,
     required this.minutes,
+    required this.left,
+    this.width,
     required this.onDelete,
     this.onDragStarted,
     this.onDragUpdate,
@@ -222,8 +241,9 @@ class _TimelineChip extends StatelessWidget {
     // this chip just reports drag lifecycle events upward and renders.
     return Positioned(
       top: _minutesToY(minutes),
-      left: _rulerWidth + 8,
-      right: 0,
+      left: left,
+      right: width == null ? 0 : null,
+      width: width,
       child: LongPressDraggable<String>(
         data: item.id,
         hapticFeedbackOnStart: true,

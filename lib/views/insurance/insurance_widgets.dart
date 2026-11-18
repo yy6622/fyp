@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
 import '../../models/insurance_models.dart';
-import '../../services/currency_service.dart';
 import '../../theme.dart';
 import 'insurance_plan_detail_page.dart';
 
@@ -88,7 +87,7 @@ class InsurancePlanCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text(
-                  plan.displayPrice(CurrencyService.instance.lastKnownUserCurrency),
+                  plan.displayPrice,
                   style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.navy),
                 ),
                 Text(insurancePriceUnitLabel(plan.category), style: const TextStyle(fontSize: 9.5, color: AppColors.textGrey)),
@@ -147,7 +146,7 @@ class InsurancePlanTile extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.baseline,
               textBaseline: TextBaseline.alphabetic,
               children: [
-                Text(plan.displayPrice(CurrencyService.instance.lastKnownUserCurrency), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.navy)),
+                Text(plan.displayPrice, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.navy)),
                 const SizedBox(width: 3),
                 Text(insurancePriceUnitLabel(plan.category), style: const TextStyle(fontSize: 8.5, color: AppColors.textGrey)),
               ],

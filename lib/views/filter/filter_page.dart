@@ -12,16 +12,6 @@ class FilterPage extends StatefulWidget {
   final FilterType type;
   final FilterController controller;
   final List<String> availableAirlines;
-  // Flight-only route search (From/To, backed by Duffel's live place
-  // suggestions -- see DuffelPlace's doc comment). These four default to
-  // whatever search actually produced the results currently on screen
-  // (ExploreController.homeAirportCode/lastFlightDestination*), so the
-  // fields read as "change this" instead of starting blank; [onRouteSearch]
-  // is only called, and only once, if the user actually picks a different
-  // airport on either side and taps Apply -- every other control in this
-  // sheet re-filters the existing results client-side, but a new route
-  // needs a brand new Duffel search, which only the owning page
-  // (explore_page.dart) can run.
   final String currentOriginCode;
   final String currentOriginLabel;
   final String currentDestinationQuery;
@@ -228,24 +218,9 @@ class _FilterPageState extends State<FilterPage> {
               color: AppColors.navy,
             ),
           ),
-          Row(
-            children: [
-              TextButton(
-                onPressed: controller.resetFilters,
-                child: const Text(
-                  'Reset',
-                  style: TextStyle(
-                    color: AppColors.textGrey,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 13,
-                  ),
-                ),
-              ),
-              IconButton(
-                icon: const Icon(Icons.close, color: AppColors.navy),
-                onPressed: () => Navigator.of(context).maybePop(),
-              ),
-            ],
+          IconButton(
+            icon: const Icon(Icons.close, color: AppColors.navy),
+            onPressed: () => Navigator.of(context).maybePop(),
           ),
         ],
       ),
@@ -320,17 +295,6 @@ class _FilterPageState extends State<FilterPage> {
     return [
       _sectionTitle('Category'),
       _chipsGroup(
-        // These 6 labels are the user-facing buckets; the real match against
-        // each attraction's raw category (Museum/Art & Culture/Adventure/
-        // Nature/Historic Site/Shopping/Landmark/Attraction — the exact
-        // values admin_web/js/places-import.js's Geoapify import assigns,
-        // the source of ~15k of this catalogue's attractions) happens via
-        // attractionCategoryBucket() in explore_page.dart, not a literal
-        // string match — "Cultural" alone never appears as a stored
-        // category, so matching the label verbatim silently matched
-        // nothing. ("Nightlife" was dropped for the same reason: no import
-        // path ever assigns it, so it could never match a single result;
-        // "Landmark" replaces it as a real, commonly-assigned category.)
         ['Museum', 'Nature', 'Adventure', 'Cultural', 'Shopping', 'Landmark'],
         controller.attractionCategories,
         icons: const [
@@ -341,13 +305,6 @@ class _FilterPageState extends State<FilterPage> {
           Icons.shopping_bag_outlined,
           Icons.location_city_outlined,
         ],
-      ),
-      const SizedBox(height: 20),
-      _sectionTitle('Price'),
-      _singleChoiceRow(
-        ['Any', 'Free', 'RM0 - 50', 'RM50 - 150', 'RM150+'],
-        controller.attractionPrice,
-        controller.setAttractionPrice,
       ),
       const SizedBox(height: 20),
       _sectionTitle('Availability'),
@@ -361,15 +318,6 @@ class _FilterPageState extends State<FilterPage> {
     return [
       _sectionTitle('Cuisine'),
       _chipsGroup(
-        // These are the exact cuisine tags admin_web/js/places-import.js's
-        // Geoapify import assigns (CUISINE_BY_PREFIX) — the source of this
-        // catalogue's ~3,760 real restaurants — so every chip here is
-        // guaranteed to match real data. The old list ('Western', 'Local',
-        // 'Fine Dining') never matched anything: those aren't cuisine tags
-        // Geoapify (or the admin's own restaurant-form.html picker) ever
-        // produces, so those 3 chips always returned zero results, and
-        // common real cuisines (Chinese, Thai, Indian, Korean, Vietnamese,
-        // Seafood, Vegetarian, Middle Eastern) had no chip at all.
         [
           'Japanese', 'Chinese', 'Thai', 'Korean', 'Vietnamese', 'Italian',
           'Indian', 'Seafood', 'Vegetarian', 'Middle Eastern', 'Fast Food', 'Cafe & Dessert',
@@ -389,13 +337,6 @@ class _FilterPageState extends State<FilterPage> {
           Icons.fastfood_outlined,
           Icons.icecream_outlined,
         ],
-      ),
-      const SizedBox(height: 20),
-      _sectionTitle('Price'),
-      _singleChoiceRow(
-        ['Any', 'RM0 - 20', 'RM20 - 50', 'RM50 - 100', 'RM100+'],
-        controller.restaurantPrice,
-        controller.setRestaurantPrice,
       ),
     ];
   }
@@ -423,6 +364,7 @@ class _FilterPageState extends State<FilterPage> {
         String prefix = 'RM ',
         String suffix = '',
       }) {
+    String label(double v) => '$prefix${v.round()}$suffix';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -433,17 +375,14 @@ class _FilterPageState extends State<FilterPage> {
           divisions: 40,
           activeColor: AppColors.primary,
           inactiveColor: AppColors.chipGrey,
-          labels: RangeLabels(
-            '$prefix${values.start.round()}$suffix',
-            '$prefix${values.end.round()}$suffix',
-          ),
+          labels: RangeLabels(label(values.start), label(values.end)),
           onChanged: onChanged,
         ),
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            _valuePill('$prefix${values.start.round()}$suffix'),
-            _valuePill('$prefix${values.end.round()}$suffix'),
+            _valuePill(label(values.start)),
+            _valuePill(label(values.end)),
           ],
         ),
       ],
@@ -536,38 +475,6 @@ class _FilterPageState extends State<FilterPage> {
                   style: const TextStyle(fontSize: 13, color: AppColors.navy),
                 ),
               ],
-            ),
-          ),
-        );
-      }).toList(),
-    );
-  }
-
-  Widget _singleChoiceRow(
-      List<String> options,
-      String selectedValue,
-      ValueChanged<String> onSelect,
-      ) {
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: options.map((label) {
-        final isSelected = label == selectedValue;
-        return GestureDetector(
-          onTap: () => onSelect(label),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            decoration: BoxDecoration(
-              color: isSelected ? AppColors.primary : AppColors.chipGrey,
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Text(
-              label,
-              style: TextStyle(
-                fontSize: 12.5,
-                fontWeight: FontWeight.w600,
-                color: isSelected ? Colors.white : AppColors.textGrey,
-              ),
             ),
           ),
         );
@@ -681,12 +588,6 @@ class _FilterPageState extends State<FilterPage> {
 }
 
 
-/// Live "type to search" picker for one side of the flight Filter
-/// sheet's route search (From or To) -- backed by Duffel's own
-/// /places/suggestions (DuffelApiService.searchPlaces), the same
-/// endpoint Skyscanner-style flight search UIs use for their From/To
-/// autocomplete. Debounces so it doesn't fire a network call on every
-/// keystroke.
 class _PlaceSearchSheet extends StatefulWidget {
   final String title;
   const _PlaceSearchSheet({required this.title});
@@ -832,12 +733,6 @@ class _PlaceSearchSheetState extends State<_PlaceSearchSheet> {
   }
 }
 
-/// Adults/children count + cabin class picker for the flight Filter
-/// sheet's Travelers & Cabin row -- mirrors Skyscanner's own "Travelers
-/// and cabin class" popover. Each child gets its own "Age of child N"
-/// dropdown (0-17) right under the Children stepper, same as Skyscanner,
-/// because Duffel needs a real age per child to price the fare
-/// correctly (see DuffelApiService.searchFlights' doc comment).
 class _TravelersCabinSheet extends StatefulWidget {
   final int adults;
   final List<int> childAges;

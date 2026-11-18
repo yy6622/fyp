@@ -41,8 +41,8 @@
       <div class="card stat-card"><div class="skeleton" style="height:70px;"></div></div>
     </div>
 
-    <div style="display:grid;grid-template-columns:1.7fr 1fr;gap:20px;align-items:start;" class="detail-grid">
-      <div class="card card-pad">
+    <div style="display:grid;grid-template-columns:1.7fr 1fr;gap:20px;align-items:stretch;" class="detail-grid">
+      <div class="card card-pad chart-card">
         <h3 class="h3" style="margin-bottom:18px;">User Engagement Analytics</h3>
         <div class="bars" id="chartBars"></div>
         <div class="bars-labels" id="chartLabels"></div>
@@ -57,11 +57,11 @@
 </div>
 
 <script type="module">
-import { requireRole } from "../js/auth-guard.js?v=20261106b";
+import { requireRole } from "../js/auth-guard.js?v=20261115a";
 import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261114a";
 import { mountIcons } from "../js/icons.js?v=20261106c";
-import { listUsers, listAllPosts, countPendingPartners, listReportedPosts, countFlaggedReviews, countPlaceSuggestions } from "../js/data.js?v=20261114c";
-import { number, statCard, plainCard, trendDelta, countBetween } from "../js/ui.js?v=20261113a";
+import { listUsers, listAllPosts, countPendingPartners, listReportedPosts, countFlaggedReviews, countPlaceSuggestions } from "../js/data.js?v=20261117a";
+import { number, statCard, plainCard, trendDelta, countBetween } from "../js/ui.js?v=20261115a";
 
 mountSidebarNav({ role: "admin", active: "overview" });
 const session = await requireRole("admin", "login.html");
@@ -72,10 +72,6 @@ if (session) {
 }
 
 async function loadNotifBell() {
-  // Bell button itself is always visible now (Nov 2026 — the admin
-  // wants a permanent way into notifications.html, not a button that
-  // disappears entirely when nothing's pending); only the red dot on it
-  // is conditional, same idea as sidebar.js's own nav-dot.
   const bell = document.getElementById("notifBell");
   bell.addEventListener("click", () => { location.href = "notifications.html"; });
   const [pendingPartners, reportedPosts, flaggedReviews, placeSuggestions] = await Promise.all([
@@ -107,18 +103,6 @@ async function loadOverview() {
     countPlaceSuggestions().catch(() => 0),
   ]);
 
-  // ---- Top stat row ----
-  // Kept deliberately lean: Total/Active/Suspended users already have a
-  // full breakdown on the Users page (same filters, same numbers), so
-  // repeating them here would just be the same three cards in two
-  // places. What's actually left for a dashboard to usefully show,
-  // without echoing any other admin page, is (a) the one user trend
-  // Users doesn't track -- new sign-ups -- and (b) a single
-  // across-the-board "does anything need me right now" number: every
-  // other page only ever shows its own slice of that (Insurance shows
-  // its own pending partners, Content Moderation shows its own pending
-  // posts/reviews, Places shows its own pending suggestions), nobody
-  // else adds them all up into one figure.
   const now = new Date();
   const thirtyDaysAgo = new Date(now.getTime() - 30 * 86400000);
   const sixtyDaysAgo = new Date(now.getTime() - 60 * 86400000);
@@ -127,16 +111,11 @@ async function loadOverview() {
   // New Sign-ups is a rolling 30-day window, so it's compared to the 30
   // days before that rather than a calendar month.
   const newSignupsDelta = trendDelta(countBetween(users, "createdAt", thirtyDaysAgo, now), countBetween(users, "createdAt", sixtyDaysAgo, thirtyDaysAgo), "the previous 30 days");
-  // Same four counts the notification bell below already tracks (kept
-  // as its own independent fetch, same as the bell -- see loadNotifBell
-  // -- so neither one can block or break the other); a queue-style
-  // total like this has no honest "vs last month" baseline, so it's a
-  // plainCard, same reasoning as Suspended used to get.
   const needsAttention = pendingPartners + reportedPosts + flaggedReviews + placeSuggestions;
 
   document.getElementById("statGrid").innerHTML = [
     statCard("New Sign-ups", number(newSignups), "sparkle", newSignupsDelta),
-    plainCard("Needs Attention", number(needsAttention), "bell"),
+    plainCard("Needs Attention", number(needsAttention), "bell", "notifications.html"),
   ].join("");
   // ---- Bar chart: users joined per month (last 6 months) ----
   const months = [];
@@ -157,12 +136,6 @@ async function loadOverview() {
     .join("");
   document.getElementById("chartLabels").innerHTML = months.map((m) => `<span>${m.label}</span>`).join("");
 
-  // ---- Top destinations: ranked by actual traveller engagement, not
-  // catalog size. Attractions/restaurants have no view tracking at all,
-  // so community post views (summed per post.location — the one real
-  // "how much do travellers actually look at this place" signal in the
-  // app, also used by Reports' Community Post Analysis tab) stand in for
-  // "most viewed destination".
   const byLocationViews = {};
   posts.forEach((p) => {
     const loc = p.location || "Unknown";

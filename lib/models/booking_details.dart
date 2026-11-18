@@ -7,12 +7,17 @@ class PassengerDetail {
   String passportNumber;
   DateTime? passportExpiry;
 
+  String? title;
+  String? gender;
+
   PassengerDetail({
     this.name = '',
     this.dob,
     this.nationality,
     this.passportNumber = '',
     this.passportExpiry,
+    this.title,
+    this.gender,
   });
 
   Map<String, dynamic> toMap() => {
@@ -21,6 +26,8 @@ class PassengerDetail {
         'nationality': nationality,
         'passportNumber': passportNumber,
         'passportExpiry': passportExpiry?.toIso8601String(),
+        'title': title,
+        'gender': gender,
       };
 
   factory PassengerDetail.fromMap(Map<String, dynamic> m) => PassengerDetail(
@@ -29,5 +36,7 @@ class PassengerDetail {
         nationality: m['nationality'] as String?,
         passportNumber: (m['passportNumber'] as String?) ?? '',
         passportExpiry: m['passportExpiry'] != null ? DateTime.tryParse(m['passportExpiry'] as String) : null,
+        title: m['title'] as String?,
+        gender: m['gender'] as String?,
       );
 }

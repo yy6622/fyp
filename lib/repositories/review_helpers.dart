@@ -3,6 +3,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/review_models.dart';
 import '../services/content_moderation_service.dart';
 
+enum ReviewSubmitOutcome { added, pendingModeration, alreadyReviewed }
+
 Stream<List<PlaceReview>> watchReviewsFor(DocumentReference<Map<String, dynamic>> parent, {String myUid = ''}) {
   return parent.collection('reviews').orderBy('createdAt', descending: true).snapshots().map((snap) => snap.docs
       .where((d) => d.data()['autoFlagged'] != true || d.data()['authorId'] == myUid)
@@ -10,7 +12,7 @@ Stream<List<PlaceReview>> watchReviewsFor(DocumentReference<Map<String, dynamic>
       .toList());
 }
 
-Future<bool> addReviewFor(
+Future<ReviewSubmitOutcome> addReviewFor(
   DocumentReference<Map<String, dynamic>> parent, {
   required String authorId,
   required String authorName,
@@ -18,6 +20,11 @@ Future<bool> addReviewFor(
   required String comment,
   bool bumpAggregate = true,
 }) async {
+  final existing = await parent.collection('reviews').where('authorId', isEqualTo: authorId).limit(1).get();
+  if (existing.docs.isNotEmpty) {
+    return ReviewSubmitOutcome.alreadyReviewed;
+  }
+
   final moderation = comment.trim().isEmpty
       ? ModerationResult.clean
       : await ContentModerationService.instance.check(comment);
@@ -41,7 +48,7 @@ Future<bool> addReviewFor(
       'ratingCount': FieldValue.increment(1),
     });
   }
-  return moderation.flagged;
+  return moderation.flagged ? ReviewSubmitOutcome.pendingModeration : ReviewSubmitOutcome.added;
 }
 
 PlaceReview _reviewFromDoc(QueryDocumentSnapshot<Map<String, dynamic>> d) {

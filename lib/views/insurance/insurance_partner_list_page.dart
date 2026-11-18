@@ -6,12 +6,6 @@ import '../../models/insurance_models.dart';
 import '../../theme.dart';
 import 'insurance_partner_detail_page.dart';
 
-/// Entry point of the insurance flow: pick an insurer first, then (from
-/// [InsurancePartnerDetailPage]) chat with them or get a quote — only after
-/// that does a traveller ever see a specific plan. There is deliberately no
-/// "browse all plans" shortcut here: a plan is only ever shown once a
-/// partner has been chosen and has handed one over via the quote step, not
-/// before.
 class InsurancePartnerListPage extends StatefulWidget {
   final String? tripId;
   const InsurancePartnerListPage({super.key, this.tripId});
@@ -46,11 +40,6 @@ class _InsurancePartnerListPageState extends State<InsurancePartnerListPage> {
                   _buildBanner(),
                   const SizedBox(height: 18),
                   const Text('Choose an insurer', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.navy)),
-                  const SizedBox(height: 4),
-                  const Text(
-                    "Pick who you'd like to buy cover from — you can message them with questions before you buy.",
-                    style: TextStyle(fontSize: 12, color: AppColors.textGrey),
-                  ),
                   const SizedBox(height: 16),
                   ...controller.partners.map((p) => Padding(
                         padding: const EdgeInsets.only(bottom: 12),
@@ -145,11 +134,6 @@ class _PartnerCard extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.navy),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    partner.activePlanCount == 1 ? '1 plan available' : '${partner.activePlanCount} plans available',
-                    style: const TextStyle(fontSize: 11.5, color: AppColors.textGrey),
                   ),
                 ],
               ),

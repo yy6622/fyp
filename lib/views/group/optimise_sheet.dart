@@ -5,6 +5,11 @@ import '../../repositories/trip_plan_edits.dart';
 import '../../repositories/trip_repository.dart';
 import '../../services/itinerary_ai_service.dart' show AiItineraryUpdate;
 import '../../services/itinerary_optimise_service.dart';
+import '../../services/missing_bookings.dart';
+import '../../services/format_utils.dart' show parseClockTime;
+import '../../services/places_api_service.dart';
+import '../../services/traffic_service.dart';
+import '../../services/weather_service.dart';
 import '../../theme.dart';
 
 Future<void> showOptimiseModeSheet(
@@ -37,7 +42,7 @@ Future<void> showOptimiseModeSheet(
             subtitle: const Text('Reorder and re-time just this day\'s activities', style: TextStyle(fontSize: 11.5)),
             onTap: () {
               Navigator.of(sheetContext).pop();
-              startAndShowOptimise(context, controller, OptimiseMode.day, dayIndex: dayIndex, dayNumber: dayNumber);
+              startOptimiseFlow(context, controller, OptimiseMode.day, dayIndex: dayIndex, dayNumber: dayNumber);
             },
           ),
           ListTile(
@@ -46,7 +51,7 @@ Future<void> showOptimiseModeSheet(
             subtitle: const Text('Rework the schedule across every day', style: TextStyle(fontSize: 11.5)),
             onTap: () {
               Navigator.of(sheetContext).pop();
-              startAndShowOptimise(context, controller, OptimiseMode.whole);
+              startOptimiseFlow(context, controller, OptimiseMode.whole);
             },
           ),
           const SizedBox(height: 8),
@@ -62,14 +67,293 @@ void startAndShowOptimise(
   OptimiseMode mode, {
   int? dayIndex,
   int? dayNumber,
+  Map<int, List<(int start, int end)>> rainWindows = const {},
+  List<({String fromItemId, String toItemId, int extraMinutes})> congestedLegs = const [],
 }) {
-  ItineraryOptimiseService.instance.start(controller.tripId, mode: mode, dayIndex: dayIndex, dayNumber: dayNumber);
+  ItineraryOptimiseService.instance.start(
+    controller.tripId,
+    mode: mode,
+    dayIndex: dayIndex,
+    dayNumber: dayNumber,
+    rainWindows: rainWindows,
+    congestedLegs: congestedLegs,
+  );
   showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.white,
     shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
     builder: (_) => _OptimiseSheet(controller: controller, mode: mode, dayIndex: dayIndex, dayNumber: dayNumber, pageContext: context),
+  );
+}
+
+/// Forecast rain windows (minute-of-day [start, end) pairs) for every day
+/// [mode] will touch -- just [dayNumber] for a single day, every day in the
+/// trip for a whole-trip run -- so Optimise can route outdoor activities
+/// around them. Empty wherever the destination can't be geocoded or the
+/// forecast doesn't reach that far; never throws.
+Future<Map<int, List<(int start, int end)>>> _rainWindowsForOptimise(
+  Trip trip,
+  OptimiseMode mode, {
+  int? dayNumber,
+}) async {
+  if (trip.destination.trim().isEmpty) return const {};
+  final targets = mode == OptimiseMode.day
+      ? (dayNumber != null ? [dayNumber] : const <int>[])
+      : [for (final day in trip.days) day.day];
+  if (targets.isEmpty) return const {};
+  final entries = await Future.wait(targets.map((n) async {
+    final date = trip.dateForDay(n);
+    if (date == null) return null;
+    final windows = await WeatherService.instance.hourlyRainWindows(trip.destination, date);
+    if (windows.isEmpty) return null;
+    return MapEntry(n, [for (final w in windows) (w.start, w.end)]);
+  }));
+  return {for (final e in entries) if (e != null) e.key: e.value};
+}
+
+/// Adjacent-activity legs that are *currently* measured as congested, for
+/// every day [mode] will touch -- by the two plan item ids either side of
+/// the leg plus how many minutes over the typical drive time it currently
+/// is. Traffic has no hour-by-hour forecast the way rain does, so this only
+/// ever reflects *today's* plan -- empty for every other day, for any day
+/// with fewer than 2 located activities, or when geocoding/the routes API
+/// fails; never throws. Lets Optimise add a realistic buffer (and prefer
+/// not to keep the two stops adjacent when a reorder can avoid it) instead
+/// of silently using the same fixed 15/30 min gap it would for any other
+/// pair of stops.
+Future<List<({String fromItemId, String toItemId, int extraMinutes})>> _congestedLegsForOptimise(
+  Trip trip,
+  OptimiseMode mode, {
+  int? dayNumber,
+}) async {
+  bool isToday(DateTime? d) {
+    if (d == null) return false;
+    final today = DateTime.now();
+    final todayStart = DateTime(today.year, today.month, today.day);
+    final dateStart = DateTime(d.year, d.month, d.day);
+    return dateStart.isAtSameMomentAs(todayStart);
+  }
+
+  final targetDays = mode == OptimiseMode.day
+      ? (dayNumber != null ? [dayNumber] : const <int>[])
+      : [for (final day in trip.days) day.day];
+
+  // A live "right now" traffic reading has no predictive value for a leg
+  // many hours away -- mirrored in live_conditions_card.dart's
+  // _maxTrafficGapMinutes (same value, same reasoning: by departure time
+  // the reading is stale, and that much slack means the user may not even
+  // travel this leg directly, e.g. a stop back at the hotel in between).
+  const maxTrafficGapMinutes = 180;
+
+  final legs = <({String fromItemId, String toItemId, int extraMinutes})>[];
+  for (final n in targetDays) {
+    if (!isToday(trip.dateForDay(n))) continue; // traffic is only meaningful for today
+    final dayPlan = trip.days.where((d) => d.day == n).firstOrNull;
+    if (dayPlan == null) continue;
+    final located = dayPlan.items.where((it) => it.id.isNotEmpty && it.location.trim().isNotEmpty).toList();
+    for (var i = 0; i < located.length - 1; i++) {
+      final a = located[i];
+      final b = located[i + 1];
+      final at = parseClockTime(a.time);
+      final bt = parseClockTime(b.time);
+      if (at != null && bt != null) {
+        final gap = (bt.hour * 60 + bt.minute) - (at.hour * 60 + at.minute);
+        if (gap > maxTrafficGapMinutes) continue;
+      }
+      final fromGeo = await PlacesApiService.instance.geocode(a.location);
+      final toGeo = await PlacesApiService.instance.geocode(b.location);
+      if (fromGeo == null || toGeo == null) continue;
+      final route = await TrafficService.instance.travelTime(
+        fromLat: fromGeo.lat, fromLon: fromGeo.lon, toLat: toGeo.lat, toLon: toGeo.lon,
+      );
+      if (route == null || !route.isCongested) continue;
+      final typical = route.staticDurationSeconds ?? route.travelTimeSeconds;
+      final extraMinutes = ((route.travelTimeSeconds - typical) / 60).round();
+      if (extraMinutes <= 0) continue;
+      legs.add((fromItemId: a.id, toItemId: b.id, extraMinutes: extraMinutes));
+    }
+  }
+  return legs;
+}
+
+/// Entry point for starting a *new* Optimise run (not for reopening an
+/// already-running/ready one -- see [_reopenOptimiseSheet]). Before handing
+/// off to [startAndShowOptimise], checks whether the trip has a flight or
+/// hotel stay from Overview that was never added into the day-by-day plan,
+/// and if so asks the user whether to add it in first -- timed around its
+/// real departure/landing or check-in/check-out -- so Optimise has it to
+/// work with. Also looks up the forecast for the day(s) in scope so
+/// Optimise can route outdoor activities around any rain.
+Future<void> startOptimiseFlow(
+  BuildContext context,
+  GroupTripController controller,
+  OptimiseMode mode, {
+  int? dayIndex,
+  int? dayNumber,
+}) async {
+  final trip = controller.trip;
+  if (trip != null) {
+    final missing = findMissingBookings(trip);
+    if (missing.isNotEmpty) {
+      if (!context.mounted) return;
+      await _offerToAddMissingBookings(context, controller, missing);
+    }
+  }
+  if (!context.mounted) return;
+  final rainWindows = trip != null
+      ? await _rainWindowsForOptimise(trip, mode, dayNumber: dayNumber)
+      : const <int, List<(int, int)>>{};
+  if (!context.mounted) return;
+  final congestedLegs = trip != null
+      ? await _congestedLegsForOptimise(trip, mode, dayNumber: dayNumber)
+      : const <({String fromItemId, String toItemId, int extraMinutes})>[];
+  if (!context.mounted) return;
+  startAndShowOptimise(context, controller, mode,
+      dayIndex: dayIndex, dayNumber: dayNumber, rainWindows: rainWindows, congestedLegs: congestedLegs);
+}
+
+String _missingBookingTime12h(String time24) {
+  final parts = time24.split(':');
+  if (parts.length != 2) return time24;
+  final h = int.tryParse(parts[0]);
+  if (h == null) return time24;
+  final h12 = h % 12 == 0 ? 12 : h % 12;
+  return '$h12:${parts[1]} ${h < 12 ? 'AM' : 'PM'}';
+}
+
+Future<void> _offerToAddMissingBookings(
+  BuildContext context,
+  GroupTripController controller,
+  List<MissingBooking> missing,
+) async {
+  final selected = Set<int>.from(List.generate(missing.length, (i) => i));
+  final add = await showDialog<bool>(
+    context: context,
+    barrierDismissible: false,
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, setState) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(22, 22, 22, 18),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: 0.1), shape: BoxShape.circle),
+                    alignment: Alignment.center,
+                    child: const Icon(Icons.luggage_outlined, color: AppColors.primary, size: 20),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      missing.length == 1 ? 'Add this booking to your plan?' : 'Add these bookings to your plan?',
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.navy),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              Text(
+                (missing.length == 1
+                        ? "This flight/hotel from Overview isn't"
+                        : "These flights/hotels from Overview aren't") +
+                    ' in the day-by-day plan yet. Add them in, timed around the real departure/landing and '
+                        'check-in/check-out times.',
+                style: const TextStyle(fontSize: 12.5, color: AppColors.textGrey),
+              ),
+              const SizedBox(height: 14),
+              for (var i = 0; i < missing.length; i++) _missingBookingRow(missing[i], i, selected, setState),
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: AppColors.border),
+                        padding: const EdgeInsets.symmetric(vertical: 13),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      ),
+                      onPressed: () => Navigator.of(ctx).pop(false),
+                      child: const Text('Skip', style: TextStyle(color: AppColors.textGrey, fontWeight: FontWeight.w600)),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        elevation: 0,
+                        padding: const EdgeInsets.symmetric(vertical: 13),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      ),
+                      onPressed: selected.isEmpty ? null : () => Navigator.of(ctx).pop(true),
+                      child: Text(
+                        selected.isEmpty ? 'Nothing selected' : 'Add ${selected.length} & Optimise',
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+  if (add != true) return;
+  for (var i = 0; i < missing.length; i++) {
+    if (!selected.contains(i)) continue;
+    final m = missing[i];
+    await controller.addActivity(
+      m.dayIndex,
+      time: m.time,
+      label: m.label,
+      iconKey: m.iconKey,
+      location: m.location,
+      sourceRef: m.sourceRef,
+    );
+  }
+}
+
+Widget _missingBookingRow(MissingBooking m, int i, Set<int> selected, StateSetter setState) {
+  final isSelected = selected.contains(i);
+  return Padding(
+    padding: const EdgeInsets.only(bottom: 10),
+    child: InkWell(
+      borderRadius: BorderRadius.circular(10),
+      onTap: () => setState(() => isSelected ? selected.remove(i) : selected.add(i)),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(iconForKey(m.iconKey), size: 18, color: AppColors.navy),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(m.label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.black)),
+                const SizedBox(height: 2),
+                Text(
+                  'Day ${m.dayIndex + 1}, ${_missingBookingTime12h(m.time)}'
+                  '${m.location.isEmpty ? '' : ' \u00b7 ${m.location}'}',
+                  style: const TextStyle(fontSize: 11.5, color: AppColors.textGrey),
+                ),
+              ],
+            ),
+          ),
+          Icon(isSelected ? Icons.check_circle : Icons.radio_button_unchecked,
+              size: 20, color: isSelected ? AppColors.primary : AppColors.textGrey),
+        ],
+      ),
+    ),
   );
 }
 
@@ -363,11 +647,10 @@ class _OptimiseSheetState extends State<_OptimiseSheet> {
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
       children: [
-        Text(
-          'Based on ${result.itemCount} ${result.itemCount == 1 ? 'activity' : 'activities'} in your current plan, '
-          'opening times and visit lengths, and your flights and hotel. Tick what you want applied.',
-          style: const TextStyle(fontSize: 12, color: AppColors.textGrey),
-        ),
+        // The explanatory paragraph that used to sit here ("Based on N
+        // activities in your current plan...") was just noise -- each row
+        // below already has its own checkbox-style selection icon, so
+        // "tick what you want applied" is obvious without a caption.
         for (final note in result.notes) _note(note),
         if (_applyError != null) ...[
           const SizedBox(height: 10),

@@ -1,0 +1,17 @@
+[
+  {
+    "origin": ["*"],
+    "method": ["GET", "HEAD", "PUT", "POST", "DELETE"],
+    "maxAgeSeconds": 3600,
+    "responseHeader": [
+      "Content-Type",
+      "Access-Control-Allow-Origin",
+      "X-Goog-Upload-URL",
+      "X-Goog-Upload-Status",
+      "X-Goog-Upload-Chunk-Granularity",
+      "X-Goog-Upload-Control-URL",
+      "X-Goog-Upload-Header-Content-Length",
+      "X-Goog-Upload-Header-Content-Type"
+    ]
+  }
+]

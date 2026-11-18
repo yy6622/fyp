@@ -67,11 +67,9 @@ class GroupSettingController extends ChangeNotifier {
 
   StreamSubscription<Trip?>? _sub;
 
-  bool get pinChat => _trip?.pinChatFor(_uid) ?? false;
   bool get realTimeLocation => _trip?.realTimeLocation ?? false;
   String get notificationOption => _trip?.notificationOptionFor(_uid) ?? 'All Messages';
 
-  void setPinChat(bool v) => TripRepository.instance.setPinChatFor(tripId, _uid, v);
   void setRealTimeLocation(bool v) => TripRepository.instance.updateSettings(tripId, realTimeLocation: v);
   void setNotificationOption(String v) => TripRepository.instance.setNotificationOptionFor(tripId, _uid, v);
 

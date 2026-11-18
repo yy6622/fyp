@@ -108,6 +108,13 @@ class FriendsController extends ChangeNotifier {
       friendName: friend.name,
       blocked: nowBlocked,
     );
+    // Blocking someone ends the friendship too -- otherwise "blocked" was
+    // just a label with no actual effect (they'd still show up everywhere
+    // a friend does: trip invites, etc). Unblocking does NOT restore it;
+    // either side has to send a fresh request.
+    if (nowBlocked) {
+      await FriendsRepository.instance.removeFriend(uid: _uid, friendUid: friend.uid);
+    }
     return nowBlocked;
   }
 
@@ -230,10 +237,6 @@ class HistoryController extends ChangeNotifier {
         _loadingHotel = false;
         notifyListeners();
       });
-      // Reads straight from insurance_transactions (the single place an
-      // insurance purchase is now stored) instead of a mirrored
-      // users/{uid}/bookings doc -- see InsuranceRepository
-      // .watchTransactionsForBuyer()'s doc comment.
       _insuranceSub = InsuranceRepository.instance.watchTransactionsForBuyer(uid).listen((list) {
         _insuranceBookings = list.map(_bookingEntryFromTransaction).toList();
         _loadingInsurance = false;
@@ -246,12 +249,6 @@ class HistoryController extends ChangeNotifier {
     }
   }
 
-  /// Adapts an [InsuranceTransaction] into the same [BookingEntry] shape
-  /// the Insurance History tab (and HistoryInsuranceDetailPage, via
-  /// history_page.dart's _openHistoryDetail) already expects, so neither
-  /// of those had to change when the underlying read source did. Field
-  /// choices mirror exactly what payment_method_page.dart used to write
-  /// into the now-removed users/{uid}/bookings mirror doc.
   BookingEntry _bookingEntryFromTransaction(InsuranceTransaction t) {
     final currencyLabel = CurrencyService.instance.displayLabel(t.currencyCode.isEmpty ? 'MYR' : t.currencyCode);
     return BookingEntry(

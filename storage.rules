@@ -56,6 +56,23 @@ service firebase.storage {
       allow write: if request.auth != null;
     }
 
+    // Insurance claim/refund supporting documents (receipts, medical
+    // reports, etc. — "Supporting Documents" on FileClaimPage/
+    // RequestRefundPage, see claim_document_service.dart), grouped by the
+    // filing uid. Read is open to any signed-in user (not just the owner)
+    // because the insurance partner/admin console reviewing the claim is
+    // a different Firebase Auth account in the same project and needs to
+    // view these — same pragmatic level as receipts/chat_images/
+    // attraction_reports above.
+    match /claim_documents/{uid}/{fileName} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null;
+    }
+    match /refund_documents/{uid}/{fileName} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null;
+    }
+
     // Community post photo/video attachment (FR61 — "Upload Media" on
     // the compose form, see community_media_service.dart), grouped by the
     // posting uid. One file per post. Same pragmatic "any signed-in user"

@@ -61,7 +61,6 @@ class PlanGroup {
   final double lastExpenseAmount;
   final String tripId;
   final String coverImage;
-  final bool pinned;
   const PlanGroup({
     required this.title,
     required this.members,
@@ -75,6 +74,5 @@ class PlanGroup {
     this.lastExpenseAmount = 0,
     this.tripId = '',
     this.coverImage = '',
-    this.pinned = false,
   });
 }

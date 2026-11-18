@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
 
+import '../../models/insurance_models.dart';
+import '../../repositories/insurance_repository.dart';
+import '../../services/currency_service.dart';
 import '../../theme.dart';
 import '../insurance/claim_refund_page.dart';
 import '../insurance/insurance_chat_page.dart';
+import '../shared/person_info_sheet.dart';
 
 const List<String> _historyMonthNames = [
   'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
@@ -18,11 +22,89 @@ String _formatPurchasedAt(DateTime? d) {
 
 String _formatDateOnly(DateTime d) => '${d.day} ${_historyMonthNames[d.month - 1]} ${d.year}';
 
-// Passenger/traveller names and ID numbers are stored as one comma-joined
-// string per booking (guestName / guestIdNumber, or the insurance
-// equivalents), in the same order, since one booking can cover several
-// people under a single booking record.
 List<String> _split(String s) => s.trim().isEmpty ? const [] : s.split(', ').where((v) => v.trim().isNotEmpty).toList();
+
+Widget _claimsRefundsSection(String transactionId) {
+  return StreamBuilder<List<ClaimOrRefundRecord>>(
+    stream: InsuranceRepository.instance.watchClaimsForTransaction(transactionId),
+    builder: (context, claimSnap) {
+      return StreamBuilder<List<ClaimOrRefundRecord>>(
+        stream: InsuranceRepository.instance.watchRefundsForTransaction(transactionId),
+        builder: (context, refundSnap) {
+          final List<ClaimOrRefundRecord> items = [...?claimSnap.data, ...?refundSnap.data];
+          if (items.isEmpty) return const SizedBox.shrink();
+          items.sort((a, b) => (b.createdAt ?? DateTime(0)).compareTo(a.createdAt ?? DateTime(0)));
+          return Padding(
+            padding: const EdgeInsets.only(top: 14, bottom: 4),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Claims & Refunds Filed', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.navy)),
+                const SizedBox(height: 10),
+                ...items.map(_claimRefundCard),
+              ],
+            ),
+          );
+        },
+      );
+    },
+  );
+}
+
+Widget _claimRefundCard(ClaimOrRefundRecord r) {
+  final style = _claimStatusStyle(r.status);
+  return Container(
+    margin: const EdgeInsets.only(bottom: 10),
+    padding: const EdgeInsets.all(14),
+    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: const Color(0xFFECECEC))),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                '${r.isRefund ? "Refund" : "Claim"} · ${r.ref.isEmpty ? "—" : r.ref}',
+                style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: AppColors.navy),
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(color: style.color.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(8)),
+              child: Text(style.label, style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: style.color)),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          '${r.category.isEmpty ? "—" : r.category} · ${CurrencyService.instance.displayLabel(r.currencyCode)} ${r.amount.toStringAsFixed(2)}',
+          style: const TextStyle(fontSize: 11.5, color: AppColors.textGrey),
+        ),
+        if (r.createdAt != null) ...[
+          const SizedBox(height: 2),
+          Text('Filed ${_formatDateOnly(r.createdAt!)}', style: const TextStyle(fontSize: 10.5, color: AppColors.textGrey)),
+        ],
+        if (r.latestNote != null) ...[
+          const SizedBox(height: 6),
+          Text(r.latestNote!, style: const TextStyle(fontSize: 11.5, color: Colors.black, fontStyle: FontStyle.italic)),
+        ],
+      ],
+    ),
+  );
+}
+
+({Color color, String label}) _claimStatusStyle(String status) {
+  switch (status) {
+    case 'approved':
+      return (color: Colors.green, label: 'Approved');
+    case 'rejected':
+      return (color: Colors.redAccent, label: 'Rejected');
+    case 'under_review':
+      return (color: Colors.orange, label: 'Info Needed');
+    default:
+      return (color: AppColors.textGrey, label: 'Submitted');
+  }
+}
 
 
 class _HistoryDetailShell extends StatefulWidget {
@@ -105,35 +187,43 @@ Widget _infoCard(String header, List<Widget> fields) {
 
 Widget _peopleList(String roleLabel, {required String name, String email = '', String phone = '', String idNumber = ''}) {
   final hasName = name.isNotEmpty;
-  return ListView(
-    padding: const EdgeInsets.all(20),
-    children: [
-      Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        decoration: BoxDecoration(color: AppColors.chipGrey, borderRadius: BorderRadius.circular(12)),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            CircleAvatar(radius: 16, backgroundColor: const Color(0xFFD9D9D9), child: Icon(Icons.person_outline, size: 16, color: AppColors.textGrey)),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(hasName ? name : 'Not available', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.black)),
-                  Text(roleLabel, style: const TextStyle(fontSize: 10.5, color: AppColors.textGrey)),
-                  if (email.isNotEmpty || phone.isNotEmpty) ...[
-                    const SizedBox(height: 4),
-                    Text([email, phone].where((s) => s.isNotEmpty).join(' · '), style: const TextStyle(fontSize: 11.5, color: AppColors.textGrey)),
-                  ],
-                  if (idNumber.isNotEmpty) Text('ID/Passport: $idNumber', style: const TextStyle(fontSize: 11.5, color: AppColors.textGrey)),
-                ],
-              ),
+  return Builder(
+    builder: (context) => ListView(
+      padding: const EdgeInsets.all(20),
+      children: [
+        InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () => showPersonInfoSheet(context, name: name, roleLabel: roleLabel, email: email, phone: phone, idNumber: idNumber),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            decoration: BoxDecoration(color: AppColors.chipGrey, borderRadius: BorderRadius.circular(12)),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                CircleAvatar(radius: 16, backgroundColor: const Color(0xFFD9D9D9), child: Icon(Icons.person_outline, size: 16, color: AppColors.textGrey)),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(hasName ? name : 'Not available', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.black)),
+                      Text(roleLabel, style: const TextStyle(fontSize: 10.5, color: AppColors.textGrey)),
+                      if (email.isNotEmpty || phone.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Text([email, phone].where((s) => s.isNotEmpty).join(' · '), style: const TextStyle(fontSize: 11.5, color: AppColors.textGrey)),
+                      ],
+                      if (idNumber.isNotEmpty) Text('ID/Passport: $idNumber', style: const TextStyle(fontSize: 11.5, color: AppColors.textGrey)),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 6),
+                const Icon(Icons.chevron_right, size: 18, color: AppColors.textGrey),
+              ],
             ),
-          ],
+          ),
         ),
-      ),
-    ],
+      ],
+    ),
   );
 }
 
@@ -177,31 +267,42 @@ Widget _passengersList({
       ],
       for (int i = 0; i < names.length; i++) ...[
         if (i > 0) const SizedBox(height: 10),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          decoration: BoxDecoration(color: AppColors.chipGrey, borderRadius: BorderRadius.circular(12)),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const CircleAvatar(radius: 16, backgroundColor: Color(0xFFD9D9D9), child: Icon(Icons.person_outline, size: 16, color: AppColors.textGrey)),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
+        Builder(
+          builder: (context) {
+            final personName = names[i].isEmpty ? '$roleLabel ${i + 1}' : names[i];
+            final personId = i < idNumbers.length ? idNumbers[i] : '';
+            return InkWell(
+              borderRadius: BorderRadius.circular(12),
+              onTap: () => showPersonInfoSheet(context, name: personName, roleLabel: roleLabel, email: email, phone: phone, idNumber: personId),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                decoration: BoxDecoration(color: AppColors.chipGrey, borderRadius: BorderRadius.circular(12)),
+                child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(names[i].isEmpty ? '$roleLabel ${i + 1}' : names[i],
-                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.black)),
-                    Text(roleLabel, style: const TextStyle(fontSize: 10.5, color: AppColors.textGrey)),
-                    if (i < idNumbers.length && idNumbers[i].isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 4),
-                        child: Text('Passport/ID: ${idNumbers[i]}', style: const TextStyle(fontSize: 11.5, color: AppColors.textGrey)),
+                    const CircleAvatar(radius: 16, backgroundColor: Color(0xFFD9D9D9), child: Icon(Icons.person_outline, size: 16, color: AppColors.textGrey)),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(personName, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.black)),
+                          Text(roleLabel, style: const TextStyle(fontSize: 10.5, color: AppColors.textGrey)),
+                          if (personId.isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 4),
+                              child: Text('Passport/ID: $personId', style: const TextStyle(fontSize: 11.5, color: AppColors.textGrey)),
+                            ),
+                        ],
                       ),
+                    ),
+                    const SizedBox(width: 6),
+                    const Icon(Icons.chevron_right, size: 18, color: AppColors.textGrey),
                   ],
                 ),
               ),
-            ],
-          ),
+            );
+          },
         ),
       ],
     ],
@@ -464,6 +565,7 @@ class _HistoryInsuranceDetailPageState extends State<HistoryInsuranceDetailPage>
                       ),
                     ],
                   ),
+                if (widget.transactionId.isNotEmpty) _claimsRefundsSection(widget.transactionId),
                 if (widget.partnerId.isNotEmpty) ...[
                   const SizedBox(height: 10),
                   SizedBox(

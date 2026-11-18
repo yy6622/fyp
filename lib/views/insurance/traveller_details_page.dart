@@ -19,6 +19,11 @@ class TravellerDetailsPage extends StatefulWidget {
   final InsurancePlan plan;
   // See [InsurancePlanCard.tripId].
   final String? tripId;
+  // The destination picked on InsuranceQuotePage, for a standalone (no
+  // trip) purchase -- see InsurancePlanDetailPage.destination. Passed
+  // straight through to PaymentMethodPage, which is what actually records
+  // it on the transaction the admin side reads.
+  final String? destination;
   // Set when arriving from a quote/compare flow that already collected
   // these on [InsuranceQuotePage] — pre-fills (and skips re-deriving from
   // the trip) traveller count and travel dates instead of asking again.
@@ -29,6 +34,7 @@ class TravellerDetailsPage extends StatefulWidget {
     super.key,
     required this.plan,
     this.tripId,
+    this.destination,
     this.initialTravellerCount,
     this.initialTravelStart,
     this.initialTravelEnd,
@@ -87,10 +93,6 @@ class _TravellerDetailsPageState extends State<TravellerDetailsPage> {
     _prefillContactFromAccount();
   }
 
-  /// The lead traveller's contact fields double as the account holder's
-  /// own details most of the time, so default them from the signed-in
-  /// traveller's profile (still fully editable) instead of leaving them
-  /// blank.
   Future<void> _prefillContactFromAccount() async {
     final uid = AuthService.instance.currentUser?.uid;
     if (uid == null) return;
@@ -175,6 +177,7 @@ class _TravellerDetailsPageState extends State<TravellerDetailsPage> {
                 travellerCount: controller.travellerCount,
                 travellers: controller.travellers,
                 tripId: widget.tripId,
+                destination: widget.destination,
                 travelStart: controller.travelStart!,
                 travelEnd: controller.travelEnd!,
               )),
@@ -367,6 +370,7 @@ class _TravellerDetailsPageState extends State<TravellerDetailsPage> {
     String label, {
     IconData? trailing,
     TextInputType? keyboardType,
+    bool required = true,
     required ValueChanged<String> onChanged,
   }) {
     return Container(
@@ -380,7 +384,12 @@ class _TravellerDetailsPageState extends State<TravellerDetailsPage> {
               keyboardType: keyboardType,
               onChanged: onChanged,
               decoration: InputDecoration(
-                labelText: label,
+                label: required
+                    ? Text.rich(TextSpan(text: label, children: const [
+                        TextSpan(text: ' *', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.w700)),
+                      ]))
+                    : null,
+                labelText: required ? null : label,
                 labelStyle: const TextStyle(fontSize: 13.5, color: AppColors.textGrey),
                 border: InputBorder.none,
                 isDense: true,
@@ -394,7 +403,7 @@ class _TravellerDetailsPageState extends State<TravellerDetailsPage> {
     );
   }
 
-  Widget _pickerField(String label, String? value, {required VoidCallback onTap}) {
+  Widget _pickerField(String label, String? value, {required VoidCallback onTap, bool required = true}) {
     return InkWell(
       borderRadius: BorderRadius.circular(10),
       onTap: onTap,
@@ -404,13 +413,14 @@ class _TravellerDetailsPageState extends State<TravellerDetailsPage> {
         child: Row(
           children: [
             Expanded(
-              child: Text(
-                value ?? label,
-                style: TextStyle(
-                  fontSize: 13.5,
-                  color: value == null ? AppColors.textGrey : Colors.black,
-                ),
-              ),
+              child: value != null
+                  ? Text(value, style: const TextStyle(fontSize: 13.5, color: Colors.black))
+                  : Text.rich(
+                      TextSpan(text: label, children: [
+                        if (required) const TextSpan(text: ' *', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.w700)),
+                      ]),
+                      style: const TextStyle(fontSize: 13.5, color: AppColors.textGrey),
+                    ),
             ),
             const Icon(Icons.keyboard_arrow_down, size: 18, color: AppColors.textGrey),
           ],

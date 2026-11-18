@@ -4,7 +4,6 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../../controllers/vote_controller.dart';
 import '../../repositories/catalog_repository.dart';
 import '../../repositories/trip_repository.dart';
-import '../../services/currency_service.dart';
 import '../../theme.dart';
 import '../shared/nice_dialog.dart';
 import 'saved_item_picker_sheet.dart';
@@ -183,7 +182,7 @@ class _VoteTabState extends State<VoteTab> {
       headerIcon: Icons.add_circle_outline,
       confirmLabel: 'Add',
       fieldsBuilder: (ctx, setState) => [
-        niceDialogField(textController, 'Option', icon: Icons.edit_outlined, autofocus: true),
+        niceDialogField(textController, 'Option', icon: Icons.edit_outlined, autofocus: true, required: true),
       ],
     );
     if (confirmed != true) return;
@@ -199,14 +198,10 @@ class _VoteTabState extends State<VoteTab> {
   Set<String> _alreadyAddedKeys(TripVote vote) {
     final keys = <String>{};
     for (final o in vote.options) {
-      final hotel = controller.hotelFor(o);
-      if (hotel != null) keys.add('hotel:${hotel.id}');
       final attraction = controller.attractionFor(o);
       if (attraction != null) keys.add('attraction:${attraction.id}');
       final restaurant = controller.restaurantFor(o);
       if (restaurant != null) keys.add('restaurant:${restaurant.id}');
-      final flight = controller.flightFor(o);
-      if (flight != null) keys.add('flight:${flight.id}');
     }
     return keys;
   }
@@ -236,33 +231,47 @@ class _VoteTabState extends State<VoteTab> {
     );
   }
 
+  Future<void> _retractVote(TripVote vote, String optionId) async {
+    final error = await controller.retractVote(vote, optionId);
+    if (!mounted || error == null) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(error)),
+    );
+  }
+
   // Why a tap on a locked option does nothing, so the user isn't left
-  // guessing when their tap silently has no effect.
+  // guessing when their tap silently has no effect. The only thing that
+  // locks a tap now is the poll itself being closed -- picking a
+  // different option (even in a single-choice poll) switches your vote,
+  // and tapping your current pick again retracts it.
   String? _blockedReason(TripVote vote, VoteOption option) {
     if (vote.isClosed) return 'Voting is closed for this poll.';
-    if (!vote.allowMultipleChoice && controller.hasVotedAny(vote) && !controller.votedByMe(option)) {
-      return "This is a single-choice poll — you've already voted and can't switch.";
-    }
     return null;
   }
 
   Widget _optionCard(TripVote vote, VoteOption option) {
     final mineVoted = controller.votedByMe(option);
-    final hotel = controller.hotelFor(option);
-    final attraction = hotel == null ? controller.attractionFor(option) : null;
-    final restaurant = hotel == null && attraction == null ? controller.restaurantFor(option) : null;
-    final flight = hotel == null && attraction == null && restaurant == null ? controller.flightFor(option) : null;
+    final attraction = controller.attractionFor(option);
+    final restaurant = attraction == null ? controller.restaurantFor(option) : null;
 
     final canVote = controller.canVote(vote, option);
+    // Tapping your own already-selected option retracts that vote --
+    // for both single- and multiple-choice polls. Tapping a DIFFERENT
+    // option while canVote is true casts a fresh vote there, which for a
+    // single-choice poll also switches you off whatever you'd picked
+    // before (handled atomically in TripRepository.castVote).
+    final canRetract = !canVote && !vote.isClosed && mineVoted;
     return GestureDetector(
       onTap: canVote
           ? () => _castVote(vote, option.id)
-          : () {
-              final reason = _blockedReason(vote, option);
-              if (reason != null) {
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(reason)));
-              }
-            },
+          : canRetract
+              ? () => _retractVote(vote, option.id)
+              : () {
+                  final reason = _blockedReason(vote, option);
+                  if (reason != null) {
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(reason)));
+                  }
+                },
       child: Container(
         margin: const EdgeInsets.only(top: 10),
         decoration: BoxDecoration(
@@ -274,15 +283,11 @@ class _VoteTabState extends State<VoteTab> {
           children: [
             Padding(
               padding: const EdgeInsets.all(12),
-              child: hotel != null
-                  ? _hotelBody(option, hotel)
-                  : attraction != null
-                      ? _attractionBody(option, attraction)
-                      : restaurant != null
-                          ? _restaurantBody(option, restaurant)
-                          : flight != null
-                              ? _flightBody(option, flight)
-                              : _plainBody(option),
+              child: attraction != null
+                  ? _attractionBody(option, attraction)
+                  : restaurant != null
+                      ? _restaurantBody(option, restaurant)
+                      : _plainBody(option),
             ),
             if (mineVoted)
               Positioned(
@@ -298,34 +303,6 @@ class _VoteTabState extends State<VoteTab> {
           ],
         ),
       ),
-    );
-  }
-
-  Widget _hotelBody(VoteOption option, CatalogHotel hotel) {
-    final price = hotel.displayPrice(CurrencyService.instance.lastKnownUserCurrency);
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _thumb(hotel.image, Icons.hotel_outlined),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(hotel.name,
-                  maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold, color: Colors.black)),
-              const SizedBox(height: 4),
-              if (hotel.rating.isNotEmpty) _ratingRow(hotel.rating, hotel.reviews),
-              if (hotel.location.isNotEmpty) ...[const SizedBox(height: 4), _locationRow(hotel.location)],
-              if (price.isNotEmpty) ...[
-                const SizedBox(height: 6),
-                Text('$price per night', style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: AppColors.primary)),
-              ],
-              _footerRow(option),
-            ],
-          ),
-        ),
-      ],
     );
   }
 
@@ -373,37 +350,6 @@ class _VoteTabState extends State<VoteTab> {
               if (restaurant.priceRange.isNotEmpty) ...[
                 const SizedBox(height: 6),
                 Text(restaurant.priceRange, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: AppColors.primary)),
-              ],
-              _footerRow(option),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _flightBody(VoteOption option, CatalogFlight flight) {
-    final price = flight.displayPrice(CurrencyService.instance.lastKnownUserCurrency);
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          width: 56,
-          height: 56,
-          decoration: BoxDecoration(color: AppColors.chipGrey, borderRadius: BorderRadius.circular(10)),
-          child: const Icon(Icons.flight_outlined, color: AppColors.primary, size: 24),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('${flight.from} → ${flight.to}', style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold, color: Colors.black)),
-              const SizedBox(height: 4),
-              Text('${flight.depTime} - ${flight.arrTime} · ${flight.stops}', style: const TextStyle(fontSize: 11, color: AppColors.textGrey)),
-              if (price.isNotEmpty) ...[
-                const SizedBox(height: 6),
-                Text(price, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: AppColors.primary)),
               ],
               _footerRow(option),
             ],

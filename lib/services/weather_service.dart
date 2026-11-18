@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'demo_mode_service.dart';
 import 'places_api_service.dart';
 
 
@@ -59,6 +60,9 @@ class WeatherService {
   Future<DestinationWeather?> forDestination(String destination, {DateTime? forDate}) async {
     final trimmed = destination.trim();
     if (trimmed.isEmpty) return null;
+    if (DemoModeService.instance.enabled) {
+      return const DestinationWeather(tempC: DemoModeService.demoTempC, weatherCode: DemoModeService.demoWeatherCode);
+    }
     final dateKey = forDate == null ? 'now' : '${forDate.year}-${forDate.month}-${forDate.day}';
     final key = '$trimmed|$dateKey';
     final cached = _cache[key];
@@ -127,10 +131,6 @@ class WeatherService {
     return DestinationWeather(tempC: (maxT + minT) / 2, tempMinC: minT, tempMaxC: maxT, weatherCode: code);
   }
 
-  /// Weather for one day of a trip's itinerary. The caller (LiveConditionsCard)
-  /// never asks for a day that has already passed — weather is only shown
-  /// for today or an upcoming day within the forecast-worthwhile window —
-  /// so this always does a live/forecast fetch, no local replay needed.
   Future<DestinationWeather?> forTripDay({
     required String tripId,
     required int dayNumber,
@@ -138,4 +138,69 @@ class WeatherService {
     required DateTime date,
   }) =>
       forDestination(destination, forDate: date);
+
+  final Map<String, (DateTime fetchedAt, List<({int start, int end})> windows)> _rainCache = {};
+
+  /// Hour-by-hour forecast rain/snow/storm windows for [destination] on
+  /// [date], as minute-of-day [start, end) ranges (e.g. 14:00-17:00 ->
+  /// (840, 1020)). Used by Optimise to avoid scheduling outdoor activities
+  /// during them -- not shown anywhere on its own. Empty if the date is
+  /// outside the forecast horizon, the destination can't be geocoded, or
+  /// the request fails; never throws.
+  Future<List<({int start, int end})>> hourlyRainWindows(String destination, DateTime date) async {
+    final trimmed = destination.trim();
+    if (trimmed.isEmpty) return const [];
+    if (DemoModeService.instance.enabled) return DemoModeService.demoRainWindows;
+    final today = DateTime.now();
+    final todayMidnight = DateTime(today.year, today.month, today.day);
+    final dateMidnight = DateTime(date.year, date.month, date.day);
+    final daysAhead = dateMidnight.difference(todayMidnight).inDays;
+    if (daysAhead < 0 || daysAhead > _forecastHorizonDays) return const [];
+
+    String two(int n) => n.toString().padLeft(2, '0');
+    final dateStr = '${date.year}-${two(date.month)}-${two(date.day)}';
+    final key = '$trimmed|$dateStr';
+    final cached = _rainCache[key];
+    if (cached != null && DateTime.now().difference(cached.$1) < _cacheTtl) return cached.$2;
+
+    List<({int start, int end})> windows = const [];
+    try {
+      final geo = await PlacesApiService.instance.geocode(trimmed);
+      if (geo != null) {
+        final uri = Uri.https('api.open-meteo.com', '/v1/forecast', {
+          'latitude': '${geo.lat}',
+          'longitude': '${geo.lon}',
+          'hourly': 'weather_code',
+          'start_date': dateStr,
+          'end_date': dateStr,
+          'timezone': 'auto',
+        });
+        final res = await http.get(uri).timeout(const Duration(seconds: 10));
+        if (res.statusCode == 200) {
+          final decoded = jsonDecode(res.body) as Map<String, dynamic>;
+          final hourly = decoded['hourly'] as Map<String, dynamic>?;
+          final codes = List<dynamic>.from(hourly?['weather_code'] as List? ?? const []);
+          bool disruptive(int? code) =>
+              code != null &&
+              ((code >= 61 && code <= 67) || (code >= 71 && code <= 77) || (code >= 80 && code <= 82) || code >= 95);
+          final built = <({int start, int end})>[];
+          int? openStart;
+          for (var h = 0; h < codes.length && h < 24; h++) {
+            final bad = disruptive((codes[h] as num?)?.toInt());
+            if (bad && openStart == null) openStart = h * 60;
+            if (!bad && openStart != null) {
+              built.add((start: openStart, end: h * 60));
+              openStart = null;
+            }
+          }
+          if (openStart != null) built.add((start: openStart, end: 24 * 60));
+          windows = built;
+        }
+      }
+    } catch (_) {
+      windows = const [];
+    }
+    _rainCache[key] = (DateTime.now(), windows);
+    return windows;
+  }
 }

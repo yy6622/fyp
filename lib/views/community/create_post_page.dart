@@ -54,10 +54,10 @@ class _CreatePostPageState extends State<CreatePostPage> {
   }
 
   Future<void> _pickMedia() async {
-    if (controller.mediaAdded) {
-      controller.removeMedia();
-      return;
-    }
+    // Video only makes sense to offer when nothing is picked yet -- a post
+    // is either up to 9 photos or a single video, never mixed (see
+    // CreatePostController.pickMedia).
+    final offerVideo = controller.mediaCount == 0;
     final choice = await showModalBottomSheet<({ImageSource source, bool video})>(
       context: context,
       backgroundColor: Colors.white,
@@ -73,19 +73,21 @@ class _CreatePostPageState extends State<CreatePostPage> {
             ),
             ListTile(
               leading: const Icon(Icons.photo_library_outlined, color: AppColors.primary),
-              title: const Text('Choose a Photo'),
+              title: Text(controller.mediaCount == 0 ? 'Choose Photos' : 'Choose More Photos'),
               onTap: () => Navigator.of(ctx).pop((source: ImageSource.gallery, video: false)),
             ),
-            ListTile(
-              leading: const Icon(Icons.videocam_outlined, color: AppColors.primary),
-              title: const Text('Record a Video'),
-              onTap: () => Navigator.of(ctx).pop((source: ImageSource.camera, video: true)),
-            ),
-            ListTile(
-              leading: const Icon(Icons.video_library_outlined, color: AppColors.primary),
-              title: const Text('Choose a Video'),
-              onTap: () => Navigator.of(ctx).pop((source: ImageSource.gallery, video: true)),
-            ),
+            if (offerVideo) ...[
+              ListTile(
+                leading: const Icon(Icons.videocam_outlined, color: AppColors.primary),
+                title: const Text('Record a Video'),
+                onTap: () => Navigator.of(ctx).pop((source: ImageSource.camera, video: true)),
+              ),
+              ListTile(
+                leading: const Icon(Icons.video_library_outlined, color: AppColors.primary),
+                title: const Text('Choose a Video'),
+                onTap: () => Navigator.of(ctx).pop((source: ImageSource.gallery, video: true)),
+              ),
+            ],
           ],
         ),
       ),
@@ -167,33 +169,17 @@ class _CreatePostPageState extends State<CreatePostPage> {
                     _tagChips(),
                   ],
                   const SizedBox(height: 16),
-                  _label('Upload Media'),
-                  const SizedBox(height: 8),
-                  GestureDetector(
-                    onTap: _pickMedia,
-                    child: Container(
-                      height: 56,
-                      decoration: BoxDecoration(
-                        border: Border.all(color: const Color(0xFFECECEC)),
-                        borderRadius: BorderRadius.circular(10),
-                        color: controller.mediaAdded ? AppColors.chipGrey : Colors.white,
-                      ),
-                      alignment: Alignment.center,
-                      child: controller.mediaAdded
-                          ? Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(controller.mediaIsVideo ? Icons.videocam : Icons.check_circle, size: 18, color: AppColors.primary),
-                                const SizedBox(width: 8),
-                                Text(
-                                  '1 ${controller.mediaIsVideo ? 'video' : 'photo'} added — tap to remove',
-                                  style: const TextStyle(fontSize: 12.5, color: AppColors.navy),
-                                ),
-                              ],
-                            )
-                          : const Icon(Icons.file_upload_outlined, color: AppColors.textGrey),
-                    ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      _label('Upload Media'),
+                      if (controller.mediaCount > 0 && !controller.mediaIsVideo)
+                        Text('${controller.mediaCount}/${CreatePostController.maxMediaCount}',
+                            style: const TextStyle(fontSize: 12, color: AppColors.textGrey)),
+                    ],
                   ),
+                  const SizedBox(height: 8),
+                  _mediaGrid(),
                   const SizedBox(height: 20),
                   const Text('More Options', style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold, color: Colors.black)),
                   const SizedBox(height: 4),
@@ -230,6 +216,74 @@ class _CreatePostPageState extends State<CreatePostPage> {
   }
 
   Widget _label(String text) => Text(text, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold, color: Colors.black));
+
+  Widget _mediaGrid() {
+    return Wrap(
+      spacing: 10,
+      runSpacing: 10,
+      children: [
+        for (var i = 0; i < controller.mediaCount; i++) _mediaTile(i),
+        if (controller.canAddMoreMedia) _addMediaTile(),
+      ],
+    );
+  }
+
+  Widget _mediaTile(int index) {
+    final isVideo = controller.mediaIsVideo;
+    return SizedBox(
+      width: 80,
+      height: 80,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Container(
+            width: 80,
+            height: 80,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(10),
+              color: AppColors.chipGrey,
+              image: isVideo
+                  ? null
+                  : DecorationImage(image: FileImage(controller.mediaFiles[index]), fit: BoxFit.cover),
+            ),
+            alignment: Alignment.center,
+            child: isVideo ? const Icon(Icons.videocam, size: 26, color: AppColors.primary) : null,
+          ),
+          Positioned(
+            top: -6,
+            right: -6,
+            child: GestureDetector(
+              onTap: () => controller.removeMediaAt(index),
+              child: Container(
+                width: 22,
+                height: 22,
+                decoration: const BoxDecoration(color: Colors.black54, shape: BoxShape.circle),
+                alignment: Alignment.center,
+                child: const Icon(Icons.close, size: 14, color: Colors.white),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _addMediaTile() {
+    return GestureDetector(
+      onTap: _pickMedia,
+      child: Container(
+        width: 80,
+        height: 80,
+        decoration: BoxDecoration(
+          border: Border.all(color: const Color(0xFFECECEC)),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        alignment: Alignment.center,
+        child: const Icon(Icons.add_photo_alternate_outlined, color: AppColors.textGrey),
+      ),
+    );
+  }
+
 
   Widget _textField(TextEditingController ctrl, {required int maxLength, int lines = 1}) {
     final border = OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFFECECEC)));

@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
@@ -15,16 +15,17 @@ class CreatePlanWizardController extends ChangeNotifier {
 
   final TextEditingController tripNameController = TextEditingController();
   final TextEditingController destinationController = TextEditingController();
+  final TextEditingController aboutController = TextEditingController();
 
   DateTime? startDate;
   DateTime? endDate;
 
   String ownerName = 'You';
 
-  File? coverImage;
+  Uint8List? coverImage;
 
-  void setCoverImage(File? file) {
-    coverImage = file;
+  void setCoverImage(Uint8List? bytes) {
+    coverImage = bytes;
     notifyListeners();
   }
 
@@ -36,7 +37,11 @@ class CreatePlanWizardController extends ChangeNotifier {
   final Set<String> interests = {};
 
   static const interestOptions = [
-    'Beach', 'City', 'Nature', 'Food', 'Adventure', 'Culture', 'Shopping', 'Nightlife', 'Relaxation',
+    // 'Shopping' removed: its only mapped attraction-category tag was a
+    // phantom string that never matched a real attraction (see
+    // interest_mapping.dart), so picking it had zero effect on results.
+    'Beach', 'City', 'Nature', 'Adventure', 'Culture', 'Relaxation',
+    'Wildlife', 'History', 'Art', 'Religion', 'Markets',
   ];
 
   bool _creating = false;
@@ -132,6 +137,7 @@ class CreatePlanWizardController extends ChangeNotifier {
         interests: interests.toList(),
         extraMembers: {for (final t in travellers) t.uid: t.name},
         coverImage: fetchedCoverImage,
+        about: aboutController.text.trim(),
       );
       final localCover = coverImage;
       if (localCover != null) {
@@ -153,6 +159,7 @@ class CreatePlanWizardController extends ChangeNotifier {
     _disposed = true;
     tripNameController.dispose();
     destinationController.dispose();
+    aboutController.dispose();
     super.dispose();
   }
 }

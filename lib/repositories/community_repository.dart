@@ -97,11 +97,10 @@ class CommunityRepository {
     });
   }
 
-  Future<void> recordView(String postId, String uid, {List<String> tags = const []}) async {
+  Future<void> recordView(String postId, String uid) async {
     if (uid.isEmpty || postId.isEmpty) return;
     final postRef = _posts.doc(postId);
     final viewerRef = postRef.collection('viewers').doc(uid);
-    final userRef = FirebaseFirestore.instance.collection('users').doc(uid);
     final now = DateTime.now();
     final monthKey = '${now.year}-${now.month.toString().padLeft(2, '0')}';
     final statsRef = FirebaseFirestore.instance.collection('post_view_stats').doc(monthKey);
@@ -112,6 +111,7 @@ class CommunityRepository {
         tx.set(
           viewerRef,
           {
+            'uid': uid,
             'firstViewedAt': isFirstView ? FieldValue.serverTimestamp() : viewerSnap.data()?['firstViewedAt'],
             'lastViewedAt': FieldValue.serverTimestamp(),
           },
@@ -122,24 +122,22 @@ class CommunityRepository {
           if (isFirstView) 'uniqueViewerCount': FieldValue.increment(1),
         });
         tx.set(statsRef, {'viewCount': FieldValue.increment(1)}, SetOptions(merge: true));
-        if (isFirstView && tags.isNotEmpty) {
-          tx.set(
-            userRef,
-            {'tagAffinity': {for (final tag in normalizeTags(tags)) tag: FieldValue.increment(1)}},
-            SetOptions(merge: true),
-          );
-        }
       });
     } catch (_) {
     }
   }
 
-  Stream<Map<String, int>> watchTagAffinity(String uid) {
+  Stream<Set<String>> watchMyViewedPostIds(String uid) {
     if (uid.isEmpty) return Stream.value(const {});
-    return FirebaseFirestore.instance.collection('users').doc(uid).snapshots().map((snap) {
-      final raw = snap.data()?['tagAffinity'] as Map? ?? const {};
-      return raw.map((k, v) => MapEntry(k as String, (v as num).toInt()));
-    });
+    return FirebaseFirestore.instance
+        .collectionGroup('viewers')
+        .where('uid', isEqualTo: uid)
+        .snapshots()
+        .map((snap) => snap.docs
+            .map((d) => d.reference.parent.parent)
+            .whereType<DocumentReference>()
+            .map((ref) => ref.id)
+            .toSet());
   }
 
   Future<void> reportPost(String postId, {required String reportedByUid, required String reason}) {
@@ -149,13 +147,6 @@ class CommunityRepository {
       'reportReason': reason,
       'reportedAt': FieldValue.serverTimestamp(),
       'reportCount': FieldValue.increment(1),
-      // A separate running list of every uid that has ever reported this
-      // post, alongside `reportedBy` above (which only ever holds the
-      // MOST RECENT reporter, for admin's moderation display -- see
-      // admin_web/js/ui.js's reporterLabel()). This is what
-      // CommunityPost.reportedByMe checks, so "don't recommend a post
-      // back to someone who reported it" is correct even after a second
-      // person reports the same post and overwrites `reportedBy`.
       'reporterIds': FieldValue.arrayUnion([reportedByUid]),
     });
   }
@@ -178,10 +169,10 @@ class CommunityRepository {
             .toSet());
   }
 
-  Future<bool> addReview(String postId, {required String authorId, required String authorName, required int rating, required String comment}) async {
-    final flagged = await addReviewFor(_posts.doc(postId), authorId: authorId, authorName: authorName, rating: rating, comment: comment, bumpAggregate: false);
-    if (!flagged) await setRating(postId, authorId, rating);
-    return flagged;
+  Future<ReviewSubmitOutcome> addReview(String postId, {required String authorId, required String authorName, required int rating, required String comment}) async {
+    final outcome = await addReviewFor(_posts.doc(postId), authorId: authorId, authorName: authorName, rating: rating, comment: comment, bumpAggregate: false);
+    if (outcome == ReviewSubmitOutcome.added) await setRating(postId, authorId, rating);
+    return outcome;
   }
 
 

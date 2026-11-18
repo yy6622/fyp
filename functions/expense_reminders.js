@@ -52,10 +52,5 @@ async function runRemindUnpaidExpenses() {
   }
 }
 
-// Runs once a day; each unpaid expense is only actually reminded about once
-// every ~5 days (autoReminderCount / lastAutoReminderAt on the expense doc),
-// and stops once it has sent 3 automatic reminders. Independent of the
-// manual "Remind to Pay" button (sendPaymentReminder in trip_repository.dart),
-// which does not touch these fields.
 exports.remindUnpaidExpenses = onSchedule("every day 10:00", runRemindUnpaidExpenses);
 exports._runRemindUnpaidExpenses = runRemindUnpaidExpenses;

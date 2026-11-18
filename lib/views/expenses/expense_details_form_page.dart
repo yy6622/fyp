@@ -57,7 +57,9 @@ class _ExpenseDetailsFormPageState extends State<ExpenseDetailsFormPage> {
           final valid = _amountError(ctrl.text) == null;
           return AlertDialog(
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
-            title: const Text('Amount', style: TextStyle(fontSize: 16.5, fontWeight: FontWeight.bold, color: AppColors.navy)),
+            title: const Text.rich(TextSpan(text: 'Amount', children: [
+              TextSpan(text: ' *', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.w700)),
+            ]), style: TextStyle(fontSize: 16.5, fontWeight: FontWeight.bold, color: AppColors.navy)),
             content: TextField(
               controller: ctrl,
               autofocus: true,
@@ -133,7 +135,7 @@ class _ExpenseDetailsFormPageState extends State<ExpenseDetailsFormPage> {
                   ],
                   const Text('Details', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.navy)),
                   const SizedBox(height: 8),
-                  if (widget.controller.splitEqually)
+                  if (widget.controller.splitEqually != false)
                     _editableRow('Amount', widget.controller.amountController.text.isEmpty ? 'Tap to add an amount' : 'RM ${widget.controller.amountController.text}',
                         onTap: _editAmount)
                   else
@@ -141,16 +143,14 @@ class _ExpenseDetailsFormPageState extends State<ExpenseDetailsFormPage> {
                   _editableRow('Category', widget.controller.category, onTap: _chooseCategory),
                   _editableRow('Note', widget.controller.noteController.text.isEmpty ? 'Tap to add a note (e.g. dinner at Mei Seafood)' : widget.controller.noteController.text,
                       onTap: () => _editField('Note', widget.controller.noteController.text, widget.controller.setNote)),
-                  // Solo trip -- nobody else to split this with or remind,
-                  // so there's nothing to decide here (same reasoning as
-                  // the Groups/Personal toggle on expenses_tab.dart and
-                  // the Generate Report sheet skipping its own prompt).
                   if (widget.controller.trip.memberIds.length > 1) ...[
                     _editableRow(
                       'Split Method',
-                      widget.controller.splitEqually
-                          ? 'Equally · ${widget.controller.selectedUids.length} people'
-                          : 'Itemized · ${widget.controller.items.length} items',
+                      widget.controller.splitEqually == null
+                          ? 'Tap to choose'
+                          : widget.controller.splitEqually!
+                              ? 'Equally · ${widget.controller.selectedUids.length} people'
+                              : 'Itemized · ${widget.controller.items.length} items',
                       onTap: _chooseSplitMethod,
                     ),
                     Container(
@@ -192,13 +192,14 @@ class _ExpenseDetailsFormPageState extends State<ExpenseDetailsFormPage> {
 
   String _whatIsMissing() {
     final c = widget.controller;
-    if (c.splitEqually) {
+    if (c.trip.memberIds.length > 1 && c.splitEqually == null) return 'Choose a split method';
+    if (c.splitEqually == false) {
+      if (c.items.isEmpty) return 'Add at least one item';
+      if (c.items.any((i) => i.assigneeUids.isEmpty)) return 'Every item needs someone to pay for it';
+    } else {
       final e = _amountError(c.amountController.text);
       if (e != null) return e;
       if (c.selectedUids.isEmpty) return 'Choose who to split with';
-    } else {
-      if (c.items.isEmpty) return 'Add at least one item';
-      if (c.items.any((i) => i.assigneeUids.isEmpty)) return 'Every item needs someone to pay for it';
     }
     return 'Add an amount and who to split with';
   }

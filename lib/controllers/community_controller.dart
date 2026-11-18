@@ -42,11 +42,11 @@ class CommunityController extends ChangeNotifier {
 
   Set<String> get allTags => {for (final p in _posts) ...p.tags};
 
-  Map<String, int> _tagAffinity = {};
+  Set<String> _myViewedPostIds = {};
 
   StreamSubscription<List<CommunityPost>>? _sub;
   StreamSubscription<Set<String>>? _reviewedSub;
-  StreamSubscription<Map<String, int>>? _affinitySub;
+  StreamSubscription<Set<String>>? _viewedSub;
 
   CommunityController() {
     final uid = AuthService.instance.currentUser?.uid;
@@ -68,8 +68,8 @@ class CommunityController extends ChangeNotifier {
         _myReviewedPostIds = ids;
         notifyListeners();
       });
-      _affinitySub = CommunityRepository.instance.watchTagAffinity(uid).listen((affinity) {
-        _tagAffinity = affinity;
+      _viewedSub = CommunityRepository.instance.watchMyViewedPostIds(uid).listen((ids) {
+        _myViewedPostIds = ids;
         notifyListeners();
       });
     } else {
@@ -99,24 +99,20 @@ class CommunityController extends ChangeNotifier {
       result = result.where((p) => p.avgRating >= _minRating).toList();
     }
     final query = search.text.trim().toLowerCase();
-    if (query.isEmpty) return result;
-    return result
-        .where((p) =>
-            p.title.toLowerCase().contains(query) ||
-            p.location.toLowerCase().contains(query) ||
-            p.author.toLowerCase().contains(query))
-        .toList();
-  }
-
-  List<CommunityPost> get recommendedPosts {
-    if (_tagAffinity.isEmpty) return const [];
-    final topTags = _tagAffinity.keys.toSet();
-    final scored = _posts
-        .where((p) => !p.reportedByMe && p.tags.any(topTags.contains))
-        .map((p) => (post: p, score: p.tags.where(topTags.contains).length))
-        .toList()
-      ..sort((a, b) => b.score.compareTo(a.score));
-    return scored.map((e) => e.post).take(10).toList();
+    if (query.isNotEmpty) {
+      result = result
+          .where((p) =>
+              p.title.toLowerCase().contains(query) ||
+              p.location.toLowerCase().contains(query) ||
+              p.author.toLowerCase().contains(query))
+          .toList();
+    }
+    // Posts already opened sink below posts not yet seen -- a stable
+    // partition (not a re-sort of the whole list) so within each group
+    // nothing shuffles relative to how watchPosts() already ordered it.
+    final notViewed = result.where((p) => !_myViewedPostIds.contains(p.id)).toList();
+    final viewed = result.where((p) => _myViewedPostIds.contains(p.id)).toList();
+    return [...notViewed, ...viewed];
   }
 
   void toggleLike(CommunityPost post) {
@@ -128,7 +124,7 @@ class CommunityController extends ChangeNotifier {
   void recordView(CommunityPost post) {
     final uid = AuthService.instance.currentUser?.uid;
     if (uid == null || post.id.isEmpty) return;
-    CommunityRepository.instance.recordView(post.id, uid, tags: post.tags);
+    CommunityRepository.instance.recordView(post.id, uid);
   }
 
   Future<String?> reportPost(CommunityPost post, String reason) async {
@@ -168,7 +164,7 @@ class CommunityController extends ChangeNotifier {
   void dispose() {
     _sub?.cancel();
     _reviewedSub?.cancel();
-    _affinitySub?.cancel();
+    _viewedSub?.cancel();
     search.dispose();
     super.dispose();
   }
@@ -212,18 +208,52 @@ class CreatePostController extends ChangeNotifier {
     notifyListeners();
   }
 
-  PickedPostMedia? _media;
-  File? get mediaFile => _media?.file;
-  bool get mediaAdded => _media != null;
-  bool get mediaIsVideo => _media?.isVideo ?? false;
+  /// A post is either up to [maxMediaCount] photos, or a single video --
+  /// never mixed (matches how `images`/`videoUrl` are stored as separate
+  /// fields on CommunityPost). Picking a video replaces any photos already
+  /// chosen, and vice versa.
+  static const int maxMediaCount = 9;
+
+  final List<PickedPostMedia> _mediaItems = [];
+  List<File> get mediaFiles => _mediaItems.map((m) => m.file).toList(growable: false);
+  int get mediaCount => _mediaItems.length;
+  bool get mediaAdded => _mediaItems.isNotEmpty;
+  bool get mediaIsVideo => _mediaItems.isNotEmpty && _mediaItems.first.isVideo;
+  bool get canAddMoreMedia => !mediaIsVideo && _mediaItems.length < maxMediaCount;
 
   Future<String?> pickMedia(ImageSource source, {required bool video}) async {
     try {
-      final picked = video
-          ? await CommunityMediaService.instance.pickVideo(source)
-          : await CommunityMediaService.instance.pickImage(source);
+      if (video) {
+        final picked = await CommunityMediaService.instance.pickVideo(source);
+        if (picked == null) return null;
+        _mediaItems
+          ..clear()
+          ..add(picked);
+        notifyListeners();
+        return null;
+      }
+
+      // Switching from a previously-picked video back to photos.
+      if (_mediaItems.isNotEmpty && _mediaItems.first.isVideo) {
+        _mediaItems.clear();
+      }
+      if (_mediaItems.length >= maxMediaCount) {
+        return 'You can add up to $maxMediaCount photos.';
+      }
+
+      if (source == ImageSource.gallery) {
+        final remaining = maxMediaCount - _mediaItems.length;
+        final picked = await CommunityMediaService.instance.pickMultiImages(limit: remaining);
+        if (picked.isEmpty) return null;
+        _mediaItems.addAll(picked.take(remaining));
+        notifyListeners();
+        return null;
+      }
+
+      // Camera: one photo at a time.
+      final picked = await CommunityMediaService.instance.pickImage(source);
       if (picked == null) return null;
-      _media = picked;
+      _mediaItems.add(picked);
       notifyListeners();
       return null;
     } catch (e) {
@@ -231,8 +261,14 @@ class CreatePostController extends ChangeNotifier {
     }
   }
 
+  void removeMediaAt(int index) {
+    if (index < 0 || index >= _mediaItems.length) return;
+    _mediaItems.removeAt(index);
+    notifyListeners();
+  }
+
   void removeMedia() {
-    _media = null;
+    _mediaItems.clear();
     notifyListeners();
   }
 
@@ -311,13 +347,18 @@ class CreatePostController extends ChangeNotifier {
 
       var images = const <String>[];
       var videoUrl = '';
-      final media = _media;
-      if (media != null) {
-        final url = await CommunityMediaService.instance.upload(user.uid, media);
-        if (media.isVideo) {
-          videoUrl = url;
+      if (_mediaItems.isNotEmpty) {
+        if (_mediaItems.first.isVideo) {
+          videoUrl = await CommunityMediaService.instance.upload(user.uid, _mediaItems.first);
         } else {
-          images = [url];
+          // Uploaded in parallel (up to 9, each independent) but Future.wait
+          // preserves input order in its result regardless of completion
+          // order, so the post's photo order still matches what the user
+          // arranged/picked.
+          images = await Future.wait([
+            for (var i = 0; i < _mediaItems.length; i++)
+              CommunityMediaService.instance.upload(user.uid, _mediaItems[i], index: i),
+          ]);
         }
       }
 
@@ -366,7 +407,8 @@ class ItinerarySelectController extends ChangeNotifier {
       return;
     }
     _sub = TripRepository.instance.watchMyTrips(uid).listen((list) {
-      _trips = list;
+      // Past plans only live on the Plan tab -- hide them here too.
+      _trips = list.where((t) => !t.isInactive).toList();
       _loading = false;
       notifyListeners();
     });

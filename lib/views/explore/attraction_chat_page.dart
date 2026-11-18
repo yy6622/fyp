@@ -139,12 +139,14 @@ class _AttractionChatPageState extends State<AttractionChatPage> {
               textAlign: TextAlign.center,
               style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.navy),
             ),
-            const SizedBox(height: 6),
-            const Text(
-              "I'll only suggest real places from Voya's own listings for this destination — never a made-up one.",
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 12, color: AppColors.textGrey),
-            ),
+            if (widget.tripId != null) ...[
+              const SizedBox(height: 6),
+              const Text(
+                'I can also add, remove, or reschedule activities on your plan — just ask.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 12, color: AppColors.textGrey),
+              ),
+            ],
           ],
         ),
       ),
@@ -197,6 +199,98 @@ class _AttractionChatPageState extends State<AttractionChatPage> {
             const SizedBox(height: 10),
             ...m.suggestions.map(_buildSuggestionCard),
           ],
+          if (m.actions.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            ...m.actions.map(_buildActionCard),
+          ],
+        ],
+      ),
+    );
+  }
+
+  String _actionVerb(AttractionChatAction a) {
+    switch (a.type) {
+      case ChatActionType.addActivity:
+        return 'Add';
+      case ChatActionType.removeActivity:
+        return 'Remove';
+      case ChatActionType.updateTime:
+        return 'Update';
+      case ChatActionType.moveActivity:
+        return 'Move';
+    }
+  }
+
+  String _actionDescription(AttractionChatAction a) {
+    switch (a.type) {
+      case ChatActionType.addActivity:
+        return 'Add to Day ${a.day} · ${a.time} — ${a.label}';
+      case ChatActionType.removeActivity:
+        return 'Remove from Day ${a.day} — ${a.label}';
+      case ChatActionType.updateTime:
+        return 'Change Day ${a.day} time to ${a.time} — ${a.label}';
+      case ChatActionType.moveActivity:
+        return 'Move to Day ${a.toDay}${a.time != null ? ' · ${a.time}' : ''} — ${a.label}';
+    }
+  }
+
+  IconData _actionIcon(AttractionChatAction a) {
+    switch (a.type) {
+      case ChatActionType.addActivity:
+        return Icons.add_circle_outline;
+      case ChatActionType.removeActivity:
+        return Icons.remove_circle_outline;
+      case ChatActionType.updateTime:
+        return Icons.schedule_outlined;
+      case ChatActionType.moveActivity:
+        return Icons.swap_horiz;
+    }
+  }
+
+  Future<void> _confirmAction(AttractionChatAction a) async {
+    final error = await controller.applyAction(a);
+    if (!mounted || error == null) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
+  }
+
+  Widget _buildActionCard(AttractionChatAction a) {
+    final applied = controller.isApplied(a);
+    final applying = controller.isApplying(a);
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFECECEC)),
+      ),
+      child: Row(
+        children: [
+          Icon(_actionIcon(a), size: 18, color: AppColors.primary),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              _actionDescription(a),
+              style: const TextStyle(fontSize: 12.5, color: AppColors.navy, fontWeight: FontWeight.w600),
+            ),
+          ),
+          const SizedBox(width: 10),
+          if (applying)
+            const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary))
+          else
+            OutlinedButton(
+              style: OutlinedButton.styleFrom(
+                side: BorderSide(color: applied ? AppColors.textGrey : AppColors.primary),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                minimumSize: Size.zero,
+              ),
+              onPressed: applied ? null : () => _confirmAction(a),
+              child: Text(
+                applied ? 'Done' : _actionVerb(a),
+                style: TextStyle(fontSize: 12, color: applied ? AppColors.textGrey : AppColors.primary, fontWeight: FontWeight.w600),
+              ),
+            ),
         ],
       ),
     );
@@ -228,17 +322,15 @@ class _AttractionChatPageState extends State<AttractionChatPage> {
               ],
             ),
           ),
-          const SizedBox(width: 10),
-          OutlinedButton(
-            style: OutlinedButton.styleFrom(
-              side: BorderSide(color: added ? AppColors.textGrey : AppColors.primary),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              minimumSize: Size.zero,
-            ),
-            onPressed: (added || controller.tripId == null) ? null : () => controller.addToTrip(a),
-            child: Text(
-              added ? 'Added' : 'Add',
-              style: TextStyle(fontSize: 12, color: added ? AppColors.textGrey : AppColors.primary, fontWeight: FontWeight.w600),
+          const SizedBox(width: 6),
+          IconButton(
+            tooltip: added ? 'Remove from plan' : 'Add to plan',
+            visualDensity: VisualDensity.compact,
+            onPressed: controller.tripId == null ? null : () => added ? controller.removeFromTrip(a) : controller.addToTrip(a),
+            icon: Icon(
+              added ? Icons.favorite : Icons.favorite_border,
+              color: controller.tripId == null ? AppColors.textGrey : AppColors.primary,
+              size: 22,
             ),
           ),
         ],
@@ -250,32 +342,44 @@ class _AttractionChatPageState extends State<AttractionChatPage> {
     return SafeArea(
       top: false,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-        child: Row(
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Expanded(
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14),
-                decoration: BoxDecoration(color: AppColors.chipGrey, borderRadius: BorderRadius.circular(24)),
-                child: TextField(
-                  controller: _inputCtrl,
-                  minLines: 1,
-                  maxLines: 4,
-                  textInputAction: TextInputAction.send,
-                  onSubmitted: (_) => _send(),
-                  decoration: const InputDecoration(
-                    hintText: 'Ask about attractions…',
-                    hintStyle: TextStyle(color: AppColors.textGrey, fontSize: 13),
-                    border: InputBorder.none,
-                    isDense: true,
+            Row(
+              children: [
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    decoration: BoxDecoration(color: AppColors.chipGrey, borderRadius: BorderRadius.circular(24)),
+                    child: TextField(
+                      controller: _inputCtrl,
+                      minLines: 1,
+                      maxLines: 4,
+                      textInputAction: TextInputAction.send,
+                      onSubmitted: (_) => _send(),
+                      decoration: const InputDecoration(
+                        hintText: 'Ask about attractions…',
+                        hintStyle: TextStyle(color: AppColors.textGrey, fontSize: 13),
+                        border: InputBorder.none,
+                        isDense: true,
+                      ),
+                    ),
                   ),
                 ),
-              ),
+                const SizedBox(width: 8),
+                IconButton(
+                  onPressed: controller.sending ? null : _send,
+                  icon: const Icon(Icons.send, color: AppColors.primary),
+                ),
+              ],
             ),
-            const SizedBox(width: 8),
-            IconButton(
-              onPressed: controller.sending ? null : _send,
-              icon: const Icon(Icons.send, color: AppColors.primary),
+            const Padding(
+              padding: EdgeInsets.only(top: 2, bottom: 4),
+              child: Text(
+                'AI can make mistakes. Double-check anything important.',
+                style: TextStyle(fontSize: 10.5, color: AppColors.textGrey),
+              ),
             ),
           ],
         ),

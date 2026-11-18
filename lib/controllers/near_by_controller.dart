@@ -61,10 +61,13 @@ class NearByController extends ChangeNotifier {
 
   String? _describeError(Object? e) {
     if (e == null) return null;
+    // The source can now be Geoapify (preferred, when configured) or the
+    // Overpass mirror chain (fallback) -- see PlacesApiService.searchNearbyStable
+    // -- so this stays source-agnostic instead of naming one of them.
     final s = e.toString();
-    if (s.contains('TimeoutException')) return "Timed out reaching OpenStreetMap's servers.";
+    if (s.contains('TimeoutException')) return "Timed out reaching the places service.";
     if (s.contains('SocketException') || s.contains('Failed host lookup') || s.contains('Connection')) {
-      return "Couldn't connect to OpenStreetMap's servers — the network may be blocking this host.";
+      return "Couldn't connect to the places service — the network may be blocking it.";
     }
     return "Couldn't load nearby places ($s).";
   }

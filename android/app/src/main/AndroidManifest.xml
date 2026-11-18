@@ -12,6 +12,13 @@
          scan a trip's invite QR code shown on its Group Info page. -->
     <uses-permission android:name="android.permission.CAMERA" />
 
+    <!-- Android 13+ requires this to be declared before a push
+         notification can be shown in the system tray at all,
+         requested at runtime by NotificationService.init()
+         (lib/services/notification_service.dart), via
+         FirebaseMessaging's own permission request. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
     <application
         android:label="voya"
         android:name="${applicationName}"
@@ -25,6 +32,16 @@
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
             android:hardwareAccelerated="true"
             android:windowSoftInputMode="adjustResize">
+            <!-- NOTE: deliberately NOT using android:screenOrientation="portrait"
+                 here. On targetSdk 27+, a fixed activity-level orientation
+                 crashes with "IllegalStateException: Only fullscreen
+                 activities can request orientation" the moment a plugin's
+                 own camera/picker activity (image_picker's camera capture,
+                 in this app's case) calls setRequestedOrientation() on
+                 launch, which is exactly what "take a photo" does. The
+                 Dart-level SystemChrome.setPreferredOrientations() lock in
+                 main.dart achieves the same portrait-only behaviour for
+                 this app's own UI without that native conflict. -->
             <!-- Specifies an Android theme to apply to this Activity as soon as
                  the Android process has started. This theme is visible to the user
                  while the Flutter UI initializes. After that, this theme continues

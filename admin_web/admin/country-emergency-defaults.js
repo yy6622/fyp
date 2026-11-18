@@ -1,20 +1,3 @@
-// Voya — shared, real/verified default reference data for the Country
-// Emergency Info admin pages (country-emergency.html list,
-// country-emergency-form.html destination form, country-embassy-form.html
-// per-embassy form).
-//
-// Police/ambulance/fire numbers are destination-only — the same regardless
-// of a trip member's own nationality, which is why they're kept separate
-// from embassy data below. Embassy contact details were sourced ONLY from
-// each home country's own official Ministry of Foreign Affairs directory
-// (never general knowledge, never a third-party site) — see each
-// nationality's own notes in claude/session-2026-10-20-country-emergency-
-// info-admin-and-firestore.md for exact sources. DEFAULT_EMBASSIES is a map
-// of destinationKey -> homeCountryKey -> embassy so any number of
-// nationalities' embassies can coexist per destination. Kept here only as
-// a one-click starting point ("Fill with default values" / "Import missing
-// defaults") — nothing here is written to Firestore without the
-// signed-in admin explicitly clicking Save or Import.
 
 export const DEFAULT_EMERGENCY_NUMBERS = {
   malaysia: {
@@ -3466,12 +3449,6 @@ export const DEFAULT_EMBASSIES = {
   }
 };
 
-// The nationality choices already offered elsewhere in the app (flight/
-// insurance Traveller Details — see nationalityOptions in
-// lib/controllers/insurance_controller.dart) and in Account Setting's
-// Country/Region picker, reused here as suggestions when adding an
-// embassy so the admin's spelling matches what a user's own
-// users/{uid}.country value will actually be.
 export const COMMON_HOME_COUNTRIES = [
   "Malaysia",
   "Singapore",

@@ -134,7 +134,7 @@ class _AddHotelPageState extends State<AddHotelPage> {
             child: ListView(
               padding: const EdgeInsets.all(20),
               children: [
-                niceDialogField(_name, 'Hotel Name', icon: Icons.hotel_outlined, autofocus: true),
+                niceDialogField(_name, 'Hotel Name', icon: Icons.hotel_outlined, autofocus: true, required: true),
                 niceDialogField(_location, 'Location', icon: Icons.place_outlined),
                 Row(
                   children: [

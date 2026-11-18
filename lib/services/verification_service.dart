@@ -8,11 +8,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../repositories/user_repository.dart';
 import 'auth_service.dart';
 
-/// Why a 6-digit email code is being asked for. FR04 itself is
-/// login-only 2FA (signup / new-device login); the other purposes here
-/// are step-up confirmations for sensitive account changes, a related
-/// but separate feature -- payment deliberately has no purpose here at
-/// all, see functions/email_code.js's header comment.
 enum CodePurpose {
   signup('signup', 'Verify Your Email', 'to verify your email address'),
   login('login', 'New Device Sign-in', 'because this is a new device'),
@@ -34,21 +29,12 @@ enum SignInStep { suspended, verifyEmail, verifyDevice, open }
 
 class VerificationException implements Exception {
   final String message;
-  // The raw FirebaseFunctionsException.code (e.g. 'permission-denied',
-  // 'internal'), when this came from a callable. Lets callers tell a
-  // transient server-side hiccup (code was right, something else failed)
-  // apart from an actually-wrong/expired code -- see
-  // VerificationCodeController.verify() in auth_controller.dart.
   final String code;
   const VerificationException(this.message, {this.code = ''});
   @override
   String toString() => message;
 }
 
-/// Email-code verification (FR04): sign-up, new-device sign-in, and step-up
-/// confirmation before changing a password/email or deleting the account.
-/// Codes are created and checked by the sendVerificationCode / verifyCode
-/// Cloud Functions.
 class VerificationService {
   VerificationService._();
   static final VerificationService instance = VerificationService._();

@@ -65,11 +65,6 @@ function overpassQuery(kind, lat, lon, country) {
   return `[out:json][timeout:8];(${parts});out center tags 40;`;
 }
 
-// Raw OSM rows, straight off Overpass -- not yet in the catalog_attractions /
-// catalog_restaurants display schema. toCatalogDoc() below converts one of
-// these into the same shape the app's own live refresh writes, so a place
-// found here and a place found by a traveller browsing Explore converge on
-// one document (same id scheme: "osm_<n|w|r><id>") instead of two.
 function rowsFromOverpass(elements, kind, { lat, lon, country, city }) {
   const seen = new Set();
   const rows = [];
@@ -105,12 +100,6 @@ function rowsFromOverpass(elements, kind, { lat, lon, country, city }) {
   return rows.slice(0, KEEP);
 }
 
-// Builds the exact document that gets written to (and later read back from)
-// catalog_attractions / catalog_restaurants -- the one and only collection
-// this feature keeps data in. "needKey" is this specific need (e.g.
-// "TH:museum") so a future trip to the same country can reuse the same
-// document without a fresh Overpass call; "destinationKey" tags it for the
-// current trip's own Explore-style display lookup.
 function toCatalogDoc(d, kind, destinationKey, needKey) {
   const name = (d.nameEn && d.nameEn.trim()) || d.name;
   const nameLocal = d.name && d.name.trim() && d.name.trim() !== name ? d.name.trim() : null;
@@ -163,10 +152,6 @@ function makeNeedLookup({ db, destination, fetchJson = getJson, maxLookups = 4, 
   const destinationKey = tripDestination.toLowerCase();
   let cityP = null;
   let osmCalls = 0;
-  // One lazily-loaded, per-country cache per collection -- loaded at most
-  // once each per lookupNeed() run, same cost as the old catalog_places
-  // query, just split across the two real display collections instead of
-  // a separate reference one.
   const countryRowsByCollection = {};
   const city = async (name) => {
     if (!cityP) {

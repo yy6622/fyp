@@ -6,11 +6,9 @@ import '../../repositories/catalog_repository.dart';
 import '../../services/currency_service.dart';
 import '../../theme.dart';
 import '../detail/detail_page_attraction.dart';
-import '../detail/detail_page_flight.dart';
-import '../detail/detail_page_hotel.dart';
 import '../detail/detail_page_restaurant.dart';
 
-enum _SavedTab { flights, hotels, attractions, restaurants }
+enum _SavedTab { attractions, restaurants }
 
 class SavedItemsPage extends StatefulWidget {
   final String tripId;
@@ -23,7 +21,7 @@ class SavedItemsPage extends StatefulWidget {
 
 class _SavedItemsPageState extends State<SavedItemsPage> {
   late final SavedItemsController controller = SavedItemsController(tripId: widget.tripId);
-  _SavedTab _tab = _SavedTab.flights;
+  _SavedTab _tab = _SavedTab.attractions;
 
   @override
   void dispose() {
@@ -45,8 +43,6 @@ class _SavedItemsPageState extends State<SavedItemsPage> {
           children: [
             Row(
               children: [
-                _tabButton('Flights', _SavedTab.flights),
-                _tabButton('Hotels', _SavedTab.hotels),
                 _tabButton('Attractions', _SavedTab.attractions),
                 _tabButton('Restaurant', _SavedTab.restaurants),
               ],
@@ -58,13 +54,6 @@ class _SavedItemsPageState extends State<SavedItemsPage> {
     );
   }
 
-  // Text-only tabs (no icon) -- same bar still used on the group trip
-  // page's Plan/Chat/Expenses/Vote tabs (see group_trip_page.dart's own
-  // _tabButton) has room for an icon next to a short label, but
-  // "Attractions"/"Restaurant" next to an icon in a quarter-width tab
-  // here just got cramped, so this one drops the icon and keeps the
-  // white background, rounded bottom corners, and 2px primary underline
-  // on the selected tab.
   Widget _tabButton(String label, _SavedTab tab) {
     final selected = _tab == tab;
     return Expanded(
@@ -94,24 +83,6 @@ class _SavedItemsPageState extends State<SavedItemsPage> {
 
   Widget _buildBody() {
     switch (_tab) {
-      case _SavedTab.flights:
-        if (controller.loadingFlights) return const Center(child: CircularProgressIndicator(color: AppColors.primary));
-        if (controller.flights.isEmpty) return _empty('No flights saved for this trip yet.');
-        return ListView.separated(
-          padding: const EdgeInsets.fromLTRB(20, 14, 20, 20),
-          itemCount: controller.flights.length,
-          separatorBuilder: (_, __) => const SizedBox(height: 12),
-          itemBuilder: (context, i) => _flightCard(controller.flights[i]),
-        );
-      case _SavedTab.hotels:
-        if (controller.loadingHotels) return const Center(child: CircularProgressIndicator(color: AppColors.primary));
-        if (controller.hotels.isEmpty) return _empty('No hotels saved for this trip yet.');
-        return ListView.separated(
-          padding: const EdgeInsets.fromLTRB(20, 14, 20, 20),
-          itemCount: controller.hotels.length,
-          separatorBuilder: (_, __) => const SizedBox(height: 12),
-          itemBuilder: (context, i) => _hotelCard(controller.hotels[i]),
-        );
       case _SavedTab.attractions:
         if (controller.loadingAttractions) return const Center(child: CircularProgressIndicator(color: AppColors.primary));
         if (controller.attractions.isEmpty) return _empty('No attractions saved for this trip yet.');
@@ -168,92 +139,6 @@ class _SavedItemsPageState extends State<SavedItemsPage> {
           border: Border.all(color: const Color(0xFFECECEC)),
         ),
         child: child,
-      ),
-    );
-  }
-
-  Widget _flightCard(CatalogFlight flight) {
-    final price = flight.displayPrice(CurrencyService.instance.lastKnownUserCurrency);
-    return _card(
-      onTap: () => Navigator.of(context).push(MaterialPageRoute(
-        builder: (_) => DetailPageFlight(
-          airline: flight.airline,
-          fromCode: flight.from,
-          toCode: flight.to,
-          flightNo: flight.flightNo,
-          date: flight.date,
-          depTime: flight.depTime,
-          arrTime: flight.arrTime,
-          duration: flight.duration,
-          stops: flight.stops,
-          price: price,
-          priceSuffix: flight.fareType,
-          airlineLogoUrl: flight.airlineLogoUrl,
-          tripId: widget.tripId,
-        ),
-      )),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('${flight.from} → ${flight.to}', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.navy)),
-                const SizedBox(height: 4),
-                Text('${flight.depTime} - ${flight.arrTime} · ${flight.stops}', style: const TextStyle(fontSize: 11, color: AppColors.textGrey)),
-                const SizedBox(height: 4),
-                Text(price, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.primary)),
-              ],
-            ),
-          ),
-          GestureDetector(
-            onTap: () => controller.unsaveFlight(flight),
-            child: const Icon(Icons.favorite, size: 20, color: Colors.redAccent),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _hotelCard(CatalogHotel hotel) {
-    final price = hotel.displayPrice(CurrencyService.instance.lastKnownUserCurrency);
-    return _card(
-      onTap: () => Navigator.of(context).push(MaterialPageRoute(
-        builder: (_) => DetailPageHotel(
-          hotelId: hotel.id,
-          name: hotel.name,
-          location: hotel.location,
-          ratingLabel: '${hotel.rating}(${hotel.reviews})',
-          pricePerNight: price,
-          image: hotel.image,
-          tripId: widget.tripId,
-          amenities: hotel.amenities,
-        ),
-      )),
-      child: Row(
-        children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(10),
-            child: _cardImage(hotel.image, Icons.hotel_outlined),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(hotel.name, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold, color: AppColors.navy)),
-                const SizedBox(height: 4),
-                Text(hotel.location, style: const TextStyle(fontSize: 11, color: AppColors.textGrey)),
-                const SizedBox(height: 4),
-                Text('$price per night', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.primary)),
-              ],
-            ),
-          ),
-          GestureDetector(
-            onTap: () => controller.unsaveHotel(hotel),
-            child: const Icon(Icons.favorite, size: 20, color: Colors.redAccent),
-          ),
-        ],
       ),
     );
   }

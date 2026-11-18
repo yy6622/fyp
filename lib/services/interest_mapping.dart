@@ -1,41 +1,27 @@
-/// Maps a trip's declared interest points (CreatePlanWizardController.
-/// interestOptions: Beach/City/Nature/Food/Adventure/Culture/Shopping/
-/// Nightlife/Relaxation, set at plan creation and editable afterwards
-/// from the trip Overview -> TravelPreferencesPage) onto the REAL
-/// attraction category tags places are actually stored with (see
-/// explore_page.dart's _attractionCategoryBucket doc comment for where
-/// that vocabulary comes from -- Geoapify's import or the OSM refresh in
-/// catalog_repository.dart).
-///
-/// 'Food' and 'Nightlife' are deliberately left out: there's no
-/// attraction category tag that means either of those (restaurants are a
-/// separate recommendation list with cuisine tags, not category tags,
-/// and nothing in the catalogue is tagged as a bar/club), so mapping
-/// them to an unrelated category would just be a fabricated signal.
 const Map<String, List<String>> kInterestToAttractionCategoryTags = {
-  'Beach': ['Nature', 'Viewpoint'],
-  'City': ['Landmark', 'Attraction'],
-  'Nature': ['Nature', 'Viewpoint', 'Zoo'],
-  'Adventure': ['Adventure', 'Zoo', 'Theme Park'],
-  'Culture': ['Art & Culture', 'Historic Site', 'Artwork', 'Gallery', 'Museum'],
-  'Shopping': ['Shopping'],
-  'Relaxation': ['Nature', 'Viewpoint'],
+  // Every tag below is a real admin/attraction-form.html
+  // CATEGORY_TAG_PRESETS entry. Earlier versions of this map also listed
+  // 'Nature', 'Attraction', 'Shopping', 'Adventure', 'Artwork' and
+  // 'Gallery' as tags -- none of those exist as real presets, so they
+  // could never actually match a real attraction and were silently dead
+  // weight. Removed. 'Shopping' interest is gone entirely: its only tag
+  // was the phantom 'Shopping' string, so with that removed it had zero
+  // real tags left (see create_plan_wizard_controller.dart).
+  'Beach': ['Viewpoint'],
+  'City': ['Landmark'],
+  'Nature': ['Viewpoint', 'Zoo'],
+  'Adventure': ['Zoo', 'Theme Park'],
+  'Culture': ['Art & Culture', 'Historic Site', 'Museum'],
+  'Relaxation': ['Viewpoint'],
+  'Wildlife': ['Zoo'],
+  'History': ['Historic Site'],
+  'Art': ['Museum'],
+  'Religion': ['Temple', 'Shrine', 'Religious Site'],
+  'Markets': ['Market'],
 };
 
-/// How much a declared-interest tag match is worth, in the same units as
-/// CatalogRepository's behavioral affinity counts (a view bumps a tag by
-/// +1, a save/favorite by +5 -- see CatalogRepository._favoriteAffinityWeight).
-/// Picked so interests alone decide the ranking at cold start (every real
-/// affinity count is 0 for a brand-new user) while a handful of real
-/// saves/views on a different tag can still outweigh it -- this is the
-/// "starts from interest points, shifts toward actual behaviour as it
-/// builds up, but never drops the interest points entirely" blend.
 const int kInterestAffinityBonus = 4;
 
-/// Returns [affinity] with [kInterestAffinityBonus] added to every
-/// category tag any of [interests] maps to. Never mutates [affinity]
-/// itself -- it's a live stream's current value (ExploreController's
-/// _attractionAffinity) that other code also reads.
 Map<String, int> blendInterestsIntoAffinity(Map<String, int> affinity, List<String> interests) {
   if (interests.isEmpty) return affinity;
   final blended = Map<String, int>.from(affinity);

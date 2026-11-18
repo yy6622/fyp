@@ -164,7 +164,7 @@ class _AddFlightPageState extends State<AddFlightPage> {
             child: ListView(
               padding: const EdgeInsets.all(20),
               children: [
-                niceAutocompleteField(_airline, 'Airline', options: kAirlines, icon: Icons.flight_outlined, autofocus: true),
+                niceAutocompleteField(_airline, 'Airline', options: kAirlines, icon: Icons.flight_outlined, autofocus: true, required: true),
                 niceDialogField(_flightNumber, 'Flight Number (optional)', icon: Icons.confirmation_number_outlined),
                 Row(
                   children: [

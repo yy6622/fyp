@@ -39,6 +39,18 @@ dependencies:
   firebase_core: ^4.14.0
   firebase_auth: ^6.6.1
   cloud_firestore: ^6.9.0
+  # Real OS-level push for the "conditions have changed" alerts the
+  # conditionWatch Cloud Function sends (functions/condition_watch.js) --
+  # everything before this was only the in-app bell-icon notification list.
+  # ^16.4.3 depends on firebase_core ^4.12.1, compatible with this
+  # project's firebase_core ^4.14.0 above (checked on pub.dev before
+  # pinning, same discipline as cloud_functions's version note below).
+  firebase_messaging: ^16.4.3
+  # Shows a real notification in the phone's notification shade for a
+  # push message that arrives while the app happens to be open --
+  # Android/iOS only auto-display a push's "notification" payload in the
+  # system tray when the app is backgrounded/terminated, not foregrounded.
+  flutter_local_notifications: ^21.0.0
 
   # Google sign-in (login_page.dart / signup_page.dart's social row —
   # previously a decorative circle with no onTap at all). Ends at
@@ -49,6 +61,16 @@ dependencies:
   google_sign_in: ^6.2.2
   image_picker: ^1.2.3
   firebase_storage: ^13.5.0
+  # Lets FileClaimPage/RequestRefundPage's "Supporting Documents" accept a
+  # PDF receipt/report, not just a camera/gallery photo (image_picker above
+  # can only ever return an image). Supports Web with pickFiles(withData:
+  # true), which is what putting the bytes straight into Storage via
+  # putData needs on a web build. Pinned to ^13.3.3 (not an older 8.x-12.x
+  # release) because this project's share_plus ^13.3.0 already pulls in
+  # win32 ^6.0.1, and file_picker versions before 13.x depend on the
+  # older win32 ^5.9.0 -- `flutter pub get` itself reported this conflict
+  # and named 13.3.3 as the fix.
+  file_picker: ^13.3.3
   # Calls the `createPaymentIntent` Cloud Function (see functions/index.js)
   # so the real Stripe secret key only ever lives server-side — the app
   # itself never sees or holds it. See lib/services/stripe_service.dart.

@@ -37,19 +37,14 @@
 </div>
 
 <script type="module">
-import { requireRole } from "../js/auth-guard.js?v=20261106b";
+import { requireRole } from "../js/auth-guard.js?v=20261115a";
 import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261114a";
 import { mountIcons } from "../js/icons.js?v=20261106c";
-import { listPartners, listReportedPosts, listFlaggedReviews, listPlaceSuggestions, listDismissedNoticeKeys, dismissNotice, listSeenNoticeKeys, markNoticeSeen } from "../js/data.js?v=20261114c";
+import { listPartners, listReportedPosts, listFlaggedReviews, listPlaceSuggestions, listDismissedNoticeKeys, dismissNotice, listSeenNoticeKeys, markNoticeSeen } from "../js/data.js?v=20261117a";
 import {
   timeAgo, escapeHtml, toast, setBusy, reporterLabel,
-} from "../js/ui.js?v=20261113a";
+} from "../js/ui.js?v=20261115a";
 
-// No "Notifications" nav item in the sidebar anymore — this page is only
-// reached from the Dashboard's bell button now, not a permanent tab (see
-// js/sidebar.js). Highlighting "overview" keeps the Dashboard tab marked
-// active while the admin is here, since that's conceptually where they
-// came from and where the "Back to Dashboard" link above returns to.
 mountSidebarNav({ role: "admin", active: "overview" });
 const session = await requireRole("admin", "login.html");
 let partners = [];
@@ -58,25 +53,11 @@ let flaggedReviews = [];
 let placeSuggestions = [];
 let dismissedKeys = new Set();
 let seenKeys = new Map(); // key -> seenAt Timestamp, for the already-decided-partner aging rule below
-// An already-decided partner notice (kind "partner_decision") is just an
-// FYI, not something left to act on, so it's allowed to fall off the feed
-// on its own once the admin has actually seen it AND it's this old —
-// same "read + 30 days" idea as the traveller app's own notification
-// retention (see functions/notification_cleanup.js). Still-open notices
-// (a pending partner request, an unresolved report/suggestion) are never
-// aged out this way, however old or however long ago they were opened —
-// only resolving them or dismissing them by hand removes those.
 const MAX_DECIDED_NOTICE_AGE_DAYS = 30;
 
 if (session) {
   setSidebarUser({ displayName: session.profile.name || "Admin", roleLabel: "Administrator" });
   await load();
-  // Every notice click navigates away with location.href, and a lot of
-  // browsers restore the page from the back/forward cache (bfcache) when
-  // you hit Back afterwards -- that restores the exact DOM from before
-  // the click, with the icon still showing its old unread color, instead
-  // of re-running this script. Re-fetch and re-render whenever that
-  // happens so the read state the click just wrote actually shows up.
   window.addEventListener("pageshow", (e) => { if (e.persisted) load(); });
 }
 
@@ -99,12 +80,6 @@ async function load() {
   mountIcons(document);
 }
 
-// One flat, chronological notice feed — new partner requests, reported
-// posts/reviews, place suggestions, and already-decided partners are all
-// just "things that happened", mixed together and sorted by time rather
-// than split into separate category cards. Each kind still does the right
-// thing on click (open the detail dialog, or jump to the full review flow
-// on Content Moderation / Places Management) — only the layout is flat now.
 function buildNotices() {
   const pending = partners.filter((p) => p.status === "pending" || !p.status);
   const decided = partners.filter((p) => p.status && p.status !== "pending");
@@ -171,11 +146,6 @@ function noticeMeta(n) {
   }
 }
 
-// Read/unread is shown purely through the icon's color -- blue while
-// unseen, grey once it's been opened -- not a tinted row background
-// (tried that first; with every row the same teal wash it was all noise
-// and no signal). Same idea as a classic mail client's unread dot, just
-// recolors the icon that's already there instead of adding another one.
 function renderNoticeRow(n) {
   const m = noticeMeta(n);
   const unseen = !n.seen;
@@ -246,10 +216,6 @@ async function handleNoticeClick(kind, id, key) {
   // write here should never block the admin from actually opening the
   // thing they clicked on.
   try { await markNoticeSeen(key); } catch { /* ignore */ }
-  // Every notice kind just jumps to the real page and opens that item's
-  // own detail dialog there -- deciding (approve/reject a partner,
-  // moderate a post/review, accept a suggestion) only ever happens on
-  // that page, never from this feed.
   if (kind === "partner_request" || kind === "partner_decision") { location.href = `insurance.html?tab=partners&focus=${id}`; return; }
   // Suggestions live on Places Management, not Content Moderation — see
   // attractions.html's "Place Suggestions" tab.

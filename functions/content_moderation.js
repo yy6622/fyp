@@ -1,17 +1,3 @@
-// Server-side content moderation (FR: auto-flag harmful community posts/reviews).
-//
-// Calls OpenAI's Moderation API from the Cloud Function, not from the client.
-// Two reasons this has to run server-side rather than the app calling OpenAI
-// directly: (1) OpenAI's /v1/moderations endpoint sends no CORS headers, so a
-// browser (Flutter web) request to it is blocked outright by the browser
-// before it even leaves the page; (2) it keeps the OpenAI key out of the
-// client bundle instead of embedding it in compiled app code.
-//
-// The app's local word-list pre-check still runs on-device first (zero
-// network, catches obvious profanity instantly); this function is the
-// fallback classifier for everything that list doesn't catch. Like the
-// client-side version it replaces, this fails open: any error, timeout, or
-// missing key returns "not flagged" rather than blocking the user's post.
 const { onCall } = require("firebase-functions/v2/https");
 const { defineSecret } = require("firebase-functions/params");
 

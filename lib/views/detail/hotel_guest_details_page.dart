@@ -54,8 +54,6 @@ class _HotelGuestDetailsPageState extends State<HotelGuestDetailsPage> {
   final TextEditingController _nameCtrl = TextEditingController();
   final TextEditingController _emailCtrl = TextEditingController();
   final TextEditingController _phoneCtrl = TextEditingController();
-  final TextEditingController _idCtrl = TextEditingController();
-  final TextEditingController _requestsCtrl = TextEditingController();
   final TextEditingController _checkInCtrl = TextEditingController();
   final TextEditingController _checkOutCtrl = TextEditingController();
 
@@ -114,7 +112,7 @@ class _HotelGuestDetailsPageState extends State<HotelGuestDetailsPage> {
   @override
   void dispose() {
     controller.dispose();
-    for (final c in [_nameCtrl, _emailCtrl, _phoneCtrl, _idCtrl, _requestsCtrl, _checkInCtrl, _checkOutCtrl]) {
+    for (final c in [_nameCtrl, _emailCtrl, _phoneCtrl, _checkInCtrl, _checkOutCtrl]) {
       c.dispose();
     }
     super.dispose();
@@ -143,8 +141,6 @@ class _HotelGuestDetailsPageState extends State<HotelGuestDetailsPage> {
     controller.setFullName(_nameCtrl.text);
     controller.setEmail(_emailCtrl.text);
     controller.setPhone(_phoneCtrl.text);
-    controller.setIdNumber(_idCtrl.text);
-    controller.setSpecialRequests(_requestsCtrl.text);
     final error = controller.validate();
     if (error != null) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
@@ -166,8 +162,6 @@ class _HotelGuestDetailsPageState extends State<HotelGuestDetailsPage> {
         guestName: controller.fullName.trim(),
         guestEmail: controller.email.trim(),
         guestPhone: controller.phone.trim(),
-        guestIdNumber: controller.idNumber.trim(),
-        specialRequests: controller.specialRequests.trim(),
         checkIn: controller.checkIn,
         checkOut: controller.checkOut,
         forMemberUids: _forMemberUids.toList(),
@@ -183,6 +177,7 @@ class _HotelGuestDetailsPageState extends State<HotelGuestDetailsPage> {
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
+        centerTitle: true,
         iconTheme: const IconThemeData(color: AppColors.navy),
         title: const Text('Guest Details', style: TextStyle(color: AppColors.navy, fontWeight: FontWeight.bold, fontSize: 18)),
       ),
@@ -206,17 +201,10 @@ class _HotelGuestDetailsPageState extends State<HotelGuestDetailsPage> {
                         const SizedBox(height: 18),
                         const Text('Stay Dates & Rooms', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.navy)),
                         const SizedBox(height: 10),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: niceDialogField(_checkInCtrl, 'Check-in', icon: Icons.login, readOnly: true, onTap: _pickStayDates),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: niceDialogField(_checkOutCtrl, 'Check-out', icon: Icons.logout, readOnly: true, onTap: _pickStayDates),
-                            ),
-                          ],
-                        ),
+                        niceDialogField(_checkInCtrl, 'Check-in', icon: Icons.login, readOnly: true, onTap: _pickStayDates, required: true),
+                        const SizedBox(height: 10),
+                        niceDialogField(_checkOutCtrl, 'Check-out', icon: Icons.logout, readOnly: true, onTap: _pickStayDates, required: true),
+                        const SizedBox(height: 10),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
@@ -231,16 +219,14 @@ class _HotelGuestDetailsPageState extends State<HotelGuestDetailsPage> {
                         const Text('Who the stay is booked under, as a real hotel check-in requires.',
                             style: TextStyle(fontSize: 11, color: AppColors.textGrey)),
                         const SizedBox(height: 10),
-                        niceDialogField(_nameCtrl, 'Guest Full Name', icon: Icons.person_outline),
-                        niceDialogField(_emailCtrl, 'Email', icon: Icons.email_outlined, keyboardType: TextInputType.emailAddress),
+                        niceDialogField(_nameCtrl, 'Guest Full Name', icon: Icons.person_outline, required: true),
+                        niceDialogField(_emailCtrl, 'Email', icon: Icons.email_outlined, keyboardType: TextInputType.emailAddress, required: true),
                         PhoneInputField(
                           key: ValueKey(_phoneFieldVersion),
                           initialValue: _phoneCtrl.text,
                           onChanged: (v) => _phoneCtrl.text = v,
+                          required: true,
                         ),
-                        const SizedBox(height: 12),
-                        niceDialogField(_idCtrl, 'Passport / ID Number', icon: Icons.badge_outlined),
-                        niceDialogField(_requestsCtrl, 'Special Requests (optional)', icon: Icons.edit_note_outlined, maxLines: 3),
                       ],
                     ),
                   ),

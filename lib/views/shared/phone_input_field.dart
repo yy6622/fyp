@@ -8,6 +8,7 @@ class PhoneInputField extends StatefulWidget {
   final ValueChanged<String> onChanged;
   final String label;
   final bool autofocus;
+  final bool required;
 
   const PhoneInputField({
     super.key,
@@ -15,6 +16,7 @@ class PhoneInputField extends StatefulWidget {
     required this.onChanged,
     this.label = 'Phone Number',
     this.autofocus = false,
+    this.required = true,
   });
 
   @override
@@ -52,8 +54,13 @@ class _PhoneInputFieldState extends State<PhoneInputField> {
   }
 
   void _emit() {
-    final number = _numberCtrl.text.trim();
-    widget.onChanged(number.isEmpty ? '' : '+${_selected.dialCode} $number');
+    // Duffel (and most phone validators) require strict E.164: a leading
+    // "+" then digits only, no space, dash, or formatting -- a space here
+    // ("+60 123456789") is exactly why flight bookings were failing with
+    // "field phone_number is invalid". Strip everything but digits from
+    // what the traveller typed before joining it to the dial code.
+    final digits = _numberCtrl.text.replaceAll(RegExp(r'[^0-9]'), '');
+    widget.onChanged(digits.isEmpty ? '' : '+${_selected.dialCode}$digits');
   }
 
   Future<void> _pickCountry() async {
@@ -102,7 +109,12 @@ class _PhoneInputFieldState extends State<PhoneInputField> {
                   keyboardType: TextInputType.phone,
                   onChanged: (_) => _emit(),
                   decoration: InputDecoration(
-                    labelText: widget.label,
+                    label: widget.required
+                        ? Text.rich(TextSpan(text: widget.label, children: const [
+                            TextSpan(text: ' *', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.w700)),
+                          ]))
+                        : null,
+                    labelText: widget.required ? null : widget.label,
                     labelStyle: const TextStyle(fontSize: 11.5, color: AppColors.textGrey),
                     border: InputBorder.none,
                     isDense: true,

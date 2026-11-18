@@ -1,11 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-/// One message inside an [InsuranceChatRepository] thread. A partner can
-/// attach a specific plan instead of (or alongside) plain text —
-/// [attachedPlanId] is then set and the UI renders a plan card; the live
-/// plan itself is fetched on demand via InsuranceRepository.getPlan so the
-/// card always shows the plan's current price/coverage rather than a
-/// point-in-time copy (see sendInsuranceChatPlan in admin_web/js/data.js).
 class InsuranceChatMessage {
   final String id;
   final String senderId;
@@ -52,12 +46,6 @@ class InsuranceChatSummary {
   });
 }
 
-/// A direct-message thread between one traveller and one insurance
-/// partner — deliberately not tied to a specific purchase, so a traveller
-/// can message a partner with questions before buying a plan, as well as
-/// to discuss an existing policy afterwards. One thread per
-/// (traveller, partner) pair, keyed by a deterministic id so both sides
-/// always land on the same thread without a lookup query.
 class InsuranceChatRepository {
   InsuranceChatRepository._();
   static final InsuranceChatRepository instance = InsuranceChatRepository._();
@@ -150,16 +138,6 @@ class InsuranceChatRepository {
     );
   }
 
-  /// Every thread a traveller has started, most recently active first.
-  // Sorts client-side after the query, rather than chaining .orderBy()
-  // onto the .where() in Firestore itself, which would need a composite
-  // index for (travellerId ==, lastMessageAt desc) that this project has
-  // never created (firestore.indexes.json has none) — that combination
-  // was silently failing forever (StreamBuilder never got hasError
-  // checked either, compounding it into an infinite "loading" spinner
-  // on InsuranceMessagesPage). Mirrors admin_web/js/data.js's
-  // listInsuranceChats, which already does the same where-only-then-
-  // sort-in-JS to avoid needing that index on the partner console side.
   Stream<List<InsuranceChatSummary>> watchChatsForTraveller(String travellerId) {
     return _chats.where('travellerId', isEqualTo: travellerId).snapshots().map((snap) {
       final list = snap.docs.map(_fromDoc).toList();
@@ -168,10 +146,6 @@ class InsuranceChatRepository {
     });
   }
 
-  /// Every thread a partner has with any traveller, most recently active
-  /// first — used by the partner console's inbox. See
-  /// [watchChatsForTraveller]'s doc comment for why this sorts
-  /// client-side instead of chaining .orderBy() in the query.
   Stream<List<InsuranceChatSummary>> watchChatsForPartner(String partnerId) {
     return _chats.where('partnerId', isEqualTo: partnerId).snapshots().map((snap) {
       final list = snap.docs.map(_fromDoc).toList();

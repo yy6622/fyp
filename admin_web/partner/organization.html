@@ -35,18 +35,24 @@
     <div class="card form-card">
       <h3 class="h3" style="margin-bottom:18px;">Company information</h3>
       <div class="form-grid">
-        <div class="field"><label>Company name</label><input class="input" id="companyName" readonly /></div>
+        <div class="field"><label>Company name <span style="color:var(--danger-500,#D14343);">*</span></label><input class="input" id="companyName" readonly /></div>
         <div class="field"><label>Registration number</label><input class="input" id="registrationNumber" readonly /></div>
-        <div class="field"><label>Support email</label><input class="input" id="supportEmail" type="email" readonly /></div>
-        <div class="field"><label>Phone</label><input class="input" id="phone" readonly /></div>
+        <div class="field"><label>Support email <span style="color:var(--danger-500,#D14343);">*</span></label><input class="input" id="supportEmail" type="email" readonly /></div>
+        <div class="field">
+          <label>Phone <span style="color:var(--danger-500,#D14343);">*</span></label>
+          <div class="phone-input-wrap">
+            <select class="select" id="phoneDialCode" disabled></select>
+            <input class="input" id="phone" readonly placeholder="Phone number" />
+          </div>
+        </div>
       </div>
     </div>
 
     <div class="card form-card">
       <h3 class="h3" style="margin-bottom:18px;">Verification details</h3>
       <div class="form-grid">
-        <div class="field"><label>Insurance license number</label><input class="input" id="licenseNumber" readonly /></div>
-        <div class="field"><label>Country of registration</label><select class="select" id="countryOfRegistration" disabled><option value="">Select a country…</option></select></div>
+        <div class="field"><label>Insurance license number <span style="color:var(--danger-500,#D14343);">*</span></label><input class="input" id="licenseNumber" readonly /></div>
+        <div class="field"><label>Country of registration <span style="color:var(--danger-500,#D14343);">*</span></label><select class="select" id="countryOfRegistration" disabled><option value="">Select a country…</option></select></div>
         <div class="field"><label>Official website</label><input class="input" id="website" type="url" readonly placeholder="https://www.yourcompany.com" /></div>
       </div>
     </div>
@@ -85,7 +91,13 @@
         <div class="field"><label>Full name</label><input class="input" id="contactName" readonly /></div>
         <div class="field"><label>Designation</label><input class="input" id="contactDesignation" readonly /></div>
         <div class="field"><label>Email address</label><input class="input" id="contactEmail" type="email" readonly /></div>
-        <div class="field"><label>Phone</label><input class="input" id="contactPhone" readonly /></div>
+        <div class="field">
+          <label>Phone</label>
+          <div class="phone-input-wrap">
+            <select class="select" id="contactPhoneDialCode" disabled></select>
+            <input class="input" id="contactPhone" readonly placeholder="Phone number" />
+          </div>
+        </div>
       </div>
     </div>
 
@@ -122,23 +134,20 @@
 </div>
 
 <script type="module">
-import { requireRole, authErrorMessage } from "../js/auth-guard.js?v=20261106b";
+import { requireRole, authErrorMessage } from "../js/auth-guard.js?v=20261115a";
 import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261114a";
 import { mountIcons } from "../js/icons.js?v=20261106c";
 import { getPartnerProfile, savePartnerProfile } from "../js/data.js?v=20261114c";
 import { COUNTRY_OPTIONS } from "../js/countries.js?v=20261113a";
+import { DIAL_CODES, DEFAULT_DIAL_CODE } from "../js/dial_codes.js?v=20261114a";
 import { auth, storage } from "../js/firebase-config.js?v=20261007";
 import { ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-storage.js";
 import {
   EmailAuthProvider, reauthenticateWithCredential, updatePassword,
 } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
-import { toast, setBusy, isValidImageFile, openModal, closeModal, wireModalDismiss, emailCodeStepUp, wirePasswordRules } from "../js/ui.js?v=20261114a";
+import { toast, setBusy, isValidImageFile, isValidEmail, isPlausiblePhone, openModal, closeModal, wireModalDismiss, emailCodeStepUp, wirePasswordRules } from "../js/ui.js?v=20261115a";
 
 mountSidebarNav({ role: "partner", active: "organization" });
-// allowPending: a partner waiting on admin approval can still view and
-// edit their own organization profile (and change their password) --
-// only the OTHER partner pages (plans, transactions, claims, messages,
-// reports) are locked to dashboard.html while pending.
 const session = await requireRole("partner", "login.html", { allowPending: true });
 let profile = null;
 
@@ -154,6 +163,8 @@ const EDITABLE_IDS = [
 function setEditing(on) {
   EDITABLE_IDS.forEach((id) => { document.getElementById(id).readOnly = !on; });
   document.getElementById("countryOfRegistration").disabled = !on;
+  document.getElementById("phoneDialCode").disabled = !on;
+  document.getElementById("contactPhoneDialCode").disabled = !on;
   document.getElementById("logoFile").disabled = !on;
   document.getElementById("editBtn").style.display = on ? "none" : "";
   document.getElementById("formActions").style.display = on ? "flex" : "none";
@@ -180,7 +191,18 @@ async function load() {
   document.getElementById("companyName").value = profile.companyName || "";
   document.getElementById("registrationNumber").value = profile.registrationNumber || "";
   document.getElementById("supportEmail").value = profile.supportEmail || "";
-  document.getElementById("phone").value = profile.phone || "";
+  const phoneDialSelect = document.getElementById("phoneDialCode");
+  phoneDialSelect.innerHTML = DIAL_CODES.map((d) => `<option value="${d.code}">${d.code} ${d.name}</option>`).join("");
+  const contactPhoneDialSelect = document.getElementById("contactPhoneDialCode");
+  contactPhoneDialSelect.innerHTML = DIAL_CODES.map((d) => `<option value="${d.code}">${d.code} ${d.name}</option>`).join("");
+  function splitStoredPhone(stored) {
+    const raw = (stored || "").trim();
+    const match = DIAL_CODES.find((d) => raw.startsWith(d.code + " "));
+    return match ? { code: match.code, number: raw.slice(match.code.length).trim() } : { code: DEFAULT_DIAL_CODE, number: raw };
+  }
+  const phoneParts = splitStoredPhone(profile.phone);
+  phoneDialSelect.value = phoneParts.code;
+  document.getElementById("phone").value = phoneParts.number;
   document.getElementById("licenseNumber").value = profile.licenseNumber || "";
   document.getElementById("website").value = profile.website || "";
   const countrySelect = document.getElementById("countryOfRegistration");
@@ -193,7 +215,9 @@ async function load() {
   document.getElementById("contactName").value = profile.contact?.fullName || "";
   document.getElementById("contactDesignation").value = profile.contact?.designation || "";
   document.getElementById("contactEmail").value = profile.contact?.email || "";
-  document.getElementById("contactPhone").value = profile.contact?.phone || "";
+  const contactPhoneParts = splitStoredPhone(profile.contact?.phone);
+  contactPhoneDialSelect.value = contactPhoneParts.code;
+  document.getElementById("contactPhone").value = contactPhoneParts.number;
   if (profile.logoUrl) {
     document.getElementById("logoPreview").style.backgroundImage = `url('${profile.logoUrl}')`;
     document.getElementById("logoStatus").textContent = "Logo uploaded";
@@ -215,10 +239,6 @@ async function uploadLogoIfNeeded() {
 
 document.getElementById("editBtn").addEventListener("click", () => setEditing(true));
 
-// Validate the picked file the moment it's chosen (not only at Save) —
-// accept="image/..." is only a hint to the OS file-picker dialog, so a
-// renamed file or "All files" can still hand back a .csv here with
-// nothing catching it until this fires. See isValidImageFile() in ui.js.
 document.getElementById("logoFile").addEventListener("change", (e) => {
   const file = e.target.files?.[0];
   if (!file) return;
@@ -237,15 +257,22 @@ document.getElementById("saveBtn").addEventListener("click", async () => {
   setBusy(btn, true, "Saving…");
   try {
     const logoUrl = await uploadLogoIfNeeded();
+    const companyName = document.getElementById("companyName").value.trim();
+    const supportEmail = document.getElementById("supportEmail").value.trim();
+    const phoneNumber = document.getElementById("phone").value.trim();
+    const phone = phoneNumber ? `${document.getElementById("phoneDialCode").value} ${phoneNumber}` : "";
     const licenseNumber = document.getElementById("licenseNumber").value.trim();
     const countryOfRegistration = document.getElementById("countryOfRegistration").value;
+    if (!companyName) { toast("Company name is required.", "error"); return; }
+    if (!supportEmail || !isValidEmail(supportEmail)) { toast("A valid support email is required.", "error"); return; }
+    if (!phone || !isPlausiblePhone(phone)) { toast("A valid phone number is required.", "error"); return; }
     if (!licenseNumber) { toast("Insurance license number is required.", "error"); return; }
     if (!countryOfRegistration) { toast("Please select your country of registration.", "error"); return; }
     const data = {
-      companyName: document.getElementById("companyName").value.trim(),
+      companyName,
       registrationNumber: document.getElementById("registrationNumber").value.trim(),
-      supportEmail: document.getElementById("supportEmail").value.trim(),
-      phone: document.getElementById("phone").value.trim(),
+      supportEmail,
+      phone,
       licenseNumber,
       countryOfRegistration,
       website: document.getElementById("website").value.trim(),
@@ -260,7 +287,10 @@ document.getElementById("saveBtn").addEventListener("click", async () => {
         fullName: document.getElementById("contactName").value.trim(),
         designation: document.getElementById("contactDesignation").value.trim(),
         email: document.getElementById("contactEmail").value.trim(),
-        phone: document.getElementById("contactPhone").value.trim(),
+        phone: (() => {
+          const n = document.getElementById("contactPhone").value.trim();
+          return n ? `${document.getElementById("contactPhoneDialCode").value} ${n}` : "";
+        })(),
       },
     };
     await savePartnerProfile(session.uid, data);

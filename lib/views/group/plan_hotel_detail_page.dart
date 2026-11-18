@@ -7,6 +7,7 @@ import '../../repositories/trip_repository.dart';
 import '../../services/hotel_document_service.dart';
 import '../../theme.dart';
 import '../shared/member_select_section.dart';
+import '../shared/person_info_sheet.dart';
 
 class PlanHotelDetailPage extends StatefulWidget {
   final String tripId;
@@ -196,39 +197,52 @@ class _PlanHotelDetailPageState extends State<PlanHotelDetailPage> {
     return ListView(
       padding: const EdgeInsets.all(20),
       children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          decoration: BoxDecoration(color: AppColors.chipGrey, borderRadius: BorderRadius.circular(12)),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              CircleAvatar(
-                radius: 16,
-                backgroundColor: AppColors.primary.withValues(alpha: 0.15),
-                child: Text(initial, style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 13)),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(widget.guestName.isEmpty ? 'Guest' : widget.guestName,
-                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.black)),
-                    const SizedBox(height: 4),
-                    Text(
-                      [widget.guestEmail, widget.guestPhone].where((s) => s.isNotEmpty).join(' · '),
-                      style: const TextStyle(fontSize: 11.5, color: AppColors.textGrey),
-                    ),
-                    if (widget.guestIdNumber.isNotEmpty)
-                      Text('ID/Passport: ${widget.guestIdNumber}', style: const TextStyle(fontSize: 11.5, color: AppColors.textGrey)),
-                    if (widget.specialRequests.isNotEmpty) ...[
-                      const SizedBox(height: 4),
-                      Text('Request: ${widget.specialRequests}', style: const TextStyle(fontSize: 11.5, color: AppColors.textGrey)),
-                    ],
-                  ],
+        InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () => showPersonInfoSheet(
+            context,
+            name: widget.guestName,
+            roleLabel: 'Guest',
+            email: widget.guestEmail,
+            phone: widget.guestPhone,
+            idNumber: widget.guestIdNumber,
+          ),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            decoration: BoxDecoration(color: AppColors.chipGrey, borderRadius: BorderRadius.circular(12)),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                CircleAvatar(
+                  radius: 16,
+                  backgroundColor: AppColors.primary.withValues(alpha: 0.15),
+                  child: Text(initial, style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 13)),
                 ),
-              ),
-            ],
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(widget.guestName.isEmpty ? 'Guest' : widget.guestName,
+                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.black)),
+                      const SizedBox(height: 4),
+                      Text(
+                        [widget.guestEmail, widget.guestPhone].where((s) => s.isNotEmpty).join(' · '),
+                        style: const TextStyle(fontSize: 11.5, color: AppColors.textGrey),
+                      ),
+                      if (widget.guestIdNumber.isNotEmpty)
+                        Text('ID/Passport: ${widget.guestIdNumber}', style: const TextStyle(fontSize: 11.5, color: AppColors.textGrey)),
+                      if (widget.specialRequests.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Text('Request: ${widget.specialRequests}', style: const TextStyle(fontSize: 11.5, color: AppColors.textGrey)),
+                      ],
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 6),
+                const Icon(Icons.chevron_right, size: 18, color: AppColors.textGrey),
+              ],
+            ),
           ),
         ),
       ],

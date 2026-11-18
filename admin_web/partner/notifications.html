@@ -43,19 +43,12 @@
 </div>
 
 <script type="module">
-import { requireRole, logout } from "../js/auth-guard.js?v=20261106b";
+import { requireRole, logout } from "../js/auth-guard.js?v=20261115a";
 import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261114a";
 import { mountIcons } from "../js/icons.js?v=20261106c";
 import { listClaims, listRefunds, listPartnerDismissedNoticeKeys, dismissPartnerNotice, listPartnerSeenNoticeKeys, markPartnerNoticeSeen } from "../js/data.js?v=20261114c";
-import { fullDate, timeAgo, escapeHtml, moneyExact, toast, setBusy } from "../js/ui.js?v=20261113a";
+import { fullDate, timeAgo, escapeHtml, moneyExact, toast, setBusy } from "../js/ui.js?v=20261115a";
 
-// skipStatusGate: true — without it, requireRole() would redirect a
-// rejected partner back to THIS page in a loop (that redirect is
-// what sends them here in the first place for every OTHER partner page).
-// An approved/pending/suspended partner reaches this page normally too —
-// not via a permanent "Notifications" nav tab (removed; see
-// js/sidebar.js), but via the "View details" button on the Dashboard's
-// own status banner, same pattern as the admin side.
 mountSidebarNav({ role: "partner", active: "dashboard" });
 const session = await requireRole("partner", "login.html", { skipStatusGate: true });
 
@@ -69,11 +62,6 @@ if (session) {
   }
   render(session.profile);
   await loadActivity(session.uid);
-  // Same bfcache gotcha as admin/notifications.html -- clicking a notice
-  // navigates away with location.href, and hitting Back afterwards can
-  // restore this exact page from the back/forward cache instead of
-  // re-running this script, so the read state the click just wrote never
-  // shows up. Re-fetch whenever that happens.
   window.addEventListener("pageshow", (e) => { if (e.persisted) loadActivity(session.uid); });
 }
 
@@ -81,17 +69,7 @@ let activityItems = [];
 let dismissedKeys = new Set();
 let seenKeys = new Map();
 let currentPartnerId = "";
-// Unlike admin/notifications.html, nothing here ever ages out by itself:
-// every row is a claim/refund that's still status "new" (see
-// loadActivity below) -- it naturally drops off this list the moment the
-// partner actually decides it on claim-detail.html/refund-detail.html,
-// so there's no "already read, just historical" bucket to auto-expire.
-// "Seen" here only drives the read/unread look, same as the admin side.
 
-// Row style/layout matches admin/notifications.html's own notice feed
-// exactly (bordered box, icon circle, title/subtitle, dismiss button) --
-// the admin side calls it "Notifications (N)" with an "All caught up"
-// empty state, so this does too, instead of the plain list it used to be.
 async function loadActivity(partnerId) {
   currentPartnerId = partnerId;
   const [claims, refunds, dismissed, seen] = await Promise.all([
@@ -135,10 +113,6 @@ function renderActivity() {
   mountIcons(list);
 }
 
-// Read/unread shown purely by the icon's color -- blue while unseen,
-// grey once opened -- same convention as admin/notifications.html, not
-// a tinted row background (that just made every row the same wash with
-// no real signal).
 function renderActivityRow(it) {
   const d = it.data;
   const ref = it.kind === "claim" ? d.claimRef : d.refundRef;
@@ -170,7 +144,7 @@ function wireActivityRows(list) {
       const key = row.dataset.notice;
       const [kind, id] = key.split(":");
       try { await markPartnerNoticeSeen(currentPartnerId, key); } catch { /* best-effort, never blocks navigation */ }
-      location.href = kind === "claim" ? `claim-detail.html?id=${id}` : `refund-detail.html?id=${id}`;
+      location.href = `claims.html?type=${kind}&open=${id}`;
     });
   });
   list.querySelectorAll("[data-dismiss]").forEach((b) => b.addEventListener("click", async (e) => {
@@ -193,13 +167,6 @@ function render(profile) {
   const card = document.getElementById("statusCard");
   const org = companyName ? escapeHtml(companyName) : "Your organization";
 
-  // An approved partner has nothing to act on here — the Dashboard
-  // already says nothing extra for "approved" (its own status bar only
-  // shows for suspended/pending, see partner/dashboard.html's
-  // showStatusBar()), so this page matches that instead of repeating a
-  // "You're all set" message that isn't a notification at all. Only the
-  // genuinely actionable statuses (pending/suspended/rejected) still get
-  // a card here, same as before.
   if (status === "approved") {
     card.style.display = "none";
     return;

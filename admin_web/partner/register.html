@@ -30,19 +30,19 @@
       <div class="auth-error" id="authError"></div>
       <form id="regForm">
         <div class="auth-field">
-          <label for="companyName">Company name</label>
+          <label for="companyName">Company name <span style="color:var(--danger-500,#D14343);">*</span></label>
           <input class="input" id="companyName" placeholder="e.g. AIA Malaysia" required />
         </div>
         <div class="auth-field">
-          <label for="registrationNumber">Registration number</label>
+          <label for="registrationNumber">Registration number <span style="color:var(--danger-500,#D14343);">*</span></label>
           <input class="input" id="registrationNumber" placeholder="Company registration number" required />
         </div>
         <div class="auth-field">
-          <label for="licenseNumber">Insurance license number</label>
+          <label for="licenseNumber">Insurance license number <span style="color:var(--danger-500,#D14343);">*</span></label>
           <input class="input" id="licenseNumber" placeholder="Your regulator-issued license number" required />
         </div>
         <div class="auth-field">
-          <label for="countryOfRegistration">Country of registration</label>
+          <label for="countryOfRegistration">Country of registration <span style="color:var(--danger-500,#D14343);">*</span></label>
           <select class="select" id="countryOfRegistration" required><option value="">Select a country…</option></select>
         </div>
         <div class="auth-field">
@@ -50,18 +50,18 @@
           <input class="input" id="website" type="url" placeholder="https://www.yourcompany.com" />
         </div>
         <div class="auth-field">
-          <label for="phone">Phone</label>
+          <label for="phone">Phone <span style="color:var(--danger-500,#D14343);">*</span></label>
           <div class="phone-input-wrap">
             <select class="select" id="phoneDialCode"></select>
             <input class="input" id="phone" placeholder="Company phone number" required />
           </div>
         </div>
         <div class="auth-field">
-          <label for="email">Work email</label>
+          <label for="email">Work email <span style="color:var(--danger-500,#D14343);">*</span></label>
           <input class="input" type="email" id="email" placeholder="you@company.com" required autocomplete="username" />
         </div>
         <div class="auth-field">
-          <label for="password">Password</label>
+          <label for="password">Password <span style="color:var(--danger-500,#D14343);">*</span></label>
           <div class="password-input-wrap">
             <input class="input" type="password" id="password" placeholder="Create a password" required autocomplete="new-password" />
             <button type="button" class="password-toggle-btn" id="togglePassword" tabindex="-1" aria-label="Show password"><span data-icon="eye" data-icon-size="18"></span></button>
@@ -69,7 +69,7 @@
           <ul class="password-rules" id="passwordRules"></ul>
         </div>
         <div class="auth-field">
-          <label for="confirmPassword">Confirm password</label>
+          <label for="confirmPassword">Confirm password <span style="color:var(--danger-500,#D14343);">*</span></label>
           <div class="password-input-wrap">
             <input class="input" type="password" id="confirmPassword" placeholder="Re-enter your password" required autocomplete="new-password" minlength="8" />
             <button type="button" class="password-toggle-btn" id="toggleConfirmPassword" tabindex="-1" aria-label="Show password"><span data-icon="eye" data-icon-size="18"></span></button>
@@ -86,8 +86,8 @@
 import { mountIcons } from "../js/icons.js?v=20261106c";
 import { COUNTRY_OPTIONS } from "../js/countries.js?v=20261113a";
 import { DIAL_CODES, DEFAULT_DIAL_CODE } from "../js/dial_codes.js?v=20261114a";
-import { registerWithRole, authErrorMessage } from "../js/auth-guard.js?v=20261106b";
-import { setBusy, isValidEmail, wirePasswordToggle, wirePasswordRules } from "../js/ui.js?v=20261114a";
+import { registerWithRole, authErrorMessage } from "../js/auth-guard.js?v=20261115a";
+import { setBusy, isValidEmail, wirePasswordToggle, wirePasswordRules } from "../js/ui.js?v=20261115a";
 
 mountIcons(document);
 document.getElementById("countryOfRegistration").innerHTML =
@@ -162,18 +162,10 @@ document.getElementById("regForm").addEventListener("submit", async (e) => {
       supportEmail: email.trim().toLowerCase(),
       logoUrl: "",
       address: { line1: "", city: "", state: "", postalCode: "" },
-      // All four primary-contact fields start genuinely blank, not
-        // pre-filled from the account's own email/phone -- a partner who
-        // hasn't designated a specific contact person yet should see that
-        // honestly reflected as "not set" everywhere (organization.html's
-        // own Primary Contact section, and the admin's partner detail
-        // popup), not have email/phone silently duplicated from the
-        // account while fullName/designation stay blank, which looked
-        // like real, distinct contact info that was never actually given.
         contact: { fullName: "", designation: "", email: "", phone: "" },
       status: "pending",
     });
-    location.href = "dashboard.html?welcome=1";
+    location.href = "verify-email.html";
   } catch (err) {
     errBox.textContent = authErrorMessage(err);
     errBox.classList.add("show");

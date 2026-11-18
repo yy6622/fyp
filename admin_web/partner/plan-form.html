@@ -42,14 +42,14 @@
       <div class="form-section">
         <div class="form-section-title"><span data-icon="briefcase"></span>Plan details</div>
         <div class="form-grid">
-          <div class="field" style="grid-column:1/-1;"><label>Plan name</label><input class="input" id="fName" placeholder="e.g. Travel Care Premium" /></div>
+          <div class="field" style="grid-column:1/-1;"><label>Plan name <span style="color:var(--danger-500,#D14343);">*</span></label><input class="input" id="fName" placeholder="e.g. Travel Care Premium" /></div>
           <div class="field">
             <label>Trip type</label>
             <select class="select" id="fType"><option value="Basic">Basic</option><option value="Annual">Annual</option></select>
             <p class="hint" style="margin:6px 0 0;">Basic covers one trip's dates (priced per day). Annual covers unlimited trips within a year (flat yearly price).</p>
           </div>
           <div class="field">
-            <label id="fPremiumLabel">Premium per traveller / day (RM)</label>
+            <label id="fPremiumLabel">Premium per traveller / day (RM) <span style="color:var(--danger-500,#D14343);">*</span></label>
             <input class="input" id="fPremium" type="number" placeholder="12" />
           </div>
         </div>
@@ -114,25 +114,15 @@
 </div>
 
 <script type="module">
-import { requireRole } from "../js/auth-guard.js?v=20261106b";
+import { requireRole } from "../js/auth-guard.js?v=20261115a";
 import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261114a";
 import { mountIcons } from "../js/icons.js?v=20261106c";
-import { getPlan, createPlan, setPlanStatus, sendInsuranceChatPlan } from "../js/data.js?v=20261114c";
-import { toast, setBusy, escapeHtml, statusBadge, confirmDialog } from "../js/ui.js?v=20261113a";
+import { getPlan, createPlan, setPlanStatus, sendInsuranceChatPlan, listPlans } from "../js/data.js?v=20261114c";
+import { toast, setBusy, escapeHtml, statusBadge } from "../js/ui.js?v=20261115a";
 import { COUNTRY_OPTIONS } from "../js/countries.js?v=20261113a";
 
 mountSidebarNav({ role: "partner", active: "plans" });
 const editingId = new URLSearchParams(location.search).get("id");
-// Set when this page was opened from a traveller's chat (message-detail.html's
-// "+ Create new plan for this traveller" button) instead of from Plans ->
-// Add -- on save, the new plan is sent straight into that thread and the
-// partner lands back on the conversation instead of the plans list, so a
-// bespoke plan for one traveller's requirement doesn't mean losing their
-// place in the chat. This path deliberately never shows the "Review
-// status" section below -- it's saved as a plain "draft" and sent
-// straight into the chat (never published for every traveller to see),
-// because InsuranceRepository.getPlan() (which fetches a chat-attached
-// plan) never gates on status.
 const returnChatId = new URLSearchParams(location.search).get("returnChatId");
 document.getElementById("pageTitle").textContent = editingId ? "Edit plan" : (returnChatId ? "Create plan for this traveller" : "Add plan");
 if (returnChatId) {
@@ -149,11 +139,6 @@ const session = await requireRole("partner", "login.html");
 // place by renderCoverageItems()'s own listeners, read back into the
 // saved doc's `coverageItems` array on Save.
 let coverageItemsDraft = [];
-// A handful of coverage types almost every travel-insurance plan
-// includes — tapping one just adds that label to coverageItemsDraft so
-// the partner only has to type the RM amount. Anything not in this list
-// is added as a blank custom row via the dashed "+" box at the end of
-// the same chip row (mountChipRow below).
 const COVERAGE_PRESETS = [
   "Medical Expenses (Overseas)",
   "Medical Expenses (Malaysia)",
@@ -166,10 +151,6 @@ const COVERAGE_PRESETS = [
   "Loss of Personal Money/Documents",
   "Personal Liability",
 ];
-// Each one is its own badge on the app's plan detail page
-// (InsurancePlan.highlights is a List<String>) -- unlike coverage these
-// have no extra amount to fill in, so picking/typing one adds it
-// straight away (see mountChipRow below).
 const HIGHLIGHT_PRESETS = [
   "24/7 Support", "Cashless Claims", "Worldwide Coverage", "COVID-19 Coverage",
   "Instant Approval", "No Medical Checkup", "Family Discount", "Annual Multi-Trip",
@@ -186,20 +167,9 @@ const NATIONALITY_OPTIONS = [
 ];
 let eligibleCountriesDraft = [];
 
-// Same real country list the traveller's own destination picker uses
-// (InsuranceQuotePage, via lib/data/countries.dart's kCountries) -- now
-// shared from js/countries.js so this, partner/register.html and
-// partner/organization.html can never drift apart.
 const DESTINATION_OPTIONS = COUNTRY_OPTIONS;
 let destinationsDraft = [];
 
-// Generic "pick a preset, or type your own" chip row: tap a chip to
-// toggle it in `selected`, or type something not in the list into the
-// dashed box at the end and press Enter -- used for Highlights and
-// Eligible nationalities below (not Key coverage, which needs an RM
-// amount per row rather than a plain on/off toggle). Mirrors
-// admin/attraction-form.html's mountPresetPicker, minus the
-// Firestore-backed shared-preset-list part this doesn't need.
 function mountChipRow(boxId, presets, selected, onChange) {
   const box = document.getElementById(boxId);
   function render() {
@@ -263,10 +233,6 @@ function renderCoverageItems() {
   renderCoveragePresets();
 }
 
-// Same preset-chip-row idea as mountChipRow, but each "chip" here adds a
-// label+amount row below instead of just toggling a plain tag -- a
-// selected preset shows as a disabled checkmark chip (it's already a row
-// below), and the dashed "+" box adds a blank custom row.
 function renderCoveragePresets() {
   const list = document.getElementById("coveragePresetsList");
   list.innerHTML = COVERAGE_PRESETS.map((label, i) => {
@@ -293,11 +259,6 @@ function renderCoveragePresets() {
 
 let currentPlan = null;
 
-// Only an approved partner may create/edit a plan — firestore.rules
-// enforces this for real (insurance_plans create/update now check the
-// partner's own status), this just keeps the UI from offering an action
-// that would fail with a permission error (e.g. a direct link to this
-// page while still pending).
 const isApproved = session?.profile.status === "approved";
 
 if (session) {
@@ -308,16 +269,11 @@ if (session) {
   await load();
 }
 
-// Basic plans charge per traveller per day of the actual trip
-// (lib/controllers/insurance_controller.dart's PaymentMethodController
-// multiplies this by the trip length), so the app's "pay" screen is only
-// honest if partners know that's what they're pricing here. Annual plans
-// cover unlimited trips within the year, so they stay a flat yearly price.
 function updatePremiumLabel() {
   const isAnnual = document.getElementById("fType").value === "Annual";
-  document.getElementById("fPremiumLabel").textContent = isAnnual
+  document.getElementById("fPremiumLabel").innerHTML = (isAnnual
     ? "Premium per traveller / year (RM)"
-    : "Premium per traveller / day (RM)";
+    : "Premium per traveller / day (RM)") + ' <span style="color:var(--danger-500,#D14343);">*</span>';
 }
 document.getElementById("fType").addEventListener("change", updatePremiumLabel);
 
@@ -349,12 +305,6 @@ async function load() {
   mountIcons(document);
 }
 
-/** Builds the "Status" section and the form's action button(s) -- both
- * depend on exactly where this plan currently sits: active, inactive,
- * suspended, or not saved yet (see firestore.rules' insurance_plans
- * rule for the same states enforced server-side). Re-run after every
- * load()/save() so the page always reflects the plan's real current
- * state. */
 function renderStatusAndActions() {
   const statusBlock = document.getElementById("statusBlock");
   const actions = document.getElementById("formActions");
@@ -371,47 +321,22 @@ function renderStatusAndActions() {
     return;
   }
 
-  // No admin-approval queue any more -- the partner fully controls their
-  // own plan's status, toggling freely between "active" (visible,
-  // travellers can see and buy it) and "inactive" (saved, hidden) any
-  // time. "suspended" is a separate, admin-only state: once an admin
-  // suspends a plan, only an admin can lift it -- enforced in
-  // firestore.rules, not just here. ("published" is read as a synonym
-  // of "active" here too, for any plan still holding that pre-rename
-  // value until the one-time data migration runs.)
   const rawStatus = currentPlan?.status || "active";
   const status = rawStatus === "published" ? "active" : rawStatus;
-  let statusHtml = `<div style="margin-bottom:10px;">${statusBadge(status)}</div>`;
-  if (!editingId) {
-    statusHtml = `
-      <label for="createStatus">Status</label>
-      <select class="select" id="createStatus" style="margin-bottom:6px;">
-        <option value="active" selected>Active -- visible to travellers right away</option>
-        <option value="inactive">Inactive -- saved, but not visible to travellers yet</option>
-      </select>
-      <p class="muted small">You can change this later from the plan's edit page.</p>`;
-  } else if (status === "active") {
-    statusHtml += `<p class="muted small">Live -- travellers can see and buy this plan. Changes you save take effect immediately.</p>`;
-  } else if (status === "inactive") {
-    statusHtml += `<p class="muted small">Not visible to travellers right now. Activate it whenever you want travellers to see and buy it again.</p>`;
-  } else if (status === "suspended") {
-    statusHtml += `<p class="muted small">Not visible to travellers right now. You can still edit it, but only an admin can make it live again.</p>`;
-  }
-  statusBlock.innerHTML = statusHtml;
 
-  let buttonsHtml = "";
-  if (!editingId) {
-    buttonsHtml = `<button class="btn btn-primary" id="saveBtn">Save plan</button>`;
-  } else if (status === "active") {
-    buttonsHtml = `<button class="btn btn-danger-outline" id="deactivateBtn">Deactivate</button><button class="btn btn-primary" id="saveBtn">Save changes</button>`;
-  } else if (status === "inactive") {
-    buttonsHtml = `<button class="btn btn-primary" id="activateBtn">Activate</button><button class="btn btn-outline" id="saveBtn">Save changes</button>`;
+  if (status === "suspended") {
+    statusBlock.innerHTML = `<div style="margin-bottom:10px;">${statusBadge(status)}</div>
+      <p class="muted small">Not visible to travellers right now. You can still edit it, but only an admin can make it live again.</p>`;
   } else {
-    // suspended -- content can still be edited and saved, but the save
-    // never changes status away from "suspended" itself; see
-    // wireSaveButton's call below.
-    buttonsHtml = `<button class="btn btn-primary" id="saveBtn">Save changes</button>`;
+    // Plain Active/Inactive -- no extra explanatory hint text underneath.
+    statusBlock.innerHTML = `
+      <select class="select" id="statusSelect">
+        <option value="active" ${status === "active" ? "selected" : ""}>Active</option>
+        <option value="inactive" ${status === "inactive" ? "selected" : ""}>Inactive</option>
+      </select>`;
   }
+
+  const buttonsHtml = `<button class="btn btn-primary" id="saveBtn">${editingId ? "Save changes" : "Save plan"}</button>`;
   actions.innerHTML = cancelHtml + buttonsHtml;
 
   if (!isApproved) {
@@ -419,49 +344,11 @@ function renderStatusAndActions() {
     return;
   }
 
-  // New plan -> whatever the partner picked in the Status dropdown above
-  // (read at click time, since they can still change it before saving).
-  // Editing an active/inactive plan -> Save changes never flips between
-  // the two itself, that's what the Activate/Deactivate button is for.
-  // A suspended plan's Save button keeps it "suspended" -- the partner
-  // can fix its content, but firestore.rules blocks them from also
-  // changing status away from "suspended" in that same write; only an
-  // admin can.
   if (document.getElementById("saveBtn")) {
     wireSaveButton(
-      !editingId ? () => document.getElementById("createStatus").value : status,
+      status === "suspended" && editingId ? status : () => document.getElementById("statusSelect").value,
       "saveBtn"
     );
-  }
-  const deactivateBtn = document.getElementById("deactivateBtn");
-  if (deactivateBtn) {
-    deactivateBtn.addEventListener("click", async () => {
-      const ok = await confirmDialog({ title: "Deactivate this plan?", body: "Travellers won't be able to buy it until you activate it again.", confirmText: "Deactivate", danger: true });
-      if (!ok) return;
-      setBusy(deactivateBtn, true, "Deactivating…");
-      try {
-        await setPlanStatus(editingId, "inactive", {});
-        toast("Plan deactivated.", "success");
-        await load();
-      } catch (err) {
-        toast(err.message || "Couldn't deactivate plan.", "error");
-        setBusy(deactivateBtn, false);
-      }
-    });
-  }
-  const activateBtn = document.getElementById("activateBtn");
-  if (activateBtn) {
-    activateBtn.addEventListener("click", async () => {
-      setBusy(activateBtn, true, "Activating…");
-      try {
-        await setPlanStatus(editingId, "active", {});
-        toast("Plan activated.", "success");
-        await load();
-      } catch (err) {
-        toast(err.message || "Couldn't activate plan.", "error");
-        setBusy(activateBtn, false);
-      }
-    });
   }
 }
 
@@ -503,29 +390,33 @@ function collectFormData() {
     minTripDurationDays: minDuration, maxTripDurationDays: maxDuration,
     partnerId: session.uid,
     providerName: session.profile.companyName || "Partner",
-    // Denormalized from the partner's own profile (Organization Profile
-    // page) so the rider's app can show the real logo on plan cards
-    // without an extra read per plan — see
-    // lib/repositories/insurance_repository.dart's _fromDoc.
     providerLogoUrl: session.profile.logoUrl || "",
   };
   return data;
 }
 
-/** Wires a Save button to collect the form, write it with the given
- * target status, and navigate away on success -- shared by every button
- * renderStatusAndActions() can show (Save & send, Save plan, Save
- * changes), so there's exactly one place that actually writes the plan
- * doc. `status` can be a plain string, or (for the new-plan Status
- * dropdown, which the partner can still change right up until they
- * click Save) a function returning the status to use. */
 function wireSaveButton(status, btnId = "saveBtn") {
   document.getElementById(btnId).addEventListener("click", async () => {
     const data = collectFormData();
     if (!data) return;
+    const btnForCheck = document.getElementById(btnId);
+    setBusy(btnForCheck, true, "Saving…");
+    let existingPlans;
+    try {
+      existingPlans = await listPlans(session.uid);
+    } catch (err) {
+      toast(err.message || "Couldn't verify plan name.", "error");
+      setBusy(btnForCheck, false);
+      return;
+    }
+    const nameTaken = existingPlans.some((p) => p.id !== editingId && (p.name || "").trim().toLowerCase() === data.name.trim().toLowerCase());
+    if (nameTaken) {
+      toast("You already have a plan named that — pick a different name.", "error");
+      setBusy(btnForCheck, false);
+      return;
+    }
     const resolvedStatus = typeof status === "function" ? status() : status;
-    const btn = document.getElementById(btnId);
-    setBusy(btn, true, "Saving…");
+    const btn = btnForCheck;
     try {
       const successToast = resolvedStatus === "draft" ? "Saved as draft."
         : resolvedStatus === "inactive" ? "Plan saved as inactive -- not visible to travellers yet."

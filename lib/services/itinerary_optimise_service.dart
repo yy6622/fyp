@@ -70,7 +70,14 @@ class ItineraryOptimiseService extends ChangeNotifier {
     notifyListeners();
   }
 
-  void start(String tripId, {required OptimiseMode mode, int? dayIndex, int? dayNumber}) {
+  void start(
+    String tripId, {
+    required OptimiseMode mode,
+    int? dayIndex,
+    int? dayNumber,
+    Map<int, List<(int start, int end)>> rainWindows = const {},
+    List<({String fromItemId, String toItemId, int extraMinutes})> congestedLegs = const [],
+  }) {
     assert(mode != OptimiseMode.day || dayIndex != null, 'dayIndex is required for OptimiseMode.day');
     final job = jobFor(tripId);
     final current = _scopes[tripId];
@@ -82,7 +89,7 @@ class ItineraryOptimiseService extends ChangeNotifier {
     _scopes[tripId] = OptimiseScope(mode: mode, dayIndex: dayIndex, dayNumber: dayNumber, groupByArea: groupByArea);
     job.value = OptimiseJob.running;
     notifyListeners();
-    _optimise(tripId, mode: mode, dayIndex: dayIndex, groupByArea: groupByArea).then((result) {
+    _optimise(tripId, mode: mode, dayIndex: dayIndex, groupByArea: groupByArea, rainWindows: rainWindows, congestedLegs: congestedLegs).then((result) {
       job.value = OptimiseJob._(OptimiseStatus.ready, result: result);
       notifyListeners();
     }).catchError((Object e) {
@@ -100,7 +107,14 @@ class ItineraryOptimiseService extends ChangeNotifier {
     }
   }
 
-  Future<OptimiseResult> _optimise(String tripId, {required OptimiseMode mode, int? dayIndex, bool groupByArea = true}) async {
+  Future<OptimiseResult> _optimise(
+    String tripId, {
+    required OptimiseMode mode,
+    int? dayIndex,
+    bool groupByArea = true,
+    Map<int, List<(int start, int end)>> rainWindows = const {},
+    List<({String fromItemId, String toItemId, int extraMinutes})> congestedLegs = const [],
+  }) async {
     final Map<String, dynamic> data;
     try {
       final callable = FirebaseFunctions.instance.httpsCallable(
@@ -112,6 +126,16 @@ class ItineraryOptimiseService extends ChangeNotifier {
         'mode': mode == OptimiseMode.day ? 'day' : 'whole',
         if (mode == OptimiseMode.day) 'dayIndex': dayIndex,
         'groupByArea': groupByArea,
+        if (rainWindows.isNotEmpty)
+          'rainWindows': {
+            for (final e in rainWindows.entries)
+              '${e.key}': [for (final w in e.value) [w.$1, w.$2]],
+          },
+        if (congestedLegs.isNotEmpty)
+          'congestedLegs': [
+            for (final l in congestedLegs)
+              {'fromItemId': l.fromItemId, 'toItemId': l.toItemId, 'extraMinutes': l.extraMinutes},
+          ],
       });
       data = (result.data as Map).cast<String, dynamic>();
     } on FirebaseFunctionsException catch (e) {

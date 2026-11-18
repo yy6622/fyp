@@ -59,7 +59,6 @@ RecommendationContext _ctx({
   Map<String, int> affinity = const {},
 }) =>
     RecommendationContext(
-      withinBudget: (_) => true,
       affinity: affinity,
       requireOpenNow: openNow,
       requireAccessible: accessible,
@@ -204,7 +203,6 @@ void main() {
       c.setPhone('12ab');
       expect(c.validate(), 'Please enter a valid phone number.');
       c.setPhone('+60 12-345 6789');
-      c.setIdNumber('A12345678');
       expect(c.validate(), 'Please select check-in and check-out dates.');
       c.setDates(DateTime(2026, 12, 10), DateTime(2026, 12, 12));
       expect(c.validate(), isNull);

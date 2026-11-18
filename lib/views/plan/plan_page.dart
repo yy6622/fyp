@@ -80,10 +80,16 @@ class _PlanPageState extends State<PlanPage> {
                         child: _buildExpenseGroupCard(g),
                       ))
                 else
-                  ...controller.activePlanGroups.map((g) => Padding(
-                        padding: const EdgeInsets.only(bottom: 14),
-                        child: _buildPlanGroupCard(g, tab: GroupTab.plan),
-                      )),
+                  // The All tab is just a quick overview -- only the 3 most
+                  // recent plans belong here. The complete list lives on the
+                  // dedicated Plan tab (which "View All" above already opens).
+                  ...(controller.selectedTab == PlanTab.all
+                          ? controller.activePlanGroups.take(3)
+                          : controller.activePlanGroups)
+                      .map((g) => Padding(
+                            padding: const EdgeInsets.only(bottom: 14),
+                            child: _buildPlanGroupCard(g, tab: GroupTab.plan),
+                          )),
               ],
               _buildPastSection(),
               ],
@@ -575,15 +581,7 @@ class _PlanPageState extends State<PlanPage> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Row(
-                          children: [
-                            if (group.pinned) ...[
-                              const Icon(Icons.push_pin, size: 12, color: AppColors.primary),
-                              const SizedBox(width: 4),
-                            ],
-                            Text(group.title, style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.bold, color: AppColors.navy)),
-                          ],
-                        ),
+                        Text(group.title, style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.bold, color: AppColors.navy)),
                         Text(group.timeAgo, style: const TextStyle(fontSize: 10, color: AppColors.textGrey)),
                       ],
                     ),

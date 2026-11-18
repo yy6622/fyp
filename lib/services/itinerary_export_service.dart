@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart' show PdfGoogleFonts;
 
 import '../repositories/trip_repository.dart';
 
@@ -36,9 +37,42 @@ class ItineraryExportService {
     return data.buffer.asUint8List();
   }
 
+  static final _cjk = RegExp(r'[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]');
+  static final _hangul = RegExp(r'[\uac00-\ud7af\u1100-\u11ff]');
+  static final _thai = RegExp(r'[\u0e00-\u0e7f]');
+
+  /// The built-in PDF font (Helvetica) has no Unicode glyphs, so Chinese,
+  /// Japanese, Korean or Thai place names would print as blanks. Noto Sans is
+  /// used instead, with a script font added only when the trip needs it.
+  static Future<pw.ThemeData> _theme(Trip trip, List<TripExpense> expenses) async {
+    final text = [
+      trip.name, trip.destination,
+      for (final d in trip.days) for (final it in d.items) '${it.label} ${it.location}',
+      for (final f in trip.flights) '${f.airline} ${f.routeCities}',
+      for (final h in trip.hotelStays) '${h.name} ${h.location}',
+      if (trip.insurance != null) '${trip.insurance!.planName} ${trip.insurance!.coverage}',
+      for (final e in expenses) '${e.title} ${e.note} ${e.category} ${e.paidByName}',
+    ].join(' ');
+    try {
+      final fallback = <pw.Font>[
+        if (_cjk.hasMatch(text)) await PdfGoogleFonts.notoSansSCRegular(),
+        if (_hangul.hasMatch(text)) await PdfGoogleFonts.notoSansKRRegular(),
+        if (_thai.hasMatch(text)) await PdfGoogleFonts.notoSansThaiRegular(),
+      ];
+      return pw.ThemeData.withFont(
+        base: await PdfGoogleFonts.notoSansRegular(),
+        bold: await PdfGoogleFonts.notoSansBold(),
+        fontFallback: fallback,
+      );
+    } catch (_) {
+      // Offline and never downloaded before: fall back to the built-in font.
+      return pw.ThemeData();
+    }
+  }
+
   static Future<Uint8List> buildItineraryPdf({required Trip trip, List<TripExpense> expenses = const []}) async {
     final logo = await _logoBytes();
-    final doc = pw.Document();
+    final doc = pw.Document(theme: await _theme(trip, expenses));
     final totalExpenses = expenses.fold(0.0, (s, e) => s + e.amount);
 
     doc.addPage(

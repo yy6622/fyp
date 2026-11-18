@@ -51,8 +51,8 @@
 
     <div class="stat-grid" id="statGrid"><div class="skeleton" style="height:90px;grid-column:1/-1;"></div></div>
 
-    <div style="display:grid;grid-template-columns:1.4fr 1fr;gap:20px;align-items:start;" class="detail-grid">
-      <div class="card card-pad">
+    <div style="display:grid;grid-template-columns:1.4fr 1fr;gap:20px;align-items:stretch;" class="detail-grid">
+      <div class="card card-pad chart-card">
         <h3 class="h3" style="margin-bottom:18px;">Monthly Plan Purchases</h3>
         <div class="bars" id="purchaseBars"></div>
         <div class="bars-labels" id="purchaseLabels"></div>
@@ -81,14 +81,14 @@
 </div>
 
 <script type="module">
-import { requireRole } from "../js/auth-guard.js?v=20261106b";
+import { requireRole } from "../js/auth-guard.js?v=20261115a";
 import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261114a";
 import { mountIcons } from "../js/icons.js?v=20261106c";
 import { listTransactions, listClaims, listRefunds, listPlans } from "../js/data.js?v=20261114c";
 import {
   money, moneyExact, number, escapeHtml, renderComparisonBars, trendDelta, pointDelta,
   sumInMonth, countInMonth, countBefore, monthBounds, rateOf, monthsBetween, inRange, wireDateRangeBar,
-} from "../js/ui.js?v=20261113a";
+} from "../js/ui.js?v=20261115a";
 import { exportReportPdf, exportReportExcel } from "../js/report-export.js?v=20261007e";
 
 mountSidebarNav({ role: "partner", active: "reports" });
@@ -109,20 +109,11 @@ function plainCard(label, value, icon) {
   return `<div class="card stat-card"><div class="stat-top"><div class="stat-icon"><span data-icon="${icon}"></span></div><div class="stat-label">${label}</div></div><div class="stat-value">${value}</div></div>`;
 }
 
-/** Matches a transaction/claim/refund to a plan: by planId when the record
- * has one (real mobile-app purchases always do), falling back to a
- * case-insensitive plan-name match otherwise (older records saved before
- * planId existed have none). */
 function belongsToPlan(item, plan) {
   if (item.planId) return item.planId === plan.id;
   return (item.planName || "").trim().toLowerCase() === (plan.name || "").trim().toLowerCase();
 }
 
-/** Average days between a claim/refund's createdAt and the timeline entry
- * that first reached its current terminal status (approved/rejected).
- * Items still open (new/under_review) are excluded — there's no
- * "processing time" for a case that hasn't finished yet. Returns null if
- * nothing resolved yet, so the caller can show "—" instead of "0 days". */
 function avgProcessingDays(items) {
   const diffs = items
     .filter((i) => i.status === "approved" || i.status === "rejected")
@@ -152,10 +143,6 @@ async function load(start, end) {
   const pendingClaims = claimsInRange.filter((c) => c.status === "new" || c.status === "under_review").length;
   const pendingRefunds = refundsInRange.filter((r) => r.status === "new" || r.status === "under_review").length;
 
-  // Real month-over-month deltas — always "this calendar month vs last",
-  // computed from the full, unwindowed data, independent of the selected
-  // reporting window above (same split as admin/reports.html's Insurance
-  // Operations tab).
   const { start: reportsThisMonthStart } = monthBounds(0);
   const allPaid = txns.filter((t) => t.status === "paid");
   const activePlansDelta = trendDelta(activePlans.length, countBefore(activePlans, "createdAt", reportsThisMonthStart));
@@ -242,6 +229,7 @@ async function load(start, end) {
     statGrid: { activePlans: activePlans.length, purchases: paidInRange.length, value, pendingClaims, pendingRefunds },
     monthList, claims: claimsInRange, refunds: refundsInRange, planRows, claimRate, refundRate,
     claimStatusCounts: claimCounts,
+    refundStatusCounts: refundCounts,
     period: { start, end },
   };
 }
@@ -268,9 +256,12 @@ document.getElementById("exportPdfBtn").addEventListener("click", () => {
         values: data.monthList.map((m) => m.count),
       },
       barChart: {
-        title: "Claims by Status",
+        title: "Claim & Refund Status Distribution",
         labels: ["Pending", "In Progress", "Approved", "Rejected"],
-        values: data.claimStatusCounts,
+        series: [
+          { label: "Claims", values: data.claimStatusCounts },
+          { label: "Refunds", values: data.refundStatusCounts },
+        ],
         horizontal: true,
       },
       table: {

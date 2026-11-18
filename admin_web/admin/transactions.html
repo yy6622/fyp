@@ -124,21 +124,16 @@
 </div>
 
 <script type="module">
-import { requireRole } from "../js/auth-guard.js?v=20261106b";
+import { requireRole } from "../js/auth-guard.js?v=20261115a";
 import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261114a";
 import { mountIcons } from "../js/icons.js?v=20261106c";
-import { listAllBookings } from "../js/data.js?v=20261114c";
-import { money, moneyExact, fullDate, timeAgo, statusBadge, escapeHtml, paginate, renderPager, statCard, trendDelta, countBefore, sumBefore, monthBounds, openModal, wireModalDismiss } from "../js/ui.js?v=20261113a";
+import { listAllBookings } from "../js/data.js?v=20261117a";
+import { money, moneyExact, fullDate, timeAgo, statusBadge, escapeHtml, paginate, renderPager, statCard, trendDelta, countBefore, sumBefore, monthBounds, openModal, wireModalDismiss } from "../js/ui.js?v=20261115a";
 
 mountSidebarNav({ role: "admin", active: "transactions" });
 const session = await requireRole("admin", "login.html");
 const PAGE_SIZE = 8;
 
-// A booking's `trailing` field is a display-ready string like
-// "RM 420.00" (see lib/views/detail/booking_payment_page.dart's
-// addBooking call) — there's no separate numeric amount field, so stats
-// here parse it the same way lib/models/insurance_models.dart's
-// insurancePlanTotal() parses a plan's price string.
 function amountOf(b) { return parseFloat(String(b.trailing || "").replace(/[^0-9.]/g, "")) || 0; }
 
 let all = [], flights = [], hotels = [];
@@ -202,13 +197,6 @@ function applyFilters(kind) {
   const to = document.getElementById(`${kind}DateTo`).value ? new Date(document.getElementById(`${kind}DateTo`).value + "T23:59:59") : null;
   const sort = document.getElementById(`${kind}SortFilter`).value;
   let result = source.filter((t) => {
-    // Matches the same fallback the Reference column itself displays
-    // (t.bookingRef || t.id) -- bookingRef is an optional field the
-    // traveller may have left blank (see add_flight_page.dart /
-    // add_hotel_page.dart), so plenty of real rows legitimately show
-    // their raw doc id as the Reference instead; search has to accept
-    // that exact string too, or typing precisely what's on screen would
-    // never find the row.
     const matchesQ = !q || (t.guestName || "").toLowerCase().includes(q) || (t.bookingRef || t.id || "").toLowerCase().includes(q);
     const matchesStatus = !status || (t.status || "").toLowerCase() === status;
     const bookedAt = t.createdAt?.toDate ? t.createdAt.toDate() : null;
@@ -278,7 +266,7 @@ function openDetail(id) {
       ${row("Reference", escapeHtml(t.bookingRef || t.id))}
       ${row("Status", statusBadge(t.status))}
       ${row("Traveller", escapeHtml(t.guestName || "—"))}
-      ${row("Passport/ID", escapeHtml(t.guestIdNumber || "—"))}
+      ${t.type === "flight" ? row("Passport/ID", escapeHtml(t.guestIdNumber || "—")) : ""}
       ${row("Email", escapeHtml(t.guestEmail || "—"))}
       ${row("Phone", escapeHtml(t.guestPhone || "—"))}
       ${row(t.type === "flight" ? "Flight" : "Hotel", escapeHtml(t.title || "—"))}

@@ -53,8 +53,8 @@ import { auth } from "../js/firebase-config.js?v=20261007";
 import { onAuthStateChanged, setPersistence, browserLocalPersistence, browserSessionPersistence, signOut } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
 import { doc, getDoc } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
 import { db } from "../js/firebase-config.js?v=20261007";
-import { loginWithEmail, authErrorMessage } from "../js/auth-guard.js?v=20261106b";
-import { setBusy, wirePasswordToggle } from "../js/ui.js?v=20261113a";
+import { loginWithEmail, authErrorMessage } from "../js/auth-guard.js?v=20261115a";
+import { setBusy, wirePasswordToggle } from "../js/ui.js?v=20261115a";
 
 mountIcons(document);
 wirePasswordToggle("password", "togglePassword");
@@ -86,11 +86,6 @@ document.getElementById("loginForm").addEventListener("submit", async (e) => {
     const user = await loginWithEmail(email, password);
     const snap = await getDoc(doc(db, "admins", user.uid));
     if (!snap.exists()) {
-      // loginWithEmail just succeeded, so this leaves a real signed-in
-      // session for an account with no admin role — close it instead of
-      // leaving it live (requireRole on every other page would catch
-      // this too, but the login page itself shouldn't leave the session
-      // open when it already knows the account isn't an admin).
       await signOut(auth).catch(() => {});
       errBox.textContent = "That account isn't set up as an admin. Ask an existing admin to add you, or use the setup tool.";
       errBox.classList.add("show");

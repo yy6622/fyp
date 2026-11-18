@@ -16,6 +16,10 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        // flutter_local_notifications (added for the push-notification
+        // feature) requires core library desugaring to be enabled -- see
+        // the coreLibraryDesugaring dependency below.
+        isCoreLibraryDesugaringEnabled = true
     }
 
     kotlinOptions {
@@ -50,6 +54,26 @@ android {
 // another plugin.
 dependencies {
     implementation("androidx.appcompat:appcompat:1.7.0")
+    // Required by flutter_local_notifications when core library
+    // desugaring is enabled above.
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
+
+    // google_mlkit_text_recognition (used by receipt_ocr_service.dart for
+    // the Chinese/Japanese/Korean receipt scanning added this session)
+    // declares its non-Latin script recognizers as `compileOnly` in its own
+    // android/build.gradle -- they compile fine but are NOT bundled into
+    // the APK unless the app itself also declares them here. Without this,
+    // the moment scan() picks TextRecognitionScript.japanese/korean/chinese
+    // (for a Japan/Korea/China-destination trip), the native recognizer
+    // class is missing at runtime and the app crashes with
+    // ClassNotFoundException / NoClassDefFoundError. Latin (the default
+    // for every other destination) ships as a normal `implementation`
+    // dependency of the plugin already, so it was never affected.
+    // Version pinned to match the plugin's own (0.16.0) declared version.
+    implementation("com.google.mlkit:text-recognition-chinese:16.0.1")
+    implementation("com.google.mlkit:text-recognition-japanese:16.0.1")
+    implementation("com.google.mlkit:text-recognition-korean:16.0.1")
+    implementation("com.google.mlkit:text-recognition-devanagari:16.0.1")
 }
 
 flutter {

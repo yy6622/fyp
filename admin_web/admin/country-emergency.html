@@ -59,16 +59,16 @@
 </div>
 
 <script type="module">
-import { requireRole } from "../js/auth-guard.js?v=20261106b";
+import { requireRole } from "../js/auth-guard.js?v=20261115a";
 import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261114a";
 import { mountIcons } from "../js/icons.js?v=20261106c";
 import {
   listCountryEmergencyInfo, deleteCountryEmergencyInfo,
   listEmbassies,
-} from "../js/data.js?v=20261114c";
+} from "../js/data.js?v=20261117a";
 import {
   number, escapeHtml, paginate, renderPager, toast, confirmDialog, statCard, plainCard, detailDialog,
-} from "../js/ui.js?v=20261113a";
+} from "../js/ui.js?v=20261115a";
 import { DEFAULT_EMERGENCY_NUMBERS, titleCase } from "./country-emergency-defaults.js?v=20261020c";
 
 mountSidebarNav({ role: "admin", active: "emergency" });
@@ -90,10 +90,6 @@ async function load() {
   rows.forEach((r) => { docsByKey[r.id] = r; });
   const allKeys = [...new Set([...COUNTRY_KEYS, ...Object.keys(docsByKey)])].sort();
 
-  // One embassies query per destination — fine at this scale (~30
-  // countries, an infrequently-used admin page), and the only way to
-  // show an accurate "how many embassies does this destination have"
-  // count since embassies now live in a subcollection per destination.
   const embassyLists = await Promise.all(allKeys.map((key) => listEmbassies(key)));
 
   items = allKeys.map((key, idx) => {

@@ -26,7 +26,6 @@ class GroupTripController extends ChangeNotifier {
 
   late final SavedItemsController _saved = SavedItemsController(tripId: tripId);
 
-  CatalogHotel? hotelForActivity(ActivityItem item) => _firstWhereOrNull(_saved.hotels, (h) => _sameName(h.name, item.label));
   CatalogAttraction? attractionForActivity(ActivityItem item) =>
       _firstWhereOrNull(_saved.attractions, (a) => _sameName(a.name, item.label)) ??
       _firstWhereOrNull(_cityAttractions, (a) => _sameName(a.name, item.label));
@@ -150,9 +149,11 @@ class GroupTripController extends ChangeNotifier {
     required String iconKey,
     String location = '',
     List<String> forMemberUids = const [],
+    String sourceRef = '',
   }) {
     return TripRepository.instance.addActivity(tripId, dayIndex,
-        time: time, label: label, iconKey: iconKey, location: location, forMemberUids: forMemberUids, actorUid: _uid);
+        time: time, label: label, iconKey: iconKey, location: location, forMemberUids: forMemberUids,
+        sourceRef: sourceRef, actorUid: _uid);
   }
 
   Future<void> toggleActivityVote(int dayIndex, ActivityItem item) {

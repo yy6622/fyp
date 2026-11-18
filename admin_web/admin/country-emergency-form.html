@@ -122,29 +122,19 @@
 </div>
 
 <script type="module">
-import { requireRole } from "../js/auth-guard.js?v=20261106b";
+import { requireRole } from "../js/auth-guard.js?v=20261115a";
 import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261114a";
 import { mountIcons } from "../js/icons.js?v=20261106c";
 import {
   getCountryEmergencyInfo, saveCountryEmergencyInfo, deleteCountryEmergencyInfo,
   listEmbassies, getEmbassy, saveEmbassy, deleteEmbassy, uploadEmbassyPhoto,
-} from "../js/data.js?v=20261114c";
-import { toast, setBusy, escapeHtml, openModal, closeModal, wireModalDismiss, confirmDialog, isValidEmail, isPlausiblePhone, isValidImageFile } from "../js/ui.js?v=20261113a";
+} from "../js/data.js?v=20261117a";
+import { toast, setBusy, escapeHtml, openModal, closeModal, wireModalDismiss, confirmDialog, isValidEmail, isPlausiblePhone, isValidImageFile } from "../js/ui.js?v=20261115a";
 import { DEFAULT_EMERGENCY_NUMBERS, DEFAULT_EMBASSIES, COMMON_HOME_COUNTRIES, titleCase } from "./country-emergency-defaults.js?v=20261020c";
 
 mountSidebarNav({ role: "admin", active: "emergency" });
 let countryKey = new URLSearchParams(location.search).get("key");
 
-// Everything in this block depends only on the URL's ?key= — not on the
-// auth check or any Firestore read — so it's set immediately: the right
-// title with no flash, and (for an edit link) the country name filled in
-// right away. The police/ambulance/fire fields are different: their real
-// values live in Firestore and genuinely can't be known until that read
-// comes back, so rather than showing them briefly blank-and-editable
-// (which looked like empty fields that then "snap" to having data, and
-// could let a fast keystroke get silently overwritten once the load
-// resolves), they're disabled with a "Loading…" placeholder until
-// loadNumbers() actually has the real values to put in them.
 document.getElementById("pageTitle").textContent = countryKey ? "Edit country" : "Add country";
 if (countryKey) {
   document.getElementById("fCountry").value = titleCase(countryKey);

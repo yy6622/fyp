@@ -81,23 +81,52 @@
   </main>
 </div>
 
+<div class="modal-backdrop" id="detailModal">
+  <div class="modal" style="max-width:640px;">
+    <div class="modal-head">
+      <div>
+        <h3 class="h2" id="detailTitle">Claim</h3>
+        <div id="detailStatusBadge" style="margin-top:6px;"></div>
+      </div>
+      <button class="modal-close" data-close><span data-icon="x"></span></button>
+    </div>
+    <div id="detailModalBody"></div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="imgModal">
+  <div class="modal" style="max-width:720px;padding:16px;">
+    <div class="modal-head" style="margin-bottom:8px;">
+      <h3 class="h3">Document</h3>
+      <button class="modal-close" data-close><span data-icon="x"></span></button>
+    </div>
+    <img id="imgModalImg" src="" alt="Document" style="display:block;width:100%;max-height:75vh;object-fit:contain;border-radius:10px;" />
+  </div>
+</div>
+
 <script type="module">
-import { requireRole } from "../js/auth-guard.js?v=20261106b";
+import { requireRole } from "../js/auth-guard.js?v=20261115a";
 import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261114a";
 import { mountIcons } from "../js/icons.js?v=20261106c";
-import { listClaims, listRefunds } from "../js/data.js?v=20261114c";
-import { number, moneyExact, statusBadge, escapeHtml, paginate, renderPager, statCard, trendDelta, countByStatusInMonth } from "../js/ui.js?v=20261113a";
+import { listClaims, listRefunds, getClaim, getRefund, updateClaimStatus, updateRefundStatus } from "../js/data.js?v=20261114c";
+import { number, moneyExact, statusBadge, escapeHtml, paginate, renderPager, statCard, trendDelta, countByStatusInMonth, fullDate, toast, confirmDialog, openModal, closeModal, wireModalDismiss } from "../js/ui.js?v=20261115a";
 
 mountSidebarNav({ role: "partner", active: "claims" });
 const session = await requireRole("partner", "login.html");
+const isApproved = session?.profile.status === "approved";
 let items = [], filtered = [], page = 1;
 let type = new URLSearchParams(location.search).get("type") === "refund" ? "refund" : "claim";
 const PAGE_SIZE = 8;
 
 if (session) {
   setSidebarUser({ displayName: session.profile.companyName || "Partner", roleLabel: `${session.profile.companyName || "Insurance"} · Insurance Partner` });
+  wireModalDismiss();
   setTab(type);
   await load();
+  // Deep link from notifications.html -- open straight into a specific
+  // claim/refund's detail modal instead of landing on the bare list.
+  const openId = new URLSearchParams(location.search).get("open");
+  if (openId) openDetail(openId);
 }
 
 function setTab(nextType) {
@@ -123,10 +152,6 @@ document.querySelectorAll(".tab-btn").forEach((b) => b.addEventListener("click",
 async function load() {
   items = type === "claim" ? await listClaims(session.uid) : await listRefunds(session.uid);
   const prefix = type === "claim" ? "New claims" : "New refunds";
-  // Real deltas (js/ui.js): bucketed by WHEN each item reached its
-  // current status (its timeline), not when it was filed — so "Approved"
-  // compares how many were approved this month vs last month, not how
-  // many happen to have been created in each of those months.
   const newDelta = trendDelta(countByStatusInMonth(items, "new", 0), countByStatusInMonth(items, "new", 1));
   const reviewDelta = trendDelta(countByStatusInMonth(items, "under_review", 0), countByStatusInMonth(items, "under_review", 1));
   const approvedDelta = trendDelta(countByStatusInMonth(items, "approved", 0), countByStatusInMonth(items, "approved", 1));
@@ -187,8 +212,15 @@ function renderTable() {
   const body = document.getElementById("tableBody");
   const empty = document.getElementById("emptyState");
   const refField = type === "claim" ? "claimRef" : "refundRef";
-  const detailPage = type === "claim" ? "claim-detail.html" : "refund-detail.html";
-  if (!pageItems.length) { body.innerHTML = ""; empty.style.display = "block"; }
+  if (!pageItems.length) {
+    body.innerHTML = "";
+    empty.style.display = "block";
+    const hasAnyItems = items.length > 0;
+    document.getElementById("emptyTitle").textContent = hasAnyItems ? "No matches found" : (type === "claim" ? "No claims yet" : "No refunds yet");
+    document.getElementById("emptyBody").textContent = hasAnyItems
+      ? "Try adjusting your search, filters, or date range."
+      : (type === "claim" ? "Claims submitted for your plans will show up here." : "Refunds issued against your plans will show up here.");
+  }
   else {
     empty.style.display = "none";
     body.innerHTML = pageItems.map((c) => `
@@ -199,7 +231,7 @@ function renderTable() {
         <td class="muted">${moneyExact(c.amount)}</td>
         <td>${statusBadge(c.status)}</td>
       </tr>`).join("");
-    body.querySelectorAll("[data-open]").forEach((row) => row.addEventListener("click", () => { location.href = `${detailPage}?id=${row.dataset.open}`; }));
+    body.querySelectorAll("[data-open]").forEach((row) => row.addEventListener("click", () => openDetail(row.dataset.open)));
   }
   document.getElementById("resultsLabel").textContent = total
     ? `Showing ${(page - 1) * PAGE_SIZE + 1} to ${Math.min(page * PAGE_SIZE, total)} of ${total} results` : "No results";
@@ -213,6 +245,105 @@ document.getElementById("planFilter").addEventListener("change", applyFilters);
 document.getElementById("filedFrom").addEventListener("change", applyFilters);
 document.getElementById("filedTo").addEventListener("change", applyFilters);
 document.getElementById("sortFilter").addEventListener("change", applyFilters);
+
+async function openDetail(id) {
+  const record = type === "claim" ? await getClaim(id) : await getRefund(id);
+  if (!record || record.partnerId !== session.uid) {
+    toast(`Couldn't find that ${type}.`, "error");
+    return;
+  }
+  renderDetail(id, record);
+  openModal("detailModal");
+}
+
+function renderDetail(id, record) {
+  const noun = type === "claim" ? "Claim" : "Refund";
+  const ref = record[type === "claim" ? "claimRef" : "refundRef"];
+  document.getElementById("detailTitle").textContent = `${noun} ${ref}`;
+  document.getElementById("detailStatusBadge").innerHTML = statusBadge(record.status);
+  const isFinal = record.status === "approved" || record.status === "rejected";
+  const timeline = (record.timeline || []).slice().reverse();
+  const docs = record.documents || [];
+  document.getElementById("detailModalBody").innerHTML = `
+    <div class="card detail-card">
+      <h3 class="h3">Policyholder</h3>
+      <p class="value">${escapeHtml(record.policyholderName || "—")} · ${escapeHtml(record.policyholderEmail || "—")}</p>
+    </div>
+    <div class="card detail-card">
+      <h3 class="h3">Policy</h3>
+      <p class="value">${escapeHtml(record.planName || "—")}</p>
+    </div>
+    <div class="card detail-card">
+      <h3 class="h3">${noun} details</h3>
+      <p class="value">${moneyExact(record.amount)} · ${escapeHtml(record.category || "—")}</p>
+    </div>
+    <div class="card detail-card">
+      <h3 class="h3">Documents</h3>
+      ${docs.length ? `<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px;">${docs.map((u) => `<img src="${escapeHtml(u)}" data-view-doc="${escapeHtml(u)}" style="width:64px;height:64px;border-radius:8px;object-fit:cover;border:1px solid var(--border);cursor:pointer;" />`).join("")}</div>` : `<p class="value muted">No documents attached.</p>`}
+    </div>
+    <div class="card detail-card">
+      <h3 class="h3">Review timeline</h3>
+      ${timeline.length ? timeline.map((t) => `
+        <div style="padding:8px 0;border-top:1px solid var(--border);">
+          <p class="value" style="font-weight:700;">${escapeHtml((t.status || "").replace(/_/g, " ").replace(/^\w/, (c) => c.toUpperCase()))}</p>
+          <p class="muted small">${fullDate(t.at)}${t.note ? " · " + escapeHtml(t.note) : ""}</p>
+        </div>`).join("") : `<p class="value muted">No activity yet.</p>`}
+    </div>
+    <div class="form-actions" style="margin-top:4px;">
+      ${isApproved ? (isFinal ? `
+      <p class="muted small">This ${type} has already been ${escapeHtml(record.status)} — no further action is needed.</p>
+      ` : `
+      <button class="btn btn-danger-outline" id="rejectBtn"><span data-icon="x" data-icon-size="14"></span>Reject ${type}</button>
+      <button class="btn btn-outline" id="infoBtn"><span data-icon="eye" data-icon-size="14"></span>Request info</button>
+      <button class="btn btn-primary" id="approveBtn"><span data-icon="check-circle" data-icon-size="14"></span>Approve</button>
+      `) : `<p class="muted small">Your account is ${escapeHtml(session?.profile.status || "pending")} — review actions unlock once an admin approves your account.</p>`}
+    </div>`;
+  mountIcons(document.getElementById("detailModalBody"));
+
+  document.getElementById("detailModalBody").querySelectorAll("[data-view-doc]").forEach((img) => {
+    img.addEventListener("click", () => openImg(img.dataset.viewDoc));
+  });
+
+  if (isApproved && !isFinal) {
+    document.getElementById("rejectBtn").addEventListener("click", () => act(id, "rejected", `${noun} rejected`, true));
+    document.getElementById("infoBtn").addEventListener("click", () => act(id, "under_review", "Requested more information from the policyholder", false));
+    document.getElementById("approveBtn").addEventListener("click", () => act(id, "approved", "Approved for payout", true));
+  }
+}
+
+function openImg(url) {
+  document.getElementById("imgModalImg").src = url;
+  openModal("imgModal");
+}
+
+async function act(id, status, note, needsConfirm) {
+  const getFn = type === "claim" ? getClaim : getRefund;
+  const updateFn = type === "claim" ? updateClaimStatus : updateRefundStatus;
+  const latest = await getFn(id);
+  if (latest && (latest.status === "approved" || latest.status === "rejected")) {
+    toast(`This ${type} was already decided — refreshing.`, "error");
+    renderDetail(id, latest);
+    await load();
+    return;
+  }
+  if (needsConfirm) {
+    const ok = await confirmDialog({
+      title: status === "approved" ? `Approve this ${type}?` : `Reject this ${type}?`,
+      body: status === "approved" ? "The policyholder will be marked as approved for payout." : `The policyholder will be notified the ${type} was rejected.`,
+      confirmText: status === "approved" ? "Approve" : "Reject", danger: status !== "approved",
+    });
+    if (!ok) return;
+  }
+  try {
+    await updateFn(id, status, note);
+    toast(`${type === "claim" ? "Claim" : "Refund"} updated.`, "success");
+    const fresh = await getFn(id);
+    renderDetail(id, fresh);
+    await load();
+  } catch (err) {
+    toast(err.message || `Couldn't update this ${type}.`, "error");
+  }
+}
 
 </script>
 </body>

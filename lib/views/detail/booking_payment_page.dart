@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 
 import '../../controllers/booking_payment_controller.dart';
 import '../../models/booking_details.dart';
+import '../../models/duffel_models.dart';
 import '../../repositories/booking_repository.dart';
 import '../../services/auth_service.dart';
 import '../../services/format_utils.dart';
+import '../../services/duffel_api_service.dart';
 import '../../services/paypal_service.dart';
 import '../../services/stripe_service.dart';
 import '../../theme.dart';
@@ -57,6 +59,13 @@ class BookingPaymentPage extends StatefulWidget {
   final String bookingSubtitle;
   final String refId;
   final int quantity;
+  /// See [BookingPaymentController.priceIsTotal]: true for flights,
+  /// because [unitPrice] there is already the Duffel offer's full
+  /// total for every passenger and leg, not a per-passenger price.
+  final bool priceIsTotal;
+  final List<DuffelOfferPassenger> offerPassengers;
+  final double offerTotalAmount;
+  final String offerTotalCurrency;
 
   final List<PassengerDetail> passengerDetails;
   final String contactEmail;
@@ -71,6 +80,22 @@ class BookingPaymentPage extends StatefulWidget {
   final DateTime? checkOut;
 
   final List<String> forMemberUids;
+
+  // Flight-only -- the full itinerary shown before payment (see
+  // _flightSummarySection below), not just itemTitle/itemSubtitle's
+  // thin "KUL -> TFU" / "22 Nov 18:45".
+  final String? fromCode;
+  final String? fromCity;
+  final String? toCode;
+  final String? toCity;
+  final String? flightDate;
+  final String? depTime;
+  final String? arrTime;
+  final String? duration;
+  final String? stops;
+  final String? airline;
+  final String? airlineLogoUrl;
+  final String? cabinClass;
 
   final String tripId;
   final Future<void> Function(BookingConfirmation confirmation)? onPaid;
@@ -87,6 +112,10 @@ class BookingPaymentPage extends StatefulWidget {
     required this.bookingSubtitle,
     this.refId = '',
     this.quantity = 1,
+    this.priceIsTotal = false,
+    this.offerPassengers = const [],
+    this.offerTotalAmount = 0,
+    this.offerTotalCurrency = '',
     this.passengerDetails = const [],
     this.contactEmail = '',
     this.contactPhone = '',
@@ -98,6 +127,18 @@ class BookingPaymentPage extends StatefulWidget {
     this.checkIn,
     this.checkOut,
     this.forMemberUids = const [],
+    this.fromCode,
+    this.fromCity,
+    this.toCode,
+    this.toCity,
+    this.flightDate,
+    this.depTime,
+    this.arrTime,
+    this.duration,
+    this.stops,
+    this.airline,
+    this.airlineLogoUrl,
+    this.cabinClass,
     this.tripId = '',
     this.onPaid,
   });
@@ -112,6 +153,7 @@ class _BookingPaymentPageState extends State<BookingPaymentPage> {
     initialQuantity: widget.quantity,
     minQuantity: widget.quantity,
     maxQuantity: widget.quantity,
+    priceIsTotal: widget.priceIsTotal,
   );
   bool _paying = false;
   PaymentMethodOption _method = PaymentMethodOption.card;
@@ -142,6 +184,7 @@ class _BookingPaymentPageState extends State<BookingPaymentPage> {
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
+        centerTitle: true,
         iconTheme: const IconThemeData(color: AppColors.navy),
         title: const Text('Payment', style: TextStyle(color: AppColors.navy, fontWeight: FontWeight.bold, fontSize: 18)),
       ),
@@ -204,9 +247,13 @@ class _BookingPaymentPageState extends State<BookingPaymentPage> {
                   ),
                   if (widget.bookingType == 'flight') ...[
                     const SizedBox(height: 24),
+                    _flightSummarySection(),
+                    const SizedBox(height: 24),
                     _passengerSummarySection(),
                   ],
                   if (widget.bookingType == 'hotel') ...[
+                    const SizedBox(height: 24),
+                    _staySummarySection(),
                     const SizedBox(height: 24),
                     _guestSummarySection(),
                   ],
@@ -220,7 +267,10 @@ class _BookingPaymentPageState extends State<BookingPaymentPage> {
                   const SizedBox(height: 16),
                   const Divider(color: Color(0xFFECECEC)),
                   const SizedBox(height: 4),
-                  _summaryRow('${widget.currencyLabel} ${widget.unitPrice.toStringAsFixed(0)} × ${controller.quantity}',
+                  _summaryRow(
+                      widget.priceIsTotal
+                          ? '${widget.currencyLabel} ${widget.unitPrice.toStringAsFixed(0)} (${controller.quantity} ${_quantityLabel.toLowerCase()})'
+                          : '${widget.currencyLabel} ${widget.unitPrice.toStringAsFixed(0)} × ${controller.quantity}',
                       '${widget.currencyLabel} ${controller.subtotal.toStringAsFixed(2)}'),
                   _summaryRow('Service Fee', '${widget.currencyLabel} ${BookingPaymentController.serviceFee.toStringAsFixed(2)}'),
                   const SizedBox(height: 8),
@@ -292,15 +342,146 @@ class _BookingPaymentPageState extends State<BookingPaymentPage> {
           const SizedBox(height: 10),
           Text(widget.guestName, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.navy)),
           Text('${widget.guestEmail} · ${widget.guestPhone}', style: const TextStyle(fontSize: 11.5, color: AppColors.textGrey)),
-          Text('ID/Passport: ${widget.guestIdNumber}', style: const TextStyle(fontSize: 11.5, color: AppColors.textGrey)),
-          if (widget.specialRequests.isNotEmpty) ...[
-            const SizedBox(height: 6),
-            Text('Request: ${widget.specialRequests}', style: const TextStyle(fontSize: 11.5, color: AppColors.textGrey)),
+        ],
+      ),
+    );
+  }
+
+  Widget _staySummarySection() {
+    final checkIn = widget.checkIn;
+    final checkOut = widget.checkOut;
+    final nights = (checkIn != null && checkOut != null) ? checkOut.difference(checkIn).inDays : null;
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(color: AppColors.chipGrey, borderRadius: BorderRadius.circular(14)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Stay Details', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.black)),
+          const SizedBox(height: 12),
+          if (checkIn != null && checkOut != null) ...[
+            Row(
+              children: [
+                Expanded(
+                  child: _stayDateColumn('Check-in', checkIn),
+                ),
+                const Icon(Icons.arrow_forward, size: 16, color: AppColors.textGrey),
+                Expanded(
+                  child: _stayDateColumn('Check-out', checkOut, alignEnd: true),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
           ],
-          const SizedBox(height: 10),
-          if (widget.checkIn != null && widget.checkOut != null)
-            Text('${formatLongDate(widget.checkIn!)} → ${formatLongDate(widget.checkOut!)}',
-                style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: AppColors.navy)),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              if (nights != null)
+                Text(nights == 1 ? '1 night' : '$nights nights', style: const TextStyle(fontSize: 12.5, color: AppColors.textGrey)),
+              Text(_quantityLabel == 'Rooms' ? '${controller.quantity} ${controller.quantity == 1 ? 'room' : 'rooms'}' : '',
+                  style: const TextStyle(fontSize: 12.5, color: AppColors.textGrey)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _stayDateColumn(String label, DateTime date, {bool alignEnd = false}) {
+    return Column(
+      crossAxisAlignment: alignEnd ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(fontSize: 11, color: AppColors.textGrey)),
+        const SizedBox(height: 2),
+        Text(formatLongDate(date), style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold, color: AppColors.navy)),
+      ],
+    );
+  }
+
+  Widget _flightSummarySection() {
+    final hasRoute = (widget.fromCode ?? '').isNotEmpty && (widget.toCode ?? '').isNotEmpty;
+    if (!hasRoute) return const SizedBox.shrink();
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(color: AppColors.chipGrey, borderRadius: BorderRadius.circular(14)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Expanded(
+                child: Text('Flight Details', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.black)),
+              ),
+              if ((widget.cabinClass ?? '').isNotEmpty)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)),
+                  child: Text(widget.cabinClass!, style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600, color: AppColors.navy)),
+                ),
+            ],
+          ),
+          if ((widget.flightDate ?? '').isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(widget.flightDate!, style: const TextStyle(fontSize: 11.5, color: AppColors.textGrey)),
+          ],
+          const SizedBox(height: 12),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(widget.depTime ?? '', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.navy)),
+                    Text('${widget.fromCode ?? ''}${(widget.fromCity ?? '').isNotEmpty ? ' · ${widget.fromCity}' : ''}',
+                        style: const TextStyle(fontSize: 11.5, color: AppColors.textGrey)),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: Column(
+                  children: [
+                    if ((widget.duration ?? '').isNotEmpty)
+                      Text(widget.duration!, style: const TextStyle(fontSize: 11, color: AppColors.textGrey)),
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 2),
+                      child: Icon(Icons.arrow_forward, size: 15, color: AppColors.textGrey),
+                    ),
+                    Text((widget.stops ?? '').isNotEmpty ? widget.stops! : 'Direct flight',
+                        style: const TextStyle(fontSize: 10.5, color: AppColors.textGrey)),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(widget.arrTime ?? '', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.navy)),
+                    Text('${widget.toCode ?? ''}${(widget.toCity ?? '').isNotEmpty ? ' · ${widget.toCity}' : ''}',
+                        textAlign: TextAlign.end,
+                        style: const TextStyle(fontSize: 11.5, color: AppColors.textGrey)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          if ((widget.airline ?? '').isNotEmpty) ...[
+            const SizedBox(height: 12),
+            const Divider(height: 1, color: Color(0xFFDDDDDD)),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                if ((widget.airlineLogoUrl ?? '').isNotEmpty) ...[
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: Image.network(widget.airlineLogoUrl!, width: 20, height: 20, errorBuilder: (_, __, ___) => const SizedBox.shrink()),
+                  ),
+                  const SizedBox(width: 8),
+                ],
+                Text(widget.airline!, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: AppColors.navy)),
+              ],
+            ),
+          ],
         ],
       ),
     );
@@ -331,6 +512,16 @@ class _BookingPaymentPageState extends State<BookingPaymentPage> {
 
   Future<void> _confirmPayment() async {
     final user = AuthService.instance.currentUser;
+    if (user == null) {
+      // Stop here, BEFORE any money moves or a real Duffel order is
+      // created -- continuing would charge the traveller and book a real
+      // flight/hotel with nowhere to save the record, which is exactly
+      // what "Duffel has it, Firebase doesn't, no message" looks like.
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("You've been signed out. Please sign in again and retry this booking.")),
+      );
+      return;
+    }
     setState(() => _paying = true);
     final String paymentRef;
     try {
@@ -362,6 +553,43 @@ class _BookingPaymentPageState extends State<BookingPaymentPage> {
       return;
     }
 
+    // A real Duffel order only ever succeeds against Duffel's own test
+    // airline ("Duffel Airways", IATA code ZZ) -- for any real-world
+    // airline (Malaysia Airlines, etc.) a `duffel_test_...` key always
+    // fails order creation with a generic "internal_error", since that
+    // would require actually ticketing with that airline's live system.
+    // So this only attempts createOrder for a Duffel Airways offer
+    // (identifiable by its airline name, same as Duffel's own test-mode
+    // docs identify it by owner.iata_code == 'ZZ' / owner.name ==
+    // "Duffel Airways"); every other flight, and every hotel, keeps going
+    // straight to the Firestore-only booking exactly as before. If this
+    // DOES fail even for a Duffel Airways offer (e.g. no network), it
+    // still falls back to the Firestore-only booking rather than losing
+    // a payment that has already gone through.
+    var providerName = '';
+    var externalOrderId = '';
+    final isDuffelTestAirline = widget.bookingType == 'flight' && widget.airline?.trim().toLowerCase() == 'duffel airways';
+    if (isDuffelTestAirline) {
+      try {
+        final orderId = await DuffelApiService.instance.createOrder(
+          offerId: widget.refId,
+          offerPassengers: widget.offerPassengers,
+          passengerDetails: widget.passengerDetails,
+          totalAmount: widget.offerTotalAmount,
+          totalCurrency: widget.offerTotalCurrency,
+          contactEmail: widget.contactEmail,
+          contactPhone: widget.contactPhone,
+        );
+        if (orderId.isNotEmpty) {
+          providerName = 'Duffel';
+          externalOrderId = orderId;
+        }
+      } catch (_) {
+        // Fall back to Firestore-only below -- the payment already went
+        // through, so this must never block the booking from being saved.
+      }
+    }
+
     if (user != null) {
       final qtyNote = controller.quantity > 1 ? ' · ${controller.quantity} $_quantityLabel' : '';
       final isFlight = widget.bookingType == 'flight';
@@ -388,6 +616,8 @@ class _BookingPaymentPageState extends State<BookingPaymentPage> {
           specialRequests: widget.specialRequests,
           checkIn: widget.checkIn != null ? formatLongDate(widget.checkIn!) : '',
           checkOut: widget.checkOut != null ? formatLongDate(widget.checkOut!) : '',
+          providerName: providerName,
+          externalOrderId: externalOrderId,
         );
       } catch (e) {
         if (!mounted) return;
@@ -422,6 +652,17 @@ class _BookingPaymentPageState extends State<BookingPaymentPage> {
       }
     }
 
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(widget.bookingType == 'flight'
+            ? 'Payment successful! Your flight is booked.'
+            : 'Payment successful! Your booking is confirmed.'),
+        backgroundColor: Colors.green,
+        duration: const Duration(seconds: 2),
+      ),
+    );
+    await Future.delayed(const Duration(milliseconds: 700));
     if (!mounted) return;
     Navigator.of(context).popUntil((route) => route.isFirst);
   }

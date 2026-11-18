@@ -15,10 +15,6 @@ const List<String> _quoteMonthNames = [
   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
 ];
 
-/// Step 1 of buying from [partner] — collect trip details and get a quote
-/// before any plan price is shown, the way a real insurer's "Get a Quote"
-/// page works (destination, dates, traveller count, then a comparison of
-/// plans priced for that exact trip — see [InsurancePlanComparePage]).
 class InsuranceQuotePage extends StatefulWidget {
   final InsurancePartner partner;
   final String? tripId;
@@ -182,11 +178,6 @@ class _InsuranceQuotePageState extends State<InsuranceQuotePage> {
                     child: ListView(
                       padding: const EdgeInsets.only(bottom: 16),
                       children: [
-                        // Lets the traveller buy a policy for anywhere, even a
-                        // place not in our country list (e.g. a smaller
-                        // territory, or just a differently-spelled city name) --
-                        // only shown once they've typed something that isn't
-                        // already one of the exact matches below.
                         if (query.isNotEmpty && !exactMatch)
                           ListTile(
                             leading: const Icon(Icons.edit_outlined, size: 18, color: AppColors.primary),

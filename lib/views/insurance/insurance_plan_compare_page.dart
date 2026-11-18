@@ -2,16 +2,10 @@ import 'package:flutter/material.dart';
 
 import '../../controllers/insurance_controller.dart';
 import '../../models/insurance_models.dart';
-import '../../services/currency_service.dart';
 import '../../theme.dart';
 import 'insurance_plan_detail_page.dart';
 import 'insurance_widgets.dart';
 
-/// Step 2 of buying from [partner] — that insurer's plans priced for the
-/// exact trip collected on [InsuranceQuotePage], shown side by side like a
-/// real insurer's plan-comparison chart. Tapping a plan goes to the normal
-/// [InsurancePlanDetailPage], pre-filled with the quote's traveller count
-/// and dates so nothing has to be re-entered or re-confirmed.
 class InsurancePlanComparePage extends StatefulWidget {
   final InsurancePartner partner;
   final String destination;
@@ -96,12 +90,6 @@ class _InsurancePlanComparePageState extends State<InsurancePlanComparePage> {
                 if (controller.loading) {
                   return const Center(child: CircularProgressIndicator(color: AppColors.primary));
                 }
-                // Lowest-to-highest by this quote's actual total (unit price x
-                // travellers x coverage days -- insurancePlanTotal, same formula
-                // the price breakdown below and the detail page both use), not
-                // raw plan.price, so an Annual plan's flat yearly price still
-                // compares fairly against a per-day plan's multiplied total.
-                final userCurrency = CurrencyService.instance.lastKnownUserCurrency;
                 final tripDays = widget.travelEnd.difference(widget.travelStart).inDays + 1;
                 final plans = controller.filtered
                     .where((p) =>
@@ -114,13 +102,11 @@ class _InsurancePlanComparePageState extends State<InsurancePlanComparePage> {
                         travellerCount: widget.travellerCount,
                         travelStart: widget.travelStart,
                         travelEnd: widget.travelEnd,
-                        userCurrency: userCurrency,
                       ).compareTo(insurancePlanTotal(
                         b,
                         travellerCount: widget.travellerCount,
                         travelStart: widget.travelStart,
                         travelEnd: widget.travelEnd,
-                        userCurrency: userCurrency,
                       )));
                 if (plans.isEmpty) {
                   return Center(
@@ -140,11 +126,11 @@ class _InsurancePlanComparePageState extends State<InsurancePlanComparePage> {
                   separatorBuilder: (_, __) => const SizedBox(height: 12),
                   itemBuilder: (context, i) => _ComparePlanCard(
                     plan: plans[i],
+                    destination: widget.destination,
                     travelStart: widget.travelStart,
                     travelEnd: widget.travelEnd,
                     travellerCount: widget.travellerCount,
                     tripId: widget.tripId,
-                    userCurrency: userCurrency,
                   ),
                 );
               },
@@ -158,19 +144,24 @@ class _InsurancePlanComparePageState extends State<InsurancePlanComparePage> {
 
 class _ComparePlanCard extends StatelessWidget {
   final InsurancePlan plan;
+  // The destination the traveller picked on InsuranceQuotePage -- NOT
+  // always derivable from tripId (a standalone quote not tied to a saved
+  // trip has no tripId at all), so this is threaded through explicitly
+  // from here all the way to PaymentMethodPage.recordPurchase, which is
+  // what the admin side's transaction table reads.
+  final String destination;
   final DateTime travelStart;
   final DateTime travelEnd;
   final int travellerCount;
   final String? tripId;
-  final String? userCurrency;
 
   const _ComparePlanCard({
     required this.plan,
+    required this.destination,
     required this.travelStart,
     required this.travelEnd,
     required this.travellerCount,
     this.tripId,
-    this.userCurrency,
   });
 
   @override
@@ -180,13 +171,13 @@ class _ComparePlanCard extends StatelessWidget {
       travellerCount: travellerCount,
       travelStart: travelStart,
       travelEnd: travelEnd,
-      userCurrency: userCurrency,
     );
     return GestureDetector(
       onTap: () => Navigator.of(context).push(
         MaterialPageRoute(
           builder: (_) => InsurancePlanDetailPage(
             plan: plan,
+            destination: destination,
             tripId: tripId,
             initialTravellerCount: travellerCount,
             initialTravelStart: travelStart,
@@ -222,8 +213,8 @@ class _ComparePlanCard extends StatelessWidget {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    Text('${CurrencyService.instance.displayLabel(userCurrency ?? 'MYR')}${total.toStringAsFixed(2)}', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.navy)),
-                    Text('total · ${plan.displayPrice(userCurrency)} ${insurancePriceUnitLabel(plan.category)}', style: const TextStyle(fontSize: 9, color: AppColors.textGrey)),
+                    Text('RM ${total.toStringAsFixed(2)}', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.navy)),
+                    Text('total · ${plan.displayPrice} ${insurancePriceUnitLabel(plan.category)}', style: const TextStyle(fontSize: 9, color: AppColors.textGrey)),
                   ],
                 ),
               ],

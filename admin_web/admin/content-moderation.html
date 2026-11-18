@@ -91,27 +91,23 @@
 </div>
 
 <script type="module">
-import { requireRole } from "../js/auth-guard.js?v=20261106b";
+import { requireRole } from "../js/auth-guard.js?v=20261115a";
 import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261114a";
 import { mountIcons } from "../js/icons.js?v=20261106c";
 import {
   listReportedPosts, approvePostReport, rejectPost, logModerationAction, countModerationToday, countModerationYesterday,
   listFlaggedReviews, approveReview, rejectReview,
-} from "../js/data.js?v=20261114c";
+} from "../js/data.js?v=20261117a";
 import {
   number, timeAgo, escapeHtml, toast, setBusy, confirmDialog, openModal, closeModal, wireModalDismiss,
   statCard, plainCard, trendDelta, reporterLabel,
-} from "../js/ui.js?v=20261113a";
+} from "../js/ui.js?v=20261115a";
 
 mountSidebarNav({ role: "admin", active: "moderation" });
 const session = await requireRole("admin", "login.html");
 let reports = [];
 let flaggedReviews = [];
 
-// Deep-link support: admin/notifications.html links straight into a
-// specific reported post or review (?tab=posts|reviews&focus=<id>) so
-// clicking a notification lands the admin right on that item, already
-// open for review, instead of making them find it again in the list.
 const deepLink = new URLSearchParams(location.search);
 
 if (session) {
@@ -255,13 +251,6 @@ async function act(kind, postId, btn) {
 document.getElementById("searchInput").addEventListener("input", renderList);
 document.getElementById("sortFilter").addEventListener("change", renderList);
 
-// ==================== Reported Reviews tab ====================
-// Parallel to the Reported Posts logic above, but a review isn't a
-// top-level doc — it's one entry from listFlaggedReviews() (a
-// collectionGroup query across every catalog_hotels/catalog_restaurants/
-// catalog_attractions/posts' "reviews" subcollection), carrying its own
-// Firestore ref plus its parent's ref/collection/name for display and for
-// approveReview/rejectReview to act on.
 function parentTypeLabel(collection) {
   return { catalog_hotels: "Hotel", catalog_restaurants: "Restaurant", catalog_attractions: "Attraction", posts: "Community post" }[collection] || "Item";
 }
@@ -366,11 +355,6 @@ async function actOnReview(kind, reviewId, btn) {
   try {
     if (kind === "approve") await approveReview(r);
     else await rejectReview(r);
-    // logModerationAction's 2nd param is just a generic "which thing"
-    // audit id (named postId from when only posts existed) — a review id
-    // fits the same field fine, and "review_approved"/"review_rejected"
-    // keep these counted separately from the Reported Posts tab's own
-    // "Approved today"/"Rejected today" numbers.
     await logModerationAction(kind === "approve" ? "review_approved" : "review_rejected", reviewId, session.uid);
     flaggedReviews = flaggedReviews.filter((x) => x.id !== reviewId);
     toast(kind === "approve" ? "Review approved — now visible to everyone." : "Review removed.", "success");

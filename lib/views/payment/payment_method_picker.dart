@@ -4,12 +4,6 @@ import '../../theme.dart';
 
 enum PaymentMethodOption { card, paypal }
 
-/// Shared by payment_method_page.dart (insurance) and booking_payment_page.dart
-/// (flight/hotel) -- the same two real payment rails, selectable the same
-/// way, on every purchase flow in the app. Previously each page either had
-/// no picker at all (flight/hotel) or a single hardcoded, non-selectable
-/// "Credit / Debit Card" row (insurance); this replaces both with one real
-/// choice between Stripe (card) and PayPal.
 class PaymentMethodPicker extends StatelessWidget {
   final PaymentMethodOption value;
   final ValueChanged<PaymentMethodOption> onChanged;
@@ -23,14 +17,12 @@ class PaymentMethodPicker extends StatelessWidget {
           option: PaymentMethodOption.card,
           icon: Icons.credit_card,
           label: 'Credit / Debit Card',
-          sublabel: 'Paid securely via Stripe',
         ),
         const SizedBox(height: 10),
         _tile(
           option: PaymentMethodOption.paypal,
           icon: Icons.account_balance_wallet_outlined,
           label: 'PayPal',
-          sublabel: 'Log in to your PayPal account to pay',
         ),
       ],
     );
@@ -40,7 +32,6 @@ class PaymentMethodPicker extends StatelessWidget {
     required PaymentMethodOption option,
     required IconData icon,
     required String label,
-    required String sublabel,
   }) {
     final selected = value == option;
     return GestureDetector(
@@ -60,20 +51,13 @@ class PaymentMethodPicker extends StatelessWidget {
             Icon(icon, color: selected ? AppColors.primary : AppColors.textGrey, size: 20),
             const SizedBox(width: 12),
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    label,
-                    style: TextStyle(
-                      fontSize: 13.5,
-                      fontWeight: FontWeight.w600,
-                      color: selected ? AppColors.primary : Colors.black,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(sublabel, style: const TextStyle(fontSize: 11, color: AppColors.textGrey)),
-                ],
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w600,
+                  color: selected ? AppColors.primary : Colors.black,
+                ),
               ),
             ),
             Icon(

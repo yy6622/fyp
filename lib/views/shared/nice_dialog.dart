@@ -79,6 +79,14 @@ Future<bool?> showNiceFormDialog({
   );
 }
 
+Widget _requiredLabel(String label) {
+  return Text.rich(
+    TextSpan(text: label, children: const [
+      TextSpan(text: ' *', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.w700)),
+    ]),
+  );
+}
+
 Widget niceDialogField(
   TextEditingController controller,
   String label, {
@@ -89,6 +97,7 @@ Widget niceDialogField(
   int maxLines = 1,
   bool readOnly = false,
   bool obscureText = false,
+  bool required = false,
   VoidCallback? onTap,
 }) {
   return Padding(
@@ -103,7 +112,8 @@ Widget niceDialogField(
       onTap: onTap,
       style: const TextStyle(fontSize: 13.5, color: AppColors.navy, fontWeight: FontWeight.w500),
       decoration: InputDecoration(
-        labelText: label,
+        label: required ? _requiredLabel(label) : null,
+        labelText: required ? null : label,
         prefixText: prefixText,
         prefixIcon: icon == null ? null : Icon(icon, size: 18, color: AppColors.textGrey),
         suffixIcon: onTap == null ? null : const Icon(Icons.keyboard_arrow_down, size: 18, color: AppColors.textGrey),
@@ -126,6 +136,7 @@ Widget niceAutocompleteField(
   required List<String> options,
   IconData? icon,
   bool autofocus = false,
+  bool required = false,
   FocusNode? focusNode,
 }) {
   return Padding(
@@ -145,7 +156,8 @@ Widget niceAutocompleteField(
           autofocus: autofocus,
           style: const TextStyle(fontSize: 13.5, color: AppColors.navy, fontWeight: FontWeight.w500),
           decoration: InputDecoration(
-            labelText: label,
+            label: required ? _requiredLabel(label) : null,
+            labelText: required ? null : label,
             prefixIcon: icon == null ? null : Icon(icon, size: 18, color: AppColors.textGrey),
             suffixIcon: const Icon(Icons.expand_more, size: 18, color: AppColors.textGrey),
             labelStyle: const TextStyle(fontSize: 12.5, color: AppColors.textGrey),

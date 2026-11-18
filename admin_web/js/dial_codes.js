@@ -1,9 +1,3 @@
-// Calling codes for the same 30 countries COUNTRY_OPTIONS (countries.js)
-// lists, in the same order -- kept as a separate file (rather than
-// merged into countries.js) because not every COUNTRY_OPTIONS consumer
-// needs a dial code (plan-form.html's destination picker, for one), so
-// this only loads where it's actually used (partner/register.html's
-// phone field).
 export const DIAL_CODES = [
   { name: "Malaysia", code: "+60" },
   { name: "Singapore", code: "+65" },

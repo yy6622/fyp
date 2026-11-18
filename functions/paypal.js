@@ -1,19 +1,3 @@
-// PayPal checkout (FR — "PayPal" alongside Credit/Debit Card for
-// flight/hotel/insurance): mirrors createPaymentIntent's shape next door in
-// index.js as closely as PayPal's own API allows, so the two payment rails
-// get the same server-side guarantees.
-//
-// Sandbox only for now (api-m.sandbox.paypal.com) -- same posture as Stripe's
-// pk_test_ key already in this app: real PayPal calls, real sandbox order
-// objects, nothing fabricated, but no live money ever moves. Flip
-// PAYPAL_API_BASE to https://api-m.paypal.com (and use live credentials) when
-// this app is ready to go live.
-//
-// Secrets (set once, same way STRIPE_SECRET_KEY already is -- the user runs
-// `firebase functions:secrets:set PAYPAL_CLIENT_ID` / `PAYPAL_CLIENT_SECRET`,
-// pasting in the Client ID/Secret from a PayPal Developer sandbox app at
-// developer.paypal.com/dashboard/applications/sandbox -- this file is never
-// deployed or given a value by anyone but the project owner):
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { defineSecret } = require("firebase-functions/params");
 const { initializeApp, getApps } = require("firebase-admin/app");
@@ -25,13 +9,6 @@ const paypalClientSecret = defineSecret("PAYPAL_CLIENT_SECRET");
 
 const PAYPAL_API_BASE = "https://api-m.sandbox.paypal.com";
 
-// Custom-scheme redirect targets. PayPal's web approval flow always needs a
-// return_url/cancel_url to send the browser back to once the payer approves
-// or cancels -- a WebView inside the app can't host a real HTTPS endpoint,
-// so (same technique used throughout the Flutter PayPal-integration
-// ecosystem) these are app-only URLs a NavigationDelegate intercepts before
-// the WebView ever actually tries to load them. See
-// lib/views/payment/paypal_checkout_page.dart.
 const RETURN_URL = "voyaapp://paypal-return";
 const CANCEL_URL = "voyaapp://paypal-cancel";
 
@@ -54,10 +31,6 @@ async function getAccessToken() {
   return data.access_token;
 }
 
-// Step 1: create the order. Returns the order id plus the "payer-action"
-// approval link the WebView should open -- the traveller logs into (sandbox)
-// PayPal there and approves the exact amount, nothing before this point
-// moves any money.
 exports.createPaypalOrder = onCall({ secrets: [paypalClientId, paypalClientSecret] }, async (request) => {
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "Sign in before paying.");

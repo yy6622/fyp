@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../controllers/detail_page_controller.dart';
+import '../../models/duffel_models.dart';
 import '../../repositories/trip_repository.dart';
 import '../../services/auth_service.dart';
 import '../../theme.dart';
@@ -36,8 +37,10 @@ class DetailPageFlight extends StatefulWidget {
   final bool? refundAllowed;
   final String? refundPenaltyAmount;
   final String? refundPenaltyCurrency;
-  final bool saved;
-  final VoidCallback? onToggleSave;
+  final String offerId;
+  final List<DuffelOfferPassenger> offerPassengers;
+  final double offerTotalAmount;
+  final String offerTotalCurrency;
 
   const DetailPageFlight({
     super.key,
@@ -70,8 +73,10 @@ class DetailPageFlight extends StatefulWidget {
     this.refundAllowed,
     this.refundPenaltyAmount,
     this.refundPenaltyCurrency,
-    this.saved = false,
-    this.onToggleSave,
+    this.offerId = '',
+    this.offerPassengers = const [],
+    this.offerTotalAmount = 0,
+    this.offerTotalCurrency = '',
   });
 
   @override
@@ -80,19 +85,6 @@ class DetailPageFlight extends StatefulWidget {
 
 class _DetailPageFlightState extends State<DetailPageFlight> {
   final DetailPageFlightController controller = DetailPageFlightController();
-  late bool _saved = widget.saved;
-
-  // The flight/hotel favourite backend (CatalogRepository.saveDuffelFlight /
-  // saveDuffelStay) only ever creates a saved record once — there's no
-  // matching "unsave" call available from a live search result (only from
-  // the already-saved record in Saved Items, which has its own Firestore
-  // doc id). So this can only ever go outline -> filled, never back, to
-  // avoid the heart showing "unsaved" while the backend still has it saved.
-  void _toggleSave() {
-    if (_saved) return;
-    setState(() => _saved = true);
-    widget.onToggleSave?.call();
-  }
 
   @override
   void dispose() {
@@ -205,12 +197,27 @@ class _DetailPageFlightState extends State<DetailPageFlight> {
                 price: widget.price,
                 priceSuffix: widget.priceSuffix,
                 buttonLabel: 'Select Flight',
-                saved: _saved,
-                onToggleSave: widget.onToggleSave == null ? null : _toggleSave,
                 bookingType: 'flight',
                 bookingTitle: '${widget.fromCode} → ${widget.toCode}',
                 bookingSubtitle: '${widget.date} ${widget.depTime}',
+                refId: widget.offerId,
+                offerPassengers: widget.offerPassengers,
+                offerTotalAmount: widget.offerTotalAmount,
+                offerTotalCurrency: widget.offerTotalCurrency,
+                departureAt: widget.departureAt,
                 tripId: widget.tripId,
+                fromCode: widget.fromCode,
+                fromCity: widget.fromCity,
+                toCode: widget.toCode,
+                toCity: widget.toCity,
+                flightDate: widget.date,
+                depTime: widget.depTime,
+                arrTime: widget.arrTime,
+                duration: widget.duration,
+                stops: widget.stops,
+                airline: widget.airline,
+                airlineLogoUrl: widget.airlineLogoUrl,
+                cabinClass: widget.cabinClass,
                 onPaid: widget.tripId.isEmpty
                     ? null
                     : (confirmation) => TripRepository.instance.addFlight(

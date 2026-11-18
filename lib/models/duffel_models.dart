@@ -1,13 +1,5 @@
 library;
 
-/// One entry from Duffel's `/places/suggestions` -- either a `city`
-/// (an IATA metropolitan area covering several airports, e.g. "London"
-/// for LHR/LGW/STN/...) or a single `airport`. Powers the From/To
-/// route search added to the flight Filter sheet (filter_page.dart) --
-/// previously this same endpoint was only ever used internally
-/// (DuffelApiService.resolveDestinationCode/_resolveViaPlacesSuggestions)
-/// to silently guess one best match; this exposes the real suggestion
-/// list to the UI instead, the way Skyscanner's own From/To fields work.
 class DuffelPlace {
   final String id;
   final String type; // 'city' | 'airport'
@@ -24,10 +16,6 @@ class DuffelPlace {
     this.iataCountryCode,
   });
 
-  /// "Heathrow (LHR)" / "London (LON)" -- the code shown is the airport's
-  /// own IATA code for an `airport`, or the metro area's own IATA city
-  /// code for a `city` (covers every airport in it, same as Skyscanner's
-  /// "(Any)" option for a multi-airport city).
   String get displayLabel => '$name ($iataCode)';
 
   /// Secondary line under the name in a suggestions list -- the city an
@@ -45,6 +33,27 @@ class DuffelPlace {
       iataCountryCode: json['iata_country_code'] as String?,
     );
   }
+}
+
+class DuffelOfferPassenger {
+  final String id;
+  final String type; // 'adult' | 'child' | 'infant_without_seat'
+  final int? age;
+  const DuffelOfferPassenger({required this.id, required this.type, this.age});
+
+  factory DuffelOfferPassenger.fromJson(Map<String, dynamic> json) => DuffelOfferPassenger(
+        id: (json['id'] as String?) ?? '',
+        type: (json['type'] as String?) ?? 'adult',
+        age: (json['age'] as num?)?.toInt(),
+      );
+
+  Map<String, dynamic> toCacheMap() => {'id': id, 'type': type, 'age': age};
+
+  factory DuffelOfferPassenger.fromCacheMap(Map<String, dynamic> m) => DuffelOfferPassenger(
+        id: (m['id'] as String?) ?? '',
+        type: (m['type'] as String?) ?? 'adult',
+        age: (m['age'] as num?)?.toInt(),
+      );
 }
 
 class DuffelFlightOffer {
@@ -73,6 +82,7 @@ class DuffelFlightOffer {
   final bool? refundAllowed;
   final String? refundPenaltyAmount;
   final String? refundPenaltyCurrency;
+  final List<DuffelOfferPassenger> passengers;
 
   const DuffelFlightOffer({
     required this.id,
@@ -100,6 +110,7 @@ class DuffelFlightOffer {
     this.refundAllowed,
     this.refundPenaltyAmount,
     this.refundPenaltyCurrency,
+    this.passengers = const [],
   });
 
   Duration get flightDuration => arrivalAt.difference(departureAt);
@@ -186,6 +197,9 @@ class DuffelFlightOffer {
       refundAllowed: refundCond?['allowed'] as bool?,
       refundPenaltyAmount: refundCond?['penalty_amount'] as String?,
       refundPenaltyCurrency: refundCond?['penalty_currency'] as String?,
+      passengers: ((json['passengers'] as List?) ?? const [])
+          .map((p) => DuffelOfferPassenger.fromJson((p as Map).cast<String, dynamic>()))
+          .toList(),
     );
   }
 
@@ -215,6 +229,7 @@ class DuffelFlightOffer {
         'refundAllowed': refundAllowed,
         'refundPenaltyAmount': refundPenaltyAmount,
         'refundPenaltyCurrency': refundPenaltyCurrency,
+        'passengers': passengers.map((p) => p.toCacheMap()).toList(),
       };
 
   factory DuffelFlightOffer.fromCacheMap(Map<String, dynamic> m) => DuffelFlightOffer(
@@ -243,6 +258,9 @@ class DuffelFlightOffer {
         refundAllowed: m['refundAllowed'] as bool?,
         refundPenaltyAmount: m['refundPenaltyAmount'] as String?,
         refundPenaltyCurrency: m['refundPenaltyCurrency'] as String?,
+        passengers: ((m['passengers'] as List?) ?? const [])
+            .map((p) => DuffelOfferPassenger.fromCacheMap((p as Map).cast<String, dynamic>()))
+            .toList(),
       );
 }
 

@@ -51,14 +51,6 @@ class CommunityPost {
 
   final int reportCount;
 
-  // Whether the CURRENT signed-in user is one of the people who reported
-  // this post -- read straight from Firestore's `reporterIds` array (see
-  // CommunityRepository.reportPost/the _fromDoc-equivalent factory below),
-  // not a per-screen session guess. Used by
-  // CommunityController.recommendedPosts to stop recommending a post back
-  // to someone who already flagged it, regardless of which page (the feed
-  // itself, or the post's own detail page) they reported it from, and
-  // regardless of whether they've since closed and reopened the app.
   final bool reportedByMe;
 
   final bool autoFlagged;

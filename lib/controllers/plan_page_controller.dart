@@ -60,13 +60,6 @@ class PlanPageController extends ChangeNotifier {
     });
   }
 
-  /// A live listener per trip for votes AND expenses, held open for the
-  /// whole app session, scales straight with how many trips the account
-  /// has — and most of those trips are dormant (over, untouched for
-  /// weeks). Those never need a live update again, so only a trip that
-  /// isn't [Trip.isInactive] keeps a persistent listener; a dormant one
-  /// gets a single one-off fetch instead, which is refreshed again only if
-  /// it drops out of the trip list and comes back (e.g. rejoining).
   void _syncSubs(List<Trip> trips) {
     final tripIds = trips.map((t) => t.id).toSet();
     for (final trip in trips) {
@@ -171,7 +164,12 @@ class PlanPageController extends ChangeNotifier {
       return PlanGroup(
         title: trip.name,
         members: '${trip.memberIds.length} member${trip.memberIds.length == 1 ? '' : 's'}',
-        timeAgo: trip.createdAt == null ? 'Just now' : formatTimeAgo(trip.createdAt!),
+        // Last change, not creation time -- lastActivityAt is stamped on
+        // every real mutation (plan/expenses/flights/hotels/settings), see
+        // Trip.lastActivityAt in trip_repository.dart.
+        timeAgo: (trip.lastActivityAt ?? trip.createdAt) == null
+            ? 'Just now'
+            : formatTimeAgo((trip.lastActivityAt ?? trip.createdAt)!),
         lastMessage: '${trip.destination} · ${trip.dateRangeLabel}',
         unread: trip.unreadCounts[_uid] ?? 0,
         tags: tags,
@@ -181,10 +179,8 @@ class PlanPageController extends ChangeNotifier {
         lastExpenseAmount: expenses.isEmpty ? 0 : expenses.first.amount,
         tripId: trip.id,
         coverImage: trip.coverImage,
-        pinned: trip.pinChatFor(_uid),
       );
-    }).toList()
-      ..sort((a, b) => (b.pinned ? 1 : 0).compareTo(a.pinned ? 1 : 0));
+    }).toList();
   }
 
   @override

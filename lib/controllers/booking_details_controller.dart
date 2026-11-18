@@ -14,13 +14,6 @@ bool isValidPhoneFormat(String value) {
   return digitCount >= 7 && digitCount <= 15;
 }
 
-// Passport number formats vary a lot by issuing country — some are purely
-// numeric (older German/Russian-style), most mix letters and digits
-// (Malaysia "A12345678", Singapore "K1234567A", China "E12345678", India
-// "A1234567", ...). There's no single universal digits-only rule, so this
-// only checks what IS universal: letters/digits only (no spaces, hyphens,
-// or other punctuation — real passport numbers never have those) and a
-// length in the range every issuing country's format actually falls into.
 final RegExp _passportPattern = RegExp(r'^[A-Za-z0-9]{5,12}$');
 
 bool isValidPassportFormat(String value) => _passportPattern.hasMatch(value.trim());
@@ -35,6 +28,8 @@ class FlightPassengerDetailsController extends ChangeNotifier {
   final int minQuantity;
   final int maxQuantity;
 
+  final DateTime? departureAt;
+
   final List<PassengerDetail> passengers;
   String contactEmail = '';
   String contactPhone = '';
@@ -43,9 +38,16 @@ class FlightPassengerDetailsController extends ChangeNotifier {
     int initialQuantity = 1,
     this.minQuantity = 1,
     this.maxQuantity = 9,
+    this.departureAt,
   }) : passengers = List.generate(initialQuantity.clamp(minQuantity, maxQuantity), (_) => PassengerDetail());
 
   int get quantity => passengers.length;
+
+  DateTime get minPassportExpiry {
+    final now = DateTime.now();
+    final base = (departureAt != null && departureAt!.isAfter(now)) ? departureAt! : now;
+    return DateTime(base.year, base.month + 6, base.day);
+  }
 
   /// Grows/shrinks [passengers] to match a quantity picked up front (a
   /// stepper, same pattern as [HotelGuestDetailsController.setRooms]) —
@@ -85,16 +87,27 @@ class FlightPassengerDetailsController extends ChangeNotifier {
     notifyListeners();
   }
 
+  void setGender(int index, String value) {
+    passengers[index].gender = value;
+    notifyListeners();
+  }
+
   String? validate() {
     for (var i = 0; i < passengers.length; i++) {
       final p = passengers[i];
       final who = passengers.length > 1 ? 'Passenger ${i + 1}' : 'The passenger';
       if (p.name.trim().isEmpty) return "$who's full name is required.";
+      if (p.gender == null || p.gender!.isEmpty) return "$who's gender is required.";
       if (p.dob == null) return "$who's date of birth is required.";
       if (p.nationality == null || p.nationality!.isEmpty) return "$who's nationality is required.";
       if (p.passportNumber.trim().isEmpty) return "$who's passport number is required.";
       if (!isValidPassportFormat(p.passportNumber)) return "$who's passport number doesn't look right — letters/digits only, 5-12 characters.";
       if (p.passportExpiry == null) return "$who's passport expiry date is required.";
+      if (p.passportExpiry!.isBefore(minPassportExpiry)) {
+        return departureAt != null
+            ? "$who's passport must stay valid for at least 6 months after the flight departs."
+            : "$who's passport must stay valid for at least 6 months from today.";
+      }
     }
     if (contactEmail.trim().isEmpty) return 'A contact email is required.';
     if (!isValidEmailFormat(contactEmail)) return 'Please enter a valid contact email address.';
@@ -114,8 +127,6 @@ class HotelGuestDetailsController extends ChangeNotifier {
   String fullName = '';
   String email = '';
   String phone = '';
-  String idNumber = '';
-  String specialRequests = '';
   DateTime? checkIn;
   DateTime? checkOut;
 
@@ -137,8 +148,6 @@ class HotelGuestDetailsController extends ChangeNotifier {
   void setFullName(String value) => fullName = value;
   void setEmail(String value) => email = value;
   void setPhone(String value) => phone = value;
-  void setIdNumber(String value) => idNumber = value;
-  void setSpecialRequests(String value) => specialRequests = value;
 
   void setDates(DateTime start, DateTime end) {
     checkIn = start;
@@ -152,10 +161,6 @@ class HotelGuestDetailsController extends ChangeNotifier {
     if (!isValidEmailFormat(email)) return 'Please enter a valid email address.';
     if (phone.trim().isEmpty) return 'A contact phone number is required.';
     if (!isValidPhoneFormat(phone)) return 'Please enter a valid phone number.';
-    if (idNumber.trim().isEmpty) return 'A passport/ID number is required.';
-    if (!RegExp(r'^[A-Za-z0-9]{5,20}$').hasMatch(idNumber.trim())) {
-      return "That passport/ID number doesn't look right — letters/digits only, 5-20 characters.";
-    }
     if (checkIn == null || checkOut == null) return 'Please select check-in and check-out dates.';
     return null;
   }

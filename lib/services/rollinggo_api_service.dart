@@ -70,18 +70,6 @@ class RollingGoApiService {
     return _filterToExpectedCountry(parsed, resolvedQuery);
   }
 
-  // RollingGo's own "City" place matching is loose — it can return hotels
-  // from the wrong city/country for a query, and the only location signal
-  // it gives back per hotel is a free-text name/address string (no
-  // structured city/country field), so there is nothing more precise to
-  // filter on. This re-filters its result locally: drop a hotel only when
-  // its name/address explicitly names a DIFFERENT country from our own
-  // known-country list than the one being searched — never on absence of
-  // the expected country (plenty of real addresses, e.g. "23rd Floor,
-  // Tower A, Huaqiang Plaza...", never mention the city/country at all).
-  // If every result would get dropped, trust RollingGo's own match instead
-  // of regressing to "No hotels found" over what's probably a false
-  // positive in this filter.
   List<DuffelStayResult> _filterToExpectedCountry(List<DuffelStayResult> results, String resolvedQuery) {
     final expected = _expectedCountryKey(resolvedQuery);
     if (expected == null) return results;

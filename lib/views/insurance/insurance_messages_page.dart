@@ -6,13 +6,6 @@ import '../../services/format_utils.dart';
 import '../../theme.dart';
 import 'insurance_chat_page.dart';
 
-/// Every insurance conversation the signed-in traveller has started, across
-/// every partner -- the traveller-side counterpart of the partner console's
-/// own Messages page (admin_web/partner/messages.html). Reached from the
-/// Profile menu, whose "Insurance Messages" row and whose own bottom-nav
-/// tab both carry a red dot while [InsuranceChatSummary.unreadForTraveller]
-/// is true on any thread here (see MainPage in views/shared/bottom_nav.dart
-/// and ProfilePage's own badge wiring).
 class InsuranceMessagesPage extends StatelessWidget {
   const InsuranceMessagesPage({super.key});
 
@@ -36,10 +29,6 @@ class InsuranceMessagesPage extends StatelessWidget {
               stream: InsuranceChatRepository.instance.watchChatsForTraveller(uid),
               builder: (context, snap) {
                 if (snap.hasError) {
-                  // Surfaced instead of leaving the spinner running forever
-                  // on a stream failure (e.g. a missing Firestore index) --
-                  // see InsuranceChatRepository.watchChatsForTraveller's
-                  // doc comment for the bug this previously caused.
                   return Center(
                     child: Padding(
                       padding: const EdgeInsets.all(32),

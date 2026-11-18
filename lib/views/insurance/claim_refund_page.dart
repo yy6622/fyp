@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../models/insurance_models.dart';
 import '../../repositories/insurance_repository.dart';
 import '../../services/auth_service.dart';
+import '../../services/claim_document_service.dart';
 import '../../services/currency_service.dart';
 import '../../theme.dart';
 import '../shared/nice_dialog.dart';
@@ -29,7 +31,7 @@ Widget _policySummaryCard(InsuranceTransaction tx) {
   );
 }
 
-Widget _categoryPickerField(String label, String? value, {required VoidCallback onTap}) {
+Widget _categoryPickerField(String label, String? value, {required VoidCallback onTap, bool required = true}) {
   return InkWell(
     borderRadius: BorderRadius.circular(10),
     onTap: onTap,
@@ -39,7 +41,14 @@ Widget _categoryPickerField(String label, String? value, {required VoidCallback 
       child: Row(
         children: [
           Expanded(
-            child: Text(value ?? label, style: TextStyle(fontSize: 13.5, color: value == null ? AppColors.textGrey : Colors.black)),
+            child: value != null
+                ? Text(value, style: const TextStyle(fontSize: 13.5, color: Colors.black))
+                : Text.rich(
+                    TextSpan(text: label, children: [
+                      if (required) const TextSpan(text: ' *', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.w700)),
+                    ]),
+                    style: const TextStyle(fontSize: 13.5, color: AppColors.textGrey),
+                  ),
           ),
           const Icon(Icons.keyboard_arrow_down, size: 18, color: AppColors.textGrey),
         ],
@@ -58,6 +67,112 @@ Widget _notBuyerNotice() {
         style: TextStyle(color: AppColors.textGrey),
       ),
     ),
+  );
+}
+
+enum _DocSource { camera, gallery, file }
+
+Future<_DocSource?> _pickDocumentSource(BuildContext context) {
+  return showModalBottomSheet<_DocSource>(
+    context: context,
+    backgroundColor: Colors.white,
+    shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+    builder: (ctx) => SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ListTile(
+            leading: const Icon(Icons.camera_alt_outlined, color: AppColors.primary),
+            title: const Text('Take a Photo'),
+            onTap: () => Navigator.of(ctx).pop(_DocSource.camera),
+          ),
+          ListTile(
+            leading: const Icon(Icons.photo_library_outlined, color: AppColors.primary),
+            title: const Text('Choose from Gallery'),
+            onTap: () => Navigator.of(ctx).pop(_DocSource.gallery),
+          ),
+          ListTile(
+            leading: const Icon(Icons.picture_as_pdf_outlined, color: AppColors.primary),
+            title: const Text('Choose a PDF File'),
+            onTap: () => Navigator.of(ctx).pop(_DocSource.file),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+Widget _documentsSection({
+  required List<String> urls,
+  required bool uploading,
+  required VoidCallback onAdd,
+  required ValueChanged<int> onRemove,
+}) {
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      const Text('Supporting Documents (Optional)',
+          style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: AppColors.textGrey)),
+      const SizedBox(height: 4),
+      const Text('Receipts, medical reports or other proof can help your insurer review this faster. Photos or PDF, up to 5MB each.',
+          style: TextStyle(fontSize: 11.5, color: AppColors.textGrey)),
+      const SizedBox(height: 10),
+      Wrap(
+        spacing: 10,
+        runSpacing: 10,
+        children: [
+          for (var i = 0; i < urls.length; i++)
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  // A PDF download URL can't be decoded as an image --
+                  // Image.network would just show a broken-image icon, so
+                  // give a PDF its own recognizable tile instead.
+                  child: urls[i].toLowerCase().contains('.pdf')
+                      ? Container(
+                          width: 72,
+                          height: 72,
+                          color: AppColors.chipGrey,
+                          alignment: Alignment.center,
+                          child: const Icon(Icons.picture_as_pdf_outlined, size: 28, color: AppColors.textGrey),
+                        )
+                      : Image.network(urls[i], width: 72, height: 72, fit: BoxFit.cover),
+                ),
+                Positioned(
+                  top: -6,
+                  right: -6,
+                  child: GestureDetector(
+                    onTap: () => onRemove(i),
+                    child: Container(
+                      padding: const EdgeInsets.all(2),
+                      decoration: const BoxDecoration(color: Colors.black54, shape: BoxShape.circle),
+                      child: const Icon(Icons.close, size: 14, color: Colors.white),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          InkWell(
+            borderRadius: BorderRadius.circular(10),
+            onTap: uploading ? null : onAdd,
+            child: Container(
+              width: 72,
+              height: 72,
+              decoration: BoxDecoration(
+                color: AppColors.chipGrey,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppColors.divider),
+              ),
+              child: uploading
+                  ? const Center(child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)))
+                  : const Icon(Icons.add_a_photo_outlined, color: AppColors.textGrey),
+            ),
+          ),
+        ],
+      ),
+    ],
   );
 }
 
@@ -113,6 +228,8 @@ class _FileClaimPageState extends State<FileClaimPage> {
   final TextEditingController _amountCtrl = TextEditingController();
   final TextEditingController _descriptionCtrl = TextEditingController();
   bool _submitting = false;
+  List<String> _documents = [];
+  bool _uploadingDoc = false;
 
   @override
   void initState() {
@@ -152,6 +269,40 @@ class _FileClaimPageState extends State<FileClaimPage> {
     if (picked != null && mounted) setState(() => _category = picked);
   }
 
+  Future<void> _addDocument() async {
+    final choice = await _pickDocumentSource(context);
+    if (choice == null || !mounted) return;
+    XFile? imageFile;
+    PickedDocument? document;
+    if (choice == _DocSource.file) {
+      document = await ClaimDocumentService.instance.pickPdf();
+      if (document == null || !mounted) return;
+    } else {
+      imageFile = await ClaimDocumentService.instance.pick(choice == _DocSource.camera ? ImageSource.camera : ImageSource.gallery);
+      if (imageFile == null || !mounted) return;
+    }
+    final uid = AuthService.instance.currentUser?.uid ?? '';
+    setState(() => _uploadingDoc = true);
+    try {
+      final url = await ClaimDocumentService.instance.upload(kind: 'claim', uid: uid, file: imageFile, document: document);
+      if (!mounted) return;
+      setState(() {
+        _documents = [..._documents, url];
+        _uploadingDoc = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _uploadingDoc = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e is ClaimDocumentTooLargeException ? e.toString() : 'Upload failed: $e')),
+      );
+    }
+  }
+
+  void _removeDocument(int index) {
+    setState(() => _documents = [..._documents]..removeAt(index));
+  }
+
   Future<void> _submit() async {
     final tx = _transaction;
     if (tx == null || !_isOwner) return;
@@ -175,6 +326,7 @@ class _FileClaimPageState extends State<FileClaimPage> {
         category: _category!,
         amount: amount,
         description: _descriptionCtrl.text.trim(),
+        documents: _documents,
       );
       if (!mounted) return;
       showNiceInfoDialog(
@@ -233,8 +385,16 @@ class _FileClaimPageState extends State<FileClaimPage> {
                               niceDialogField(
                                   _amountCtrl,
                                   'Claim Amount (${CurrencyService.instance.displayLabel(_transaction!.currencyCode.isEmpty ? 'MYR' : _transaction!.currencyCode)})',
+                                  required: true,
                                   keyboardType: const TextInputType.numberWithOptions(decimal: true)),
-                              niceDialogField(_descriptionCtrl, 'What happened?', maxLines: 4),
+                              niceDialogField(_descriptionCtrl, 'What happened?', maxLines: 4, required: true),
+                              const SizedBox(height: 16),
+                              _documentsSection(
+                                urls: _documents,
+                                uploading: _uploadingDoc,
+                                onAdd: _addDocument,
+                                onRemove: _removeDocument,
+                              ),
                             ],
                           ),
                         ),
@@ -276,6 +436,8 @@ class _RequestRefundPageState extends State<RequestRefundPage> {
   String? _category;
   final TextEditingController _reasonCtrl = TextEditingController();
   bool _submitting = false;
+  List<String> _documents = [];
+  bool _uploadingDoc = false;
 
   @override
   void initState() {
@@ -320,6 +482,40 @@ class _RequestRefundPageState extends State<RequestRefundPage> {
     if (picked != null && mounted) setState(() => _category = picked);
   }
 
+  Future<void> _addDocument() async {
+    final choice = await _pickDocumentSource(context);
+    if (choice == null || !mounted) return;
+    XFile? imageFile;
+    PickedDocument? document;
+    if (choice == _DocSource.file) {
+      document = await ClaimDocumentService.instance.pickPdf();
+      if (document == null || !mounted) return;
+    } else {
+      imageFile = await ClaimDocumentService.instance.pick(choice == _DocSource.camera ? ImageSource.camera : ImageSource.gallery);
+      if (imageFile == null || !mounted) return;
+    }
+    final uid = AuthService.instance.currentUser?.uid ?? '';
+    setState(() => _uploadingDoc = true);
+    try {
+      final url = await ClaimDocumentService.instance.upload(kind: 'refund', uid: uid, file: imageFile, document: document);
+      if (!mounted) return;
+      setState(() {
+        _documents = [..._documents, url];
+        _uploadingDoc = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _uploadingDoc = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e is ClaimDocumentTooLargeException ? e.toString() : 'Upload failed: $e')),
+      );
+    }
+  }
+
+  void _removeDocument(int index) {
+    setState(() => _documents = [..._documents]..removeAt(index));
+  }
+
   Future<void> _submit() async {
     final tx = _transaction;
     if (tx == null || !_eligible || !_isOwner) return;
@@ -333,6 +529,7 @@ class _RequestRefundPageState extends State<RequestRefundPage> {
         transaction: tx,
         category: _category!,
         reason: _reasonCtrl.text.trim(),
+        documents: _documents,
       );
       if (!mounted) return;
       showNiceInfoDialog(
@@ -419,6 +616,13 @@ class _RequestRefundPageState extends State<RequestRefundPage> {
                                   _categoryPickerField('Reason Category', _category, onTap: _pickCategory),
                                   const SizedBox(height: 12),
                                   niceDialogField(_reasonCtrl, 'Additional details (optional)', maxLines: 4),
+                                  const SizedBox(height: 16),
+                                  _documentsSection(
+                                    urls: _documents,
+                                    uploading: _uploadingDoc,
+                                    onAdd: _addDocument,
+                                    onRemove: _removeDocument,
+                                  ),
                                 ],
                               ),
                             ),

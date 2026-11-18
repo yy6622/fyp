@@ -3,6 +3,8 @@ import 'dart:math';
 
 import 'package:http/http.dart' as http;
 
+import '../config/secrets.dart';
+
 
 class OsmPlace {
   final String id;
@@ -114,6 +116,151 @@ class PlacesApiService {
     }
   }
 
+  // The official overpass-api.de instance is a single, free, volunteer-run
+  // server -- well known for frequent slow responses, 504 timeouts and
+  // temporary outages under load, with no uptime guarantee at all. Rather
+  // than depend on that one host, this tries a short list of independently
+  // run Overpass mirrors in order and uses the first one that actually
+  // answers. They all speak the exact same Overpass QL/response format (no
+  // API key needed on any of them), so this is a pure reliability swap --
+  // nothing else in the app needs to change. (host, path) pairs, since not
+  // every mirror uses the same path as the main instance (VK Maps' is
+  // nested under /osm/tools/overpass/). Sourced from the OSM wiki's
+  // current, documented, no-API-key, global-coverage endpoints:
+  // https://wiki.openstreetmap.org/wiki/Overpass_API
+  static const List<(String, String)> _overpassHosts = [
+    ('overpass-api.de', '/api/interpreter'),
+    ('maps.mail.ru', '/osm/tools/overpass/api/interpreter'),
+    ('overpass.private.coffee', '/api/interpreter'),
+  ];
+
+  bool get _geoapifyConfigured => geoapifyApiKey.isNotEmpty && geoapifyApiKey != 'YOUR_GEOAPIFY_API_KEY_HERE';
+
+  /// Maps an app-level nearby category to Geoapify's hierarchical category
+  /// keys (geoapify.com/docs/places) -- comma-separating a few top-level
+  /// groups pulls in every sub-category under them (e.g. "entertainment"
+  /// covers entertainment.museum, entertainment.zoo, etc. without having to
+  /// enumerate each one).
+  static String geoapifyCategoriesFor(String category) {
+    switch (category) {
+      case 'Restaurants':
+        return 'catering.restaurant';
+      case 'Cafes':
+        return 'catering.cafe';
+      case 'Attractions':
+        return 'tourism,entertainment';
+      case 'Shopping':
+        return 'commercial';
+      case 'ATM':
+        return 'service.financial.atm';
+      case 'Pharmacy':
+        return 'healthcare.pharmacy';
+      default:
+        return 'catering.restaurant';
+    }
+  }
+
+  /// Entry point for the "Nearby" page: tries Geoapify -- a stable,
+  /// commercially hosted places API, not a volunteer-run OSM mirror -- when
+  /// a key is configured, falling back to [searchNearby]'s existing
+  /// Overpass-mirror chain if Geoapify isn't configured or its request
+  /// fails for any reason (bad key, network, quota). Geoapify's basic
+  /// Places search doesn't return the rich OSM tags (opening_hours, phone,
+  /// website, wheelchair, fee) that catalog_repository.dart's
+  /// destination-level attraction/restaurant population relies on, so that
+  /// code keeps calling [searchNearby] directly and is unaffected either
+  /// way -- this stable path is only for the user-facing "Nearby" page,
+  /// which just needs a name, location, and a rough category label.
+  Future<List<OsmPlace>> searchNearbyStable({
+    required double lat,
+    required double lon,
+    required String category,
+    int radiusMeters = 4000,
+    int limit = 25,
+  }) async {
+    lastSearchNearbyError = null;
+    if (_geoapifyConfigured) {
+      final viaGeoapify = await _searchNearbyGeoapify(lat: lat, lon: lon, category: category, radiusMeters: radiusMeters, limit: limit);
+      if (viaGeoapify != null) return viaGeoapify;
+      // Geoapify itself failed -- fall through to Overpass rather than
+      // showing the traveller an error when there's still a chance of
+      // getting real results another way.
+    }
+    return searchNearby(lat: lat, lon: lon, filter: overpassFilterFor(category), radiusMeters: radiusMeters, limit: limit);
+  }
+
+  /// Returns null (not an empty list) on any request failure, so
+  /// [searchNearbyStable] can tell "Geoapify answered with zero nearby
+  /// places" (a real, valid empty result -- don't fall back) apart from
+  /// "Geoapify couldn't be reached at all" (fall back to Overpass).
+  Future<List<OsmPlace>?> _searchNearbyGeoapify({
+    required double lat,
+    required double lon,
+    required String category,
+    required int radiusMeters,
+    required int limit,
+  }) async {
+    try {
+      final uri = Uri.https('api.geoapify.com', '/v2/places', {
+        'categories': geoapifyCategoriesFor(category),
+        'filter': 'circle:$lon,$lat,$radiusMeters',
+        'bias': 'proximity:$lon,$lat',
+        'limit': '$limit',
+        'apiKey': geoapifyApiKey,
+      });
+      final res = await http.get(uri).timeout(const Duration(seconds: 12));
+      if (res.statusCode != 200) {
+        lastSearchNearbyError = 'Geoapify returned HTTP ${res.statusCode}';
+        return null;
+      }
+      final data = jsonDecode(res.body) as Map<String, dynamic>;
+      final features = (data['features'] as List?) ?? const [];
+      final out = <OsmPlace>[];
+      for (final raw in features) {
+        final f = raw as Map<String, dynamic>;
+        final props = (f['properties'] as Map?)?.cast<String, dynamic>() ?? const {};
+        final name = (props['name'] as String?)?.trim();
+        if (name == null || name.isEmpty) continue;
+        final placeLat = (props['lat'] as num?)?.toDouble();
+        final placeLon = (props['lon'] as num?)?.toDouble();
+        if (placeLat == null || placeLon == null) continue;
+        final categories = ((props['categories'] as List?) ?? const []).map((c) => '$c').toList();
+
+        String? firstAfter(String prefix) {
+          for (final c in categories) {
+            if (c.startsWith(prefix) && c.length > prefix.length) return c.substring(prefix.length).split('.').first.replaceAll('_', ' ');
+          }
+          return null;
+        }
+
+        final tags = <String, String>{
+          if (((props['housenumber'] as String?) ?? '').isNotEmpty) 'addr:housenumber': props['housenumber'] as String,
+          if (((props['street'] as String?) ?? '').isNotEmpty) 'addr:street': props['street'] as String,
+          if (((props['city'] as String?) ?? '').isNotEmpty) 'addr:city': props['city'] as String,
+          if (((props['postcode'] as String?) ?? '').isNotEmpty) 'addr:postcode': props['postcode'] as String,
+        };
+        // Best-effort equivalents of the OSM tags _osmCategoryLabel reads,
+        // so the "Nearby" page's category subtitle (a cuisine, a shop
+        // type, ...) still shows something meaningful from Geoapify's own
+        // category tree instead of just the generic category name.
+        final cuisine = firstAfter('catering.restaurant.') ?? firstAfter('catering.cafe.');
+        if (cuisine != null) tags['cuisine'] = cuisine;
+        final shop = firstAfter('commercial.');
+        if (shop != null) tags['shop'] = shop;
+        final tourism = firstAfter('tourism.') ?? firstAfter('entertainment.');
+        if (tourism != null) tags['tourism'] = tourism;
+
+        final placeId = (props['place_id'] as String?) ?? '$placeLat,$placeLon';
+        out.add(OsmPlace(id: 'geoapify_$placeId', name: name, lat: placeLat, lon: placeLon, tags: tags));
+      }
+      lastSearchNearbyError = null;
+      return out;
+    } catch (e) {
+      lastSearchNearbyError = 'Geoapify failed: $e';
+      return null;
+    }
+  }
+
   Future<List<OsmPlace>> searchNearby({
     required double lat,
     required double lon,
@@ -127,41 +274,46 @@ class PlacesApiService {
         'way$filter(around:$radiusMeters,$lat,$lon);'
         ');'
         'out center $limit;';
-    try {
-      final res = await http
-          .post(
-            Uri.https('overpass-api.de', '/api/interpreter'),
-            headers: {'User-Agent': _userAgent, 'Content-Type': 'application/x-www-form-urlencoded'},
-            body: {'data': query},
-          )
-          .timeout(const Duration(seconds: 25));
-      if (res.statusCode != 200) {
-        lastSearchNearbyError = 'Overpass returned HTTP ${res.statusCode}';
-        return const [];
-      }
-      final data = jsonDecode(res.body) as Map<String, dynamic>;
-      final elements = (data['elements'] as List?) ?? const [];
-      final out = <OsmPlace>[];
-      for (final raw in elements) {
-        final el = raw as Map<String, dynamic>;
-        final tags = Map<String, String>.from((el['tags'] as Map?)?.map((k, v) => MapEntry('$k', '$v')) ?? const {});
-        final name = tags['name'];
-        if (name == null || name.trim().isEmpty) continue;
-        double? elLat = (el['lat'] as num?)?.toDouble();
-        double? elLon = (el['lon'] as num?)?.toDouble();
-        if (elLat == null || elLon == null) {
-          final center = el['center'] as Map<String, dynamic>?;
-          elLat = (center?['lat'] as num?)?.toDouble();
-          elLon = (center?['lon'] as num?)?.toDouble();
+
+    for (final (host, path) in _overpassHosts) {
+      try {
+        final res = await http
+            .post(
+              Uri.https(host, path),
+              headers: {'User-Agent': _userAgent, 'Content-Type': 'application/x-www-form-urlencoded'},
+              body: {'data': query},
+            )
+            .timeout(const Duration(seconds: 20));
+        if (res.statusCode != 200) {
+          lastSearchNearbyError = 'Overpass ($host) returned HTTP ${res.statusCode}';
+          continue; // try the next mirror instead of giving up
         }
-        if (elLat == null || elLon == null) continue;
-        out.add(OsmPlace(id: '${el['type']}${el['id']}', name: name.trim(), lat: elLat, lon: elLon, tags: tags));
+        final data = jsonDecode(res.body) as Map<String, dynamic>;
+        final elements = (data['elements'] as List?) ?? const [];
+        final out = <OsmPlace>[];
+        for (final raw in elements) {
+          final el = raw as Map<String, dynamic>;
+          final tags = Map<String, String>.from((el['tags'] as Map?)?.map((k, v) => MapEntry('$k', '$v')) ?? const {});
+          final name = tags['name'];
+          if (name == null || name.trim().isEmpty) continue;
+          double? elLat = (el['lat'] as num?)?.toDouble();
+          double? elLon = (el['lon'] as num?)?.toDouble();
+          if (elLat == null || elLon == null) {
+            final center = el['center'] as Map<String, dynamic>?;
+            elLat = (center?['lat'] as num?)?.toDouble();
+            elLon = (center?['lon'] as num?)?.toDouble();
+          }
+          if (elLat == null || elLon == null) continue;
+          out.add(OsmPlace(id: '${el['type']}${el['id']}', name: name.trim(), lat: elLat, lon: elLon, tags: tags));
+        }
+        lastSearchNearbyError = null;
+        return out;
+      } catch (e) {
+        lastSearchNearbyError = 'Overpass ($host) failed: $e';
+        continue; // network error / timeout on this mirror -- try the next
       }
-      return out;
-    } catch (e) {
-      lastSearchNearbyError = e;
-      return const [];
     }
+    return const [];
   }
 
   Future<String?> resolveImage(Map<String, String> tags) async {

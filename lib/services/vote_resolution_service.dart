@@ -18,16 +18,6 @@ class VoteResolutionOutcome {
   const VoteResolutionOutcome({required this.anyResolved, required this.conflictCount});
 }
 
-/// Reads back the result of a "Decide Now -> Vote" poll and applies it to
-/// [discussionDecisions] so AI Summarise (and, once a day & time is set via
-/// Agree, Optimise) reflect the group's actual decision instead of leaving
-/// it stuck at "voting" forever. Runs every time the discussion summary is
-/// refreshed, not just while the Decide Now sheet happens to be open, so a
-/// poll that nobody re-opens the sheet for still gets resolved.
-///
-/// A poll that ends in a tie, or whose winner disagrees with how the chat
-/// itself leaned, is deliberately left alone -- that is a conflict only a
-/// traveller should resolve, by tapping Agree/Skip/Vote again in Decide Now.
 class VoteResolutionService {
   VoteResolutionService._();
   static final VoteResolutionService instance = VoteResolutionService._();
@@ -79,10 +69,6 @@ class VoteResolutionService {
         continue;
       }
       if (pollAgrees && _planCategories.contains(it.category)) {
-        // Still needs a day & time from a person before it's really
-        // "confirmed" -- leave it at 'voting' so Decide Now keeps showing
-        // the "tap Agree to give it a day & time" nudge. Optimise will see
-        // it once that activity actually exists.
         continue;
       }
       await TripRepository.instance.recordDiscussionDecision(

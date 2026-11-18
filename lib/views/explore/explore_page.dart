@@ -4,7 +4,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 
 import '../../controllers/explore_controller.dart';
 import '../../controllers/filter_controller.dart';
-import '../../data/malaysia_airports.dart';
+import '../../data/airports.dart';
 import '../../models/duffel_models.dart';
 import '../../models/explore_models.dart';
 import '../../models/filter_models.dart';
@@ -78,19 +78,6 @@ class _ExplorePageState extends State<ExplorePage> {
         backgroundColor: AppColors.scaffoldBackground,
         floatingActionButton: _buildAiFab(),
         body: SafeArea(
-          // SizedBox.expand forces this Stack to always be the full
-          // screen height. Without it, a bare Stack sizes itself to its
-          // tallest non-positioned child -- normally that's close enough
-          // to full height to not notice, but the Flight tab's content
-          // can be much shorter right after switching trips (results
-          // cleared, still loading the new search), so the Stack itself
-          // shrank to that short height and the trip-switcher overlay
-          // below -- a Positioned.fill, which only fills the STACK's own
-          // bounds, not the real screen -- got cut off partway down with
-          // plain scaffold background showing underneath instead of the
-          // dimmed backdrop. Hotel/Attraction/Restaurant tabs always had
-          // enough content to fill the screen anyway, so this never
-          // showed up there.
           child: SizedBox.expand(
             child: Stack(
               children: [
@@ -191,7 +178,7 @@ class _ExplorePageState extends State<ExplorePage> {
         controller: filterController,
         availableAirlines: availableAirlines,
         currentOriginCode: isFlightTab ? controller.homeAirportCode : '',
-        currentOriginLabel: isFlightTab ? malaysiaAirportLabel(controller.homeAirportCode) : '',
+        currentOriginLabel: isFlightTab ? airportLabel(controller.homeAirportCode) : '',
         currentDestinationQuery: isFlightTab ? (controller.lastFlightDestinationQuery ?? '') : '',
         currentDestinationLabel: isFlightTab ? (controller.lastFlightDestinationLabel ?? '') : '',
         currentAdults: controller.flightAdults,
@@ -212,35 +199,6 @@ class _ExplorePageState extends State<ExplorePage> {
     );
   }
 
-
-  List<int> _numbersIn(String text) => RegExp(r'\d+').allMatches(text).map((m) => int.parse(m.group(0)!)).toList();
-
-  bool _priceTextMatchesBucket(String priceText, String bucket) {
-    final lower = priceText.toLowerCase();
-    if (bucket == 'Free') return lower.contains('free');
-    if (lower.contains('free')) return false;
-    final numbers = _numbersIn(priceText);
-    if (numbers.isEmpty) return false;
-    final lo = numbers.first;
-    final hi = numbers.length > 1 ? numbers.last : numbers.first;
-    switch (bucket) {
-      case 'RM0 - 20':
-      case 'RM0 - 50':
-        return lo <= (bucket == 'RM0 - 20' ? 20 : 50);
-      case 'RM20 - 50':
-        return hi >= 20 && lo <= 50;
-      case 'RM50 - 100':
-        return hi >= 50 && lo <= 100;
-      case 'RM50 - 150':
-        return hi >= 50 && lo <= 150;
-      case 'RM100+':
-        return hi >= 100;
-      case 'RM150+':
-        return hi >= 150;
-      default:
-        return true;
-    }
-  }
 
   List<DuffelFlightOffer> get _visibleFlights {
     final f = filterController;
@@ -280,31 +238,12 @@ class _ExplorePageState extends State<ExplorePage> {
         final star = hotel.rating?.round();
         if (star == null || !f.starRatings.contains('$star★')) return false;
       }
-      // "Guest Rating" used to be a second filter here, but with no
-      // independent review-score data for most results it just duplicated
-      // Star Rating under a different name and label set (same underlying
-      // field, two controls) -- removed per explicit request rather than
-      // kept as a confusing near-duplicate.
       return true;
     }).toList();
-    // withinBudget is always true here — every survivor above already
-    // passed the real price/star/guest-rating checks, so there's nothing
-    // left to gate on. HotelRecommendation still re-sorts them by amenity
-    // preference + rating + that same budget pass, same as attractions.
     final ctx = HotelRecommendationContext(withinBudget: (_) => true, affinity: controller.hotelAmenityAffinity);
     return HotelRecommendation.rank(filtered, ctx);
   }
 
-  // The "Category" filter's 6 chip labels are a simplified, user-facing
-  // bucketing; the real stored category on each attraction is whatever
-  // admin_web/js/places-import.js's Geoapify import (or the live in-app OSM
-  // refresh in catalog_repository.dart) actually assigned — Museum, Art &
-  // Culture, Adventure, Nature, Historic Site, Shopping, Landmark, Attraction
-  // (Geoapify; the ~15k-doc majority of the catalogue), or Museum, Viewpoint,
-  // Gallery, Zoo, Theme Park, Artwork, Attraction (OSM tourism tag, a smaller
-  // minority). None of those is literally "Cultural", so a straight label
-  // match always returned zero results for that chip — this expands each
-  // chip into the real values it should cover instead.
   static const Map<String, List<String>> _attractionCategoryBucket = {
     'Museum': ['Museum'],
     'Nature': ['Nature', 'Viewpoint'],
@@ -323,7 +262,6 @@ class _ExplorePageState extends State<ExplorePage> {
       return wanted.any(tags.contains);
     }).toList();
     final ctx = RecommendationContext(
-      withinBudget: (a) => f.attractionPrice == 'Any' || _priceTextMatchesBucket(a.price, f.attractionPrice),
       affinity: controller.attractionAffinityForRanking,
       requireOpenNow: f.openNow,
       requireAccessible: f.accessibleOnly,
@@ -338,7 +276,6 @@ class _ExplorePageState extends State<ExplorePage> {
       return true;
     }).toList();
     final ctx = RestaurantRecommendationContext(
-      withinBudget: (r) => f.restaurantPrice == 'Any' || _priceTextMatchesBucket(r.priceRange, f.restaurantPrice),
       affinity: controller.restaurantAffinity,
     );
     return RestaurantRecommendation.rank(cuisineFiltered, ctx);
@@ -585,11 +522,6 @@ class _ExplorePageState extends State<ExplorePage> {
     );
   }
 
-  // ---------------- Category chips ----------------
-  /// During a manual search, only categories that actually matched (or are
-  /// still loading) are offered as tabs — a destination search for, say, an
-  /// attraction shouldn't still show a "Flights"/"Hotels" tab with unrelated
-  /// leftover results. Outside of a search, every category is shown as usual.
   List<ExploreCategory> get _visibleCategories {
     if (!controller.isManualSearch) return ExploreCategory.values;
     final matched = <ExploreCategory>[
@@ -603,12 +535,6 @@ class _ExplorePageState extends State<ExplorePage> {
     return matched.isEmpty ? ExploreCategory.values : matched;
   }
 
-  /// The category actually driving the chip row and the body. During a
-  /// manual search this never settles on "All" — even with several
-  /// matching categories, the body always shows exactly one of them (the
-  /// previously-selected one if it's still among the matches, otherwise
-  /// the first match), never the "All" view's mixed sections. Outside a
-  /// search, the normal selected category (including "All") is used as-is.
   ExploreCategory get _effectiveCategory {
     final sel = controller.selectedCategory;
     if (!controller.isManualSearch) return sel;
@@ -719,6 +645,11 @@ class _ExplorePageState extends State<ExplorePage> {
           const SizedBox(height: 22),
         ],
         _buildNearbyPreview(),
+        // Clears the AI-assistant FAB (bottom-right, see _buildAiFab) so it
+        // doesn't sit on top of "View On Map" -- the ListView's own 24px
+        // bottom padding wasn't enough once the FAB's own size/margin is
+        // accounted for.
+        const SizedBox(height: 50),
       ],
     );
   }
@@ -886,7 +817,6 @@ class _ExplorePageState extends State<ExplorePage> {
   }
 
   Widget _buildFlightCompactCard(DuffelFlightOffer flight) {
-    final saved = controller.savedFlightIds.containsKey(flight.id);
     return GestureDetector(
       onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => _flightDetailFor(flight))),
       child: Container(
@@ -910,10 +840,6 @@ class _ExplorePageState extends State<ExplorePage> {
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600, color: AppColors.navy)),
                 ),
-                GestureDetector(
-                  onTap: () => controller.toggleFlightSaved(flight),
-                  child: Icon(saved ? Icons.favorite : Icons.favorite_border, size: 16, color: saved ? Colors.redAccent : AppColors.textGrey),
-                ),
               ],
             ),
             const SizedBox(height: 10),
@@ -936,8 +862,10 @@ class _ExplorePageState extends State<ExplorePage> {
   }
 
   DetailPageFlight _flightDetailFor(DuffelFlightOffer flight) => DetailPageFlight(
-        saved: controller.savedFlightIds.containsKey(flight.id),
-        onToggleSave: () => controller.toggleFlightSaved(flight),
+        offerId: flight.id,
+        offerPassengers: flight.passengers,
+        offerTotalAmount: flight.totalAmount,
+        offerTotalCurrency: flight.totalCurrency,
         airline: flight.airlineName,
         fromCode: flight.originCode,
         fromCity: flight.originCityName,
@@ -1013,7 +941,6 @@ class _ExplorePageState extends State<ExplorePage> {
   }
 
   Widget _buildFlightRowCard(DuffelFlightOffer flight) {
-    final saved = controller.savedFlightIds.containsKey(flight.id);
     return GestureDetector(
       onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => _flightDetailFor(flight))),
       child: Container(
@@ -1067,11 +994,6 @@ class _ExplorePageState extends State<ExplorePage> {
                     style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.primary)),
               ],
             ),
-            const SizedBox(width: 8),
-            GestureDetector(
-              onTap: () => controller.toggleFlightSaved(flight),
-              child: Icon(saved ? Icons.favorite : Icons.favorite_border, size: 18, color: saved ? Colors.redAccent : AppColors.textGrey),
-            ),
           ],
         ),
       ),
@@ -1094,8 +1016,6 @@ class _ExplorePageState extends State<ExplorePage> {
   }
 
   DetailPageHotel _hotelDetailFor(DuffelStayResult hotel) => DetailPageHotel(
-        saved: controller.savedStayIds.containsKey(hotel.searchResultId),
-        onToggleSave: () => controller.toggleHotelSaved(hotel),
         hotelId: hotel.accommodationId.isNotEmpty ? hotel.accommodationId : hotel.searchResultId,
         name: hotel.name,
         location: hotel.address,
@@ -1113,7 +1033,6 @@ class _ExplorePageState extends State<ExplorePage> {
       );
 
   Widget _buildHotelCompactCard(DuffelStayResult hotel) {
-    final saved = controller.savedStayIds.containsKey(hotel.searchResultId);
     return GestureDetector(
       onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => _hotelDetailFor(hotel))),
       child: Container(
@@ -1131,18 +1050,6 @@ class _ExplorePageState extends State<ExplorePage> {
                 ClipRRect(
                   borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
                   child: _placeCardImage(hotel.photoUrl ?? '', height: 95, width: double.infinity, icon: Icons.hotel_outlined),
-                ),
-                Positioned(
-                  top: 8,
-                  right: 8,
-                  child: GestureDetector(
-                    onTap: () => controller.toggleHotelSaved(hotel),
-                    child: Container(
-                      padding: const EdgeInsets.all(5),
-                      decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-                      child: Icon(saved ? Icons.favorite : Icons.favorite_border, size: 12, color: saved ? Colors.redAccent : AppColors.textGrey),
-                    ),
-                  ),
                 ),
               ],
             ),
@@ -1201,7 +1108,6 @@ class _ExplorePageState extends State<ExplorePage> {
   }
 
   Widget _buildHotelRowCard(DuffelStayResult hotel) {
-    final saved = controller.savedStayIds.containsKey(hotel.searchResultId);
     return GestureDetector(
       onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => _hotelDetailFor(hotel))),
       child: Container(
@@ -1248,10 +1154,6 @@ class _ExplorePageState extends State<ExplorePage> {
                 ],
               ),
             ),
-            GestureDetector(
-              onTap: () => controller.toggleHotelSaved(hotel),
-              child: Icon(saved ? Icons.favorite : Icons.favorite_border, size: 18, color: saved ? Colors.redAccent : AppColors.textGrey),
-            ),
           ],
         ),
       ),
@@ -1293,15 +1195,6 @@ class _ExplorePageState extends State<ExplorePage> {
     );
   }
 
-  // ================= ATTRACTIONS =================
-  // Card height: 95 (image) + 20 (padding) + ~16 (name) + 6 (gap) + ~18
-  // (price) ≈ 155, +~7 breathing room. Was 198 (sized for when this card
-  // also had a rating row, before rating got removed for attractions/
-  // restaurants since it was always the fake "New" placeholder) — left
-  // un-shrunk back then, which is why a big empty strip used to sit under
-  // the price on every card. Keep this in sync with
-  // _buildAttractionCompactCard's actual content height if that card's
-  // layout changes again.
   Widget _buildAttractionHorizontalList() {
     if (controller.loadingPlaces && _visibleAttractions.isEmpty) {
       return const SizedBox(height: 162, child: Center(child: CircularProgressIndicator(color: AppColors.primary)));

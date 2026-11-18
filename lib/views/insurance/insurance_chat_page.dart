@@ -7,7 +7,6 @@ import '../../repositories/insurance_chat_repository.dart';
 import '../../repositories/insurance_repository.dart';
 import '../../repositories/user_repository.dart';
 import '../../services/auth_service.dart';
-import '../../services/currency_service.dart';
 import '../../theme.dart';
 import 'insurance_plan_detail_page.dart';
 
@@ -27,11 +26,6 @@ String _formatChatTime(DateTime? d) {
   return '${d.day} ${_chatMonthNames[d.month - 1]}, $time';
 }
 
-/// Direct-message thread between the signed-in traveller and one
-/// insurance partner. Reachable both before a purchase (from a plan's
-/// detail page, to ask questions) and after (from the History Insurance
-/// detail page, to discuss the policy) — [planName] is only set in the
-/// former case, for context on the first message.
 class InsuranceChatPage extends StatefulWidget {
   final String partnerId;
   final String providerName;
@@ -207,11 +201,6 @@ class _InsuranceChatPageState extends State<InsuranceChatPage> {
     );
   }
 
-  /// Renders the attached plan as a tappable card — fetched live via
-  /// [_resolvePlan] (cached per planId) rather than any snapshot stored on
-  /// the message, so it always reflects the plan's current price/coverage.
-  /// Shows "no longer available" if the partner has since deactivated the
-  /// plan or been unapproved.
   Widget _planCard(String planId, bool isMe) {
     return FutureBuilder<InsurancePlan?>(
       future: _resolvePlan(planId),
@@ -255,7 +244,7 @@ class _InsuranceChatPageState extends State<InsuranceChatPage> {
                   ],
                 ),
                 const SizedBox(height: 4),
-                Text(plan.displayPrice(CurrencyService.instance.lastKnownUserCurrency), style: TextStyle(fontSize: 12, color: isMe ? Colors.white.withOpacity(0.85) : AppColors.textGrey)),
+                Text(plan.displayPrice, style: TextStyle(fontSize: 12, color: isMe ? Colors.white.withOpacity(0.85) : AppColors.textGrey)),
                 const SizedBox(height: 8),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.end,

@@ -8,7 +8,7 @@ import '../services/auth_service.dart';
 import 'saved_items_controller.dart';
 
 class PickedSavedItem {
-  /// 'flight' | 'hotel' | 'attraction' | 'restaurant'.
+  /// 'attraction' | 'restaurant'.
   final String kind;
   final String id;
   final String label;
@@ -88,19 +88,21 @@ class VoteTabController extends ChangeNotifier {
 
   bool hasVotedAny(TripVote vote) => vote.options.any((o) => o.votedBy.contains(_uid));
 
+  // A single-choice poll used to block any tap once you'd voted for
+  // ANY option. Now casting a vote for a different option switches your
+  // pick (TripRepository.castVote clears the old one atomically), so the
+  // only thing that blocks a tap here is the poll being closed or the
+  // option already being your current pick (that goes through
+  // retractVote instead -- see canRetract in vote_tab.dart).
   bool canVote(TripVote vote, VoteOption option) {
     if (vote.isClosed) return false;
-    if (vote.allowMultipleChoice) return !votedByMe(option);
-    return !hasVotedAny(vote);
+    return !votedByMe(option);
   }
 
-  CatalogHotel? hotelFor(VoteOption option) => _firstWhereOrNull(_saved.hotels, (h) => _sameName(h.name, option.label));
   CatalogAttraction? attractionFor(VoteOption option) =>
       _firstWhereOrNull(_saved.attractions, (a) => _sameName(a.name, option.label));
   CatalogRestaurant? restaurantFor(VoteOption option) =>
       _firstWhereOrNull(_saved.restaurants, (r) => _sameName(r.name, option.label));
-  CatalogFlight? flightFor(VoteOption option) =>
-      _firstWhereOrNull(_saved.flights, (f) => _sameName('${f.from} → ${f.to}', option.label));
 
   bool _sameName(String a, String b) => a.trim().toLowerCase() == b.trim().toLowerCase();
 
@@ -119,6 +121,19 @@ class VoteTabController extends ChangeNotifier {
       return e.message;
     } catch (_) {
       return "Couldn't cast your vote. Please try again.";
+    }
+  }
+
+  /// Un-tick an option -- clears your vote for it, in either a
+  /// single-choice or a multiple-choice poll.
+  Future<String?> retractVote(TripVote vote, String optionId) async {
+    try {
+      await TripRepository.instance.retractVote(tripId, vote, optionId, _uid);
+      return null;
+    } on StateError catch (e) {
+      return e.message;
+    } catch (_) {
+      return "Couldn't update your vote. Please try again.";
     }
   }
 

@@ -1,255 +1,228 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Insurance Plans — Voya Insurance Partner</title>
-<link rel="stylesheet" href="../css/tokens.css?v=20261006b" />
-<link rel="stylesheet" href="../css/base.css?v=20261006b" />
-<link rel="stylesheet" href="../css/layout.css?v=20261111a" />
-<link rel="stylesheet" href="../css/components.css?v=20261106g" />
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Insurance Plans — Voya Insurance Partner</title>
+    <link rel="stylesheet" href="../css/tokens.css?v=20261006b" />
+    <link rel="stylesheet" href="../css/base.css?v=20261006b" />
+    <link rel="stylesheet" href="../css/layout.css?v=20261111a" />
+    <link rel="stylesheet" href="../css/components.css?v=20261106g" />
 </head>
 <body>
 <div class="shell">
-  <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
-  <aside class="sidebar" id="sidebar">
-    <img class="sidebar-brand" src="../img/voya-logo-white.png" alt="Voya" />
-    <div class="sidebar-user">
-      <div class="name" id="sbUserName">Loading…</div>
-      <div class="role" id="sbUserRole">Partner workspace</div>
-    </div>
-    <nav class="nav" id="sidebarNav"></nav>
-    <button class="sidebar-logout" id="logoutBtn"><span data-icon="log-out"></span>Log out</button>
-  </aside>
+    <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+    <aside class="sidebar" id="sidebar">
+        <img class="sidebar-brand" src="../img/voya-logo-white.png" alt="Voya" />
+        <div class="sidebar-user">
+            <div class="name" id="sbUserName">Loading…</div>
+            <div class="role" id="sbUserRole">Partner workspace</div>
+        </div>
+        <nav class="nav" id="sidebarNav"></nav>
+        <button class="sidebar-logout" id="logoutBtn"><span data-icon="log-out"></span>Log out</button>
+    </aside>
 
-  <main class="content">
-    <div class="topbar">
-      <div>
-        <button class="menu-toggle" id="menuToggle"><span data-icon="menu"></span></button>
-        <h1 class="h1">Insurance Plans</h1>
-        <p class="subtitle">Create and manage coverage for every journey</p>
-      </div>
-      <a class="btn btn-primary" id="addBtn" href="plan-form.html"><span data-icon="plus"></span>Add plan</a>
-    </div>
+    <main class="content">
+        <div class="topbar">
+            <div>
+                <button class="menu-toggle" id="menuToggle"><span data-icon="menu"></span></button>
+                <h1 class="h1">Insurance Plans</h1>
+                <p class="subtitle">Create and manage coverage for every journey</p>
+            </div>
+            <a class="btn btn-primary" id="addBtn" href="plan-form.html"><span data-icon="plus"></span>Add plan</a>
+        </div>
 
-    <div class="dev-tool-bar" id="approvalBar" style="display:none;">
-      <span>Your organization is pending approval — you can't create or edit plans until an admin approves your account.</span>
-    </div>
+        <div class="dev-tool-bar" id="approvalBar" style="display:none;">
+            <span>Your organization is pending approval — you can't create or edit plans until an admin approves your account.</span>
+        </div>
 
-    <div class="stat-grid" id="statGrid"><div class="skeleton" style="height:90px;grid-column:1/-1;"></div></div>
+        <div class="stat-grid" id="statGrid"><div class="skeleton" style="height:90px;grid-column:1/-1;"></div></div>
 
-    <div class="filter-bar">
-      <div class="search-input-wrap"><span data-icon="search"></span><input class="input" id="searchInput" placeholder="Search plan name or partner…" /></div>
-      <select class="select" id="statusFilter">
-        <option value="">All status</option>
-        <option value="draft">Draft</option>
-        <option value="active">Active</option>
-        <option value="inactive">Inactive</option>
-        <option value="suspended">Suspended</option>
-      </select>
-      <select class="select" id="tripTypeFilter">
-        <option value="">All trip types</option>
-        <option value="Basic">Basic</option>
-        <option value="Annual">Annual</option>
-      </select>
-      <div class="inline-flex" style="gap:6px;">
-        <input type="number" class="input" id="premiumMin" placeholder="Min premium" style="width:120px;" />
-        <span class="muted small">to</span>
-        <input type="number" class="input" id="premiumMax" placeholder="Max premium" style="width:120px;" />
-      </div>
-      <select class="select" id="sortFilter">
-        <option value="">No sort</option>
-        <option value="premium_desc">Premium: high to low</option>
-        <option value="premium_asc">Premium: low to high</option>
-      </select>
-    </div>
+        <div class="filter-bar">
+            <div class="search-input-wrap"><span data-icon="search"></span><input class="input" id="searchInput" placeholder="Search plan name or partner…" /></div>
+            <select class="select" id="statusFilter">
+                <option value="">All status</option>
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+                <option value="suspended">Suspended</option>
+            </select>
+            <select class="select" id="tripTypeFilter">
+                <option value="">All trip types</option>
+                <option value="Basic">Basic</option>
+                <option value="Annual">Annual</option>
+            </select>
+            <div class="inline-flex" style="gap:6px;">
+                <input type="number" class="input" id="premiumMin" placeholder="Min premium" style="width:120px;" />
+                <span class="muted small">to</span>
+                <input type="number" class="input" id="premiumMax" placeholder="Max premium" style="width:120px;" />
+            </div>
+            <select class="select" id="sortFilter">
+                <option value="">No sort</option>
+                <option value="premium_desc">Premium: high to low</option>
+                <option value="premium_asc">Premium: low to high</option>
+            </select>
+        </div>
 
-    <div class="table-wrap scroll-x">
-      <table class="data-table">
-        <thead><tr><th>Plan name</th><th>Trip type</th><th>Coverage</th><th>Premium</th><th>Status</th><th></th></tr></thead>
-        <tbody id="tableBody"><tr><td colspan="6"><div class="skeleton" style="height:40px;"></div></td></tr></tbody>
-      </table>
-      <div class="empty-state" id="emptyState" style="display:none;">
-        <span data-icon="briefcase" class="icon-lg"></span>
-        <div class="h3">No plans yet</div>
-        <p class="small">Add your first plan to start selling coverage.</p>
-      </div>
-    </div>
-    <div class="table-foot">
-      <p class="small muted" id="resultsLabel"></p>
-      <div class="pagination" id="pagination"></div>
-    </div>
-  </main>
+        <div class="table-wrap scroll-x">
+            <table class="data-table">
+                <thead><tr><th>Plan name</th><th>Trip type</th><th>Coverage</th><th>Premium</th><th>Status</th><th></th></tr></thead>
+                <tbody id="tableBody"><tr><td colspan="6"><div class="skeleton" style="height:40px;"></div></td></tr></tbody>
+            </table>
+            <div class="empty-state" id="emptyState" style="display:none;">
+                <span data-icon="briefcase" class="icon-lg"></span>
+                <div class="h3" id="emptyTitle">No plans yet</div>
+                <p class="small" id="emptyBody">Add your first plan to start selling coverage.</p>
+            </div>
+        </div>
+        <div class="table-foot">
+            <p class="small muted" id="resultsLabel"></p>
+            <div class="pagination" id="pagination"></div>
+        </div>
+    </main>
 </div>
 
 <script type="module">
-import { requireRole } from "../js/auth-guard.js?v=20261106b";
-import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261114a";
-import { mountIcons } from "../js/icons.js?v=20261106c";
-import { listPlans, deletePlan } from "../js/data.js?v=20261114c";
-import { moneyExact, number, statusBadge, escapeHtml, paginate, renderPager, toast, confirmDialog, detailDialog, statCard, plainCard, trendDelta, countBefore, monthBounds } from "../js/ui.js?v=20261113a";
+    import { requireRole } from "../js/auth-guard.js?v=20261115a";
+    import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261114a";
+    import { mountIcons } from "../js/icons.js?v=20261106c";
+    import { listPlans } from "../js/data.js?v=20261114c";
+    import { moneyExact, number, statusBadge, escapeHtml, paginate, renderPager, detailDialog, statCard, plainCard, trendDelta, countBefore, monthBounds } from "../js/ui.js?v=20261115a";
 
-mountSidebarNav({ role: "partner", active: "plans" });
-const session = await requireRole("partner", "login.html");
-let items = [], filtered = [], page = 1;
-const PAGE_SIZE = 8;
+    mountSidebarNav({ role: "partner", active: "plans" });
+    const session = await requireRole("partner", "login.html");
+    let items = [], filtered = [], page = 1;
+    const PAGE_SIZE = 8;
 
-// Only an approved partner may create/edit/delete a plan — firestore.rules
-// enforces this for real (insurance_plans create/update/delete now check
-// the partner's own status), this just keeps the UI from offering an
-// action that would fail with a permission error.
-const isApproved = session?.profile.status === "approved";
+    const isApproved = session?.profile.status === "approved";
 
-if (session) {
-  setSidebarUser({ displayName: session.profile.companyName || "Partner", roleLabel: `${session.profile.companyName || "Insurance"} · Insurance Partner` });
-  if (!isApproved) {
-    document.getElementById("approvalBar").style.display = "flex";
-    document.getElementById("addBtn").style.display = "none";
-  }
-  await load();
-}
+    if (session) {
+      setSidebarUser({ displayName: session.profile.companyName || "Partner", roleLabel: `${session.profile.companyName || "Insurance"} · Insurance Partner` });
+      if (!isApproved) {
+        document.getElementById("approvalBar").style.display = "flex";
+        document.getElementById("addBtn").style.display = "none";
+      }
+      await load();
+    }
 
-async function load() {
-  items = await listPlans(session.uid);
-  const active = items.filter((p) => p.status === "active" || p.status === "published");
-  const inactive = items.filter((p) => p.status === "inactive");
-  const suspended = items.filter((p) => p.status === "suspended");
-  const { start: thisMonthStart } = monthBounds(0);
-  const activeDelta = trendDelta(active.length, countBefore(active, "createdAt", thisMonthStart));
-  // "Policies sold" used to live here too, but it's a sales number, not a
-  // plan-catalogue number — it already has a real home (and a matching
-  // real trend) on the Transactions page, so showing it a second time
-  // here was just duplication (Nov 2026).
-  document.getElementById("statGrid").innerHTML = [
-    statCard("Active plans", number(active.length), "shield-check", activeDelta),
-    plainCard("Inactive", number(inactive.length), "eye"),
-    plainCard("Suspended", number(suspended.length), "x-circle"),
-  ].join("");
-  applyFilters();
-  mountIcons(document);
-}
+    async function load() {
+      items = await listPlans(session.uid);
+      const active = items.filter((p) => p.status === "active" || p.status === "published");
+      const inactive = items.filter((p) => p.status === "inactive");
+      const suspended = items.filter((p) => p.status === "suspended");
+      const { start: thisMonthStart } = monthBounds(0);
+      const activeDelta = trendDelta(active.length, countBefore(active, "createdAt", thisMonthStart));
+      document.getElementById("statGrid").innerHTML = [
+        statCard("Active plans", number(active.length), "shield-check", activeDelta),
+        plainCard("Inactive", number(inactive.length), "eye"),
+        plainCard("Suspended", number(suspended.length), "x-circle"),
+      ].join("");
+      applyFilters();
+      mountIcons(document);
+    }
 
-function applyFilters() {
-  const q = document.getElementById("searchInput").value.trim().toLowerCase();
-  const status = document.getElementById("statusFilter").value;
-  const tripType = document.getElementById("tripTypeFilter").value;
-  const premiumMin = document.getElementById("premiumMin").value !== "" ? Number(document.getElementById("premiumMin").value) : null;
-  const premiumMax = document.getElementById("premiumMax").value !== "" ? Number(document.getElementById("premiumMax").value) : null;
-  const sort = document.getElementById("sortFilter").value;
-  filtered = items.filter((p) => {
-    const matchesQ = !q || (p.name || "").toLowerCase().includes(q);
-    const matchesStatus = !status || p.status === status;
-    const matchesTripType = !tripType || p.tripType === tripType;
-    const premium = Number(p.premium) || 0;
-    const matchesPremiumMin = premiumMin === null || premium >= premiumMin;
-    const matchesPremiumMax = premiumMax === null || premium <= premiumMax;
-    return matchesQ && matchesStatus && matchesTripType && matchesPremiumMin && matchesPremiumMax;
-  });
-  if (sort === "premium_desc") filtered.sort((a, b) => (Number(b.premium) || 0) - (Number(a.premium) || 0));
-  else if (sort === "premium_asc") filtered.sort((a, b) => (Number(a.premium) || 0) - (Number(b.premium) || 0));
-  page = 1;
-  renderTable();
-}
+    function applyFilters() {
+      const q = document.getElementById("searchInput").value.trim().toLowerCase();
+      const status = document.getElementById("statusFilter").value;
+      const tripType = document.getElementById("tripTypeFilter").value;
+      const premiumMin = document.getElementById("premiumMin").value !== "" ? Number(document.getElementById("premiumMin").value) : null;
+      const premiumMax = document.getElementById("premiumMax").value !== "" ? Number(document.getElementById("premiumMax").value) : null;
+      const sort = document.getElementById("sortFilter").value;
+      filtered = items.filter((p) => {
+        const matchesQ = !q || (p.name || "").toLowerCase().includes(q);
+        const matchesStatus = !status || p.status === status;
+        const matchesTripType = !tripType || p.tripType === tripType;
+        const premium = Number(p.premium) || 0;
+        const matchesPremiumMin = premiumMin === null || premium >= premiumMin;
+        const matchesPremiumMax = premiumMax === null || premium <= premiumMax;
+        return matchesQ && matchesStatus && matchesTripType && matchesPremiumMin && matchesPremiumMax;
+      });
+      if (sort === "premium_desc") filtered.sort((a, b) => (Number(b.premium) || 0) - (Number(a.premium) || 0));
+      else if (sort === "premium_asc") filtered.sort((a, b) => (Number(a.premium) || 0) - (Number(b.premium) || 0));
+      page = 1;
+      renderTable();
+    }
 
-// Basic plans are priced per traveller per day of the trip (see
-// plan-form.html); Annual is a flat per-traveller yearly price. Shown
-// next to the premium everywhere it's listed so it's never read as a flat
-// total.
-function premiumUnit(tripType) {
-  return tripType === "Annual" ? "/traveller/yr" : "/traveller/day";
-}
+    function premiumUnit(tripType) {
+      return tripType === "Annual" ? "/traveller/yr" : "/traveller/day";
+    }
 
-function renderTable() {
-  const { pageItems, pages, total } = paginate(filtered, page, PAGE_SIZE);
-  const body = document.getElementById("tableBody");
-  const empty = document.getElementById("emptyState");
-  if (!pageItems.length) { body.innerHTML = ""; empty.style.display = "block"; }
-  else {
-    empty.style.display = "none";
-    body.innerHTML = pageItems.map((p) => `
-      <tr style="cursor:pointer;" data-open="${p.id}">
-        <td class="cell-strong">${escapeHtml(p.name || "—")}</td>
-        <td class="muted">${escapeHtml(p.tripType || "—")}</td>
-        <td class="muted">${moneyExact(p.coverage)}</td>
-        <td class="muted">${moneyExact(p.premium)} <span class="small">${premiumUnit(p.tripType)}</span></td>
-        <td>${statusBadge(p.status || "draft")}</td>
-        <td>
-          <div class="row-actions">
-            ${isApproved ? `
-            <a class="btn btn-outline btn-sm" href="plan-form.html?id=${p.id}"><span data-icon="edit" data-icon-size="14"></span></a>
-            <button class="btn btn-danger-outline btn-sm" data-del="${p.id}"><span data-icon="trash" data-icon-size="14"></span></button>
-            ` : ""}
-          </div>
-        </td>
-      </tr>`).join("");
-    // Row click opens a read-only detail popup (same convention as every
-    // other table in this console now) — only the pencil icon, or the
-    // popup's own Edit button, actually navigates to the edit form.
-    body.querySelectorAll("[data-open]").forEach((row) => row.addEventListener("click", (e) => {
-      if (e.target.closest(".row-actions")) return;
-      openDetail(row.dataset.open);
-    }));
-    body.querySelectorAll("[data-del]").forEach((b) => b.addEventListener("click", (e) => { e.stopPropagation(); remove(b.dataset.del); }));
-  }
-  document.getElementById("resultsLabel").textContent = total
-    ? `Showing ${(page - 1) * PAGE_SIZE + 1} to ${Math.min(page * PAGE_SIZE, total)} of ${total} results` : "No results";
-  renderPager("pagination", { page, pages }, (n) => { page = n; renderTable(); });
-  mountIcons(document);
-}
+    function renderTable() {
+      const { pageItems, pages, total } = paginate(filtered, page, PAGE_SIZE);
+      const body = document.getElementById("tableBody");
+      const empty = document.getElementById("emptyState");
+      if (!pageItems.length) {
+        body.innerHTML = "";
+        empty.style.display = "block";
+        const hasAnyItems = items.length > 0;
+        document.getElementById("emptyTitle").textContent = hasAnyItems ? "No matches found" : "No plans yet";
+        document.getElementById("emptyBody").textContent = hasAnyItems
+          ? "Try adjusting your search or filters."
+          : "Add your first plan to start selling coverage.";
+      }
+      else {
+        empty.style.display = "none";
+        body.innerHTML = pageItems.map((p) => `
+          <tr style="cursor:pointer;" data-open="${p.id}">
+            <td class="cell-strong">${escapeHtml(p.name || "—")}</td>
+            <td class="muted">${escapeHtml(p.tripType || "—")}</td>
+            <td class="muted">${moneyExact(p.coverage)}</td>
+            <td class="muted">${moneyExact(p.premium)} <span class="small">${premiumUnit(p.tripType)}</span></td>
+            <td>${statusBadge(p.status || "draft")}</td>
+            <td>
+              <div class="row-actions">
+                ${isApproved ? `
+                <a class="btn btn-outline btn-sm" href="plan-form.html?id=${p.id}"><span data-icon="edit" data-icon-size="14"></span></a>
+                ` : ""}
+              </div>
+            </td>
+          </tr>`).join("");
+        // Row click opens a read-only detail popup (same convention as every
+        // other table in this console now) — only the pencil icon, or the
+        // popup's own Edit button, actually navigates to the edit form.
+        body.querySelectorAll("[data-open]").forEach((row) => row.addEventListener("click", (e) => {
+          if (e.target.closest(".row-actions")) return;
+          openDetail(row.dataset.open);
+        }));
+      }
+      document.getElementById("resultsLabel").textContent = total
+        ? `Showing ${(page - 1) * PAGE_SIZE + 1} to ${Math.min(page * PAGE_SIZE, total)} of ${total} results` : "No results";
+      renderPager("pagination", { page, pages }, (n) => { page = n; renderTable(); });
+      mountIcons(document);
+    }
 
-function openDetail(id) {
-  const p = items.find((x) => x.id === id);
-  if (!p) return;
-  // No single "Total coverage" row here on purpose -- real travel
-  // insurance doesn't have one undifferentiated coverage amount. Each
-  // benefit (medical, cancellation, baggage, liability...) has its own
-  // separate limit, because they cover entirely different kinds of
-  // claims that are never paid out together -- summing them into one
-  // number wouldn't mean anything an insurer would actually print on a
-  // policy schedule. This "Key coverage" list already IS that per-benefit
-  // schedule, which is the real, meaningful information.
-  const coverageHtml = (p.coverageItems || []).length
-    ? p.coverageItems.map((it) => `
-        <div style="display:flex;justify-content:space-between;gap:12px;padding:4px 0;">
-          <span>${escapeHtml(it.label)}</span>
-          <span class="cell-strong" style="flex:none;">${moneyExact(it.amount)}</span>
-        </div>`).join("")
-    : "—";
-  const highlightsHtml = (p.highlights || []).length
-    ? `<ul style="margin:0;padding-left:18px;">${p.highlights.map((h) => `<li style="padding:2px 0;">${escapeHtml(h)}</li>`).join("")}</ul>`
-    : "—";
-  const rows = [
-    { label: "Premium", value: `${moneyExact(p.premium)} ${premiumUnit(p.tripType)}` },
-    { label: "Key coverage", value: coverageHtml, block: true },
-    { label: "Highlights", value: highlightsHtml, block: true },
-  ];
-  detailDialog({
-    title: p.name || "Untitled plan",
-    subtitle: `${p.tripType || "Trip type not set"} · ${(p.status || "draft").replace(/_/g, " ")}`,
-    rows,
-    actions: isApproved ? [{ text: "Edit", className: "btn-primary", onClick: () => { location.href = `plan-form.html?id=${id}`; } }] : [],
-  });
-}
+    function openDetail(id) {
+      const p = items.find((x) => x.id === id);
+      if (!p) return;
+      const coverageHtml = (p.coverageItems || []).length
+        ? p.coverageItems.map((it) => `
+            <div style="display:flex;justify-content:space-between;gap:12px;padding:4px 0;">
+              <span>${escapeHtml(it.label)}</span>
+              <span class="cell-strong" style="flex:none;">${moneyExact(it.amount)}</span>
+            </div>`).join("")
+        : "—";
+      const highlightsHtml = (p.highlights || []).length
+        ? `<ul style="margin:0;padding-left:18px;">${p.highlights.map((h) => `<li style="padding:2px 0;">${escapeHtml(h)}</li>`).join("")}</ul>`
+        : "—";
+      const rows = [
+        { label: "Premium", value: `${moneyExact(p.premium)} ${premiumUnit(p.tripType)}` },
+        { label: "Key coverage", value: coverageHtml, block: true },
+        { label: "Highlights", value: highlightsHtml, block: true },
+      ];
+      detailDialog({
+        title: p.name || "Untitled plan",
+        subtitle: `${p.tripType || "Trip type not set"} · ${(p.status || "draft").replace(/_/g, " ")}`,
+        rows,
+        actions: isApproved ? [{ text: "Edit", className: "btn-primary", onClick: () => { location.href = `plan-form.html?id=${id}`; } }] : [],
+      });
+    }
 
-async function remove(id) {
-  const p = items.find((x) => x.id === id);
-  const ok = await confirmDialog({ title: `Delete "${p?.name || "this plan"}"?`, body: "This can't be undone.", confirmText: "Delete", danger: true });
-  if (!ok) return;
-  try {
-    await deletePlan(id);
-    toast("Plan deleted.", "success");
-    await load();
-  } catch (err) {
-    toast(err.message || "Couldn't delete.", "error");
-  }
-}
 
-document.getElementById("searchInput").addEventListener("input", applyFilters);
-document.getElementById("statusFilter").addEventListener("change", applyFilters);
-document.getElementById("tripTypeFilter").addEventListener("change", applyFilters);
-document.getElementById("sortFilter").addEventListener("change", applyFilters);
-document.getElementById("premiumMin").addEventListener("input", applyFilters);
-document.getElementById("premiumMax").addEventListener("input", applyFilters);
+    document.getElementById("searchInput").addEventListener("input", applyFilters);
+    document.getElementById("statusFilter").addEventListener("change", applyFilters);
+    document.getElementById("tripTypeFilter").addEventListener("change", applyFilters);
+    document.getElementById("sortFilter").addEventListener("change", applyFilters);
+    document.getElementById("premiumMin").addEventListener("input", applyFilters);
+    document.getElementById("premiumMax").addEventListener("input", applyFilters);
 </script>
 </body>
 </html>

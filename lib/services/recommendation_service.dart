@@ -5,20 +5,16 @@ import 'opening_hours.dart';
 
 class RecommendationWeights {
   final double preference;
-  final double rating;
   final double distance;
-  final double budget;
   final double schedule;
 
   const RecommendationWeights({
-    this.preference = 0.30,
-    this.rating = 0.25,
-    this.distance = 0.20,
-    this.budget = 0.15,
-    this.schedule = 0.10,
+    this.preference = 0.50,
+    this.distance = 0.33,
+    this.schedule = 0.17,
   });
 
-  double get sum => preference + rating + distance + budget + schedule;
+  double get sum => preference + distance + schedule;
 
   void validate() {
     assert((sum - 1.0).abs() < 0.001, 'RecommendationWeights must sum to 1 (got $sum)');
@@ -26,8 +22,6 @@ class RecommendationWeights {
 }
 
 class RecommendationContext {
-  final bool Function(CatalogAttraction a) withinBudget;
-
   final Map<String, int> affinity;
 
   final bool requireOpenNow;
@@ -37,7 +31,6 @@ class RecommendationContext {
   final DateTime now;
 
   RecommendationContext({
-    required this.withinBudget,
     required this.affinity,
     required this.requireOpenNow,
     required this.requireAccessible,
@@ -49,7 +42,6 @@ class AttractionRecommendation {
   const AttractionRecommendation._();
 
   static bool passesMandatoryConstraints(CatalogAttraction a, RecommendationContext ctx) {
-    if (!ctx.withinBudget(a)) return false;
     if (ctx.requireAccessible && !a.facilities.contains('Wheelchair accessible')) return false;
     if (ctx.requireOpenNow) {
       final open = isOpenNow(a.openingHours, now: ctx.now);
@@ -67,19 +59,11 @@ class AttractionRecommendation {
     return (raw / maxAffinity).clamp(0.0, 1.0);
   }
 
-  static double ratingScore(CatalogAttraction a) {
-    final r = double.tryParse(a.rating);
-    if (r == null) return 0.5;
-    return (r / 5.0).clamp(0.0, 1.0);
-  }
-
   static double distanceScore(CatalogAttraction a) {
     final km = a.distanceKm;
     if (km == null) return 0.5;
     return 1.0 / (1.0 + km / 10.0);
   }
-
-  static double budgetScore(CatalogAttraction a, RecommendationContext ctx) => ctx.withinBudget(a) ? 1.0 : 0.0;
 
   static double scheduleScore(CatalogAttraction a, RecommendationContext ctx) {
     final open = isOpenNow(a.openingHours, now: ctx.now);
@@ -94,9 +78,7 @@ class AttractionRecommendation {
     RecommendationWeights weights = const RecommendationWeights(),
   }) {
     return weights.preference * preferenceScore(a, ctx.affinity, maxAffinity) +
-        weights.rating * ratingScore(a) +
         weights.distance * distanceScore(a) +
-        weights.budget * budgetScore(a, ctx) +
         weights.schedule * scheduleScore(a, ctx);
   }
 
@@ -118,19 +100,12 @@ class AttractionRecommendation {
   }
 }
 
-/// Same idea as [RecommendationContext] but for restaurants: cuisine
-/// affinity instead of category affinity, and no open-now/accessible
-/// toggles since the restaurant filter sheet (filter_page.dart's
-/// _restaurantFilters()) never exposes those — only Cuisine and Price.
 class RestaurantRecommendationContext {
-  final bool Function(CatalogRestaurant r) withinBudget;
-
   final Map<String, int> affinity;
 
   final DateTime now;
 
   RestaurantRecommendationContext({
-    required this.withinBudget,
     required this.affinity,
     DateTime? now,
   }) : now = now ?? DateTime.now();
@@ -138,8 +113,6 @@ class RestaurantRecommendationContext {
 
 class RestaurantRecommendation {
   const RestaurantRecommendation._();
-
-  static bool passesMandatoryConstraints(CatalogRestaurant r, RestaurantRecommendationContext ctx) => ctx.withinBudget(r);
 
   static double preferenceScore(CatalogRestaurant r, Map<String, int> affinity, int maxAffinity) {
     if (affinity.isEmpty || maxAffinity <= 0) return 0.5;
@@ -150,25 +123,11 @@ class RestaurantRecommendation {
     return (raw / maxAffinity).clamp(0.0, 1.0);
   }
 
-  /// Every restaurant is seeded with rating 'New' (see catalog_repository's
-  /// OSM import) because there's no reachable UI to ever submit a real
-  /// restaurant review, same root cause as attractions — so this returns
-  /// the neutral 0.5 fallback for every restaurant today. Kept (rather than
-  /// dropped) so the weight wakes up on its own the moment a real review
-  /// pipeline exists, exactly like AttractionRecommendation.ratingScore.
-  static double ratingScore(CatalogRestaurant r) {
-    final rating = double.tryParse(r.rating);
-    if (rating == null) return 0.5;
-    return (rating / 5.0).clamp(0.0, 1.0);
-  }
-
   static double distanceScore(CatalogRestaurant r) {
     final km = r.distanceKm;
     if (km == null) return 0.5;
     return 1.0 / (1.0 + km / 10.0);
   }
-
-  static double budgetScore(CatalogRestaurant r, RestaurantRecommendationContext ctx) => ctx.withinBudget(r) ? 1.0 : 0.0;
 
   /// Soft signal only — there's no "open now" toggle for restaurants to
   /// hard-gate on, but a currently-open place is still a better suggestion
@@ -186,9 +145,7 @@ class RestaurantRecommendation {
     RecommendationWeights weights = const RecommendationWeights(),
   }) {
     return weights.preference * preferenceScore(r, ctx.affinity, maxAffinity) +
-        weights.rating * ratingScore(r) +
         weights.distance * distanceScore(r) +
-        weights.budget * budgetScore(r, ctx) +
         weights.schedule * scheduleScore(r, ctx);
   }
 
@@ -197,9 +154,8 @@ class RestaurantRecommendation {
     RestaurantRecommendationContext ctx, {
     RecommendationWeights weights = const RecommendationWeights(),
   }) {
-    final survivors = candidates.where((r) => passesMandatoryConstraints(r, ctx)).toList();
     final maxAffinity = ctx.affinity.values.fold<int>(0, (m, v) => v > m ? v : m);
-    final indexed = survivors.asMap().entries.toList()
+    final indexed = candidates.asMap().entries.toList()
       ..sort((x, y) {
         final sx = score(x.value, ctx, maxAffinity: maxAffinity, weights: weights);
         final sy = score(y.value, ctx, maxAffinity: maxAffinity, weights: weights);
@@ -210,19 +166,6 @@ class RestaurantRecommendation {
   }
 }
 
-/// Hotels only ever get 3 real signals, so this doesn't reuse
-/// [RecommendationWeights]'s 5-way split:
-/// - preference: amenity affinity, built the same way as attraction
-///   category / restaurant cuisine affinity (bumped on save/view — see
-///   CatalogRepository.recordHotelView / saveDuffelStay).
-/// - rating: real — RollingGo's own guest review score or star rating.
-/// - budget: whether it's within the price range the user actually set in
-///   the filter sheet.
-/// There's no distance (RollingGo's result payload doesn't carry hotel
-/// coordinates, so there's nothing real to compute a distance from) and no
-/// schedule (a hotel isn't "open" or "closed" the way a place you visit for
-/// an hour is) — both are left out rather than wired up as permanently-0.5
-/// filler, which would just be decoration pretending to be a signal.
 class HotelRecommendationWeights {
   final double preference;
   final double rating;

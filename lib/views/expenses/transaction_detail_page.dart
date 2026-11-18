@@ -10,6 +10,7 @@ import '../../services/auth_service.dart';
 import '../../services/receipt_service.dart';
 import '../../theme.dart';
 import '../shared/nice_dialog.dart';
+import 'friend_picker_dialog.dart';
 
 class TransactionDetailPage extends StatefulWidget {
   final TripExpense expense;
@@ -294,15 +295,52 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
     final note = TextEditingController(text: e.note);
     var category = e.category;
     final paidOthers = e.participants.where((p) => p.paid && p.uid != e.paidBy).map((p) => p.name).toList();
+    // The amount can't change once someone else has paid their share --
+    // and for an itemized expense, editing the items (which is how the
+    // amount is derived) is blocked for the same reason.
     final amountLocked = paidOthers.isNotEmpty;
     final lockReason = paidOthers.isEmpty
         ? ''
         : 'The amount can\'t be changed because ${paidOthers.length > 2 ? '${paidOthers.take(2).join(', ')} +${paidOthers.length - 2}' : paidOthers.join(' and ')} '
             '${paidOthers.length == 1 ? 'has' : 'have'} already paid their share.';
+    final isItemized = e.items.isNotEmpty;
+    final itemsEditable = isItemized && !amountLocked;
+    // For an itemized expense, Amount is always derived from the items --
+    // it's shown read-only here too (matching how adding an expense shows
+    // it), and the Items section below is where the owner actually edits
+    // the breakdown or reassigns an item to someone else.
+    final amountReadOnly = amountLocked || isItemized;
     File? newReceipt;
     var removeReceipt = false;
     var saving = false;
     String? error;
+    var items = List<ExpenseLineItem>.from(e.items);
+    Trip? trip;
+    if (isItemized) {
+      try {
+        trip = await TripRepository.instance.getTrip(e.tripId, _uid);
+      } catch (_) {
+        trip = null;
+      }
+    }
+    if (!mounted) return;
+
+    String? itemProblem(String labelText, String priceText) {
+      final priceValue = double.tryParse(priceText);
+      if (labelText.trim().isEmpty) return 'Give the item a name';
+      // Allows an optional leading "-": a voucher/loyalty discount line
+      // (ReceiptOcrService.discount, applied in
+      // AddExpenseController.scanReceipt) is stored as a negative-price
+      // item on purpose -- split equally across members the same way tax
+      // is -- so re-saving it here, even unchanged, must not be rejected
+      // by a positive-only price format.
+      if (priceValue == null || !RegExp(r'^-?\d+(\.\d{1,2})?$').hasMatch(priceText)) {
+        return 'Price: numbers only, up to 2 decimal places';
+      }
+      if (priceValue == 0) return 'Price can\'t be RM 0';
+      if (priceValue.abs() > 1000000) return 'Price can\'t be more than RM 1,000,000';
+      return null;
+    }
 
     await showModalBottomSheet<void>(
       context: context,
@@ -311,8 +349,92 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setSheet) {
-          final amountProblem = amountLocked ? null : _amountError(amount.text);
+          final amountProblem = amountReadOnly ? null : _amountError(amount.text);
           final hasReceipt = newReceipt != null || (!removeReceipt && e.receiptImageUrl.isNotEmpty);
+
+          void refreshAmountFromItems() {
+            amount.text = items.fold(0.0, (s, i) => s + i.price).toStringAsFixed(2);
+          }
+
+          Future<void> editItem(int index) async {
+            if (!itemsEditable) return;
+            final item = items[index];
+            final label = TextEditingController(text: item.label);
+            final price = TextEditingController(text: item.price.toStringAsFixed(2));
+            final result = await showNiceFormDialog(
+              context: ctx,
+              title: 'Edit Item',
+              headerIcon: Icons.edit_outlined,
+              confirmLabel: 'Save',
+              fieldsBuilder: (dctx, dSetState) => [
+                niceDialogField(label, 'Item', icon: Icons.label_outline, autofocus: true, required: true),
+                niceDialogField(price, 'Price (RM)', icon: Icons.payments_outlined, keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true), required: true),
+              ],
+            );
+            if (result != true) return;
+            final problem = itemProblem(label.text, price.text.trim());
+            if (problem != null) {
+              if (ctx.mounted) ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text(problem)));
+              return;
+            }
+            setSheet(() {
+              items[index] = ExpenseLineItem(label: label.text.trim(), price: double.parse(price.text.trim()), assigneeUids: item.assigneeUids);
+              refreshAmountFromItems();
+            });
+          }
+
+          void reassignItem(int index) {
+            if (!itemsEditable || trip == null) return;
+            final item = items[index];
+            showDialog(
+              context: ctx,
+              builder: (_) => FriendPickerDialog(
+                trip: trip!,
+                initialSelectedUids: item.assigneeUids.toSet(),
+                onConfirm: (uids) => setSheet(() {
+                  items[index] = ExpenseLineItem(label: item.label, price: item.price, assigneeUids: uids.toList());
+                }),
+              ),
+            );
+          }
+
+          Widget itemRow(int index) {
+            final item = items[index];
+            final names = item.assigneeUids.map((uid) => trip?.memberNames[uid] ?? '?').toList();
+            return Container(
+              margin: const EdgeInsets.only(bottom: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(border: Border.all(color: const Color(0xFFECECEC)), borderRadius: BorderRadius.circular(12)),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  GestureDetector(
+                    onTap: () => editItem(index),
+                    child: Text('${item.label} — RM ${item.price.toStringAsFixed(2)}',
+                        style: TextStyle(fontSize: 12.5, color: itemsEditable ? Colors.black : AppColors.textGrey)),
+                  ),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          names.isEmpty ? 'Nobody assigned yet' : 'Split with: ${names.join(', ')}',
+                          style: const TextStyle(fontSize: 10.5, color: AppColors.textGrey),
+                        ),
+                      ),
+                      if (itemsEditable)
+                        GestureDetector(
+                          onTap: () => reassignItem(index),
+                          child: const CircleAvatar(
+                              radius: 13, backgroundColor: AppColors.chipGrey, child: Icon(Icons.person_add_alt, size: 14, color: AppColors.navy)),
+                        ),
+                    ],
+                  ),
+                ],
+              ),
+            );
+          }
+
           Future<void> pick(ImageSource source) async {
             final x = await ImagePicker().pickImage(source: source, imageQuality: 75, maxWidth: 1600);
             if (x != null) setSheet(() {
@@ -323,6 +445,9 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
 
           Future<void> save() async {
             if (amountProblem != null) return setSheet(() => error = amountProblem);
+            if (itemsEditable && items.any((i) => i.assigneeUids.isEmpty)) {
+              return setSheet(() => error = 'Every item needs someone to pay for it.');
+            }
             setSheet(() {
               saving = true;
               error = null;
@@ -337,10 +462,14 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
               await TripRepository.instance.updateExpense(
                 e,
                 title: note.text.trim(),
-                amount: amountLocked ? e.amount : double.parse(double.parse(amount.text.trim()).toStringAsFixed(2)),
+                amount: isItemized
+                    ? items.fold(0.0, (s, i) => s + i.price)
+                    : (amountLocked ? e.amount : double.parse(double.parse(amount.text.trim()).toStringAsFixed(2))),
                 category: category,
                 note: note.text.trim(),
                 receiptImageUrl: url,
+                items: itemsEditable ? items : null,
+                memberNames: trip?.memberNames ?? const {},
               );
               if (ctx.mounted) Navigator.of(ctx).pop();
               if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Expense updated')));
@@ -363,20 +492,24 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
                   const SizedBox(height: 14),
                   TextField(
                     controller: amount,
-                    readOnly: amountLocked,
-                    style: TextStyle(color: amountLocked ? AppColors.textGrey : Colors.black),
+                    readOnly: amountReadOnly,
+                    style: TextStyle(color: amountReadOnly ? AppColors.textGrey : Colors.black),
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
                     inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d{0,7}(\.\d{0,2})?'))],
                     onChanged: (_) => setSheet(() {}),
                     decoration: InputDecoration(
-                      labelText: 'Amount',
+                      label: Text.rich(TextSpan(text: 'Amount', children: const [
+                        TextSpan(text: ' *', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.w700)),
+                      ])),
                       prefixText: 'RM ',
                       errorText: amount.text.isEmpty ? null : amountProblem,
                       helperText: amountLocked
                           ? null
-                          : e.participants.length > 1
-                              ? 'The split between members is updated to match.'
-                              : null,
+                          : isItemized
+                              ? 'Calculated from the items below.'
+                              : e.participants.length > 1
+                                  ? 'The split between members is updated to match.'
+                                  : null,
                       suffixIcon: amountLocked
                           ? Tooltip(
                               message: lockReason,
@@ -400,6 +533,12 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
                         ],
                       ),
                     ),
+                  if (isItemized) ...[
+                    const SizedBox(height: 16),
+                    const Text('Items', style: TextStyle(fontSize: 12.5, color: AppColors.textGrey)),
+                    const SizedBox(height: 6),
+                    for (int i = 0; i < items.length; i++) itemRow(i),
+                  ],
                   const SizedBox(height: 12),
                   const Text('Category', style: TextStyle(fontSize: 12.5, color: AppColors.textGrey)),
                   const SizedBox(height: 6),
@@ -502,6 +641,7 @@ class _ReceiptViewer extends StatelessWidget {
       appBar: AppBar(
         backgroundColor: Colors.black,
         elevation: 0,
+        centerTitle: true,
         leading: IconButton(icon: const Icon(Icons.close, color: Colors.white), onPressed: () => Navigator.of(context).pop()),
         title: const Text('Receipt', style: TextStyle(color: Colors.white, fontSize: 16)),
       ),

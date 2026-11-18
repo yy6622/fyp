@@ -9,10 +9,11 @@ import 'traveller_details_page.dart';
 class InsurancePlanDetailPage extends StatelessWidget {
   final InsurancePlan plan;
   final String? tripId;
-  // Pre-fills [TravellerDetailsPage] when this plan was reached from a
-  // quote/compare flow that already collected trip details, so the
-  // traveller doesn't have to re-enter dates or traveller count they just
-  // gave on [InsuranceQuotePage]/[InsurancePlanComparePage].
+  // See _ComparePlanCard.destination in insurance_plan_compare_page.dart --
+  // only set when arriving from a quote/compare flow; threaded through to
+  // TravellerDetailsPage so a standalone (no-trip) purchase still records
+  // its destination.
+  final String? destination;
   final int? initialTravellerCount;
   final DateTime? initialTravelStart;
   final DateTime? initialTravelEnd;
@@ -20,6 +21,7 @@ class InsurancePlanDetailPage extends StatelessWidget {
     super.key,
     required this.plan,
     this.tripId,
+    this.destination,
     this.initialTravellerCount,
     this.initialTravelStart,
     this.initialTravelEnd,
@@ -98,7 +100,7 @@ class InsurancePlanDetailPage extends StatelessWidget {
                               crossAxisAlignment: CrossAxisAlignment.baseline,
                               textBaseline: TextBaseline.alphabetic,
                               children: [
-                                Text(plan.displayPrice(CurrencyService.instance.lastKnownUserCurrency), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.primary)),
+                                Text(plan.displayPrice, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.primary)),
                                 const SizedBox(width: 4),
                                 Text(insurancePriceUnitLabel(plan.category), style: const TextStyle(fontSize: 10, color: AppColors.textGrey)),
                               ],
@@ -193,7 +195,7 @@ class InsurancePlanDetailPage extends StatelessWidget {
                                       children: [
                                         const TextSpan(text: 'Up to '),
                                         TextSpan(
-                                          text: CurrencyService.instance.format(item.amount, 'MYR', CurrencyService.instance.lastKnownUserCurrency),
+                                          text: CurrencyService.instance.format(item.amount, 'MYR', 'MYR'),
                                           style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black),
                                         ),
                                       ],
@@ -222,7 +224,7 @@ class InsurancePlanDetailPage extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(plan.displayPrice(CurrencyService.instance.lastKnownUserCurrency), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.primary)),
+                      Text(plan.displayPrice, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.primary)),
                       Text(insurancePriceUnitLabel(plan.category), style: const TextStyle(fontSize: 11, color: AppColors.textGrey)),
                     ],
                   ),
@@ -237,6 +239,7 @@ class InsurancePlanDetailPage extends StatelessWidget {
                     MaterialPageRoute(builder: (_) => TravellerDetailsPage(
                     plan: plan,
                     tripId: tripId,
+                    destination: destination,
                     initialTravellerCount: initialTravellerCount,
                     initialTravelStart: initialTravelStart,
                     initialTravelEnd: initialTravelEnd,

@@ -37,6 +37,9 @@
             <input class="input" type="password" id="password" placeholder="Password" required autocomplete="current-password" />
             <button type="button" class="password-toggle-btn" id="togglePassword" tabindex="-1" aria-label="Show password"><span data-icon="eye" data-icon-size="18"></span></button>
           </div>
+          <div style="text-align:right;margin-top:8px;">
+            <a href="#" id="forgotPasswordLink" style="font-size:13px;font-weight:700;color:var(--teal-600);">Forgot password?</a>
+          </div>
         </div>
         <label class="checkbox-row" style="margin-bottom:22px;">
           <input type="checkbox" id="remember" checked /> Remember me
@@ -54,8 +57,8 @@ import { auth } from "../js/firebase-config.js?v=20261007";
 import { onAuthStateChanged, setPersistence, browserLocalPersistence, browserSessionPersistence, signOut } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
 import { doc, getDoc } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
 import { db } from "../js/firebase-config.js?v=20261007";
-import { loginWithEmail, authErrorMessage } from "../js/auth-guard.js?v=20261106b";
-import { setBusy, wirePasswordToggle } from "../js/ui.js?v=20261113a";
+import { loginWithEmail, authErrorMessage, resetPassword } from "../js/auth-guard.js?v=20261115a";
+import { setBusy, wirePasswordToggle, toast, isValidEmail } from "../js/ui.js?v=20261115a";
 
 mountIcons(document);
 wirePasswordToggle("password", "togglePassword");
@@ -66,6 +69,33 @@ if (params.get("err") === "not-authorized") {
   errBox.textContent = "That account isn't set up as an insurance partner yet.";
   errBox.classList.add("show");
 }
+
+document.getElementById("forgotPasswordLink").addEventListener("click", async (e) => {
+  e.preventDefault();
+  errBox.classList.remove("show");
+  const emailField = document.getElementById("email");
+  const email = emailField.value.trim();
+  if (!isValidEmail(email)) {
+    errBox.textContent = 'Enter your email address above first, then tap "Forgot password?".';
+    errBox.classList.add("show");
+    emailField.focus();
+    return;
+  }
+  const link = e.currentTarget;
+  const originalText = link.textContent;
+  link.textContent = "Sending…";
+  link.style.pointerEvents = "none";
+  try {
+    await resetPassword(email);
+    toast(`Password reset link sent to ${email}.`, "success");
+  } catch (err) {
+    errBox.textContent = authErrorMessage(err);
+    errBox.classList.add("show");
+  } finally {
+    link.textContent = originalText;
+    link.style.pointerEvents = "";
+  }
+});
 
 onAuthStateChanged(auth, async (user) => {
   if (!user) return;

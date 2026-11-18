@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 
 import '../config/secrets.dart';
 import '../data/country_gateways.dart';
+import '../models/booking_details.dart';
 import '../models/duffel_models.dart';
 
 class DuffelApiService {
@@ -22,15 +23,6 @@ class DuffelApiService {
 
   bool get isConfigured => duffelApiKey.isNotEmpty && duffelApiKey != 'YOUR_DUFFEL_ACCESS_TOKEN_HERE';
 
-  /// [childAges] -- one entry per child, each 0-17 -- are sent to Duffel
-  /// as bare `{'age': n}` passenger objects rather than `{'type':
-  /// 'child', 'age': n}`: Duffel's own docs say to give a passenger
-  /// EITHER age or type, never both, and it infers child/infant fares
-  /// from the age itself. [cabinClass] must be one of Duffel's own
-  /// four values ('economy', 'premium_economy', 'business', 'first') --
-  /// no longer hardcoded to economy now that the Filter sheet's
-  /// Travelers & Cabin picker lets the traveller choose (see
-  /// filter_page.dart's _TravelersCabinSheet).
   Future<List<DuffelFlightOffer>> searchFlights({
     required String origin,
     required String destination,
@@ -70,6 +62,67 @@ class DuffelApiService {
     return parsed;
   }
 
+  Future<String> createOrder({
+    required String offerId,
+    required List<DuffelOfferPassenger> offerPassengers,
+    required List<PassengerDetail> passengerDetails,
+    required double totalAmount,
+    required String totalCurrency,
+    required String contactEmail,
+    required String contactPhone,
+  }) async {
+    if (!isConfigured) throw const DuffelApiException('Duffel API key is not set yet — see lib/config/secrets.dart.');
+    if (offerId.isEmpty) throw const DuffelApiException('Missing Duffel offer id — please search again.');
+    if (offerPassengers.isEmpty || offerPassengers.length != passengerDetails.length) {
+      throw const DuffelApiException('Passenger count no longer matches the searched fare — please search again.');
+    }
+
+    final passengersPayload = <Map<String, dynamic>>[];
+    for (var i = 0; i < offerPassengers.length; i++) {
+      final detail = passengerDetails[i];
+      final nameParts = detail.name.trim().split(RegExp(r'\s+')).where((s) => s.isNotEmpty).toList();
+      final givenName = nameParts.length > 1 ? nameParts.sublist(0, nameParts.length - 1).join(' ') : (nameParts.isNotEmpty ? nameParts.first : 'Traveller');
+      final familyName = nameParts.length > 1 ? nameParts.last : 'Traveller';
+      passengersPayload.add({
+        'id': offerPassengers[i].id,
+        'title': (detail.title ?? 'Mr').toLowerCase(),
+        'gender': detail.gender == 'Female' ? 'f' : 'm',
+        'given_name': givenName,
+        'family_name': familyName,
+        if (detail.dob != null) 'born_on': _dateOnly(detail.dob!),
+        'email': contactEmail,
+        'phone_number': contactPhone,
+      });
+    }
+
+    final body = {
+      'data': {
+        'type': 'instant',
+        'selected_offers': [offerId],
+        // The traveller already paid us directly (Stripe/PayPal, just above
+        // in booking_payment_page.dart) -- we are the merchant of record,
+        // not the traveller's own card. There is no Duffel card-tokenisation
+        // flow anywhere in this app to produce a real card_id (that needs
+        // Duffel's own Components SDK to collect the card a SECOND time,
+        // which we don't do), so "card" payment with a made-up card_id was
+        // always going to be rejected by Duffel as invalid. "balance" pays
+        // from this Duffel account's own prepaid balance instead, which is
+        // the correct type for a platform that collects payment itself.
+        'payments': [
+          {
+            'type': 'balance',
+            'amount': totalAmount.toStringAsFixed(2),
+            'currency': totalCurrency,
+          }
+        ],
+        'passengers': passengersPayload,
+      }
+    };
+
+    final res = await _post('/air/orders', body);
+    return (res['id'] as String?) ?? '';
+  }
+
   Future<String> resolveDestinationCode(String freeText) async {
     final text = freeText.trim();
     if (_looksLikeIataCode(text)) return text;
@@ -77,11 +130,6 @@ class DuffelApiService {
     final viaCountry = kCountryGateways[text.toLowerCase()]?.flightIataCode;
     if (viaCountry != null) return viaCountry;
 
-    // Trip/catalog destinations are stored as "City, Country" (see
-    // country_gateways.dart's hotelPlaceQuery values and trip.destination).
-    // That whole string never matches kCountryGateways' country-only keys,
-    // so also try the part after the last comma before falling back to a
-    // live lookup.
     if (text.contains(',')) {
       final countryPart = text.split(',').last.trim().toLowerCase();
       final viaCountryPart = kCountryGateways[countryPart]?.flightIataCode;
@@ -110,13 +158,6 @@ class DuffelApiService {
     return (v is String && v.isNotEmpty) ? v : null;
   }
 
-  /// The raw suggestion list for a From/To autocomplete field (the
-  /// flight Filter sheet's route search -- see DuffelPlace's doc
-  /// comment). Unlike [resolveDestinationCode]/[_resolveViaPlacesSuggestions]
-  /// below, this doesn't guess a single best match or fall back to
-  /// anything -- it's meant to be called on every keystroke (debounced
-  /// by the caller) and shown as a picklist, so an empty result or a
-  /// thrown error should just mean "no suggestions yet", not block typing.
   Future<List<DuffelPlace>> searchPlaces(String query) async {
     final text = query.trim();
     if (text.length < 2 || !isConfigured) return const [];

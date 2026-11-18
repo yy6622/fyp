@@ -19,7 +19,7 @@ Future<List<PickedSavedItem>?> showSavedItemPicker(
   );
 }
 
-enum _PickerTab { flights, hotels, attractions, restaurants }
+enum _PickerTab { attractions, restaurants }
 
 class _SavedItemPickerSheet extends StatefulWidget {
   final String tripId;
@@ -32,7 +32,7 @@ class _SavedItemPickerSheet extends StatefulWidget {
 
 class _SavedItemPickerSheetState extends State<_SavedItemPickerSheet> {
   late final SavedItemsController controller = SavedItemsController(tripId: widget.tripId);
-  _PickerTab _tab = _PickerTab.flights;
+  _PickerTab _tab = _PickerTab.attractions;
 
   final Map<String, PickedSavedItem> _selected = {};
 
@@ -81,8 +81,6 @@ class _SavedItemPickerSheetState extends State<_SavedItemPickerSheet> {
               ),
               Row(
                 children: [
-                  Expanded(child: _tabButton('Flights', _PickerTab.flights)),
-                  Expanded(child: _tabButton('Hotels', _PickerTab.hotels)),
                   Expanded(child: _tabButton('Attractions', _PickerTab.attractions)),
                   Expanded(child: _tabButton('Food', _PickerTab.restaurants)),
                 ],
@@ -137,42 +135,6 @@ class _SavedItemPickerSheetState extends State<_SavedItemPickerSheet> {
 
   Widget _body(ScrollController scrollController) {
     switch (_tab) {
-      case _PickerTab.flights:
-        return _list(
-          scrollController,
-          loading: controller.loadingFlights,
-          count: controller.flights.length,
-          emptyMessage: 'No flights saved for this trip yet.',
-          itemBuilder: (i) {
-            final f = controller.flights[i];
-            return _row(PickedSavedItem(
-              kind: 'flight',
-              id: f.id,
-              label: '${f.from} → ${f.to}',
-              subtitle: '${f.depTime} - ${f.arrTime} · ${f.stops}',
-              fallbackIcon: Icons.flight_outlined,
-            ));
-          },
-        );
-      case _PickerTab.hotels:
-        return _list(
-          scrollController,
-          loading: controller.loadingHotels,
-          count: controller.hotels.length,
-          emptyMessage: 'No hotels saved for this trip yet.',
-          itemBuilder: (i) {
-            final h = controller.hotels[i];
-            return _row(PickedSavedItem(
-              kind: 'hotel',
-              id: h.id,
-              label: h.name,
-              subtitle: h.location,
-              imageUrl: h.image,
-              rating: h.rating,
-              fallbackIcon: Icons.hotel_outlined,
-            ));
-          },
-        );
       case _PickerTab.attractions:
         return _list(
           scrollController,

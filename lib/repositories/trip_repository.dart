@@ -253,14 +253,10 @@ class Trip {
   final DateTime? endDate;
   final double budgetPerPerson;
   final List<String> interests;
-  final String travelStyle;
-  final String accommodation;
-  final String foodPreference;
   final String ownerId;
   final List<String> memberIds;
   final Map<String, String> memberNames;
   final String about;
-  final Map<String, bool> pinChat;
   final bool realTimeLocation;
   final Map<String, String> notificationOption;
   final DateTime? createdAt;
@@ -284,14 +280,10 @@ class Trip {
     required this.endDate,
     required this.budgetPerPerson,
     required this.interests,
-    this.travelStyle = '',
-    this.accommodation = '',
-    this.foodPreference = '',
     required this.ownerId,
     required this.memberIds,
     required this.memberNames,
     required this.about,
-    this.pinChat = const {},
     required this.realTimeLocation,
     this.notificationOption = const {},
     required this.createdAt,
@@ -340,7 +332,6 @@ class Trip {
     return seen == null || updated.isAfter(seen);
   }
 
-  bool pinChatFor(String uid) => pinChat[uid] ?? false;
   String notificationOptionFor(String uid) => notificationOption[uid] ?? 'All Messages';
 
   String get dateRangeLabel {
@@ -438,13 +429,10 @@ class Trip {
           total: memberIds.isEmpty ? 1 : memberIds.length,
           votedByMe: votedBy.contains(myUid),
           forMemberUids: List<String>.from(it['forMemberUids'] as List? ?? const []),
+          sourceRef: (it['sourceRef'] as String?) ?? '',
         );
       }).toList()
         ..sort((a, b) {
-          // Activities without a time (it's an optional field) should fall
-          // after timed ones for that day, not before — '' sorts before
-          // any 'HH:MM' string, which used to push "sometime today" items
-          // above a day's very first scheduled activity.
           if (a.time.isEmpty != b.time.isEmpty) return a.time.isEmpty ? 1 : -1;
           final byTime = a.time.compareTo(b.time);
           return byTime != 0 ? byTime : a.id.compareTo(b.id);
@@ -467,16 +455,10 @@ class Trip {
       endDate: (data['endDate'] as Timestamp?)?.toDate(),
       budgetPerPerson: (data['budgetPerPerson'] as num?)?.toDouble() ?? 0,
       interests: List<String>.from(data['interests'] as List? ?? const []),
-      travelStyle: (data['travelStyle'] as String?) ?? '',
-      accommodation: (data['accommodation'] as String?) ?? '',
-      foodPreference: (data['foodPreference'] as String?) ?? '',
       ownerId: (data['ownerId'] as String?) ?? '',
       memberIds: memberIds,
       memberNames: memberNames,
       about: (data['about'] as String?) ?? '',
-      pinChat: data['pinChat'] is Map
-          ? Map<String, bool>.from((data['pinChat'] as Map).map((k, v) => MapEntry(k.toString(), v == true)))
-          : const {},
       realTimeLocation: (data['realTimeLocation'] as bool?) ?? false,
       notificationOption: data['notificationOption'] is Map
           ? Map<String, String>.from((data['notificationOption'] as Map).map((k, v) => MapEntry(k.toString(), v.toString())))
@@ -518,6 +500,11 @@ class TripVote {
   final List<VoteOption> options;
   final DateTime? createdAt;
   final DateTime? deadline;
+
+  /// Set when the group settled a tie directly (see [TripRepository.decideVote])
+  /// instead of it needing another single-choice ballot. Once set, this
+  /// option is the decisive answer regardless of vote counts.
+  final String? decidedOptionId;
   const TripVote({
     required this.id,
     required this.title,
@@ -527,16 +514,21 @@ class TripVote {
     required this.options,
     required this.createdAt,
     this.deadline,
+    this.decidedOptionId,
   });
 
   bool get isClosed => deadline != null && DateTime.now().isAfter(deadline!);
+
+  VoteOption? get decidedOption =>
+      decidedOptionId == null ? null : _firstWhereOrNullOption(options, (o) => o.id == decidedOptionId);
 
   int get totalVoters => options.expand((o) => o.votedBy).toSet().length;
 
   List<String> get voterUids => options.expand((o) => o.votedBy).toSet().toList();
 
   VoteOption? get leading =>
-      options.isEmpty ? null : (options.toList()..sort((a, b) => b.votedBy.length.compareTo(a.votedBy.length))).first;
+      decidedOption ??
+      (options.isEmpty ? null : (options.toList()..sort((a, b) => b.votedBy.length.compareTo(a.votedBy.length))).first);
 
   /// All options tied for the most votes (only meaningful once at least one
   /// vote has been cast — with zero votes every option "ties" at 0, which
@@ -551,16 +543,11 @@ class TripVote {
 
   /// True when two or more options are tied for first place, after at least
   /// one vote has been cast.
-  bool get isTie => hasAnyVotes && leaders.length > 1;
+  bool get isTie => decidedOptionId == null && hasAnyVotes && leaders.length > 1;
 
   static TripVote fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
     final data = doc.data() ?? const {};
     final optionsRaw = Map<String, dynamic>.from(data['options'] as Map? ?? const {});
-    // Firestore map fields don't preserve insertion order, so the options a
-    // user typed in as #1/#2/#3 can come back from the server in a
-    // different order. Every option id ends in the microsecond timestamp it
-    // was created with ('opt{i}_{micros}' or 'opt_{micros}'), which does
-    // preserve creation order, so sort on that instead of trusting map order.
     int creationMicros(String id) {
       final tail = id.split('_').last;
       return int.tryParse(tail) ?? 0;
@@ -583,8 +570,16 @@ class TripVote {
       options: options,
       createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
       deadline: (data['deadline'] as Timestamp?)?.toDate(),
+      decidedOptionId: data['decidedOptionId'] as String?,
     );
   }
+}
+
+VoteOption? _firstWhereOrNullOption(List<VoteOption> list, bool Function(VoteOption) test) {
+  for (final item in list) {
+    if (test(item)) return item;
+  }
+  return null;
 }
 
 class ExpenseParticipant {
@@ -664,8 +659,18 @@ Map<String, double> splitExpenseItemized(List<({double price, Set<String> assign
     final uids = item.assigneeUids.toList();
     final itemCents = _expenseToCents(item.price);
     final n = uids.length;
-    final baseShare = itemCents ~/ n;
+    // A NEGATIVE itemCents (a voucher/loyalty discount split as its own
+    // line -- see ReceiptOcrService.discount) breaks the usual
+    // `~/` + `%` pairing: Dart's `%` is Euclidean (always 0 <= remainder
+    // < n, whatever the dividend's sign), but `~/` truncates toward zero
+    // rather than flooring, so for a negative dividend the two no longer
+    // add back up to itemCents. Deriving baseShare FROM the (always
+    // correct) remainder instead -- rather than from a separate `~/` that
+    // can disagree with it -- keeps `baseShare*n + distributed remainder
+    // == itemCents` true for a negative price exactly as it already was
+    // for a positive one.
     final remainder = itemCents % n;
+    final baseShare = (itemCents - remainder) ~/ n;
     for (var i = 0; i < n; i++) {
       final cents = baseShare + (i < remainder ? 1 : 0);
       totalsCents[uids[i]] = (totalsCents[uids[i]] ?? 0) + cents;
@@ -863,6 +868,7 @@ class TripRepository {
     required List<String> interests,
     Map<String, String> extraMembers = const {},
     String? coverImage,
+    String? about,
   }) async {
     final nights = endDate.difference(startDate).inDays;
     final dayCount = (nights + 1).clamp(1, 60);
@@ -891,8 +897,7 @@ class TripRepository {
       'ownerId': ownerId,
       'memberIds': memberNames.keys.toList(),
       'memberNames': memberNames,
-      'about': "Let's make amazing memories together!",
-      'pinChat': <String, bool>{},
+      'about': (about != null && about.trim().isNotEmpty) ? about.trim() : "Let's make amazing memories together!",
       'realTimeLocation': false,
       'notificationOption': <String, String>{},
       'flights': <Map<String, dynamic>>[],
@@ -902,11 +907,6 @@ class TripRepository {
       'lastActivityAt': FieldValue.serverTimestamp(),
     });
     return doc.id;
-  }
-
-  void setPinChatFor(String tripId, String uid, bool value) {
-    if (uid.isEmpty) return;
-    _trips.doc(tripId).update({'pinChat.$uid': value}).catchError((_) {});
   }
 
   void setNotificationOptionFor(String tripId, String uid, String value) {
@@ -924,9 +924,6 @@ class TripRepository {
     DateTime? endDate,
     double? budgetPerPerson,
     List<String>? interests,
-    String? travelStyle,
-    String? accommodation,
-    String? foodPreference,
     String? coverImage,
     String? actorUid,
   }) async {
@@ -940,9 +937,6 @@ class TripRepository {
     if (endDate != null) data['endDate'] = Timestamp.fromDate(endDate);
     if (budgetPerPerson != null) data['budgetPerPerson'] = budgetPerPerson;
     if (interests != null) data['interests'] = interests;
-    if (travelStyle != null) data['travelStyle'] = travelStyle;
-    if (accommodation != null) data['accommodation'] = accommodation;
-    if (foodPreference != null) data['foodPreference'] = foodPreference;
     if (data.isEmpty) return;
     final planFieldsChanged = <String>[
       if (name != null) 'the trip name',
@@ -951,18 +945,12 @@ class TripRepository {
       if (startDate != null || endDate != null) 'the dates',
       if (budgetPerPerson != null) 'the budget',
       if (interests != null) 'the interests',
-      if (travelStyle != null) 'the travel style',
-      if (accommodation != null) 'the accommodation preference',
-      if (foodPreference != null) 'the food preference',
     ];
     if (destination != null ||
         startDate != null ||
         endDate != null ||
         budgetPerPerson != null ||
-        interests != null ||
-        travelStyle != null ||
-        accommodation != null ||
-        foodPreference != null) {
+        interests != null) {
       data['lastActivityAt'] = FieldValue.serverTimestamp();
     }
     await _trips.doc(tripId).update(data);
@@ -1067,6 +1055,7 @@ class TripRepository {
     required String iconKey,
     String location = '',
     List<String> forMemberUids = const [],
+    String sourceRef = '',
     String? actorUid,
   }) async {
     final itemId = '${DateTime.now().microsecondsSinceEpoch}';
@@ -1078,6 +1067,7 @@ class TripRepository {
         'location': location,
         'votedBy': <String>[],
         'forMemberUids': forMemberUids,
+        if (sourceRef.isNotEmpty) 'sourceRef': sourceRef,
       },
       'lastActivityAt': FieldValue.serverTimestamp(),
       ..._planUpdateFields(actorUid: actorUid),
@@ -1118,10 +1108,6 @@ class TripRepository {
     });
   }
 
-  // Moves an activity from one day to another (e.g. dragged across the
-  // day-pager edge while reordering). Reads the item's current field map
-  // so votedBy/forMemberUids/icon/label/location all carry over untouched
-  // — only `time` changes, to the slot it's dropped on in the new day.
   Future<void> moveActivityToDay(
     String tripId,
     int fromDayIndex,
@@ -1357,6 +1343,42 @@ class TripRepository {
     return _votes(tripId).doc(voteId).snapshots().map((doc) => doc.exists ? TripVote.fromDoc(doc) : null);
   }
 
+  /// Settles a tie directly, as a group decision -- NOT another ballot. Used
+  /// by the AI Summarise sheet's tie-break buttons: the person tapping
+  /// almost always already voted in this exact poll (that's often how the
+  /// tie happened), so routing this through [castVote] would just hit its
+  /// "you have already voted" guard. This bypasses per-member voting rules
+  /// entirely and writes the decided option onto the vote doc, where
+  /// [TripVote.leading]/[TripVote.isTie] (and the Cloud Function engine's
+  /// own copy of this same rule) treat it as the decisive answer regardless
+  /// of ballot counts. Any trip member may decide it, not just whoever is
+  /// leading.
+  Future<void> decideVote(String tripId, String voteId, String optionId, String uid) async {
+    final voteRef = _votes(tripId).doc(voteId);
+    final tripRef = _trips.doc(tripId);
+    await FirebaseFirestore.instance.runTransaction((tx) async {
+      final voteSnap = await tx.get(voteRef);
+      final tripSnap = await tx.get(tripRef);
+      if (!voteSnap.exists) {
+        throw StateError('This poll no longer exists.');
+      }
+      final live = TripVote.fromDoc(voteSnap);
+      final memberIds = List<String>.from((tripSnap.data()?['memberIds'] as List?) ?? const []);
+      if (!tripSnap.exists || !memberIds.contains(uid)) {
+        throw StateError('You are not a member of this trip.');
+      }
+      if (!live.options.any((o) => o.id == optionId)) {
+        throw StateError('That option no longer exists.');
+      }
+      tx.update(voteRef, {
+        'decidedOptionId': optionId,
+        'decidedBy': uid,
+        'decidedAt': FieldValue.serverTimestamp(),
+      });
+    });
+    _touchActivity(tripId);
+  }
+
   Future<void> castVote(String tripId, TripVote vote, String optionId, String uid) async {
     final tripRef = _trips.doc(tripId);
     final voteRef = _votes(tripId).doc(vote.id);
@@ -1389,13 +1411,64 @@ class TripRepository {
       }
       // Step 6.
       final alreadyVotedThisOption = option.votedBy.contains(uid);
-      final alreadyVotedAnyOption = live.options.any((o) => o.votedBy.contains(uid));
-      if (live.allowMultipleChoice ? alreadyVotedThisOption : alreadyVotedAnyOption) {
-        throw StateError('You have already voted.');
+      if (alreadyVotedThisOption) {
+        // Tapping your own already-picked option casts nothing new -- the
+        // UI routes that tap to retractVote instead. Guard here too in
+        // case of a stale/duplicate tap.
+        throw StateError('You have already voted for this option.');
       }
-      tx.update(voteRef, {
+      final updates = <String, dynamic>{
         'options.$optionId.votedBy': FieldValue.arrayUnion([uid]),
         'options.$optionId.voteCount': FieldValue.increment(1),
+      };
+      if (!live.allowMultipleChoice) {
+        // Single-choice: casting a new pick switches the member's vote --
+        // clear whatever other option(s) they'd picked before, atomically
+        // with adding the new one, so they're never left double-counted.
+        for (final o in live.options) {
+          if (o.id != optionId && o.votedBy.contains(uid)) {
+            updates['options.${o.id}.votedBy'] = FieldValue.arrayRemove([uid]);
+            updates['options.${o.id}.voteCount'] = FieldValue.increment(-1);
+          }
+        }
+      }
+      tx.update(voteRef, updates);
+    });
+    _touchActivity(tripId);
+  }
+
+  Future<void> retractVote(String tripId, TripVote vote, String optionId, String uid) async {
+    final voteRef = _votes(tripId).doc(vote.id);
+    await FirebaseFirestore.instance.runTransaction((tx) async {
+      final voteSnap = await tx.get(voteRef);
+      if (!voteSnap.exists) {
+        throw StateError('This poll no longer exists.');
+      }
+      final live = TripVote.fromDoc(voteSnap);
+      if (live.isClosed) {
+        throw StateError('This poll is closed.');
+      }
+      // Retracting your own vote is allowed for single-choice polls too
+      // (tap your picked option again to clear it) -- only switching to a
+      // DIFFERENT option goes through castVote's switch-in-place logic
+      // above, since a poll can't be left with two simultaneous picks for
+      // one member mid-transaction.
+      VoteOption? option;
+      for (final o in live.options) {
+        if (o.id == optionId) {
+          option = o;
+          break;
+        }
+      }
+      if (option == null) {
+        throw StateError('That option no longer exists.');
+      }
+      if (!option.votedBy.contains(uid)) {
+        throw StateError("You haven't voted for this option.");
+      }
+      tx.update(voteRef, {
+        'options.$optionId.votedBy': FieldValue.arrayRemove([uid]),
+        'options.$optionId.voteCount': FieldValue.increment(-1),
       });
     });
     _touchActivity(tripId);
@@ -1501,6 +1574,20 @@ class TripRepository {
     return unpaid.length;
   }
 
+  ExpenseParticipant? _findParticipant(List<ExpenseParticipant> list, String uid) {
+    for (final p in list) {
+      if (p.uid == uid) return p;
+    }
+    return null;
+  }
+
+  /// [items] is only non-null when the owner edited the itemized
+  /// breakdown itself (label/price, or reassigning an item to a
+  /// different member) -- see transaction_detail_page.dart's items
+  /// editor. [memberNames] is used to name a participant this edit
+  /// introduces for the first time (reassigned onto someone who wasn't
+  /// previously split into this expense at all); existing participants
+  /// keep their own recorded name and paid status.
   Future<void> updateExpense(
     TripExpense expense, {
     required String title,
@@ -1508,33 +1595,59 @@ class TripRepository {
     required String category,
     required String note,
     String? receiptImageUrl,
+    List<ExpenseLineItem>? items,
+    Map<String, String> memberNames = const {},
   }) {
     final ps = expense.participants;
+    final itemsChanged = items != null;
+    if (itemsChanged && (items.isEmpty || items.any((i) => i.assigneeUids.isEmpty))) {
+      throw ArgumentError('Every item must have at least one assignee.');
+    }
     if ((amount - expense.amount).abs() > 0.001 && ps.any((p) => p.paid && p.uid != expense.paidBy)) {
       throw StateError('The amount can\'t change after someone has paid their share.');
     }
-    final equal = ps.isNotEmpty && ps.every((p) => (p.share - ps.first.share).abs() < 0.011);
-    Map<String, double> newShares;
-    if (ps.isEmpty) {
-      newShares = const {};
-    } else if (equal || expense.amount <= 0) {
-      newShares = splitExpenseEqual(amount, ps.map((p) => p.uid).toList());
-    } else {
-      final totalCents = _expenseToCents(amount);
-      final oldTotalCents = _expenseToCents(expense.amount);
-      final raw = <String, double>{
-        for (final p in ps) p.uid: _expenseToCents(p.share) * totalCents / oldTotalCents,
+    if (itemsChanged && ps.any((p) => p.paid && p.uid != expense.paidBy)) {
+      throw StateError("Items can't be changed after someone has paid their share.");
+    }
+
+    Map<String, dynamic> participantsUpdate = const {};
+    if (itemsChanged) {
+      final newShares = splitExpenseItemized([for (final i in items) (price: i.price, assigneeUids: i.assigneeUids.toSet())]);
+      participantsUpdate = {
+        for (final entry in newShares.entries)
+          entry.key: {
+            'name': _findParticipant(ps, entry.key)?.name ?? memberNames[entry.key] ?? 'Member',
+            'share': entry.value,
+            'paid': _findParticipant(ps, entry.key)?.paid ?? (entry.key == expense.paidBy),
+          },
       };
-      final floors = raw.map((uid, v) => MapEntry(uid, v.floor()));
-      final used = floors.values.fold<int>(0, (n, v) => n + v);
-      final remainder = totalCents - used;
-      final byFraction = ps.map((p) => p.uid).toList()
-        ..sort((a, b) => (raw[b]! - floors[b]!).compareTo(raw[a]! - floors[a]!));
-      final cents = Map.of(floors);
-      for (var i = 0; i < remainder && i < byFraction.length; i++) {
-        cents[byFraction[i]] = cents[byFraction[i]]! + 1;
+    } else if ((amount - expense.amount).abs() > 0.001) {
+      final equal = ps.isNotEmpty && ps.every((p) => (p.share - ps.first.share).abs() < 0.011);
+      Map<String, double> newShares;
+      if (ps.isEmpty) {
+        newShares = const {};
+      } else if (equal || expense.amount <= 0) {
+        newShares = splitExpenseEqual(amount, ps.map((p) => p.uid).toList());
+      } else {
+        final totalCents = _expenseToCents(amount);
+        final oldTotalCents = _expenseToCents(expense.amount);
+        final raw = <String, double>{
+          for (final p in ps) p.uid: _expenseToCents(p.share) * totalCents / oldTotalCents,
+        };
+        final floors = raw.map((uid, v) => MapEntry(uid, v.floor()));
+        final used = floors.values.fold<int>(0, (n, v) => n + v);
+        final remainder = totalCents - used;
+        final byFraction = ps.map((p) => p.uid).toList()
+          ..sort((a, b) => (raw[b]! - floors[b]!).compareTo(raw[a]! - floors[a]!));
+        final cents = Map.of(floors);
+        for (var i = 0; i < remainder && i < byFraction.length; i++) {
+          cents[byFraction[i]] = cents[byFraction[i]]! + 1;
+        }
+        newShares = cents.map((uid, c) => MapEntry(uid, _expenseFromCents(c)));
       }
-      newShares = cents.map((uid, c) => MapEntry(uid, _expenseFromCents(c)));
+      participantsUpdate = {
+        for (final p in ps) p.uid: {'name': p.name, 'share': newShares[p.uid] ?? 0, 'paid': p.paid},
+      };
     }
 
     _touchActivity(expense.tripId, category: 'expenses', actorUid: expense.paidBy);
@@ -1544,10 +1657,9 @@ class TripRepository {
       'category': category,
       'note': note,
       if (receiptImageUrl != null) 'receiptImageUrl': receiptImageUrl,
-      if ((amount - expense.amount).abs() > 0.001)
-        'participants': {
-          for (final p in ps) p.uid: {'name': p.name, 'share': newShares[p.uid] ?? 0, 'paid': p.paid},
-        },
+      if (itemsChanged)
+        'items': items.map((i) => {'label': i.label, 'price': i.price, 'assigneeUids': i.assigneeUids}).toList(),
+      if (participantsUpdate.isNotEmpty) 'participants': participantsUpdate,
       'editedAt': FieldValue.serverTimestamp(),
     });
   }
