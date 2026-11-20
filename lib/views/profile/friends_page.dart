@@ -119,7 +119,7 @@ class _FriendsPageState extends State<FriendsPage> {
               controller: ctrl,
               autofocus: true,
               decoration: InputDecoration(
-                hintText: 'Username or email',
+                hintText: 'Enter an email',
                 hintStyle: const TextStyle(fontSize: 13, color: AppColors.textGrey),
                 filled: true,
                 fillColor: AppColors.chipGrey,

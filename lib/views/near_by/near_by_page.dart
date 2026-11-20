@@ -87,7 +87,41 @@ class _NearByPageState extends State<NearByPage> {
                 ),
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 10),
+            SizedBox(
+              height: 34,
+              child: ListenableBuilder(
+                listenable: controller,
+                builder: (context, _) => ListView(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  scrollDirection: Axis.horizontal,
+                  children: [
+                    const Padding(
+                      padding: EdgeInsets.only(right: 10, top: 8),
+                      child: Text('Within', style: TextStyle(fontSize: 12, color: AppColors.textGrey)),
+                    ),
+                    for (final km in [1, 3, 5]) ...[
+                      ChoiceChip(
+                        label: Text('$km km'),
+                        selected: controller.radiusMeters == km * 1000,
+                        onSelected: (_) => controller.selectRadius(km * 1000),
+                        visualDensity: VisualDensity.compact,
+                        labelStyle: const TextStyle(fontSize: 11),
+                      ),
+                      const SizedBox(width: 8),
+                    ],
+                    IconButton(
+                      tooltip: 'Refresh nearby places',
+                      onPressed: controller.loading ? null : controller.retry,
+                      icon: const Icon(Icons.refresh, size: 19),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: ClipRRect(
@@ -152,9 +186,17 @@ class _NearByPageState extends State<NearByPage> {
                   }
                   return ListView.separated(
                     padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-                    itemCount: controller.places.length,
+                    itemCount: controller.places.length + 1,
                     separatorBuilder: (_, __) => const SizedBox(height: 12),
-                    itemBuilder: (context, i) => _placeCard(controller.places[i]),
+                    itemBuilder: (context, i) {
+                      if (i == 0) {
+                        return Text(
+                          '${controller.places.length} places within ${controller.radiusMeters ~/ 1000} km · Nearest first',
+                          style: const TextStyle(fontSize: 12, color: AppColors.textGrey),
+                        );
+                      }
+                      return _placeCard(controller.places[i - 1]);
+                    },
                   );
                 },
               ),

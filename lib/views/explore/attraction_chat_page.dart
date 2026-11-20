@@ -8,6 +8,7 @@ import '../../theme.dart';
 class AttractionChatPage extends StatefulWidget {
   final String destination;
   final List<CatalogAttraction> candidates;
+  final List<String> planInterests;
   final String uid;
   final String? tripId;
 
@@ -15,6 +16,7 @@ class AttractionChatPage extends StatefulWidget {
     super.key,
     required this.destination,
     required this.candidates,
+    this.planInterests = const [],
     required this.uid,
     required this.tripId,
   });
@@ -27,6 +29,7 @@ class _AttractionChatPageState extends State<AttractionChatPage> {
   late final AttractionChatController controller = AttractionChatController.forTrip(
     destination: widget.destination,
     candidates: widget.candidates,
+    planInterests: widget.planInterests,
     uid: widget.uid,
     tripId: widget.tripId,
   );

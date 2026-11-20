@@ -19,8 +19,18 @@ class NearByController extends ChangeNotifier {
     if (_selectedCategory == category) return;
     _selectedCategory = category;
     _reload();
-    notifyListeners();
   }
+
+  int _radiusMeters = 3000;
+  int get radiusMeters => _radiusMeters;
+  void selectRadius(int value) {
+    if (_radiusMeters == value) return;
+    _radiusMeters = value;
+    _reload();
+  }
+
+  int _requestToken = 0;
+  bool _disposed = false;
 
   List<NearbyPlace> places = [];
   bool loading = true;
@@ -36,7 +46,12 @@ class NearByController extends ChangeNotifier {
   double? get myLon => _lon;
 
   Future<void> _init() async {
+    final token = ++_requestToken;
+    loading = true;
+    error = null;
+    notifyListeners();
     final position = await LocationService.instance.getCurrentPosition();
+    if (_disposed || token != _requestToken) return;
     if (position == null) {
       locationStatus = LocationLookupStatus.failed;
       loading = false;
@@ -49,14 +64,33 @@ class NearByController extends ChangeNotifier {
     await _reload();
   }
 
-  Future<void> _reload() async {
+  Future<void> _reload({bool forceRefresh = false}) async {
     if (_lat == null || _lon == null) return;
+    final token = ++_requestToken;
     loading = true;
+    error = null;
     notifyListeners();
-    places = await CatalogRepository.instance.fetchNearbyPlaces(lat: _lat!, lon: _lon!, category: _selectedCategory);
-    error = places.isEmpty ? _describeError(PlacesApiService.instance.lastSearchNearbyError) : null;
-    loading = false;
-    notifyListeners();
+    try {
+      final results = await CatalogRepository.instance.fetchNearbyPlaces(
+        lat: _lat!, lon: _lon!, category: _selectedCategory,
+        radiusMeters: _radiusMeters, forceRefresh: forceRefresh,
+      );
+      if (_disposed || token != _requestToken) return;
+      places = results;
+      error = results.isEmpty
+          ? _describeError(PlacesApiService.instance.lastSearchNearbyError) ??
+              'No places found within ${_radiusMeters ~/ 1000} km. Try a larger distance.'
+          : null;
+    } catch (_) {
+      if (_disposed || token != _requestToken) return;
+      places = [];
+      error = 'Could not load nearby places. Check your connection and try again.';
+    } finally {
+      if (!_disposed && token == _requestToken) {
+        loading = false;
+        notifyListeners();
+      }
+    }
   }
 
   String? _describeError(Object? e) {
@@ -74,10 +108,12 @@ class NearByController extends ChangeNotifier {
 
   Future<void> retryLocation() => _init();
 
-  Future<void> retry() => _reload();
+  Future<void> retry() => _reload(forceRefresh: true);
 
   @override
   void dispose() {
+    _disposed = true;
+    _requestToken++;
     super.dispose();
   }
 }

@@ -37,8 +37,15 @@ class ExploreController extends ChangeNotifier {
       _tripsSub = TripRepository.instance.watchMyTrips(_uid).listen((v) {
         final previousSignature = _tripSignature(selectedTrip);
         // Past plans only live on the Plan tab -- hide them here.
+        final selectedId = selectedTrip?.id;
         trips = v.where((t) => !t.isInactive).toList();
-        if (selectedTripIndex >= trips.length) selectedTripIndex = 0;
+        // Keep the same plan selected when Firestore reorders the list.
+        final preservedIndex = selectedId == null ? -1 : trips.indexWhere((t) => t.id == selectedId);
+        if (preservedIndex >= 0) {
+          selectedTripIndex = preservedIndex;
+        } else if (selectedTripIndex >= trips.length) {
+          selectedTripIndex = 0;
+        }
         notifyListeners();
         _hasLoadedTrips = true;
         if (!_hasRunInitialSearch) {
@@ -110,7 +117,7 @@ class ExploreController extends ChangeNotifier {
     return 'RM ${(myr ?? amount).toStringAsFixed(0)}';
   }
 
-  String? _tripSignature(Trip? t) => t == null ? null : '${t.id}|${t.destination}|${t.startDate}|${t.endDate}';
+  String? _tripSignature(Trip? t) => t == null ? null : '${t.id}|${t.destination}|${t.startDate}|${t.endDate}|${t.interests.join(',')}';
 
   List<Trip> trips = [];
   int selectedTripIndex = 0;
@@ -190,6 +197,9 @@ class ExploreController extends ChangeNotifier {
 
   Map<String, int> get attractionAffinityForRanking =>
       blendInterestsIntoAffinity(_attractionAffinity, selectedTrip?.interests ?? const []);
+
+  Set<String> get selectedAttractionPreferenceTags =>
+      attractionCategoryTagsForInterests(selectedTrip?.interests ?? const []);
 
   void _reorderByAffinity<T>(List<T> items, List<String> Function(T) tagsOf, Map<String, int> affinity) {
     if (affinity.isEmpty || items.isEmpty) return;

@@ -1,627 +1,840 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Places Management — Voya Admin</title>
-<link rel="stylesheet" href="../css/tokens.css?v=20261022" />
-<link rel="stylesheet" href="../css/base.css?v=20261022" />
-<link rel="stylesheet" href="../css/layout.css?v=20261111a" />
-<link rel="stylesheet" href="../css/components.css?v=20261106g" />
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Places Management — Voya Admin</title>
+    <link rel="stylesheet" href="../css/tokens.css?v=20261022" />
+    <link rel="stylesheet" href="../css/base.css?v=20261022" />
+    <link rel="stylesheet" href="../css/layout.css?v=20261111a" />
+    <link rel="stylesheet" href="../css/components.css?v=20261106g" />
 </head>
 <body>
 <div class="shell">
-  <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
-  <aside class="sidebar" id="sidebar">
-    <img class="sidebar-brand" src="../img/voya-logo-white.png" alt="Voya" />
-    <div class="sidebar-user">
-      <div class="name" id="sbUserName">Loading…</div>
-      <div class="role" id="sbUserRole">Administrator</div>
-    </div>
-    <nav class="nav" id="sidebarNav"></nav>
-    <button class="sidebar-logout" id="logoutBtn"><span data-icon="log-out"></span>Log out</button>
-  </aside>
+    <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+    <aside class="sidebar" id="sidebar">
+        <img class="sidebar-brand" src="../img/voya-logo-white.png" alt="Voya" />
+        <div class="sidebar-user">
+            <div class="name" id="sbUserName">Loading…</div>
+            <div class="role" id="sbUserRole">Administrator</div>
+        </div>
+        <nav class="nav" id="sidebarNav"></nav>
+        <button class="sidebar-logout" id="logoutBtn"><span data-icon="log-out"></span>Log out</button>
+    </aside>
 
-  <main class="content">
-    <div class="topbar">
-      <div>
-        <button class="menu-toggle" id="menuToggle"><span data-icon="menu"></span></button>
-        <h1 class="h1">Places Management</h1>
-        <p class="subtitle" id="pageSubtitle">Manage attraction details and visibility</p>
-      </div>
-      <div class="inline-flex" style="gap:10px;">
-        <button class="btn btn-primary" id="addBtn"><span data-icon="plus"></span>Add attraction</button>
-      </div>
-    </div>
+    <main class="content">
+        <div class="topbar">
+            <div>
+                <button class="menu-toggle" id="menuToggle"><span data-icon="menu"></span></button>
+                <h1 class="h1">Places Management</h1>
+                <p class="subtitle" id="pageSubtitle">Manage attraction details and visibility</p>
+            </div>
+            <div class="inline-flex" style="gap:10px;">
+                <button class="btn btn-primary" id="addBtn"><span data-icon="plus"></span>Add attraction</button>
+            </div>
+        </div>
 
-    <div class="tabs" id="placesTabs">
-      <button class="tab-btn active" data-tab="attractions">Attractions</button>
-      <button class="tab-btn" data-tab="restaurants">Restaurants</button>
-      <button class="tab-btn" data-tab="suggestions">Place Suggestions<span class="tab-alert-dot" id="suggestionsTabDot" style="display:none;" title="Suggestions pending review"></span></button>
-    </div>
+        <div class="tabs" id="placesTabs">
+            <button class="tab-btn active" data-tab="attractions">Attractions</button>
+            <button class="tab-btn" data-tab="restaurants">Restaurants</button>
+            <button class="tab-btn" data-tab="suggestions">Place Suggestions<span class="tab-alert-dot" id="suggestionsTabDot" style="display:none;" title="Suggestions pending review"></span></button>
+        </div>
 
-    <div class="stat-grid" id="statGrid"><div class="skeleton" style="height:90px;grid-column:1/-1;"></div></div>
+        <div class="stat-grid" id="statGrid"><div class="skeleton" style="height:90px;grid-column:1/-1;"></div></div>
 
-    <div class="filter-bar">
-      <div class="search-input-wrap"><span data-icon="search"></span><input class="input" id="searchInput" placeholder="Search name or location…" /></div>
-      <select class="select" id="statusFilter">
-        <option value="">All status</option>
-        <option value="active">Active</option>
-        <option value="inactive">Inactive</option>
-      </select>
-      <select class="select" id="countryFilter">
-        <option value="">All countries</option>
-      </select>
-      <select class="select" id="categoryFilter">
-        <option value="">All categories</option>
-      </select>
-      <select class="select" id="sortFilter">
-        <option value="updated_desc">Updated: newest first</option>
-        <option value="updated_asc">Updated: oldest first</option>
-      </select>
-    </div>
+        <div class="filter-bar">
+            <div class="search-input-wrap"><span data-icon="search"></span><input class="input" id="searchInput" placeholder="Search attraction name (starts with)…" /></div>
+            <select class="select" id="statusFilter">
+                <option value="">All status</option>
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+            </select>
+            <select class="select" id="countryFilter">
+                <option value="">All countries</option>
+            </select>
+            <select class="select" id="categoryFilter">
+                <option value="">All categories</option>
+            </select>
+            <select class="select" id="sortFilter">
+                <option value="record">Record order (fast)</option>
+                <option value="updated_desc">Updated: newest first</option>
+                <option value="updated_asc">Updated: oldest first</option>
+            </select>
+        </div>
 
-    <div class="table-wrap scroll-x">
-      <table class="data-table">
-        <thead id="tableHead"><tr><th>Attraction</th><th>Category</th><th>Location</th><th>Updated</th><th>Status</th><th></th></tr></thead>
-        <tbody id="tableBody"><tr><td colspan="6"><div class="skeleton" style="height:40px;"></div></td></tr></tbody>
-      </table>
-      <div class="empty-state" id="emptyState" style="display:none;">
-        <span data-icon="map-pin" class="icon-lg"></span>
-        <div class="h3" id="emptyTitle">No attractions found</div>
-        <p class="small">Add one, or try a different search.</p>
-      </div>
-    </div>
-    <div class="table-foot" id="tableFoot">
-      <p class="small muted" id="resultsLabel"></p>
-      <div class="pagination" id="pagination"></div>
-    </div>
+        <div class="table-wrap scroll-x">
+            <table class="data-table">
+                <thead id="tableHead"><tr><th>Attraction</th><th>Category</th><th>Location</th><th>Updated</th><th>Status</th><th></th></tr></thead>
+                <tbody id="tableBody"><tr><td colspan="6"><div class="skeleton" style="height:40px;"></div></td></tr></tbody>
+            </table>
+            <div class="empty-state" id="emptyState" style="display:none;">
+                <span data-icon="map-pin" class="icon-lg"></span>
+                <div class="h3" id="emptyTitle">No attractions found</div>
+                <p class="small">Add one, or try a different search.</p>
+            </div>
+        </div>
+        <div class="table-foot" id="tableFoot">
+            <p class="small muted" id="resultsLabel"></p>
+            <div class="pagination" id="pagination"></div>
+        </div>
 
-    <div id="suggestionsPanel" style="display:none;">
-      <div class="filter-bar">
-        <div class="search-input-wrap"><span data-icon="search"></span><input class="input" id="suggestionSearchInput" placeholder="Search suggested places…" /></div>
-      </div>
-      <div id="suggestionList"><div class="card" style="padding:20px;"><div class="skeleton" style="height:80px;"></div></div></div>
-      <div class="empty-state" id="suggestionEmptyState" style="display:none;">
-        <span data-icon="map-pin" class="icon-lg"></span>
-        <div class="h3">Nothing to review</div>
-        <p class="small">New places travellers suggest from the app will show up here.</p>
-      </div>
-    </div>
-  </main>
+        <div id="suggestionsPanel" style="display:none;">
+            <div class="filter-bar">
+                <div class="search-input-wrap"><span data-icon="search"></span><input class="input" id="suggestionSearchInput" placeholder="Search suggested places…" /></div>
+            </div>
+            <div id="suggestionList"><div class="card" style="padding:20px;"><div class="skeleton" style="height:80px;"></div></div></div>
+            <div class="empty-state" id="suggestionEmptyState" style="display:none;">
+                <span data-icon="map-pin" class="icon-lg"></span>
+                <div class="h3">Nothing to review</div>
+                <p class="small">New places travellers suggest from the app will show up here.</p>
+            </div>
+        </div>
+    </main>
 </div>
 
 <div class="modal-backdrop" id="placeModal">
-  <div class="modal" style="max-width:600px;">
-    <div class="modal-head"><h3 class="h2" id="placeModalTitle">Attraction detail</h3><button class="modal-close" data-close><span data-icon="x"></span></button></div>
-    <div id="placeModalBody"></div>
-  </div>
+    <div class="modal" style="max-width:600px;">
+        <div class="modal-head"><h3 class="h2" id="placeModalTitle">Attraction detail</h3><button class="modal-close" data-close><span data-icon="x"></span></button></div>
+        <div id="placeModalBody"></div>
+    </div>
 </div>
 
 <div class="modal-backdrop" id="suggestionDetailModal">
-  <div class="modal" style="max-width:600px;">
-    <div class="modal-head"><h3 class="h2">Suggested place</h3><button class="modal-close" data-close><span data-icon="x"></span></button></div>
-    <div id="suggestionDetailBody"></div>
-  </div>
+    <div class="modal" style="max-width:600px;">
+        <div class="modal-head"><h3 class="h2">Suggested place</h3><button class="modal-close" data-close><span data-icon="x"></span></button></div>
+        <div id="suggestionDetailBody"></div>
+    </div>
 </div>
 
 <script type="module">
-import { requireRole } from "../js/auth-guard.js?v=20261115a";
-import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261114a";
-import { mountIcons } from "../js/icons.js?v=20261106c";
-import {
-  listAttractions, deleteAttraction, listAllRestaurants, deleteRestaurant,
-  listPlaceSuggestions, rejectPlaceSuggestion, logModerationAction, countModerationToday, countModerationYesterday,
-  countPlaceSuggestions,
-} from "../js/data.js?v=20261117a";
-import {
-  number, shortDate, fullDate, timeAgo, statusBadge, escapeHtml, paginate, renderPager, toast, confirmDialog, setBusy,
-  statCard, plainCard, trendDelta, openModal, closeModal, wireModalDismiss,
-} from "../js/ui.js?v=20261115a";
+    import { requireRole } from "../js/auth-guard.js?v=20261115a";
+    import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261114a";
+    import { mountIcons } from "../js/icons.js?v=20261106c";
+    import {
+      listAttractions, deleteAttraction, listAllRestaurants, deleteRestaurant,
+      listPlaceSuggestions, rejectPlaceSuggestion, logModerationAction, countModerationToday, countModerationYesterday,
+      countPlaceSuggestions,
+    } from "../js/data.js?v=20261117a";
+    import { COUNTRY_OPTIONS } from "../js/countries.js";
+    import { db } from "../js/firebase-config.js";
+    import {
+      collection, doc, getDoc, getDocs, query, where, limit,
+      orderBy, documentId, startAfter, getCountFromServer,
+    } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
+    import {
+      number, shortDate, fullDate, timeAgo, statusBadge, escapeHtml, paginate, renderPager, toast, confirmDialog, setBusy,
+      statCard, plainCard, trendDelta, openModal, closeModal, wireModalDismiss,
+    } from "../js/ui.js?v=20261115a";
 
-mountSidebarNav({ role: "admin", active: "attractions" });
-const session = await requireRole("admin", "login.html");
-// Lets a link into this page pick which tab opens — e.g. restaurant-form.html
-// redirects back to "attractions.html?tab=restaurants" after saving, so
-// adding/editing a restaurant doesn't dump you back on the Attractions tab.
-const requestedTab = new URLSearchParams(location.search).get("tab");
-const requestedFocus = new URLSearchParams(location.search).get("focus");
-let activeTab = requestedTab === "restaurants" ? "restaurants" : requestedTab === "suggestions" ? "suggestions" : "attractions";
-let filtered = [], page = 1;
-const PAGE_SIZE = 8;
-// Cache per tab so switching back and forth doesn't re-fetch every time.
-const cache = {};
-let placeSuggestions = [];
+    // Self-contained catalogue paging: does not depend on extra exports in js/data.js.
+    // A missing getAttractionFilterOptions export previously stopped the entire page.
+    function normaliseAttractionText(value) {
+      return String(value || "").normalize("NFKC").trim().toLowerCase().replace(/\s+/g, " ");
+    }
 
-function countryFromLocation(location) {
-  const parts = (location || "").split(",").map((s) => s.trim()).filter(Boolean);
-  return parts.length ? parts[parts.length - 1] : "";
-}
+    async function getAttractionPage({ pageSize = 20, cursor = null, search = "", status = "", country = "", category = "", sort = "record" } = {}) {
+      const conditions = [];
+      if (status) conditions.push(where("status", "==", status));
+      if (country) conditions.push(where("countryKey", "==", normaliseAttractionText(country)));
+      if (category) conditions.push(where("category", "==", category));
+      const prefix = normaliseAttractionText(search);
+      if (prefix) {
+        conditions.push(where("nameNormalized", ">=", prefix), where("nameNormalized", "<=", prefix + "\uf8ff"));
+        conditions.push(orderBy("nameNormalized"));
+      } else if (sort === "updated_asc" || sort === "updated_desc") {
+        conditions.push(orderBy("updatedAt", sort === "updated_desc" ? "desc" : "asc"));
+      } else {
+        // Document-ID order also works for records not backfilled with new fields.
+        conditions.push(orderBy(documentId()));
+      }
+      if (cursor) conditions.push(startAfter(cursor));
+      conditions.push(limit(pageSize + 1));
+      const snapshot = await getDocs(query(collection(db, "catalog_attractions"), ...conditions));
+      const visible = snapshot.docs.slice(0, pageSize);
+      return {
+        items: visible.map((d) => ({ id: d.id, ...d.data() })),
+        cursor: visible.length ? visible[visible.length - 1] : null,
+        hasMore: snapshot.docs.length > pageSize,
+      };
+    }
 
-function restaurantCuisineTags(r) {
-  return Array.isArray(r.cuisineTags) && r.cuisineTags.length
-    ? r.cuisineTags
-    : Array.isArray(r.cuisine)
-      ? r.cuisine
-      : typeof r.cuisine === "string" && r.cuisine
-        ? [r.cuisine]
-        : [];
-}
+    async function getAttractionStats() {
+      const attractions = collection(db, "catalog_attractions");
+      const [total, inactive] = await Promise.all([
+        getCountFromServer(query(attractions)),
+        getCountFromServer(query(attractions, where("status", "==", "inactive"))),
+      ]);
+      const totalCount = total.data().count;
+      const inactiveCount = inactive.data().count;
+      return { total: totalCount, active: totalCount - inactiveCount, inactive: inactiveCount };
+    }
 
-function restaurantCuisineLabel(r) {
-  const tags = restaurantCuisineTags(r);
-  return tags.length ? tags.slice(0, 2).join(", ") : "—";
-}
-function restaurantLocationLabel(r) {
-  if (typeof r.location === "string" && r.location) return r.location;
-  if (r.city && r.country) return `${r.city}, ${r.country}`;
-  return r.city || r.country || "—";
-}
-function restaurantPriceRange(r) {
-  return r.priceRange || r.price_range || "—";
-}
-function restaurantOpeningHours(r) {
-  return r.openingHours || r.opening_hours || "—";
-}
-function restaurantDescription(r) {
-  return r.description || r.about || "—";
-}
+    async function getAttractionFilterOptions() {
+      const snapshot = await getDoc(doc(db, "catalog_meta", "attractions"));
+      return snapshot.exists() ? snapshot.data() : { countries: [], categories: [] };
+    }
 
-const TABS = {
-  attractions: {
-    noun: "attraction", nounCap: "Attraction", icon: "map-pin",
-    href: "attraction-form.html",
-    subtitle: "Manage attraction details and visibility",
-    async list() {
-      const items = await listAttractions();
-      items.forEach((a) => (a.status = a.status || "active"));
-      return items;
-    },
-    hasStatus: true,
-    columns: ["Attraction", "Category", "Location", "Updated", "Status", ""],
-    row(a) {
-      return `
-        <td class="cell-strong">${escapeHtml(a.name || "—")}</td>
-        <td class="muted">${escapeHtml(a.category || "—")}</td>
-        <td class="muted">${escapeHtml(a.location || "—")}</td>
-        <td class="muted">${shortDate(a.updatedAt)}</td>
-        <td>${statusBadge(a.status)}</td>`;
-    },
-    matches(a, q) { return (a.name || "").toLowerCase().includes(q) || (a.location || "").toLowerCase().includes(q); },
-    countryOf(a) { return countryFromLocation(a.location); },
-    categoryLabel: "category",
-    categoryOf(a) { return a.category ? [a.category] : []; },
-    stats(items) {
-      const active = items.filter((a) => a.status === "active");
-      const inactive = items.filter((a) => a.status === "inactive").length;
-      return [
-        plainCard("Attractions", number(items.length), "map-pin"),
-        plainCard("Active", number(active.length), "sparkle"),
-        plainCard("Inactive", number(inactive), "x-circle"),
-      ];
-    },
-    detail(a) {
-      const row = (label, value) => `<div class="field" style="margin-bottom:12px;"><label>${label}</label><p class="value">${value}</p></div>`;
-      const extraCategories = (a.categories || []).filter((cat) => cat !== (a.category || ""));
-      const categoryLine = extraCategories.length
-        ? `${escapeHtml(a.category || "—")} <span class="muted small">(+ ${extraCategories.map(escapeHtml).join(", ")})</span>`
-        : escapeHtml(a.category || "—");
-      const isFree = a.price === "Free entry" || (!a.fees?.adult && !a.fees?.child && !a.fees?.senior && !a.price);
-      const feeLine = isFree
-        ? "Free entry"
-        : [a.fees?.adult && `Adult ${a.fees.adult}`, a.fees?.child && `Child ${a.fees.child}`, a.fees?.senior && `Senior ${a.fees.senior}`].filter(Boolean).join(" · ") || "—";
-      return `
-        ${a.image ? `<img src="${a.image}" style="width:100%;border-radius:12px;margin-bottom:16px;max-height:220px;object-fit:cover;" />` : ""}
-        <div class="form-grid">
-          ${row("Name", escapeHtml(a.name || "—"))}
-          ${row("Status", statusBadge(a.status))}
-          ${row("Category", categoryLine)}
-          ${row("Location", escapeHtml(a.location || "—"))}
-          ${row("Full address", escapeHtml(a.address || "—"))}
-          ${row("Recommended duration", escapeHtml(a.recommendedDuration || "—"))}
-          ${row("Entry fee", feeLine)}
-          ${row("Opening hours", escapeHtml(a.openingHours || "—"))}
-          ${row("Phone", escapeHtml(a.phone || "—"))}
-          ${row("Website", a.website ? `<a href="${escapeHtml(/^https?:\/\//i.test(a.website) ? a.website : `https://${a.website}`)}" target="_blank" rel="noopener">${escapeHtml(a.website)}</a>` : "—")}
-          ${row("Rating", a.rating ? `${escapeHtml(String(a.rating))}${a.reviews ? ` <span class="muted small">(${escapeHtml(String(a.reviews))} reviews)</span>` : ""}` : "—")}
-          ${row("Facilities", (a.facilities || []).length ? a.facilities.map(escapeHtml).join(", ") : "—")}
-          ${row("Highlights", (a.highlights || []).length ? a.highlights.map(escapeHtml).join(", ") : "—")}
-          ${row("Last updated", shortDate(a.updatedAt))}
-          ${row("Added", fullDate(a.createdAt))}
-        </div>`;
-    },
-    async remove(id, name) {
-      await deleteAttraction(id);
-    },
-  },
-  restaurants: {
-    noun: "restaurant", nounCap: "Restaurant", icon: "coin",
-    href: "restaurant-form.html",
-    subtitle: "Manage restaurant details shown in the app's Explore catalogue.",
-    async list() {
-      const items = await listAllRestaurants();
-      items.forEach((r) => (r.status = r.status || "active"));
-      return items;
-    },
-    hasStatus: true,
-    columns: ["Restaurant", "Cuisine", "Location", "Updated", "Status", ""],
-    row(r) {
-      return `
-        <td class="cell-strong">${escapeHtml(r.name || "—")}</td>
-        <td class="muted">${escapeHtml(restaurantCuisineLabel(r))}</td>
-        <td class="muted">${escapeHtml(restaurantLocationLabel(r))}</td>
-        <td class="muted">${shortDate(r.updatedAt)}</td>
-        <td>${statusBadge(r.status)}</td>`;
-    },
-    matches(r, q) { return (r.name || "").toLowerCase().includes(q) || restaurantLocationLabel(r).toLowerCase().includes(q); },
-    countryOf(r) { return countryFromLocation(restaurantLocationLabel(r)); },
-    categoryLabel: "cuisine",
-    categoryOf(r) { return restaurantCuisineTags(r); },
-    stats(items) {
-      const cuisineSet = new Set();
-      const destSet = new Set();
-      let missingDetails = 0;
-      items.forEach((r) => {
-        const cuisine = restaurantCuisineLabel(r);
-        const dest = restaurantLocationLabel(r);
-        if (cuisine !== "—") cuisine.split(", ").forEach((c) => cuisineSet.add(c));
-        if (dest !== "—") destSet.add(dest);
-        if (cuisine === "—" || dest === "—") missingDetails++;
+    mountSidebarNav({ role: "admin", active: "attractions" });
+    const session = await requireRole("admin", "login.html");
+    // Lets a link into this page pick which tab opens — e.g. restaurant-form.html
+    // redirects back to "attractions.html?tab=restaurants" after saving, so
+    // adding/editing a restaurant doesn't dump you back on the Attractions tab.
+    const requestedTab = new URLSearchParams(location.search).get("tab");
+    const requestedFocus = new URLSearchParams(location.search).get("focus");
+    let activeTab = requestedTab === "restaurants" ? "restaurants" : requestedTab === "suggestions" ? "suggestions" : "attractions";
+    let filtered = [], page = 1;
+    const PAGE_SIZE = 8;
+    // Cache per tab so switching back and forth doesn't re-fetch every time.
+    const cache = {};
+    const ATTRACTIONS_PER_PAGE = 20;
+    let attractionStats = null;
+    let attractionFilterOptions = null;
+    let attractionHasMore = false;
+    let attractionPageCursors = [null]; // page N starts after cursor[N-1]
+    let attractionRequestId = 0;
+    let attractionSearchTimer;
+    const ATTRACTION_CATEGORY_DEFAULTS = [
+      "Historic Site", "Temple", "Museum", "Art & Culture", "Garden", "Park",
+      "Nature Reserve", "Zoo", "Aquarium", "Theme Park", "Shopping Mall",
+      "Market", "Landmark", "Beach", "Monument", "Viewpoint",
+    ];
+    let placeSuggestions = [];
+
+    function countryFromLocation(location) {
+      const parts = (location || "").split(",").map((s) => s.trim()).filter(Boolean);
+      return parts.length ? parts[parts.length - 1] : "";
+    }
+
+    function restaurantCuisineTags(r) {
+      return Array.isArray(r.cuisineTags) && r.cuisineTags.length
+        ? r.cuisineTags
+        : Array.isArray(r.cuisine)
+          ? r.cuisine
+          : typeof r.cuisine === "string" && r.cuisine
+            ? [r.cuisine]
+            : [];
+    }
+
+    function restaurantCuisineLabel(r) {
+      const tags = restaurantCuisineTags(r);
+      return tags.length ? tags.slice(0, 2).join(", ") : "—";
+    }
+    function restaurantLocationLabel(r) {
+      if (typeof r.location === "string" && r.location) return r.location;
+      if (r.city && r.country) return `${r.city}, ${r.country}`;
+      return r.city || r.country || "—";
+    }
+    function restaurantPriceRange(r) {
+      return r.priceRange || r.price_range || "—";
+    }
+    function restaurantOpeningHours(r) {
+      return r.openingHours || r.opening_hours || "—";
+    }
+    function restaurantDescription(r) {
+      return r.description || r.about || "—";
+    }
+
+    const TABS = {
+      attractions: {
+        noun: "attraction", nounCap: "Attraction", icon: "map-pin",
+        href: "attraction-form.html",
+        subtitle: "Manage attraction details and visibility",
+        async list() {
+          const items = await listAttractions();
+          items.forEach((a) => (a.status = a.status || "active"));
+          return items;
+        },
+        hasStatus: true,
+        columns: ["Attraction", "Category", "Location", "Updated", "Status", ""],
+        row(a) {
+          return `
+            <td class="cell-strong">${escapeHtml(a.name || "—")}</td>
+            <td class="muted">${escapeHtml(a.category || "—")}</td>
+            <td class="muted">${escapeHtml(a.location || "—")}</td>
+            <td class="muted">${shortDate(a.updatedAt)}</td>
+            <td>${statusBadge(a.status)}</td>`;
+        },
+        matches(a, q) { return (a.name || "").toLowerCase().includes(q) || (a.location || "").toLowerCase().includes(q); },
+        countryOf(a) { return countryFromLocation(a.location); },
+        categoryLabel: "category",
+        categoryOf(a) { return a.category ? [a.category] : []; },
+        stats(items) {
+          const active = items.filter((a) => a.status === "active");
+          const inactive = items.filter((a) => a.status === "inactive").length;
+          return [
+            plainCard("Attractions", number(items.length), "map-pin"),
+            plainCard("Active", number(active.length), "sparkle"),
+            plainCard("Inactive", number(inactive), "x-circle"),
+          ];
+        },
+        detail(a) {
+          const row = (label, value) => `<div class="field" style="margin-bottom:12px;"><label>${label}</label><p class="value">${value}</p></div>`;
+          const extraCategories = (a.categories || []).filter((cat) => cat !== (a.category || ""));
+          const categoryLine = extraCategories.length
+            ? `${escapeHtml(a.category || "—")} <span class="muted small">(+ ${extraCategories.map(escapeHtml).join(", ")})</span>`
+            : escapeHtml(a.category || "—");
+          const isFree = a.price === "Free entry" || (!a.fees?.adult && !a.fees?.child && !a.fees?.senior && !a.price);
+          const feeLine = isFree
+            ? "Free entry"
+            : [a.fees?.adult && `Adult ${a.fees.adult}`, a.fees?.child && `Child ${a.fees.child}`, a.fees?.senior && `Senior ${a.fees.senior}`].filter(Boolean).join(" · ") || "—";
+          return `
+            ${a.image ? `<img src="${a.image}" style="width:100%;border-radius:12px;margin-bottom:16px;max-height:220px;object-fit:cover;" />` : ""}
+            <div class="form-grid">
+              ${row("Name", escapeHtml(a.name || "—"))}
+              ${row("Status", statusBadge(a.status))}
+              ${row("Category", categoryLine)}
+              ${row("Location", escapeHtml(a.location || "—"))}
+              ${row("Full address", escapeHtml(a.address || "—"))}
+              ${row("Recommended duration", escapeHtml(a.recommendedDuration || "—"))}
+              ${row("Entry fee", feeLine)}
+              ${row("Opening hours", escapeHtml(a.openingHours || "—"))}
+              ${row("Phone", escapeHtml(a.phone || "—"))}
+              ${row("Website", a.website ? `<a href="${escapeHtml(/^https?:\/\//i.test(a.website) ? a.website : `https://${a.website}`)}" target="_blank" rel="noopener">${escapeHtml(a.website)}</a>` : "—")}
+              ${row("Rating", a.rating ? `${escapeHtml(String(a.rating))}${a.reviews ? ` <span class="muted small">(${escapeHtml(String(a.reviews))} reviews)</span>` : ""}` : "—")}
+              ${row("Facilities", (a.facilities || []).length ? a.facilities.map(escapeHtml).join(", ") : "—")}
+              ${row("Highlights", (a.highlights || []).length ? a.highlights.map(escapeHtml).join(", ") : "—")}
+              ${row("Last updated", shortDate(a.updatedAt))}
+              ${row("Added", fullDate(a.createdAt))}
+            </div>`;
+        },
+        async remove(id, name) {
+          await deleteAttraction(id);
+        },
+      },
+      restaurants: {
+        noun: "restaurant", nounCap: "Restaurant", icon: "coin",
+        href: "restaurant-form.html",
+        subtitle: "Manage restaurant details shown in the app's Explore catalogue.",
+        async list() {
+          const items = await listAllRestaurants();
+          items.forEach((r) => (r.status = r.status || "active"));
+          return items;
+        },
+        hasStatus: true,
+        columns: ["Restaurant", "Cuisine", "Location", "Updated", "Status", ""],
+        row(r) {
+          return `
+            <td class="cell-strong">${escapeHtml(r.name || "—")}</td>
+            <td class="muted">${escapeHtml(restaurantCuisineLabel(r))}</td>
+            <td class="muted">${escapeHtml(restaurantLocationLabel(r))}</td>
+            <td class="muted">${shortDate(r.updatedAt)}</td>
+            <td>${statusBadge(r.status)}</td>`;
+        },
+        matches(r, q) { return (r.name || "").toLowerCase().includes(q) || restaurantLocationLabel(r).toLowerCase().includes(q); },
+        countryOf(r) { return countryFromLocation(restaurantLocationLabel(r)); },
+        categoryLabel: "cuisine",
+        categoryOf(r) { return restaurantCuisineTags(r); },
+        stats(items) {
+          const cuisineSet = new Set();
+          const destSet = new Set();
+          let missingDetails = 0;
+          items.forEach((r) => {
+            const cuisine = restaurantCuisineLabel(r);
+            const dest = restaurantLocationLabel(r);
+            if (cuisine !== "—") cuisine.split(", ").forEach((c) => cuisineSet.add(c));
+            if (dest !== "—") destSet.add(dest);
+            if (cuisine === "—" || dest === "—") missingDetails++;
+          });
+          return [
+            plainCard("Restaurants", number(items.length), "coin"),
+            plainCard("Cuisines covered", number(cuisineSet.size), "flag"),
+            plainCard("Destinations covered", number(destSet.size), "map-pin"),
+            plainCard("Missing details", number(missingDetails), "alert-triangle"),
+          ];
+        },
+        detail(r) {
+          const row = (label, value) => `<div class="field" style="margin-bottom:12px;"><label>${label}</label><p class="value">${value}</p></div>`;
+          const website = r.website || "";
+          return `
+            <div class="form-grid">
+              ${row("Name", escapeHtml(r.name || "—"))}
+              ${row("Status", statusBadge(r.status))}
+              ${row("Cuisine", escapeHtml(restaurantCuisineLabel(r)))}
+              ${row("Location", escapeHtml(restaurantLocationLabel(r)))}
+              ${row("Full address", escapeHtml(r.address || "—"))}
+              ${row("Price range", escapeHtml(restaurantPriceRange(r)))}
+              ${row("Opening hours", escapeHtml(restaurantOpeningHours(r)))}
+              ${row("Phone", escapeHtml(r.phone || "—"))}
+              ${row("Website", website ? `<a href="${escapeHtml(/^https?:\/\//i.test(website) ? website : `https://${website}`)}" target="_blank" rel="noopener">${escapeHtml(website)}</a>` : "—")}
+              ${row("Rating", r.rating ? `${escapeHtml(String(r.rating))}${r.reviews ? ` <span class="muted small">(${escapeHtml(String(r.reviews))} reviews)</span>` : ""}` : "—")}
+              ${row("About", escapeHtml(restaurantDescription(r)))}
+              ${row("Last updated", shortDate(r.updatedAt))}
+              ${row("Added", fullDate(r.createdAt))}
+            </div>`;
+        },
+        async remove(id, name) {
+          await deleteRestaurant(id);
+        },
+      },
+    };
+
+    if (session) {
+      setSidebarUser({ displayName: session.profile.name || "Admin", roleLabel: "Administrator" });
+      wireModalDismiss();
+      document.querySelectorAll("#placesTabs .tab-btn").forEach((t) => t.classList.toggle("active", t.dataset.tab === activeTab));
+      if (activeTab === "suggestions") {
+        showSuggestionsView();
+        await loadSuggestions();
+        if (requestedFocus) openSuggestionDetail(requestedFocus);
+      } else {
+        applyTabChrome();
+        await load();
+        refreshSuggestionsTabDot();
+      }
+    }
+
+    /** Lights up the Place Suggestions tab with a red dot whenever there's
+     * at least one suggestion waiting on a decision — visible from whichever
+     * tab the admin is actually on, not just after clicking into Suggestions. */
+    async function refreshSuggestionsTabDot() {
+      try {
+        const n = await countPlaceSuggestions();
+        document.getElementById("suggestionsTabDot").style.display = n > 0 ? "" : "none";
+      } catch (err) {
+        // Leave the dot as-is (hidden) rather than showing a false alarm
+        // for what's most likely the same reviews-style permission issue
+        // logged elsewhere in this console, not an actual pending count.
+      }
+    }
+
+    function showSuggestionsView() {
+      document.getElementById("addBtn").style.display = "none";
+      document.querySelector(".filter-bar").style.display = "none";
+      document.getElementById("statGrid").style.display = "none";
+      document.querySelector(".table-wrap").style.display = "none";
+      document.getElementById("tableFoot").style.display = "none";
+      document.getElementById("suggestionsPanel").style.display = "";
+    }
+    function showTableView() {
+      document.getElementById("addBtn").style.display = "";
+      document.querySelector(".filter-bar").style.display = "";
+      document.getElementById("statGrid").style.display = "";
+      document.querySelector(".table-wrap").style.display = "";
+      document.getElementById("tableFoot").style.display = "";
+      document.getElementById("suggestionsPanel").style.display = "none";
+    }
+
+    function applyTabChrome() {
+      const cfg = TABS[activeTab];
+      document.getElementById("searchInput").placeholder = activeTab === "attractions"
+        ? "Search attraction name (starts with)…" : "Search name or location…";
+      const fastSort = document.querySelector('#sortFilter option[value="record"]');
+      fastSort.hidden = activeTab !== "attractions";
+      fastSort.disabled = activeTab !== "attractions";
+      if (activeTab !== "attractions" && document.getElementById("sortFilter").value === "record") {
+        document.getElementById("sortFilter").value = "updated_desc";
+      }
+      document.getElementById("pageSubtitle").textContent = cfg.subtitle;
+      document.getElementById("addBtn").innerHTML = `<span data-icon="plus"></span>Add ${cfg.noun}`;
+      document.getElementById("statusFilter").style.display = cfg.hasStatus ? "" : "none";
+      document.getElementById("categoryFilter").innerHTML = `<option value="">All ${cfg.categoryLabel}s</option>`;
+      document.getElementById("countryFilter").value = "";
+      document.getElementById("tableHead").innerHTML = `<tr>${cfg.columns.map((c) => `<th>${c}</th>`).join("")}</tr>`;
+      document.getElementById("emptyTitle").textContent = `No ${cfg.noun}s found`;
+      mountIcons(document);
+    }
+
+    async function load() {
+      if (activeTab === "attractions") {
+        document.getElementById("tableBody").innerHTML = '<tr><td colspan="6"><div class="skeleton" style="height:40px;"></div></td></tr>';
+        // NEVER block the paginated table while stats/metadata queries are pending.
+        // On a large catalogue the count aggregation can take much longer than
+        // loading the first 20 documents, especially on a cold connection.
+        renderStats();
+        populateDynamicFilters();
+        if (!attractionStats) {
+          getAttractionStats().then((stats) => {
+            attractionStats = stats;
+            if (activeTab === "attractions") { renderStats(); renderAttractionResultsLabel(); }
+          }).catch((e) => {
+            console.warn("Attraction stats unavailable (table still works):", e);
+          });
+        }
+        if (!attractionFilterOptions) {
+          getAttractionFilterOptions().then((options) => {
+            attractionFilterOptions = options;
+            if (activeTab === "attractions") populateDynamicFilters();
+          }).catch((e) => {
+            console.warn("Attraction filter options unavailable:", e);
+          });
+        }
+        await loadAttractionPage();
+        return;
+      }
+      if (!cache[activeTab]) {
+        const cfg = TABS[activeTab];
+        document.getElementById("tableBody").innerHTML = `<tr><td colspan="${cfg.columns.length}"><div class="skeleton" style="height:40px;"></div></td></tr>`;
+        document.getElementById("statGrid").innerHTML = `<div class="skeleton" style="height:90px;grid-column:1/-1;"></div>`;
+        cache[activeTab] = await cfg.list();
+      }
+      renderStats();
+      populateDynamicFilters();
+      applyFilters();
+    }
+
+    function resetAttractionPaging() {
+      page = 1;
+      attractionPageCursors = [null];
+      attractionHasMore = false;
+    }
+
+    async function loadAttractionPage() {
+      const requestId = ++attractionRequestId;
+      const filters = {
+        pageSize: ATTRACTIONS_PER_PAGE,
+        cursor: attractionPageCursors[page - 1] || null,
+        search: document.getElementById("searchInput").value.trim(),
+        status: document.getElementById("statusFilter").value,
+        country: document.getElementById("countryFilter").value,
+        category: document.getElementById("categoryFilter").value,
+        sort: document.getElementById("sortFilter").value,
+      };
+      document.getElementById("tableBody").innerHTML = '<tr><td colspan="6"><div class="skeleton" style="height:40px;"></div></td></tr>';
+      try {
+        // Fail visibly instead of leaving the skeleton on screen indefinitely.
+        // This is a UI timeout; it does not cancel Firestore's own network request.
+        let deadline;
+        const result = await Promise.race([
+          getAttractionPage(filters),
+          new Promise((_, reject) => {
+            deadline = setTimeout(() => reject(new Error("Firestore is taking too long. Please retry or check your connection.")), 12000);
+          }),
+        ]).finally(() => clearTimeout(deadline));
+        if (requestId !== attractionRequestId || activeTab !== "attractions") return;
+        cache.attractions = result.items.map((a) => ({ ...a, status: a.status || "active" }));
+        filtered = cache.attractions;
+        attractionHasMore = result.hasMore;
+        if (result.hasMore) attractionPageCursors[page] = result.cursor;
+        renderTable();
+      } catch (e) {
+        if (requestId !== attractionRequestId || activeTab !== "attractions") return;
+        cache.attractions = [];
+        filtered = [];
+        document.getElementById("tableBody").innerHTML = `<tr><td colspan="6" style="padding:20px;">
+          <div class="muted" style="margin-bottom:10px;">Could not load attractions: ${escapeHtml(e.message || "Please try again")}</div>
+          <button type="button" class="btn btn-outline btn-sm" id="retryAttractionPage">Retry loading</button>
+        </td></tr>`;
+        document.getElementById("retryAttractionPage").addEventListener("click", loadAttractionPage);
+        document.getElementById("emptyState").style.display = "none";
+        document.getElementById("resultsLabel").textContent = "Unable to load; verify your connection, Firestore rules, and indexes.";
+        document.getElementById("pagination").innerHTML = "";
+      }
+    }
+
+    function populateDynamicFilters() {
+      if (activeTab === "attractions") {
+        // Populate filters from a tiny metadata document. No 26k-document read.
+        const countries = [...new Set([...(attractionFilterOptions?.countries || []), ...COUNTRY_OPTIONS])].sort();
+        const categories = [...new Set([...(attractionFilterOptions?.categories || []), ...ATTRACTION_CATEGORY_DEFAULTS])].sort();
+        const countrySelect = document.getElementById("countryFilter");
+        const categorySelect = document.getElementById("categoryFilter");
+        const selectedCountry = countrySelect.value;
+        const selectedCategory = categorySelect.value;
+        countrySelect.innerHTML = '<option value="">All countries</option>'
+          + countries.map((c) => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("");
+        categorySelect.innerHTML = '<option value="">All categories</option>'
+          + categories.map((c) => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("");
+        // Metadata can arrive later than the first page; preserve active filters.
+        if (countries.includes(selectedCountry)) countrySelect.value = selectedCountry;
+        if (categories.includes(selectedCategory)) categorySelect.value = selectedCategory;
+        return;
+      }
+      const cfg = TABS[activeTab];
+      const items = cache[activeTab];
+
+      const countrySelect = document.getElementById("countryFilter");
+      const countries = [...new Set(items.map((item) => cfg.countryOf(item)).filter(Boolean))].sort();
+      const currentCountry = countrySelect.value;
+      countrySelect.innerHTML = '<option value="">All countries</option>' + countries.map((c) => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("");
+      countrySelect.value = countries.includes(currentCountry) ? currentCountry : "";
+
+      const categorySelect = document.getElementById("categoryFilter");
+      const categories = [...new Set(items.flatMap((item) => cfg.categoryOf(item)).filter(Boolean))].sort();
+      const currentCategory = categorySelect.value;
+      categorySelect.innerHTML = `<option value="">All ${cfg.categoryLabel}s</option>` + categories.map((c) => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("");
+      categorySelect.value = categories.includes(currentCategory) ? currentCategory : "";
+    }
+
+    function renderStats() {
+      const cfg = TABS[activeTab];
+      document.getElementById("statGrid").innerHTML = activeTab === "attractions"
+        ? [
+            plainCard("Attractions", attractionStats?.total == null ? "—" : number(attractionStats.total), "map-pin"),
+            plainCard("Active", attractionStats?.active == null ? "—" : number(attractionStats.active), "sparkle"),
+            plainCard("Inactive", attractionStats?.inactive == null ? "—" : number(attractionStats.inactive), "x-circle"),
+          ].join("")
+        : cfg.stats(cache[activeTab]).join("");
+      mountIcons(document);
+    }
+
+    function applyFilters() {
+      if (activeTab === "attractions") {
+        resetAttractionPaging();
+        loadAttractionPage();
+        return;
+      }
+      const cfg = TABS[activeTab];
+      const q = document.getElementById("searchInput").value.trim().toLowerCase();
+      const status = cfg.hasStatus ? document.getElementById("statusFilter").value : "";
+      const country = document.getElementById("countryFilter").value;
+      const category = document.getElementById("categoryFilter").value;
+      const sort = document.getElementById("sortFilter").value;
+      filtered = cache[activeTab].filter((item) => {
+        const matchesQ = !q || cfg.matches(item, q);
+        const matchesStatus = !status || item.status === status;
+        const matchesCountry = !country || cfg.countryOf(item) === country;
+        const matchesCategory = !category || cfg.categoryOf(item).includes(category);
+        return matchesQ && matchesStatus && matchesCountry && matchesCategory;
       });
-      return [
-        plainCard("Restaurants", number(items.length), "coin"),
-        plainCard("Cuisines covered", number(cuisineSet.size), "flag"),
-        plainCard("Destinations covered", number(destSet.size), "map-pin"),
-        plainCard("Missing details", number(missingDetails), "alert-triangle"),
-      ];
-    },
-    detail(r) {
-      const row = (label, value) => `<div class="field" style="margin-bottom:12px;"><label>${label}</label><p class="value">${value}</p></div>`;
-      const website = r.website || "";
-      return `
-        <div class="form-grid">
-          ${row("Name", escapeHtml(r.name || "—"))}
-          ${row("Status", statusBadge(r.status))}
-          ${row("Cuisine", escapeHtml(restaurantCuisineLabel(r)))}
-          ${row("Location", escapeHtml(restaurantLocationLabel(r)))}
-          ${row("Full address", escapeHtml(r.address || "—"))}
-          ${row("Price range", escapeHtml(restaurantPriceRange(r)))}
-          ${row("Opening hours", escapeHtml(restaurantOpeningHours(r)))}
-          ${row("Phone", escapeHtml(r.phone || "—"))}
-          ${row("Website", website ? `<a href="${escapeHtml(/^https?:\/\//i.test(website) ? website : `https://${website}`)}" target="_blank" rel="noopener">${escapeHtml(website)}</a>` : "—")}
-          ${row("Rating", r.rating ? `${escapeHtml(String(r.rating))}${r.reviews ? ` <span class="muted small">(${escapeHtml(String(r.reviews))} reviews)</span>` : ""}` : "—")}
-          ${row("About", escapeHtml(restaurantDescription(r)))}
-          ${row("Last updated", shortDate(r.updatedAt))}
-          ${row("Added", fullDate(r.createdAt))}
+      const updatedAtOf = (item) => (item.updatedAt?.toDate ? item.updatedAt.toDate().getTime() : 0);
+      filtered.sort((a, b) => (sort === "updated_asc" ? updatedAtOf(a) - updatedAtOf(b) : updatedAtOf(b) - updatedAtOf(a)));
+      page = 1;
+      renderTable();
+    }
+
+    function renderAttractionResultsLabel() {
+      if (activeTab !== "attractions") return;
+      const total = filtered.length;
+      document.getElementById("resultsLabel").textContent = total
+        ? `Attractions page ${page} · ${total} loaded · ${attractionStats?.total == null ? "total unavailable" : number(attractionStats.total) + " in catalogue"}`
+        : "No matching attractions on this page";
+    }
+
+    function renderTable() {
+      const cfg = TABS[activeTab];
+      const isAttractions = activeTab === "attractions";
+      const { pageItems, pages, total } = isAttractions
+        ? { pageItems: filtered, pages: page + (attractionHasMore ? 1 : 0), total: filtered.length }
+        : paginate(filtered, page, PAGE_SIZE);
+      const body = document.getElementById("tableBody");
+      const empty = document.getElementById("emptyState");
+      if (!pageItems.length) { body.innerHTML = ""; empty.style.display = "block"; }
+      else {
+        empty.style.display = "none";
+        body.innerHTML = pageItems.map((item) => `
+          <tr style="cursor:pointer;" data-open="${escapeHtml(item.id)}">
+            ${cfg.row(item)}
+            <td>
+              <div class="row-actions">
+                <button class="btn btn-outline btn-sm" data-edit="${escapeHtml(item.id)}"><span data-icon="edit" data-icon-size="14"></span></button>
+                <button class="btn btn-danger-outline btn-sm" data-del="${escapeHtml(item.id)}"><span data-icon="trash" data-icon-size="14"></span></button>
+              </div>
+            </td>
+          </tr>`).join("");
+        body.querySelectorAll("[data-open]").forEach((row) => row.addEventListener("click", (e) => {
+          if (e.target.closest(".row-actions")) return;
+          openDetail(row.dataset.open);
+        }));
+        body.querySelectorAll("[data-edit]").forEach((b) => b.addEventListener("click", () => {
+          location.href = `${cfg.href}?id=${encodeURIComponent(b.dataset.edit)}`;
+        }));
+        body.querySelectorAll("[data-del]").forEach((b) => b.addEventListener("click", () => remove(b.dataset.del)));
+      }
+      if (isAttractions) {
+        renderAttractionResultsLabel();
+        // Same numbered, chevron-arrow pager used by the Transactions page.
+        // Firestore cursors are stored only for pages that have been reached,
+        // so don't offer jumps beyond the next cursor-backed page.
+        const reachablePages = Math.max(pages, attractionPageCursors.length);
+        renderPager("pagination", { page, pages: reachablePages }, (nextPage) => {
+          if (nextPage === page || nextPage < 1 || nextPage > reachablePages) return;
+          if (nextPage > 1 && !attractionPageCursors[nextPage - 1]) return;
+          page = nextPage;
+          loadAttractionPage();
+        });
+      } else {
+        document.getElementById("resultsLabel").textContent = total
+          ? `Showing ${(page - 1) * PAGE_SIZE + 1} to ${Math.min(page * PAGE_SIZE, total)} of ${total} results` : "No results";
+        renderPager("pagination", { page, pages }, (n) => { page = n; renderTable(); });
+      }
+      mountIcons(document);
+    }
+
+    /** Shows everything we know about one place in a popup — the table only
+     * has room for a few columns, but a real doc carries much more. */
+    function openDetail(id) {
+      const cfg = TABS[activeTab];
+      const item = cache[activeTab].find((x) => x.id === id);
+      if (!item) return;
+      document.getElementById("placeModalTitle").textContent = `${cfg.nounCap} detail`;
+      document.getElementById("placeModalBody").innerHTML = cfg.detail(item) + `
+        <div class="form-actions">
+          <button class="btn btn-outline" data-modal-edit="${escapeHtml(item.id)}"><span data-icon="edit" data-icon-size="14"></span>Edit</button>
         </div>`;
-    },
-    async remove(id, name) {
-      await deleteRestaurant(id);
-    },
-  },
-};
+      mountIcons(document.getElementById("placeModalBody"));
+      document.getElementById("placeModalBody").querySelector("[data-modal-edit]").onclick = () => {
+        closeModal("placeModal");
+        location.href = `${cfg.href}?id=${encodeURIComponent(item.id)}`;
+      };
+      openModal("placeModal");
+    }
 
-if (session) {
-  setSidebarUser({ displayName: session.profile.name || "Admin", roleLabel: "Administrator" });
-  wireModalDismiss();
-  document.querySelectorAll("#placesTabs .tab-btn").forEach((t) => t.classList.toggle("active", t.dataset.tab === activeTab));
-  if (activeTab === "suggestions") {
-    showSuggestionsView();
-    await loadSuggestions();
-    if (requestedFocus) openSuggestionDetail(requestedFocus);
-  } else {
-    applyTabChrome();
-    await load();
-    refreshSuggestionsTabDot();
-  }
-}
+    async function remove(id) {
+      const cfg = TABS[activeTab];
+      const item = cache[activeTab].find((x) => x.id === id);
+      const ok = await confirmDialog({
+        title: `Delete "${item?.name || `this ${cfg.noun}`}"?`,
+        body: "This removes it from the Explore catalogue in the mobile app. This can't be undone.",
+        confirmText: "Delete", danger: true,
+      });
+      if (!ok) return;
+      try {
+        await cfg.remove(id, item?.name);
+        toast(`${cfg.nounCap} deleted.`, "success");
+        cache[activeTab] = null;
+        if (activeTab === "attractions") {
+          attractionStats = null;
+          resetAttractionPaging();
+        }
+        await load();
+      } catch (err) {
+        toast(err.message || "Couldn't delete.", "error");
+      }
+    }
 
-/** Lights up the Place Suggestions tab with a red dot whenever there's
- * at least one suggestion waiting on a decision — visible from whichever
- * tab the admin is actually on, not just after clicking into Suggestions. */
-async function refreshSuggestionsTabDot() {
-  try {
-    const n = await countPlaceSuggestions();
-    document.getElementById("suggestionsTabDot").style.display = n > 0 ? "" : "none";
-  } catch (err) {
-    // Leave the dot as-is (hidden) rather than showing a false alarm
-    // for what's most likely the same reviews-style permission issue
-    // logged elsewhere in this console, not an actual pending count.
-  }
-}
+    document.querySelectorAll("#placesTabs .tab-btn").forEach((b) => b.addEventListener("click", async () => {
+      if (b.dataset.tab === activeTab) return;
+      activeTab = b.dataset.tab;
+      document.querySelectorAll("#placesTabs .tab-btn").forEach((t) => t.classList.toggle("active", t === b));
+      if (activeTab === "suggestions") {
+        showSuggestionsView();
+        await loadSuggestions();
+      } else {
+        showTableView();
+        document.getElementById("searchInput").value = "";
+        document.getElementById("sortFilter").value = activeTab === "attractions" ? "record" : "updated_desc";
+        if (activeTab === "attractions") resetAttractionPaging();
+        applyTabChrome();
+        await load();
+        refreshSuggestionsTabDot();
+      }
+    }));
 
-function showSuggestionsView() {
-  document.getElementById("addBtn").style.display = "none";
-  document.querySelector(".filter-bar").style.display = "none";
-  document.getElementById("statGrid").style.display = "none";
-  document.querySelector(".table-wrap").style.display = "none";
-  document.getElementById("tableFoot").style.display = "none";
-  document.getElementById("suggestionsPanel").style.display = "";
-}
-function showTableView() {
-  document.getElementById("addBtn").style.display = "";
-  document.querySelector(".filter-bar").style.display = "";
-  document.getElementById("statGrid").style.display = "";
-  document.querySelector(".table-wrap").style.display = "";
-  document.getElementById("tableFoot").style.display = "";
-  document.getElementById("suggestionsPanel").style.display = "none";
-}
+    async function loadSuggestions() {
+      let items, addedToday, rejectedToday, addedYesterday, rejectedYesterday;
+      try {
+        [items, addedToday, rejectedToday, addedYesterday, rejectedYesterday] = await Promise.all([
+          listPlaceSuggestions(), countModerationToday("suggestion_added"), countModerationToday("suggestion_rejected"),
+          countModerationYesterday("suggestion_added"), countModerationYesterday("suggestion_rejected"),
+        ]);
+      } catch (err) {
+        document.getElementById("suggestionList").innerHTML = `<p class="muted small" style="padding:20px 0;">Couldn't load this — ${escapeHtml(err.message || "missing or insufficient permissions")}.</p>`;
+        return;
+      }
+      placeSuggestions = items;
+      document.getElementById("suggestionsTabDot").style.display = placeSuggestions.length > 0 ? "" : "none";
+      document.getElementById("statGrid").innerHTML = [
+        plainCard("Pending review", number(placeSuggestions.length), "clock"),
+        statCard("Added today", number(addedToday), "file-check", trendDelta(addedToday, addedYesterday, "yesterday")),
+        statCard("Rejected today", number(rejectedToday), "file-x", trendDelta(rejectedToday, rejectedYesterday, "yesterday")),
+      ].join("");
+      document.getElementById("statGrid").style.display = "";
+      renderSuggestionList();
+      mountIcons(document);
+    }
 
-function applyTabChrome() {
-  const cfg = TABS[activeTab];
-  document.getElementById("pageSubtitle").textContent = cfg.subtitle;
-  document.getElementById("addBtn").innerHTML = `<span data-icon="plus"></span>Add ${cfg.noun}`;
-  document.getElementById("statusFilter").style.display = cfg.hasStatus ? "" : "none";
-  document.getElementById("categoryFilter").innerHTML = `<option value="">All ${cfg.categoryLabel}s</option>`;
-  document.getElementById("countryFilter").value = "";
-  document.getElementById("tableHead").innerHTML = `<tr>${cfg.columns.map((c) => `<th>${c}</th>`).join("")}</tr>`;
-  document.getElementById("emptyTitle").textContent = `No ${cfg.noun}s found`;
-  mountIcons(document);
-}
-
-async function load() {
-  if (!cache[activeTab]) {
-    const cfg = TABS[activeTab];
-    document.getElementById("tableBody").innerHTML = `<tr><td colspan="${cfg.columns.length}"><div class="skeleton" style="height:40px;"></div></td></tr>`;
-    document.getElementById("statGrid").innerHTML = `<div class="skeleton" style="height:90px;grid-column:1/-1;"></div>`;
-    cache[activeTab] = await cfg.list();
-  }
-  renderStats();
-  populateDynamicFilters();
-  applyFilters();
-}
-
-function populateDynamicFilters() {
-  const cfg = TABS[activeTab];
-  const items = cache[activeTab];
-
-  const countrySelect = document.getElementById("countryFilter");
-  const countries = [...new Set(items.map((item) => cfg.countryOf(item)).filter(Boolean))].sort();
-  const currentCountry = countrySelect.value;
-  countrySelect.innerHTML = '<option value="">All countries</option>' + countries.map((c) => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("");
-  countrySelect.value = countries.includes(currentCountry) ? currentCountry : "";
-
-  const categorySelect = document.getElementById("categoryFilter");
-  const categories = [...new Set(items.flatMap((item) => cfg.categoryOf(item)).filter(Boolean))].sort();
-  const currentCategory = categorySelect.value;
-  categorySelect.innerHTML = `<option value="">All ${cfg.categoryLabel}s</option>` + categories.map((c) => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("");
-  categorySelect.value = categories.includes(currentCategory) ? currentCategory : "";
-}
-
-function renderStats() {
-  const cfg = TABS[activeTab];
-  document.getElementById("statGrid").innerHTML = cfg.stats(cache[activeTab]).join("");
-  mountIcons(document);
-}
-
-function applyFilters() {
-  const cfg = TABS[activeTab];
-  const q = document.getElementById("searchInput").value.trim().toLowerCase();
-  const status = cfg.hasStatus ? document.getElementById("statusFilter").value : "";
-  const country = document.getElementById("countryFilter").value;
-  const category = document.getElementById("categoryFilter").value;
-  const sort = document.getElementById("sortFilter").value;
-  filtered = cache[activeTab].filter((item) => {
-    const matchesQ = !q || cfg.matches(item, q);
-    const matchesStatus = !status || item.status === status;
-    const matchesCountry = !country || cfg.countryOf(item) === country;
-    const matchesCategory = !category || cfg.categoryOf(item).includes(category);
-    return matchesQ && matchesStatus && matchesCountry && matchesCategory;
-  });
-  const updatedAtOf = (item) => (item.updatedAt?.toDate ? item.updatedAt.toDate().getTime() : 0);
-  filtered.sort((a, b) => (sort === "updated_asc" ? updatedAtOf(a) - updatedAtOf(b) : updatedAtOf(b) - updatedAtOf(a)));
-  page = 1;
-  renderTable();
-}
-
-function renderTable() {
-  const cfg = TABS[activeTab];
-  const { pageItems, pages, total } = paginate(filtered, page, PAGE_SIZE);
-  const body = document.getElementById("tableBody");
-  const empty = document.getElementById("emptyState");
-  if (!pageItems.length) { body.innerHTML = ""; empty.style.display = "block"; }
-  else {
-    empty.style.display = "none";
-    body.innerHTML = pageItems.map((item) => `
-      <tr style="cursor:pointer;" data-open="${escapeHtml(item.id)}">
-        ${cfg.row(item)}
-        <td>
-          <div class="row-actions">
-            <button class="btn btn-outline btn-sm" data-edit="${escapeHtml(item.id)}"><span data-icon="edit" data-icon-size="14"></span></button>
-            <button class="btn btn-danger-outline btn-sm" data-del="${escapeHtml(item.id)}"><span data-icon="trash" data-icon-size="14"></span></button>
+    function renderSuggestionList() {
+      const q = document.getElementById("suggestionSearchInput").value.trim().toLowerCase();
+      const filtered2 = placeSuggestions.filter((s) =>
+        !q || (s.name || "").toLowerCase().includes(q) || (s.location || "").toLowerCase().includes(q) || (s.authorName || "").toLowerCase().includes(q));
+      const list = document.getElementById("suggestionList");
+      const empty = document.getElementById("suggestionEmptyState");
+      if (!filtered2.length) {
+        list.innerHTML = "";
+        empty.style.display = "block";
+        return;
+      }
+      empty.style.display = "none";
+      list.innerHTML = filtered2.map((s) => `
+        <div class="card report-card" style="margin-bottom:16px;cursor:pointer;" data-open-suggestion="${s.id}">
+          <div class="report-thumb" style="${s.photoUrl ? `background-image:url('${s.photoUrl}');background-size:cover;background-position:center;` : ""}"></div>
+          <div class="report-body">
+            <div class="report-title">${escapeHtml(s.name || "Untitled place")}</div>
+            <div class="report-meta">Suggested by ${escapeHtml(s.authorName || "a traveller")} · ${timeAgo(s.createdAt)} · ${escapeHtml(s.location || "No location given")}</div>
+            <div class="report-desc">${escapeHtml(s.description || "No description given.")}</div>
           </div>
-        </td>
-      </tr>`).join("");
-    body.querySelectorAll("[data-open]").forEach((row) => row.addEventListener("click", (e) => {
-      if (e.target.closest(".row-actions")) return;
-      openDetail(row.dataset.open);
-    }));
-    body.querySelectorAll("[data-edit]").forEach((b) => b.addEventListener("click", () => {
-      location.href = `${cfg.href}?id=${encodeURIComponent(b.dataset.edit)}`;
-    }));
-    body.querySelectorAll("[data-del]").forEach((b) => b.addEventListener("click", () => remove(b.dataset.del)));
-  }
-  document.getElementById("resultsLabel").textContent = total
-    ? `Showing ${(page - 1) * PAGE_SIZE + 1} to ${Math.min(page * PAGE_SIZE, total)} of ${total} results` : "No results";
-  renderPager("pagination", { page, pages }, (n) => { page = n; renderTable(); });
-  mountIcons(document);
-}
+          <div class="report-actions">
+            <button class="btn btn-outline btn-sm" data-view-suggestion="${s.id}"><span data-icon="eye" data-icon-size="14"></span>View</button>
+            <button class="btn btn-danger-outline btn-sm" data-reject-suggestion="${s.id}"><span data-icon="x" data-icon-size="14"></span>Reject</button>
+          </div>
+        </div>`).join("");
+      mountIcons(document);
+      list.querySelectorAll("[data-open-suggestion]").forEach((card) => card.addEventListener("click", (e) => {
+        if (e.target.closest(".report-actions")) return;
+        openSuggestionDetail(card.dataset.openSuggestion);
+      }));
+      list.querySelectorAll("[data-view-suggestion]").forEach((b) => b.addEventListener("click", () => openSuggestionDetail(b.dataset.viewSuggestion)));
+      list.querySelectorAll("[data-reject-suggestion]").forEach((b) => b.addEventListener("click", () => actOnSuggestion("reject", b.dataset.rejectSuggestion, b)));
+    }
 
-/** Shows everything we know about one place in a popup — the table only
- * has room for a few columns, but a real doc carries much more. */
-function openDetail(id) {
-  const cfg = TABS[activeTab];
-  const item = cache[activeTab].find((x) => x.id === id);
-  if (!item) return;
-  document.getElementById("placeModalTitle").textContent = `${cfg.nounCap} detail`;
-  document.getElementById("placeModalBody").innerHTML = cfg.detail(item) + `
-    <div class="form-actions">
-      <button class="btn btn-outline" data-modal-edit="${escapeHtml(item.id)}"><span data-icon="edit" data-icon-size="14"></span>Edit</button>
-    </div>`;
-  mountIcons(document.getElementById("placeModalBody"));
-  document.getElementById("placeModalBody").querySelector("[data-modal-edit]").onclick = () => {
-    closeModal("placeModal");
-    location.href = `${cfg.href}?id=${encodeURIComponent(item.id)}`;
-  };
-  openModal("placeModal");
-}
+    function openSuggestionDetail(id) {
+      const s = placeSuggestions.find((x) => x.id === id);
+      if (!s) return;
+      document.getElementById("suggestionDetailBody").innerHTML = `
+        ${s.photoUrl ? `<img src="${s.photoUrl}" style="width:100%;border-radius:12px;margin-bottom:16px;max-height:220px;object-fit:cover;" />` : ""}
+        <p class="h3" style="margin-bottom:6px;">${escapeHtml(s.name || "Untitled place")}</p>
+        <p class="muted small" style="margin-bottom:14px;">Suggested by ${escapeHtml(s.authorName || "a traveller")} · ${escapeHtml(s.location || "No location given")}</p>
+        <p style="font-size:14px;line-height:1.6;color:var(--text-700);margin-bottom:18px;">${escapeHtml(s.description || "No description given.")}</p>
+        <div class="card-pad" style="background:var(--teal-100);border-radius:12px;margin-bottom:18px;">
+          <p class="small" style="color:var(--navy-800);font-weight:700;">Accepting turns this into a real listing</p>
+          <p class="small" style="color:var(--text-700);">Pick which kind of place this is — you'll land on the normal add-place form with the name, location and photo already filled in, ready to finish and save.</p>
+        </div>
+        <div class="form-actions">
+          <button class="btn btn-danger-outline" data-modal-reject-suggestion="${s.id}"><span data-icon="x" data-icon-size="14"></span>Reject</button>
+          <button class="btn btn-outline" data-accept-restaurant="${s.id}"><span data-icon="coin" data-icon-size="14"></span>Add as Restaurant</button>
+          <button class="btn btn-primary" data-accept-attraction="${s.id}"><span data-icon="map-pin" data-icon-size="14"></span>Add as Attraction</button>
+        </div>`;
+      mountIcons(document.getElementById("suggestionDetailBody"));
+      document.getElementById("suggestionDetailBody").querySelector("[data-modal-reject-suggestion]").onclick = (e) => { closeModal("suggestionDetailModal"); actOnSuggestion("reject", id, e.target); };
+      document.getElementById("suggestionDetailBody").querySelector("[data-accept-attraction]").onclick = () => acceptSuggestion("attraction", id);
+      document.getElementById("suggestionDetailBody").querySelector("[data-accept-restaurant]").onclick = () => acceptSuggestion("restaurant", id);
+      openModal("suggestionDetailModal");
+    }
 
-async function remove(id) {
-  const cfg = TABS[activeTab];
-  const item = cache[activeTab].find((x) => x.id === id);
-  const ok = await confirmDialog({
-    title: `Delete "${item?.name || `this ${cfg.noun}`}"?`,
-    body: "This removes it from the Explore catalogue in the mobile app. This can't be undone.",
-    confirmText: "Delete", danger: true,
-  });
-  if (!ok) return;
-  try {
-    await cfg.remove(id, item?.name);
-    toast(`${cfg.nounCap} deleted.`, "success");
-    cache[activeTab] = null;
-    await load();
-  } catch (err) {
-    toast(err.message || "Couldn't delete.", "error");
-  }
-}
+    function acceptSuggestion(kind, id) {
+      const s = placeSuggestions.find((x) => x.id === id);
+      if (!s) return;
+      sessionStorage.setItem("voya_suggestion_prefill", JSON.stringify({
+        reportId: s.id, name: s.name || "", location: s.location || "", description: s.description || "", photoUrl: s.photoUrl || "",
+      }));
+      location.href = kind === "attraction" ? "attraction-form.html?fromSuggestion=1" : "restaurant-form.html?fromSuggestion=1";
+    }
 
-document.querySelectorAll("#placesTabs .tab-btn").forEach((b) => b.addEventListener("click", async () => {
-  if (b.dataset.tab === activeTab) return;
-  activeTab = b.dataset.tab;
-  document.querySelectorAll("#placesTabs .tab-btn").forEach((t) => t.classList.toggle("active", t === b));
-  if (activeTab === "suggestions") {
-    showSuggestionsView();
-    await loadSuggestions();
-  } else {
-    showTableView();
-    document.getElementById("searchInput").value = "";
-    applyTabChrome();
-    await load();
-    refreshSuggestionsTabDot();
-  }
-}));
+    async function actOnSuggestion(kind, id, btn) {
+      if (kind === "reject") {
+        const ok = await confirmDialog({
+          title: "Reject this suggestion?",
+          body: "The traveller's submission stays on record, just marked as declined — nothing is added to the app.",
+          confirmText: "Reject", danger: true,
+        });
+        if (!ok) return;
+      }
+      setBusy(btn, true, "Working…");
+      try {
+        await rejectPlaceSuggestion(id);
+        await logModerationAction("suggestion_rejected", id, session.uid);
+        placeSuggestions = placeSuggestions.filter((x) => x.id !== id);
+        closeModal("suggestionDetailModal");
+        toast("Suggestion rejected.", "success");
+        await loadSuggestions();
+      } catch (err) {
+        toast(err.message || "Something went wrong.", "error");
+        setBusy(btn, false);
+      }
+    }
 
-async function loadSuggestions() {
-  let items, addedToday, rejectedToday, addedYesterday, rejectedYesterday;
-  try {
-    [items, addedToday, rejectedToday, addedYesterday, rejectedYesterday] = await Promise.all([
-      listPlaceSuggestions(), countModerationToday("suggestion_added"), countModerationToday("suggestion_rejected"),
-      countModerationYesterday("suggestion_added"), countModerationYesterday("suggestion_rejected"),
-    ]);
-  } catch (err) {
-    document.getElementById("suggestionList").innerHTML = `<p class="muted small" style="padding:20px 0;">Couldn't load this — ${escapeHtml(err.message || "missing or insufficient permissions")}.</p>`;
-    return;
-  }
-  placeSuggestions = items;
-  document.getElementById("suggestionsTabDot").style.display = placeSuggestions.length > 0 ? "" : "none";
-  document.getElementById("statGrid").innerHTML = [
-    plainCard("Pending review", number(placeSuggestions.length), "clock"),
-    statCard("Added today", number(addedToday), "file-check", trendDelta(addedToday, addedYesterday, "yesterday")),
-    statCard("Rejected today", number(rejectedToday), "file-x", trendDelta(rejectedToday, rejectedYesterday, "yesterday")),
-  ].join("");
-  document.getElementById("statGrid").style.display = "";
-  renderSuggestionList();
-  mountIcons(document);
-}
+    document.getElementById("suggestionSearchInput").addEventListener("input", renderSuggestionList);
 
-function renderSuggestionList() {
-  const q = document.getElementById("suggestionSearchInput").value.trim().toLowerCase();
-  const filtered2 = placeSuggestions.filter((s) =>
-    !q || (s.name || "").toLowerCase().includes(q) || (s.location || "").toLowerCase().includes(q) || (s.authorName || "").toLowerCase().includes(q));
-  const list = document.getElementById("suggestionList");
-  const empty = document.getElementById("suggestionEmptyState");
-  if (!filtered2.length) {
-    list.innerHTML = "";
-    empty.style.display = "block";
-    return;
-  }
-  empty.style.display = "none";
-  list.innerHTML = filtered2.map((s) => `
-    <div class="card report-card" style="margin-bottom:16px;cursor:pointer;" data-open-suggestion="${s.id}">
-      <div class="report-thumb" style="${s.photoUrl ? `background-image:url('${s.photoUrl}');background-size:cover;background-position:center;` : ""}"></div>
-      <div class="report-body">
-        <div class="report-title">${escapeHtml(s.name || "Untitled place")}</div>
-        <div class="report-meta">Suggested by ${escapeHtml(s.authorName || "a traveller")} · ${timeAgo(s.createdAt)} · ${escapeHtml(s.location || "No location given")}</div>
-        <div class="report-desc">${escapeHtml(s.description || "No description given.")}</div>
-      </div>
-      <div class="report-actions">
-        <button class="btn btn-outline btn-sm" data-view-suggestion="${s.id}"><span data-icon="eye" data-icon-size="14"></span>View</button>
-        <button class="btn btn-danger-outline btn-sm" data-reject-suggestion="${s.id}"><span data-icon="x" data-icon-size="14"></span>Reject</button>
-      </div>
-    </div>`).join("");
-  mountIcons(document);
-  list.querySelectorAll("[data-open-suggestion]").forEach((card) => card.addEventListener("click", (e) => {
-    if (e.target.closest(".report-actions")) return;
-    openSuggestionDetail(card.dataset.openSuggestion);
-  }));
-  list.querySelectorAll("[data-view-suggestion]").forEach((b) => b.addEventListener("click", () => openSuggestionDetail(b.dataset.viewSuggestion)));
-  list.querySelectorAll("[data-reject-suggestion]").forEach((b) => b.addEventListener("click", () => actOnSuggestion("reject", b.dataset.rejectSuggestion, b)));
-}
-
-function openSuggestionDetail(id) {
-  const s = placeSuggestions.find((x) => x.id === id);
-  if (!s) return;
-  document.getElementById("suggestionDetailBody").innerHTML = `
-    ${s.photoUrl ? `<img src="${s.photoUrl}" style="width:100%;border-radius:12px;margin-bottom:16px;max-height:220px;object-fit:cover;" />` : ""}
-    <p class="h3" style="margin-bottom:6px;">${escapeHtml(s.name || "Untitled place")}</p>
-    <p class="muted small" style="margin-bottom:14px;">Suggested by ${escapeHtml(s.authorName || "a traveller")} · ${escapeHtml(s.location || "No location given")}</p>
-    <p style="font-size:14px;line-height:1.6;color:var(--text-700);margin-bottom:18px;">${escapeHtml(s.description || "No description given.")}</p>
-    <div class="card-pad" style="background:var(--teal-100);border-radius:12px;margin-bottom:18px;">
-      <p class="small" style="color:var(--navy-800);font-weight:700;">Accepting turns this into a real listing</p>
-      <p class="small" style="color:var(--text-700);">Pick which kind of place this is — you'll land on the normal add-place form with the name, location and photo already filled in, ready to finish and save.</p>
-    </div>
-    <div class="form-actions">
-      <button class="btn btn-danger-outline" data-modal-reject-suggestion="${s.id}"><span data-icon="x" data-icon-size="14"></span>Reject</button>
-      <button class="btn btn-outline" data-accept-restaurant="${s.id}"><span data-icon="coin" data-icon-size="14"></span>Add as Restaurant</button>
-      <button class="btn btn-primary" data-accept-attraction="${s.id}"><span data-icon="map-pin" data-icon-size="14"></span>Add as Attraction</button>
-    </div>`;
-  mountIcons(document.getElementById("suggestionDetailBody"));
-  document.getElementById("suggestionDetailBody").querySelector("[data-modal-reject-suggestion]").onclick = (e) => { closeModal("suggestionDetailModal"); actOnSuggestion("reject", id, e.target); };
-  document.getElementById("suggestionDetailBody").querySelector("[data-accept-attraction]").onclick = () => acceptSuggestion("attraction", id);
-  document.getElementById("suggestionDetailBody").querySelector("[data-accept-restaurant]").onclick = () => acceptSuggestion("restaurant", id);
-  openModal("suggestionDetailModal");
-}
-
-function acceptSuggestion(kind, id) {
-  const s = placeSuggestions.find((x) => x.id === id);
-  if (!s) return;
-  sessionStorage.setItem("voya_suggestion_prefill", JSON.stringify({
-    reportId: s.id, name: s.name || "", location: s.location || "", description: s.description || "", photoUrl: s.photoUrl || "",
-  }));
-  location.href = kind === "attraction" ? "attraction-form.html?fromSuggestion=1" : "restaurant-form.html?fromSuggestion=1";
-}
-
-async function actOnSuggestion(kind, id, btn) {
-  if (kind === "reject") {
-    const ok = await confirmDialog({
-      title: "Reject this suggestion?",
-      body: "The traveller's submission stays on record, just marked as declined — nothing is added to the app.",
-      confirmText: "Reject", danger: true,
+    document.getElementById("addBtn").addEventListener("click", () => { location.href = TABS[activeTab].href; });
+    document.getElementById("searchInput").addEventListener("input", () => {
+      if (activeTab !== "attractions") { applyFilters(); return; }
+      clearTimeout(attractionSearchTimer);
+      attractionSearchTimer = setTimeout(applyFilters, 300);
     });
-    if (!ok) return;
-  }
-  setBusy(btn, true, "Working…");
-  try {
-    await rejectPlaceSuggestion(id);
-    await logModerationAction("suggestion_rejected", id, session.uid);
-    placeSuggestions = placeSuggestions.filter((x) => x.id !== id);
-    closeModal("suggestionDetailModal");
-    toast("Suggestion rejected.", "success");
-    await loadSuggestions();
-  } catch (err) {
-    toast(err.message || "Something went wrong.", "error");
-    setBusy(btn, false);
-  }
-}
-
-document.getElementById("suggestionSearchInput").addEventListener("input", renderSuggestionList);
-
-document.getElementById("addBtn").addEventListener("click", () => { location.href = TABS[activeTab].href; });
-document.getElementById("searchInput").addEventListener("input", applyFilters);
-document.getElementById("statusFilter").addEventListener("change", applyFilters);
-document.getElementById("countryFilter").addEventListener("change", applyFilters);
-document.getElementById("categoryFilter").addEventListener("change", applyFilters);
-document.getElementById("sortFilter").addEventListener("change", applyFilters);
+    document.getElementById("statusFilter").addEventListener("change", applyFilters);
+    document.getElementById("countryFilter").addEventListener("change", applyFilters);
+    document.getElementById("categoryFilter").addEventListener("change", applyFilters);
+    document.getElementById("sortFilter").addEventListener("change", applyFilters);
 </script>
 </body>
 </html>

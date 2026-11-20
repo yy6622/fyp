@@ -1,6 +1,27 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
+    // Plan / Group cover photo.  TripCoverService uploads to
+    // trip_covers/{tripId}.jpg (one object per trip, overwritten on edit).
+    // A signed-in user may upload/replace a cover only when their UID is
+    // listed in the corresponding Firestore trips/{tripId}.memberIds.
+    // Use a regex to validate the filename before deriving the trip ID.
+    match /trip_covers/{fileName} {
+      function isTripCoverMember() {
+        let tripId = fileName.replace('[.]jpg$', '');
+        return request.auth != null
+          && fileName.matches('[A-Za-z0-9]+[.]jpg')
+          && firestore.exists(/databases/(default)/documents/trips/$(tripId))
+          && request.auth.uid in firestore.get(/databases/(default)/documents/trips/$(tripId)).data.memberIds;
+      }
+
+      allow read: if request.auth != null;
+      allow create, update: if isTripCoverMember()
+        && request.resource.size < 5 * 1024 * 1024
+        && request.resource.contentType == 'image/jpeg';
+      allow delete: if false;
+    }
+
     // Avatar photos — anyone signed in can view (shown to friends/trip
     // members), only the owner can upload/replace/remove their own.
     // A wildcard segment can't be suffix-qualified (`{uid}.jpg` isn't

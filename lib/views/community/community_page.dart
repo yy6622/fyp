@@ -545,11 +545,6 @@ class _CommunityPageState extends State<CommunityPage> {
                   ],
                 ),
               ),
-              const Spacer(),
-              GestureDetector(
-                onTap: () => _sharePost(post),
-                child: const Icon(Icons.share_outlined, size: 18, color: AppColors.textGrey),
-              ),
             ],
           ),
         ],

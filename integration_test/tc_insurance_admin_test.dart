@@ -75,7 +75,7 @@ void main() {
   testWidgets('TC75 A traveller files a claim and the partner approves it (FR77, FR90)', (tester) async {
     await signInAs(traveller);
     final txn = (await insurance.getTransaction(txnId))!;
-    final ref = await insurance.fileClaim(transaction: txn, category: 'Medical', amount: 320, description: 'Clinic visit');
+    final ref = await insurance.fileClaim(transaction: txn, category: 'Medical', description: 'Clinic visit');
     expect(ref, startsWith('CLM'));
 
     final claims = await ownerList('claims');

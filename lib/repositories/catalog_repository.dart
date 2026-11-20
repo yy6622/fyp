@@ -197,15 +197,22 @@ class CatalogRepository {
   }
 
   Future<List<CatalogAttraction>> searchAttractionsByName(String query, {int limit = 60}) async {
-    final needle = query.trim().toLowerCase();
+    final needle = query.trim().toLowerCase().replaceAll(RegExp(r"\s+"), " ");
     if (needle.isEmpty) return [];
-    final snap = await _attractions.get();
-    final matches = snap.docs
-        .where(_isVisibleStatus)
-        .where((d) => ((d.data()['name'] as String?) ?? '').toLowerCase().contains(needle))
+    // Firestore cannot index a case-insensitive substring search. Use a
+    // normalized name-prefix range instead, so 26k catalog entries are
+    // searched on the server rather than downloaded to the phone.
+    // Existing entries need the admin_web backfill script once.
+    final snap = await _attractions
+        .where('status', isEqualTo: 'active')
+        .orderBy('nameNormalized')
+        .startAt([needle])
+        .endAt(['$needle\uf8ff'])
+        .limit(limit)
+        .get();
+    return snap.docs
         .map(_attractionFrom)
         .toList();
-    return matches.length > limit ? matches.sublist(0, limit) : matches;
   }
 
   AttractionFees _feesFrom(Map<String, dynamic>? m) {
@@ -317,28 +324,158 @@ class CatalogRepository {
     return _toggleFav(_restaurants, id, '$uid#$tripId', fav);
   }
 
-  Future<List<NearbyPlace>> fetchNearbyPlaces({required double lat, required double lon, required String category}) async {
-    final found = await PlacesApiService.instance.searchNearbyStable(lat: lat, lon: lon, category: category);
-    final withDistance = found.map((p) {
-      final km = _distanceKm(lat, lon, p.lat, p.lon);
-      return (place: p, km: km);
-    }).toList()
-      ..sort((a, b) => a.km.compareTo(b.km));
-    final images = await Future.wait(withDistance.map((e) => PlacesApiService.instance.resolveImage(e.place.tags)));
-    return [
-      for (var i = 0; i < withDistance.length; i++)
-        NearbyPlace(
-          id: withDistance[i].place.id,
-          name: withDistance[i].place.name,
-          category: category,
-          categoryLabel: _osmCategoryLabel(withDistance[i].place, category),
-          rating: 'New',
-          distance: withDistance[i].km < 1 ? '${(withDistance[i].km * 1000).round()} m' : '${withDistance[i].km.toStringAsFixed(1)} km',
-          image: images[i] ?? '',
-          lat: withDistance[i].place.lat,
-          lon: withDistance[i].place.lon,
-        ),
-    ];
+  // Nearby results are short-lived and keyed by area, category and radius.
+  // Returning cached data avoids repeating slow public API calls on tab swaps.
+  static const Duration _nearbyTtl = Duration(minutes: 10);
+  final Map<String, ({DateTime fetchedAt, List<NearbyPlace> places})> _nearbyCache = {};
+
+  Future<List<NearbyPlace>> fetchNearbyPlaces({
+    required double lat,
+    required double lon,
+    required String category,
+    int radiusMeters = 3000,
+    bool forceRefresh = false,
+  }) async {
+    final cacheKey = '${lat.toStringAsFixed(3)}:${lon.toStringAsFixed(3)}:$category:$radiusMeters';
+    final cached = _nearbyCache[cacheKey];
+    if (!forceRefresh && cached != null && DateTime.now().difference(cached.fetchedAt) < _nearbyTtl) {
+      return cached.places;
+    }
+
+    final api = PlacesApiService.instance;
+    List<NearbyPlace> places = const [];
+
+    // If no Geoapify key is configured, prefer existing catalog data for the
+    // categories we already store. This avoids making every visit depend on
+    // an overloaded public Overpass server. All queries are bounded.
+    if (!api.hasNearbyProvider && _catalogSupportsNearby(category)) {
+      places = await _nearbyFromCatalog(lat: lat, lon: lon, category: category, radiusMeters: radiusMeters);
+    }
+
+    if (places.isEmpty) {
+      final found = await api.searchNearbyStable(
+        lat: lat, lon: lon, category: category,
+        radiusMeters: radiusMeters, limit: 25,
+      );
+      final sorted = found.map((p) => (place: p, km: _distanceKm(lat, lon, p.lat, p.lon))).toList()
+        ..sort((a, b) => a.km.compareTo(b.km));
+      places = [
+        for (final item in sorted)
+          NearbyPlace(
+            id: item.place.id,
+            name: item.place.name,
+            category: category,
+            categoryLabel: _osmCategoryLabel(item.place, category),
+            rating: 'New',
+            distance: _nearbyDistanceText(item.km),
+            // Don't wait for 25 separate Wikipedia/website calls. Use known
+            // image links only; CachedNetworkImage loads them on demand.
+            image: _nearbyDirectImage(item.place.tags),
+            lat: item.place.lat,
+            lon: item.place.lon,
+          ),
+      ];
+    }
+
+    if (places.isEmpty && _catalogSupportsNearby(category)) {
+      places = await _nearbyFromCatalog(lat: lat, lon: lon, category: category, radiusMeters: radiusMeters);
+    }
+    // Empty/error results aren't cached, so Retry can recover immediately.
+    if (places.isNotEmpty) {
+      _nearbyCache[cacheKey] = (fetchedAt: DateTime.now(), places: places);
+      if (_nearbyCache.length > 40) _nearbyCache.remove(_nearbyCache.keys.first);
+    }
+    return places;
+  }
+
+  bool _catalogSupportsNearby(String category) =>
+      category == 'Attractions' || category == 'Restaurants' || category == 'Cafes';
+
+  String _nearbyDistanceText(double km) => km < 1
+      ? '${(km * 1000).round()} m'
+      : '${km.toStringAsFixed(1)} km';
+
+  String _nearbyDirectImage(Map<String, String> tags) {
+    final direct = (tags['image'] ?? '').trim();
+    if (direct.startsWith('https://') || direct.startsWith('http://')) return direct;
+    final commons = (tags['wikimedia_commons'] ?? '').trim();
+    if (commons.startsWith('File:')) {
+      return 'https://commons.wikimedia.org/wiki/Special:FilePath/${Uri.encodeComponent(commons.substring(5))}?width=480';
+    }
+    return '';
+  }
+
+  Future<List<NearbyPlace>> _nearbyFromCatalog({
+    required double lat,
+    required double lon,
+    required String category,
+    required int radiusMeters,
+  }) async {
+    try {
+      final collection = category == 'Attractions' ? _attractions : _restaurants;
+      final latDelta = radiusMeters / 111320;
+      // Two narrow, indexed latitude ranges. Never fetch 26,000 items to
+      // perform a radius check on the phone; check longitude and precise
+      // distance locally for at most 240 candidate documents.
+      final batches = await Future.wait([
+        collection
+            .where('lat', isGreaterThanOrEqualTo: lat - latDelta)
+            .where('lat', isLessThan: lat)
+            .orderBy('lat', descending: true)
+            .limit(120)
+            .get(),
+        collection
+            .where('lat', isGreaterThanOrEqualTo: lat)
+            .where('lat', isLessThanOrEqualTo: lat + latDelta)
+            .orderBy('lat')
+            .limit(120)
+            .get(),
+      ]).timeout(const Duration(seconds: 7));
+      final result = <({NearbyPlace place, double km})>[];
+      for (final batch in batches) {
+        for (final doc in batch.docs) {
+          final data = doc.data();
+          if (data['status'] != null && data['status'] != 'active') continue;
+          final latitude = (data['lat'] as num?)?.toDouble();
+          final longitude = (data['lng'] as num?)?.toDouble();
+          if (latitude == null || longitude == null) continue;
+          final name = (data['name'] as String?)?.trim() ?? '';
+          if (name.isEmpty) continue;
+          if (category == 'Cafes') {
+            final nameLower = name.toLowerCase();
+            final cuisines = '${data['cuisineTags'] ?? data['cuisine'] ?? ''}'.toLowerCase();
+            if (!nameLower.contains('cafe') && !nameLower.contains('coffee') && !cuisines.contains('cafe') && !cuisines.contains('coffee')) continue;
+          }
+          final km = _distanceKm(lat, lon, latitude, longitude);
+          if (km * 1000 > radiusMeters) continue;
+          final image = (data['image'] ?? data['image_url'] ?? '').toString();
+          final label = (category == 'Attractions'
+                  ? data['category']
+                  : data['cuisineTags'] ?? data['cuisine'])
+              ?.toString() ?? '';
+          result.add((
+            place: NearbyPlace(
+              id: doc.id,
+              name: name,
+              category: category,
+              categoryLabel: label.isNotEmpty ? label : category,
+              rating: 'New',
+              distance: _nearbyDistanceText(km),
+              image: image,
+              lat: latitude,
+              lon: longitude,
+            ),
+            km: km,
+          ));
+        }
+      }
+      result.sort((a, b) => a.km.compareTo(b.km));
+      return result.take(25).map((item) => item.place).toList();
+    } catch (_) {
+      // Catalog access may be blocked by Firestore rules, or old documents
+      // may not contain lat/lng. External provider is still attempted.
+      return const [];
+    }
   }
 
   String _osmCategoryLabel(OsmPlace p, String category) {

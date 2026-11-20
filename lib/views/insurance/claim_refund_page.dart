@@ -107,12 +107,13 @@ Widget _documentsSection({
   required bool uploading,
   required VoidCallback onAdd,
   required ValueChanged<int> onRemove,
+  bool required = false,
 }) {
   return Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      const Text('Supporting Documents (Optional)',
-          style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: AppColors.textGrey)),
+      Text(required ? 'Supporting Documents * (Required)' : 'Supporting Documents (Optional)',
+          style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: AppColors.textGrey)),
       const SizedBox(height: 4),
       const Text('Receipts, medical reports or other proof can help your insurer review this faster. Photos or PDF, up to 5MB each.',
           style: TextStyle(fontSize: 11.5, color: AppColors.textGrey)),
@@ -225,7 +226,6 @@ class _FileClaimPageState extends State<FileClaimPage> {
   InsuranceTransaction? _transaction;
   String? _loadError;
   String? _category;
-  final TextEditingController _amountCtrl = TextEditingController();
   final TextEditingController _descriptionCtrl = TextEditingController();
   bool _submitting = false;
   List<String> _documents = [];
@@ -257,7 +257,6 @@ class _FileClaimPageState extends State<FileClaimPage> {
 
   @override
   void dispose() {
-    _amountCtrl.dispose();
     _descriptionCtrl.dispose();
     super.dispose();
   }
@@ -310,13 +309,12 @@ class _FileClaimPageState extends State<FileClaimPage> {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please select a claim category')));
       return;
     }
-    final amount = double.tryParse(_amountCtrl.text.trim());
-    if (amount == null || amount <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please enter a valid claim amount')));
-      return;
-    }
     if (_descriptionCtrl.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please describe what happened')));
+      return;
+    }
+    if (_documents.isEmpty || _uploadingDoc) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('At least one supporting document is required.')));
       return;
     }
     setState(() => _submitting = true);
@@ -324,7 +322,6 @@ class _FileClaimPageState extends State<FileClaimPage> {
       final claimRef = await InsuranceRepository.instance.fileClaim(
         transaction: tx,
         category: _category!,
-        amount: amount,
         description: _descriptionCtrl.text.trim(),
         documents: _documents,
       );
@@ -382,11 +379,8 @@ class _FileClaimPageState extends State<FileClaimPage> {
                               const SizedBox(height: 20),
                               _categoryPickerField('Claim Category', _category, onTap: _pickCategory),
                               const SizedBox(height: 12),
-                              niceDialogField(
-                                  _amountCtrl,
-                                  'Claim Amount (${CurrencyService.instance.displayLabel(_transaction!.currencyCode.isEmpty ? 'MYR' : _transaction!.currencyCode)})',
-                                  required: true,
-                                  keyboardType: const TextInputType.numberWithOptions(decimal: true)),
+                              const Text('Claim amount will be assessed and entered by the insurance partner.',
+                                  style: TextStyle(fontSize: 12, color: AppColors.textGrey)),
                               niceDialogField(_descriptionCtrl, 'What happened?', maxLines: 4, required: true),
                               const SizedBox(height: 16),
                               _documentsSection(
@@ -394,6 +388,7 @@ class _FileClaimPageState extends State<FileClaimPage> {
                                 uploading: _uploadingDoc,
                                 onAdd: _addDocument,
                                 onRemove: _removeDocument,
+                                required: true,
                               ),
                             ],
                           ),
@@ -408,7 +403,7 @@ class _FileClaimPageState extends State<FileClaimPage> {
                                 padding: const EdgeInsets.symmetric(vertical: 15),
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                               ),
-                              onPressed: _submitting ? null : _submit,
+                              onPressed: (_submitting || _uploadingDoc || _documents.isEmpty) ? null : _submit,
                               child: _submitting
                                   ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                                   : const Text('Submit Claim', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 15)),
@@ -632,20 +627,26 @@ class _RequestRefundPageState extends State<RequestRefundPage> {
                     ),
                     Padding(
                       padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
-                      child: SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.primary,
-                            padding: const EdgeInsets.symmetric(vertical: 15),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                          ),
-                          onPressed: (!_eligible || _submitting) ? null : _submit,
-                          child: _submitting
-                              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                              : Text(_eligible ? 'Request Refund' : 'Not Eligible',
-                                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 15)),
-                        ),
+                      child: StreamBuilder<List<ClaimOrRefundRecord>>(
+                        stream: InsuranceRepository.instance.watchRefundsForTransaction(widget.transactionId),
+                        builder: (context, snapshot) {
+                          final hasRequest = (snapshot.data ?? const <ClaimOrRefundRecord>[]).isNotEmpty;
+                          return SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.primary,
+                                padding: const EdgeInsets.symmetric(vertical: 15),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                              ),
+                              onPressed: (!_eligible || _submitting || !snapshot.hasData || hasRequest) ? null : _submit,
+                              child: _submitting
+                                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                  : Text(hasRequest ? 'Refund Already Requested' : (_eligible ? 'Request Refund' : 'Not Eligible'),
+                                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 15)),
+                            ),
+                          );
+                        },
                       ),
                     ),
                   ],

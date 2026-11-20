@@ -30,7 +30,13 @@ class PlacesApiService {
   PlacesApiService._();
   static final PlacesApiService instance = PlacesApiService._();
 
-  static const _userAgent = 'VoyaTravelApp/1.0 (student FYP project; contact: teohyongyun90@gmail.com)';
+  static const _userAgent = 'VoyaTravelApp/1.0 (student travel application)';
+
+  // Supply with --dart-define=GEOAPIFY_API_KEY=... (no source-file edits).
+  // For a public production app, a server-side proxy is preferred to protect quotas.
+  static const String _nearbyGeoapifyKey = String.fromEnvironment(
+    'GEOAPIFY_API_KEY', defaultValue: geoapifyApiKey,
+  );
 
   Object? lastSearchNearbyError;
 
@@ -134,7 +140,8 @@ class PlacesApiService {
     ('overpass.private.coffee', '/api/interpreter'),
   ];
 
-  bool get _geoapifyConfigured => geoapifyApiKey.isNotEmpty && geoapifyApiKey != 'YOUR_GEOAPIFY_API_KEY_HERE';
+  bool get hasNearbyProvider => _nearbyGeoapifyKey.trim().isNotEmpty &&
+      _nearbyGeoapifyKey != 'YOUR_GEOAPIFY_API_KEY_HERE';
 
   /// Maps an app-level nearby category to Geoapify's hierarchical category
   /// keys (geoapify.com/docs/places) -- comma-separating a few top-level
@@ -179,14 +186,24 @@ class PlacesApiService {
     int limit = 25,
   }) async {
     lastSearchNearbyError = null;
-    if (_geoapifyConfigured) {
-      final viaGeoapify = await _searchNearbyGeoapify(lat: lat, lon: lon, category: category, radiusMeters: radiusMeters, limit: limit);
+    if (hasNearbyProvider) {
+      final viaGeoapify = await _searchNearbyGeoapify(
+        lat: lat, lon: lon, category: category,
+        radiusMeters: radiusMeters, limit: limit,
+      );
       if (viaGeoapify != null) return viaGeoapify;
-      // Geoapify itself failed -- fall through to Overpass rather than
-      // showing the traveller an error when there's still a chance of
-      // getting real results another way.
     }
-    return searchNearby(lat: lat, lon: lon, filter: overpassFilterFor(category), radiusMeters: radiusMeters, limit: limit);
+    // Nearby is interactive: don't block the UI for up to a minute trying
+    // three public Overpass mirrors. Other catalogue-import jobs retain the
+    // existing longer retry behaviour via searchNearby's default arguments.
+    return searchNearby(
+      lat: lat, lon: lon,
+      filter: overpassFilterFor(category),
+      radiusMeters: radiusMeters, limit: limit,
+      maxServers: 1,
+      requestTimeout: const Duration(seconds: 7),
+      queryTimeoutSeconds: 6,
+    );
   }
 
   /// Returns null (not an empty list) on any request failure, so
@@ -206,9 +223,9 @@ class PlacesApiService {
         'filter': 'circle:$lon,$lat,$radiusMeters',
         'bias': 'proximity:$lon,$lat',
         'limit': '$limit',
-        'apiKey': geoapifyApiKey,
+        'apiKey': _nearbyGeoapifyKey,
       });
-      final res = await http.get(uri).timeout(const Duration(seconds: 12));
+      final res = await http.get(uri).timeout(const Duration(seconds: 8));
       if (res.statusCode != 200) {
         lastSearchNearbyError = 'Geoapify returned HTTP ${res.statusCode}';
         return null;
@@ -267,15 +284,18 @@ class PlacesApiService {
     required String filter,
     int radiusMeters = 4000,
     int limit = 25,
+    int maxServers = 3,
+    Duration requestTimeout = const Duration(seconds: 20),
+    int queryTimeoutSeconds = 25,
   }) async {
     lastSearchNearbyError = null;
-    final query = '[out:json][timeout:25];'
+    final query = '[out:json][timeout:$queryTimeoutSeconds];'
         '(node$filter(around:$radiusMeters,$lat,$lon);'
         'way$filter(around:$radiusMeters,$lat,$lon);'
         ');'
         'out center $limit;';
 
-    for (final (host, path) in _overpassHosts) {
+    for (final (host, path) in _overpassHosts.take(maxServers)) {
       try {
         final res = await http
             .post(
@@ -283,7 +303,7 @@ class PlacesApiService {
               headers: {'User-Agent': _userAgent, 'Content-Type': 'application/x-www-form-urlencoded'},
               body: {'data': query},
             )
-            .timeout(const Duration(seconds: 20));
+            .timeout(requestTimeout);
         if (res.statusCode != 200) {
           lastSearchNearbyError = 'Overpass ($host) returned HTTP ${res.statusCode}';
           continue; // try the next mirror instead of giving up

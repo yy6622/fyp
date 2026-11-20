@@ -1,35 +1,53 @@
+// These values must match the categories used by Admin > Add Attraction.
+// Use actual catalogue tags rather than treating different interests as
+// the same generic "Viewpoint" category.
 const Map<String, List<String>> kInterestToAttractionCategoryTags = {
-  // Every tag below is a real admin/attraction-form.html
-  // CATEGORY_TAG_PRESETS entry. Earlier versions of this map also listed
-  // 'Nature', 'Attraction', 'Shopping', 'Adventure', 'Artwork' and
-  // 'Gallery' as tags -- none of those exist as real presets, so they
-  // could never actually match a real attraction and were silently dead
-  // weight. Removed. 'Shopping' interest is gone entirely: its only tag
-  // was the phantom 'Shopping' string, so with that removed it had zero
-  // real tags left (see create_plan_wizard_controller.dart).
-  'Beach': ['Viewpoint'],
-  'City': ['Landmark'],
-  'Nature': ['Viewpoint', 'Zoo'],
-  'Adventure': ['Zoo', 'Theme Park'],
-  'Culture': ['Art & Culture', 'Historic Site', 'Museum'],
-  'Relaxation': ['Viewpoint'],
-  'Wildlife': ['Zoo'],
-  'History': ['Historic Site'],
-  'Art': ['Museum'],
+  'Beach': ['Beach'],
+  'City': ['Landmark', 'Monument', 'Shopping Mall', 'Market'],
+  'Nature': ['Nature Reserve', 'Park', 'Garden', 'Viewpoint'],
+  'Adventure': ['Theme Park', 'Nature Reserve'],
+  'Culture': ['Art & Culture', 'Historic Site', 'Museum', 'Monument'],
+  'Relaxation': ['Beach', 'Garden', 'Park', 'Viewpoint'],
+  'Wildlife': ['Zoo', 'Aquarium', 'Nature Reserve'],
+  'History': ['Historic Site', 'Museum', 'Monument'],
+  'Art': ['Art & Culture', 'Museum'],
   'Religion': ['Temple', 'Shrine', 'Religious Site'],
   'Markets': ['Market'],
 };
 
 const int kInterestAffinityBonus = 4;
 
+String normalizedAttractionCategory(String value) =>
+    value.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
+
+/// Real attraction category tags preferred by the selected plan. Stored trip
+/// interests are matched case-insensitively (including older plans).
+Set<String> attractionCategoryTagsForInterests(Iterable<String> interests) {
+  final wanted = <String>{};
+  for (final interest in interests) {
+    final normalizedInterest = normalizedAttractionCategory(interest);
+    for (final entry in kInterestToAttractionCategoryTags.entries) {
+      if (normalizedAttractionCategory(entry.key) != normalizedInterest) continue;
+      for (final tag in entry.value) {
+        wanted.add(normalizedAttractionCategory(tag));
+      }
+      break;
+    }
+  }
+  return wanted;
+}
+
 Map<String, int> blendInterestsIntoAffinity(Map<String, int> affinity, List<String> interests) {
   if (interests.isEmpty) return affinity;
   final blended = Map<String, int>.from(affinity);
   for (final interest in interests) {
-    final tags = kInterestToAttractionCategoryTags[interest];
-    if (tags == null) continue;
-    for (final tag in tags) {
-      blended[tag] = (blended[tag] ?? 0) + kInterestAffinityBonus;
+    final normalizedInterest = normalizedAttractionCategory(interest);
+    for (final entry in kInterestToAttractionCategoryTags.entries) {
+      if (normalizedAttractionCategory(entry.key) != normalizedInterest) continue;
+      for (final tag in entry.value) {
+        blended[tag] = (blended[tag] ?? 0) + kInterestAffinityBonus;
+      }
+      break;
     }
   }
   return blended;

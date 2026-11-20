@@ -52,6 +52,22 @@ class ExpensesTabController extends ChangeNotifier {
 
   List<TripExpense> get visibleExpenses => _personal ? _personalExpenses : _groupExpenses;
 
+  /// A native-currency amount must not be added to an amount in another
+  /// currency. Older transactions without a label are treated as unknown.
+  bool get hasMixedCurrencies => _hasMixedCurrenciesFor(visibleExpenses);
+
+  bool _hasMixedCurrenciesFor(List<TripExpense> expenses) {
+    final codes = expenses.map((expense) {
+      final match = RegExp(r'Currency:\s*([A-Z]{3})\b', caseSensitive: false).firstMatch(expense.note);
+      if (match != null) return match.group(1)!.toUpperCase();
+      // Old scans that explicitly said they were converted to RM were
+      // already stored in MYR; don't infer their original currency.
+      if (expense.note.contains('converted to RM')) return 'MYR';
+      return 'UNKNOWN';
+    }).toSet();
+    return codes.length > 1;
+  }
+
   double myShareOf(TripExpense e) => e.participants.where((p) => p.uid == _uid).fold(0.0, (s, p) => s + p.share);
 
   double displayAmount(TripExpense e) => _personal ? myShareOf(e) : e.amount;
@@ -139,6 +155,11 @@ class ExpensesTabController extends ChangeNotifier {
       byCategory: byCategory,
       tripBudget: tripBudget,
       dailyTotals: _dailyTotalsFor(rows),
+      hasMixedCurrencies: _hasMixedCurrenciesFor(visible),
+      budgetComparable: visible.isEmpty || visible.every((e) {
+        final match = RegExp(r'Currency:\s*([A-Z]{3})\b', caseSensitive: false).firstMatch(e.note);
+        return match?.group(1)?.toUpperCase() == 'MYR' || e.note.contains('converted to RM');
+      }),
     );
   }
 
@@ -198,6 +219,8 @@ class ExpensesReportSnapshot {
   final Map<String, double> byCategory;
   final double tripBudget;
   final List<MapEntry<DateTime, double>> dailyTotals;
+  final bool hasMixedCurrencies;
+  final bool budgetComparable;
   const ExpensesReportSnapshot({
     required this.trip,
     required this.personal,
@@ -214,6 +237,8 @@ class ExpensesReportSnapshot {
     required this.byCategory,
     required this.tripBudget,
     required this.dailyTotals,
+    required this.hasMixedCurrencies,
+    required this.budgetComparable,
   });
 
   double get remainingBudget => tripBudget - totalExpenses;
@@ -234,6 +259,7 @@ class AddExpenseController extends ChangeNotifier {
     selectedUids = trip.memberIds.toSet();
     if (trip.destination.trim().isNotEmpty) location = trip.destination.trim();
     if (trip.memberIds.length <= 1) reminder = false;
+    noteController.text = 'Currency: ${currencyForDestination(trip.destination) ?? 'Unknown (please edit)'}';
   }
 
   final TextEditingController titleController = TextEditingController();
@@ -332,12 +358,7 @@ class AddExpenseController extends ChangeNotifier {
     _scanningReceipt = true;
     notifyListeners();
     try {
-      // The trip's own destination tells us what currency a receipt was
-      // almost certainly paid in (a Japan trip -> JPY) -- far more
-      // reliable than trying to OCR a currency symbol off the photo
-      // itself, which the receipt may not even show clearly. Falls back
-      // to null (treated as MYR, unchanged from before this existed) for
-      // a Malaysia trip or an unrecognised destination.
+      // Destination is only a fallback when the receipt does not print a currency.
       final localCurrency = currencyForDestination(trip.destination);
       final result = await ReceiptOcrService.instance.scan(photo, localCurrency: localCurrency);
 
@@ -348,13 +369,15 @@ class AddExpenseController extends ChangeNotifier {
       if (result.storeName != null && titleController.text.trim().isEmpty) {
         titleController.text = result.storeName!;
       }
-      // Transparency for a converted receipt: the amount recorded (and
-      // used in every budget/split calculation) is always MYR, but the
-      // traveller paid in local cash -- show what that actually was so
-      // the converted figure doesn't look like it came from nowhere.
-      if (result.originalCurrency != null && result.originalTotal != null && noteController.text.trim().isEmpty) {
-        noteController.text = 'Paid ${result.originalTotal!.toStringAsFixed(0)} ${result.originalCurrency} '
-            '(converted to RM ${(result.total ?? 0).toStringAsFixed(2)})';
+      // Make the original, unconverted currency explicit in Note.
+      final code = result.currencyCode ?? localCurrency;
+      final currencyNote = 'Currency: ${code ?? 'Unknown (please edit)'}';
+      final currentNote = noteController.text.trim();
+      final currencyLine = RegExp(r'Currency:\s*[^\n\r]*', caseSensitive: false);
+      if (currencyLine.hasMatch(currentNote)) {
+        noteController.text = currentNote.replaceFirst(currencyLine, currencyNote);
+      } else {
+        noteController.text = currentNote.isEmpty ? currencyNote : '$currentNote\n$currencyNote';
       }
       // Only while category is still at its untouched default -- never
       // overrides a category the traveller already picked themselves.
@@ -369,7 +392,7 @@ class AddExpenseController extends ChangeNotifier {
       // every trip member rather than pro-rated per item, so it's called
       // out here once rather than silently folded into a smaller total.
       final discountNote = (result.discount ?? 0) > 0.01
-          ? ' (RM ${result.discount!.toStringAsFixed(2)} voucher/loyalty discount applied, split equally)'
+          ? ' (${result.discount!.toStringAsFixed(2)} voucher/loyalty discount applied, split equally)'
           : '';
 
       if (result.items.isNotEmpty) {
@@ -383,11 +406,11 @@ class AddExpenseController extends ChangeNotifier {
           // it, which is exactly the "every item needs someone to pay for
           // it" dead end this used to hit. Just total the scanned items
           // instead and stay in (the only available) Split Equally mode.
-          final sum = (result.items.fold<double>(0, (s, i) => s + i.price) + (result.tax ?? 0) - (result.discount ?? 0))
+          final sum = (result.items.fold<double>(0, (s, i) => s + i.price) + (result.additionalTax) - (result.discount ?? 0))
               .clamp(0.0, double.infinity);
           amountController.text = sum.toStringAsFixed(2);
           return 'Found ${result.items.length} item${result.items.length == 1 ? '' : 's'} on your receipt, '
-              'totalling RM ${sum.toStringAsFixed(2)}$consistencyNote$discountNote — review it before saving.';
+              'totalling ${sum.toStringAsFixed(2)}$consistencyNote$discountNote — review it before saving.';
         }
         items
           ..clear()
@@ -405,7 +428,9 @@ class AddExpenseController extends ChangeNotifier {
         // would make this fallback read as a smaller (or even negative)
         // "tax" than was really charged.
         final itemSum = result.items.fold<double>(0, (s, i) => s + i.price);
-        final extra = result.tax ?? ((result.total != null ? result.total! - itemSum : 0.0) + (result.discount ?? 0));
+        final extra = result.tax != null
+            ? result.additionalTax
+            : ((result.total != null ? result.total! - itemSum : 0.0) + (result.discount ?? 0));
         if (extra > 0.01) {
           items.add(ReceiptItem(label: 'Tax & Service Charge', price: extra, assigneeUids: trip.memberIds.toSet()));
         }
@@ -430,7 +455,7 @@ class AddExpenseController extends ChangeNotifier {
       }
       if (result.total != null) {
         amountController.text = result.total!.toStringAsFixed(2);
-        return 'Found a total of RM ${result.total!.toStringAsFixed(2)}$consistencyNote — review it and choose who to split with.';
+        return 'Found a total of ${result.total!.toStringAsFixed(2)}$consistencyNote — review it and choose who to split with.';
       }
       if (result.error == 'not a receipt') {
         // Distinct from the generic failure below -- this fires when the
@@ -473,7 +498,19 @@ class AddExpenseController extends ChangeNotifier {
   Future<bool> submit() async {
     final uid = AuthService.instance.currentUser?.uid;
     if (uid == null) return false;
-    final title = noteController.text.trim();
+    final enteredNote = noteController.text.trim();
+    final manualDescription = enteredNote
+        .replaceAll(RegExp(r'Currency:\s*[^\n\r]*', caseSensitive: false), '')
+        .trim();
+    final title = titleController.text.trim().isNotEmpty
+        ? titleController.text.trim()
+        : (manualDescription.isNotEmpty ? manualDescription : category);
+    final note = RegExp(r'Currency:\s*[^\n\r]*', caseSensitive: false).hasMatch(enteredNote)
+        ? enteredNote
+        : <String>[
+            if (enteredNote.isNotEmpty) enteredNote,
+            'Currency: ${currencyForDestination(trip.destination) ?? 'Unknown'}',
+          ].join('\n');
     final amt = amount;
     final shares = _computeShares();
     if (amt <= 0 || amt > 1000000 || shares.isEmpty) return false;
@@ -505,7 +542,7 @@ class AddExpenseController extends ChangeNotifier {
         title: title,
         amount: amt,
         category: category,
-        note: noteController.text.trim(),
+        note: note,
         location: location,
         paidBy: uid,
         paidByName: myName,

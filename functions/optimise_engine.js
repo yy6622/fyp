@@ -115,18 +115,6 @@ function profile(item, known) {
   return p;
 }
 
-function recommendationScoreOf(inf) {
-  const r = inf.place && inf.place.rating != null ? parseFloat(inf.place.rating) : NaN;
-  if (!Number.isFinite(r)) return 0.5;
-  return Math.max(0, Math.min(1, r / 5));
-}
-function costPenaltyOf(inf) {
-  const price = inf.place && inf.place.price != null ? String(inf.place.price) : "";
-  if (!price || /free/i.test(price)) return 0;
-  const n = parseFloat(price.replace(/[^0-9.]/g, ""));
-  if (!Number.isFinite(n)) return 0.2;
-  return Math.max(0, Math.min(1, n / 200));
-}
 function travelTimePenaltyOf(minutes) {
   if (minutes == null) return 0.3;
   return Math.max(0, Math.min(1, minutes / 60));
@@ -179,18 +167,16 @@ function twoOptReorder(ordered, info, extraFor = () => 0) {
   }
   if (current.length) runs.push(current);
 
+  // 2-opt only considers travel time and live traffic delay.
+  // Rating, recommendation scores and attraction costs do not affect order.
   const totalUtility = (seq) => {
     let sum = 0;
-    for (let i = 0; i < seq.length; i++) {
-      const inf0 = info.get(seq[i][0].id);
-      sum += recommendationScoreOf(inf0) - costPenaltyOf(inf0);
-      if (i > 0) {
-        const minutes = estimateTravelMinutes(pointOf(seq[i - 1], info), pointOf(seq[i], info));
-        sum -= travelTimePenaltyOf(minutes);
-        const prevBlock = seq[i - 1];
-        const extra = extraFor(prevBlock[prevBlock.length - 1].id, seq[i][0].id);
-        if (extra > 0) sum -= Math.max(0, Math.min(1, extra / 60));
-      }
+    for (let i = 1; i < seq.length; i++) {
+      const minutes = estimateTravelMinutes(pointOf(seq[i - 1], info), pointOf(seq[i], info));
+      sum -= travelTimePenaltyOf(minutes);
+      const prevBlock = seq[i - 1];
+      const extra = extraFor(prevBlock[prevBlock.length - 1].id, seq[i][0].id);
+      if (extra > 0) sum -= Math.max(0, Math.min(1, extra / 60));
     }
     return sum;
   };

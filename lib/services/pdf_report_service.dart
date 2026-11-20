@@ -42,15 +42,14 @@ class PdfReportService {
   static String _fmtDate(DateTime? d) => d == null ? '—' : '${d.day} ${_monthNames[d.month - 1]} ${d.year}';
 
   static String _money(double v) {
-    final rounded = v.round();
-    final negative = rounded < 0;
-    final digits = rounded.abs().toString();
+    final cents = (v.abs() * 100).round();
+    final digits = (cents ~/ 100).toString();
     final buf = StringBuffer();
     for (var i = 0; i < digits.length; i++) {
       if (i > 0 && (digits.length - i) % 3 == 0) buf.write(',');
       buf.write(digits[i]);
     }
-    return 'RM${negative ? '-' : ''}$buf';
+    return '${v < 0 && cents > 0 ? '-' : ''}$buf.${(cents % 100).toString().padLeft(2, '0')}';
   }
 
   static String _num0(double v) => v.round().toString();
@@ -118,7 +117,12 @@ class PdfReportService {
           pw.SizedBox(height: 10),
           _divider(),
           pw.SizedBox(height: 16),
-          pw.Row(
+          if (snapshot.hasMixedCurrencies || !snapshot.budgetComparable)
+            pw.Text(snapshot.hasMixedCurrencies
+                ? 'Different or unknown transaction currencies: aggregate totals/charts are not comparable.'
+                : 'Receipts have not been converted. Budget and foreign-currency expenses cannot be compared.',
+                style: pw.TextStyle(fontSize: 9, color: _gray)),
+          if (!snapshot.hasMixedCurrencies) pw.Row(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
               pw.Expanded(
@@ -188,7 +192,7 @@ class PdfReportService {
       children: [
         pw.Row(children: [col('Travel Plan: $tripName'), col('Travel Period: $period'), col('Generated: $generated')]),
         pw.SizedBox(height: 4),
-        pw.Row(children: [col(whoLabel), col('Currency: RM'), col('Report ID: $reportId')]),
+        pw.Row(children: [col(whoLabel), col('Currency: Refer to each transaction Note'), col('Report ID: $reportId')]),
       ],
     );
   }
@@ -198,8 +202,8 @@ class PdfReportService {
   static pw.Widget _statRow(ExpensesReportSnapshot snapshot) {
     final stats = [
       MapEntry('Trip Budget', _money(snapshot.tripBudget)),
-      MapEntry('Total Expenses', _money(snapshot.totalExpenses)),
-      MapEntry('Remaining Budget', _money(snapshot.remainingBudget)),
+      MapEntry('Total Expenses', snapshot.hasMixedCurrencies ? '—' : _money(snapshot.totalExpenses)),
+      MapEntry('Remaining Budget', snapshot.hasMixedCurrencies || !snapshot.budgetComparable ? '—' : _money(snapshot.remainingBudget)),
     ];
     final children = <pw.Widget>[];
     for (var i = 0; i < stats.length; i++) {
@@ -409,7 +413,8 @@ class PdfReportService {
       for (var i = 0; i < rows.length; i++) {
         final r = rows[i];
         final e = r.expense;
-        final label = e.title.trim().isNotEmpty ? e.title.trim() : (e.note.trim().isNotEmpty ? e.note.trim() : e.category);
+        final baseLabel = e.title.trim().isNotEmpty ? e.title.trim() : e.category;
+        final label = e.note.trim().isEmpty ? baseLabel : '$baseLabel\nNote: ${e.note.trim()}';
         widgets.add(_tableRow(
           [
             _fmtDate(e.date),

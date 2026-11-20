@@ -1,6 +1,7 @@
 import '../models/duffel_models.dart';
 import '../repositories/catalog_repository.dart';
 import 'opening_hours.dart';
+import 'interest_mapping.dart';
 
 
 class RecommendationWeights {
@@ -50,6 +51,15 @@ class AttractionRecommendation {
     return true;
   }
 
+  /// Preference matches have priority over the global behavior-based score.
+  /// Otherwise the same destination can yield almost identical top results
+  /// for two plans whose interests are different.
+  static bool matchesPreferredCategories(CatalogAttraction attraction, Set<String> preferredCategoryTags) {
+    if (preferredCategoryTags.isEmpty) return false;
+    return <String>[...attraction.categoryTags, attraction.category]
+        .any((tag) => preferredCategoryTags.contains(normalizedAttractionCategory(tag)));
+  }
+
   static double preferenceScore(CatalogAttraction a, Map<String, int> affinity, int maxAffinity) {
     if (affinity.isEmpty || maxAffinity <= 0) return 0.5;
     var raw = 0;
@@ -86,11 +96,17 @@ class AttractionRecommendation {
     List<CatalogAttraction> candidates,
     RecommendationContext ctx, {
     RecommendationWeights weights = const RecommendationWeights(),
+    Set<String> preferredCategoryTags = const <String>{},
   }) {
     final survivors = candidates.where((a) => passesMandatoryConstraints(a, ctx)).toList();
     final maxAffinity = ctx.affinity.values.fold<int>(0, (m, v) => v > m ? v : m);
     final indexed = survivors.asMap().entries.toList()
       ..sort((x, y) {
+        if (preferredCategoryTags.isNotEmpty) {
+          final xMatches = matchesPreferredCategories(x.value, preferredCategoryTags);
+          final yMatches = matchesPreferredCategories(y.value, preferredCategoryTags);
+          if (xMatches != yMatches) return yMatches ? 1 : -1;
+        }
         final sx = score(x.value, ctx, maxAffinity: maxAffinity, weights: weights);
         final sy = score(y.value, ctx, maxAffinity: maxAffinity, weights: weights);
         final cmp = sy.compareTo(sx);

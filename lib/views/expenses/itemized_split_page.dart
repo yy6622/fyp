@@ -50,7 +50,7 @@ class _ItemizedSplitPageState extends State<ItemizedSplitPage> {
                   ),
                   if (widget.controller.items.isNotEmpty) ...[
                     const SizedBox(height: 16),
-                    Text('Total: RM ${widget.controller.amount.toStringAsFixed(2)}',
+                    Text('Total: ${widget.controller.amount.toStringAsFixed(2)}',
                         style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.navy)),
                   ],
                 ],
@@ -93,7 +93,7 @@ class _ItemizedSplitPageState extends State<ItemizedSplitPage> {
               Expanded(
                 child: GestureDetector(
                   onTap: () => _editItemDialog(index, item),
-                  child: Text('${item.label} — RM ${item.price.toStringAsFixed(2)}',
+                  child: Text('${item.label} — ${item.price.toStringAsFixed(2)}',
                       style: const TextStyle(fontSize: 12.5, color: Colors.black)),
                 ),
               ),
@@ -132,8 +132,8 @@ class _ItemizedSplitPageState extends State<ItemizedSplitPage> {
     if (priceValue == null || !RegExp(r'^\d+(\.\d{1,2})?$').hasMatch(priceText)) {
       return 'Price: numbers only, up to 2 decimal places';
     }
-    if (priceValue <= 0) return 'Price must be more than RM 0';
-    if (priceValue > 1000000) return 'Price can\'t be more than RM 1,000,000';
+    if (priceValue <= 0) return 'Price must be more than 0';
+    if (priceValue > 1000000) return 'Price can\'t be more than 1,000,000';
     return null;
   }
 
@@ -146,7 +146,7 @@ class _ItemizedSplitPageState extends State<ItemizedSplitPage> {
       headerIcon: Icons.receipt_long_outlined,
       fieldsBuilder: (ctx, setState) => [
         niceDialogField(label, 'Item', icon: Icons.label_outline, autofocus: true, required: true),
-        niceDialogField(price, 'Price (RM)', icon: Icons.payments_outlined, keyboardType: const TextInputType.numberWithOptions(decimal: true), required: true),
+        niceDialogField(price, 'Price', icon: Icons.payments_outlined, keyboardType: const TextInputType.numberWithOptions(decimal: true), required: true),
       ],
     );
     if (result != true) return;
@@ -168,7 +168,7 @@ class _ItemizedSplitPageState extends State<ItemizedSplitPage> {
       confirmLabel: 'Save',
       fieldsBuilder: (ctx, setState) => [
         niceDialogField(label, 'Item', icon: Icons.label_outline, autofocus: true, required: true),
-        niceDialogField(price, 'Price (RM)', icon: Icons.payments_outlined, keyboardType: const TextInputType.numberWithOptions(decimal: true), required: true),
+        niceDialogField(price, 'Price', icon: Icons.payments_outlined, keyboardType: const TextInputType.numberWithOptions(decimal: true), required: true),
       ],
     );
     if (result != true) return;

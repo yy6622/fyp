@@ -32,6 +32,7 @@ class ExplorePage extends StatefulWidget {
 }
 
 class _ExplorePageState extends State<ExplorePage> {
+  static const bool _showNearbySection = false;
   final ExploreController controller = ExploreController();
   final TextEditingController _searchController = TextEditingController();
   final FilterController filterController = FilterController();
@@ -266,8 +267,16 @@ class _ExplorePageState extends State<ExplorePage> {
       requireOpenNow: f.openNow,
       requireAccessible: f.accessibleOnly,
     );
-    return AttractionRecommendation.rank(categoryFiltered, ctx);
+    return AttractionRecommendation.rank(
+      categoryFiltered,
+      ctx,
+      preferredCategoryTags: controller.selectedAttractionPreferenceTags,
+    );
   }
+
+  bool _matchesSelectedPlanInterests(CatalogAttraction attraction) =>
+      AttractionRecommendation.matchesPreferredCategories(
+        attraction, controller.selectedAttractionPreferenceTags);
 
   List<CatalogRestaurant> get _visibleRestaurants {
     final f = filterController;
@@ -439,7 +448,9 @@ class _ExplorePageState extends State<ExplorePage> {
       onPressed: () => Navigator.of(context).push(MaterialPageRoute(
         builder: (_) => AttractionChatPage(
           destination: controller.bannerDestination,
-          candidates: controller.attractions,
+          // The assistant gets the same per-plan personalized ranking as Explore.
+          candidates: _visibleAttractions,
+          planInterests: controller.selectedTrip?.interests ?? const [],
           uid: AuthService.instance.currentUser?.uid ?? '',
           tripId: controller.selectedTrip?.id,
         ),
@@ -644,7 +655,9 @@ class _ExplorePageState extends State<ExplorePage> {
           _buildRestaurantHorizontalList(),
           const SizedBox(height: 22),
         ],
-        _buildNearbyPreview(),
+        // Temporarily hide Nearby from the Explore page without deleting
+        // the feature. Change this flag to true to display it again.
+        if (_showNearbySection) _buildNearbyPreview(),
         // Clears the AI-assistant FAB (bottom-right, see _buildAiFab) so it
         // doesn't sit on top of "View On Map" -- the ListView's own 24px
         // bottom padding wasn't enough once the FAB's own size/margin is
@@ -1199,15 +1212,20 @@ class _ExplorePageState extends State<ExplorePage> {
     if (controller.loadingPlaces && _visibleAttractions.isEmpty) {
       return const SizedBox(height: 162, child: Center(child: CircularProgressIndicator(color: AppColors.primary)));
     }
-    if (_visibleAttractions.isEmpty) return const SizedBox.shrink();
+    final ranked = _visibleAttractions;
+    if (ranked.isEmpty) return const SizedBox.shrink();
+    final matching = ranked.where(_matchesSelectedPlanInterests).toList();
+    // Prioritize matching categories, but show other destinations' results as
+    // a fallback when a catalog has no tags matching this plan's interests.
+    final visible = matching.isNotEmpty ? matching : ranked;
     return SizedBox(
       height: 162,
       child: ListView.separated(
         padding: const EdgeInsets.symmetric(horizontal: 20),
         scrollDirection: Axis.horizontal,
-        itemCount: _visibleAttractions.length,
+        itemCount: visible.length,
         separatorBuilder: (_, __) => const SizedBox(width: 12),
-        itemBuilder: (context, index) => _buildAttractionCompactCard(_visibleAttractions[index]),
+        itemBuilder: (context, index) => _buildAttractionCompactCard(visible[index]),
       ),
     );
   }
@@ -1284,18 +1302,42 @@ class _ExplorePageState extends State<ExplorePage> {
     ));
   }
 
+  Widget _attractionResultGroup(List<CatalogAttraction> items) => ListView.separated(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+        itemCount: items.length,
+        separatorBuilder: (_, __) => const SizedBox(height: 12),
+        itemBuilder: (context, index) => _buildAttractionRowCard(items[index]),
+      );
+
   Widget _buildAttractionListView() {
-    if (controller.loadingPlaces && _visibleAttractions.isEmpty) {
+    final ranked = _visibleAttractions;
+    if (controller.loadingPlaces && ranked.isEmpty) {
       return const SizedBox(height: 200, child: Center(child: CircularProgressIndicator(color: AppColors.primary)));
     }
-    if (_visibleAttractions.isEmpty) return _searchEmptyBox('No attractions found — try a different search.', padded: true);
-    return ListView.separated(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-      itemCount: _visibleAttractions.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 12),
-      itemBuilder: (context, index) => _buildAttractionRowCard(_visibleAttractions[index]),
+    if (ranked.isEmpty) return _searchEmptyBox('No attractions found — try a different search.', padded: true);
+    final matching = ranked.where(_matchesSelectedPlanInterests).toList();
+    if (matching.isEmpty) return _attractionResultGroup(ranked);
+    final other = ranked.where((item) => !_matchesSelectedPlanInterests(item)).toList();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Padding(
+          padding: EdgeInsets.fromLTRB(20, 8, 20, 12),
+          child: Text('Recommended for your plan',
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.navy)),
+        ),
+        _attractionResultGroup(matching),
+        if (other.isNotEmpty) ...[
+          const Padding(
+            padding: EdgeInsets.fromLTRB(20, 0, 20, 12),
+            child: Text('Other attractions',
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.navy)),
+          ),
+          _attractionResultGroup(other),
+        ],
+      ],
     );
   }
 

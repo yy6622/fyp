@@ -1,6 +1,7 @@
 import 'dart:math';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../models/insurance_models.dart';
@@ -286,43 +287,86 @@ class InsuranceRepository {
     return '$prefix-$year-$n';
   }
 
+  /// An application is already filed even while the partner is reviewing it.
+  /// Legacy records have random IDs; newer records use the transaction ID.
+  Future<bool> hasClaimRequest(String transactionId) async {
+    if (transactionId.isEmpty) return false;
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) {
+      throw const InsuranceEligibilityException('Please sign in to review your insurance claim.');
+    }
+    if ((await _claims.doc(transactionId).get()).exists) return true;
+    // Restrict the query by buyerId. The old transactionId-only query may be
+    // denied by Firestore rules that permit a traveller to read only their own
+    // documents. Filter by transactionId locally to avoid a composite index.
+    final snap = await _claims.where('buyerId', isEqualTo: uid).get();
+    return snap.docs.any((doc) => doc.data()['transactionId'] == transactionId);
+  }
+
   Future<String> fileClaim({
     required InsuranceTransaction transaction,
     required String category,
-    required double amount,
     String description = '',
     List<String> documents = const [],
   }) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null || uid != transaction.buyerId) {
+      throw const InsuranceEligibilityException('Only the policy buyer can submit a claim.');
+    }
+    if (documents.where((url) => url.trim().isNotEmpty).isEmpty) {
+      throw const InsuranceEligibilityException('Please upload at least one supporting document.');
+    }
+    // Check the older random-ID claims before attempting to create a new one.
+    if (await hasClaimRequest(transaction.id)) {
+      throw const InsuranceEligibilityException('A claim was already submitted for this policy. Open Claim Status to review it.');
+    }
     final nowIso = DateTime.now().toIso8601String();
     final claimRef = _newRef('CLM');
-    await _claims.add({
-      'buyerId': transaction.buyerId,
-      'transactionId': transaction.id,
-      'partnerId': transaction.partnerId,
-      'providerName': transaction.providerName,
-      'policyholderName': transaction.customerName,
-      'policyholderEmail': transaction.customerEmail,
-      'planName': transaction.planName,
-      'category': category,
-      'amount': amount,
-      'currencyCode': transaction.currencyCode.isEmpty ? 'MYR' : transaction.currencyCode,
-      'description': description,
-      'documents': documents,
-      'claimRef': claimRef,
-      'status': 'new',
-      'timeline': [
-        {'status': 'new', 'at': nowIso, 'note': 'Claim submitted'}
-      ],
-      'createdAt': FieldValue.serverTimestamp(),
-      'updatedAt': FieldValue.serverTimestamp(),
+    final claimDoc = _claims.doc(transaction.id);
+    final transactionDoc = _transactions.doc(transaction.id);
+    // A deterministic document ID prevents two concurrent submissions from
+    // creating duplicate claims when both passed the earlier legacy check.
+    await FirebaseFirestore.instance.runTransaction((tx) async {
+      final purchase = await tx.get(transactionDoc);
+      final prior = await tx.get(claimDoc);
+      final data = purchase.data();
+      if (data == null || data['buyerId'] != uid) {
+        throw const InsuranceEligibilityException('Insurance purchase not found for this user.');
+      }
+      if (prior.exists) {
+        throw const InsuranceEligibilityException('A claim was already submitted for this policy.');
+      }
+      tx.set(claimDoc, {
+        'buyerId': uid,
+        'transactionId': transaction.id,
+        'partnerId': data['partnerId'] ?? transaction.partnerId,
+        'providerName': data['providerName'] ?? transaction.providerName,
+        'policyholderName': data['customerName'] ?? transaction.customerName,
+        'policyholderEmail': data['customerEmail'] ?? transaction.customerEmail,
+        'planName': data['planName'] ?? transaction.planName,
+        'category': category,
+        'amount': null,
+        'currencyCode': data['currencyCode'] ?? (transaction.currencyCode.isEmpty ? 'MYR' : transaction.currencyCode),
+        'description': description,
+        'documents': documents,
+        'claimRef': claimRef,
+        'status': 'new',
+        'timeline': [{'status': 'new', 'at': nowIso, 'note': 'Claim submitted'}],
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
     });
     return claimRef;
   }
 
   Stream<List<ClaimOrRefundRecord>> watchClaimsForTransaction(String transactionId) {
     if (transactionId.isEmpty) return Stream.value(const []);
-    return _claims.where('transactionId', isEqualTo: transactionId).snapshots().map((snap) {
-      final list = snap.docs.map((d) => ClaimOrRefundRecord.fromDoc(d, isRefund: false)).toList();
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return Stream.error(StateError('Sign in to view your insurance claims.'));
+    return _claims.where('buyerId', isEqualTo: uid).snapshots().map((snap) {
+      final list = snap.docs
+          .where((doc) => doc.data()['transactionId'] == transactionId)
+          .map((doc) => ClaimOrRefundRecord.fromDoc(doc, isRefund: false)).toList();
       list.sort((a, b) => (b.createdAt ?? DateTime(0)).compareTo(a.createdAt ?? DateTime(0)));
       return list;
     });
@@ -330,11 +374,27 @@ class InsuranceRepository {
 
   Stream<List<ClaimOrRefundRecord>> watchRefundsForTransaction(String transactionId) {
     if (transactionId.isEmpty) return Stream.value(const []);
-    return _refunds.where('transactionId', isEqualTo: transactionId).snapshots().map((snap) {
-      final list = snap.docs.map((d) => ClaimOrRefundRecord.fromDoc(d, isRefund: true)).toList();
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return Stream.error(StateError('Sign in to view your insurance refunds.'));
+    return _refunds.where('buyerId', isEqualTo: uid).snapshots().map((snap) {
+      final list = snap.docs
+          .where((doc) => doc.data()['transactionId'] == transactionId)
+          .map((doc) => ClaimOrRefundRecord.fromDoc(doc, isRefund: true)).toList();
       list.sort((a, b) => (b.createdAt ?? DateTime(0)).compareTo(a.createdAt ?? DateTime(0)));
       return list;
     });
+  }
+
+  /// Returns true for pending, approved, and rejected refunds.
+  Future<bool> hasRefundRequest(String transactionId) async {
+    if (transactionId.isEmpty) return false;
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) {
+      throw const InsuranceEligibilityException('Please sign in to review your insurance refund.');
+    }
+    if ((await _refunds.doc(transactionId).get()).exists) return true;
+    final existing = await _refunds.where('buyerId', isEqualTo: uid).get();
+    return existing.docs.any((doc) => doc.data()['transactionId'] == transactionId);
   }
 
   Future<String> requestRefund({
@@ -343,35 +403,59 @@ class InsuranceRepository {
     String reason = '',
     List<String> documents = const [],
   }) async {
-    final start = transaction.travelStart;
-    if (start != null && !DateTime.now().isBefore(start)) {
-      throw InsuranceEligibilityException(
-        'This policy\'s travel period has already begun, so it can no longer be refunded.',
-      );
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null || uid != transaction.buyerId) {
+      throw const InsuranceEligibilityException('Only the policy buyer can request a refund.');
     }
+    // Check historical refunds created by earlier app versions as well.
+    if (await hasRefundRequest(transaction.id)) {
+      throw const InsuranceEligibilityException('A refund request already exists for this policy.');
+    }
+    final transactionRef = _transactions.doc(transaction.id);
+    // One refund document per transaction; two simultaneous submissions cannot
+    // both create the same document through the transaction below.
+    final refundDoc = _refunds.doc(transaction.id);
     final nowIso = DateTime.now().toIso8601String();
     final refundRef = _newRef('RFD');
-    await _refunds.add({
-      'buyerId': transaction.buyerId,
-      'transactionId': transaction.id,
-      'partnerId': transaction.partnerId,
-      'providerName': transaction.providerName,
-      'policyholderName': transaction.customerName,
-      'policyholderEmail': transaction.customerEmail,
-      'planName': transaction.planName,
-      'category': category,
-      'amount': transaction.premium,
-      'currencyCode': transaction.currencyCode.isEmpty ? 'MYR' : transaction.currencyCode,
-      'reason': reason,
-      'documents': documents,
-      'refundRef': refundRef,
-      'status': 'new',
-      'timeline': [
-        {'status': 'new', 'at': nowIso, 'note': 'Refund requested'}
-      ],
-      'createdAt': FieldValue.serverTimestamp(),
-      'updatedAt': FieldValue.serverTimestamp(),
+    await FirebaseFirestore.instance.runTransaction((tx) async {
+      final saved = await tx.get(transactionRef);
+      final existingRefund = await tx.get(refundDoc);
+      final data = saved.data();
+      if (data == null || data['buyerId'] != uid) {
+        throw const InsuranceEligibilityException('Policy purchase not found for this buyer.');
+      }
+      if (existingRefund.exists) {
+        throw const InsuranceEligibilityException('A refund request already exists for this policy.');
+      }
+      final start = (data['travelStart'] as Timestamp?)?.toDate();
+      if (start != null && !DateTime.now().isBefore(start)) {
+        throw const InsuranceEligibilityException(
+          'This policy\'s travel period has already begun, so it can no longer be refunded.',
+        );
+      }
+      tx.set(refundDoc, {
+        'buyerId': uid,
+        'transactionId': transaction.id,
+        'partnerId': data['partnerId'] ?? transaction.partnerId,
+        'providerName': data['providerName'] ?? transaction.providerName,
+        'policyholderName': data['customerName'] ?? transaction.customerName,
+        'policyholderEmail': data['customerEmail'] ?? transaction.customerEmail,
+        'planName': data['planName'] ?? transaction.planName,
+        'category': category,
+        'amount': data['premium'] ?? transaction.premium,
+        'currencyCode': data['currencyCode'] ?? (transaction.currencyCode.isEmpty ? 'MYR' : transaction.currencyCode),
+        'reason': reason,
+        'documents': documents,
+        'refundRef': refundRef,
+        'status': 'new',
+        'timeline': [
+          {'status': 'new', 'at': nowIso, 'note': 'Refund requested'}
+        ],
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
     });
     return refundRef;
   }
+
 }

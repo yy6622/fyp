@@ -52,7 +52,6 @@ class _PlanPageState extends State<PlanPage> {
                 _buildSectionHeader(
                   'Current Voting',
                   showIcon: Icons.how_to_vote_outlined,
-                  onViewAll: () => controller.setSelectedTab(PlanTab.voting),
                 ),
                 const SizedBox(height: 12),
                 controller.selectedTab == PlanTab.voting ? _buildVotingDetailedList() : _buildVotingList(),
@@ -69,9 +68,6 @@ class _PlanPageState extends State<PlanPage> {
                   showIcon: controller.selectedTab == PlanTab.expenses
                       ? Icons.account_balance_wallet_outlined
                       : Icons.sync_alt,
-                  onViewAll: () => controller.setSelectedTab(
-                    controller.selectedTab == PlanTab.expenses ? PlanTab.expenses : PlanTab.plan,
-                  ),
                 ),
                 const SizedBox(height: 12),
                 if (controller.selectedTab == PlanTab.expenses)
@@ -82,7 +78,7 @@ class _PlanPageState extends State<PlanPage> {
                 else
                   // The All tab is just a quick overview -- only the 3 most
                   // recent plans belong here. The complete list lives on the
-                  // dedicated Plan tab (which "View All" above already opens).
+                  // dedicated Plan tab (select it using the tab chips above).
                   ...(controller.selectedTab == PlanTab.all
                           ? controller.activePlanGroups.take(3)
                           : controller.activePlanGroups)
@@ -254,7 +250,7 @@ class _PlanPageState extends State<PlanPage> {
     );
   }
 
-  Widget _buildSectionHeader(String title, {IconData? showIcon, required VoidCallback onViewAll}) {
+  Widget _buildSectionHeader(String title, {IconData? showIcon}) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Row(
@@ -271,13 +267,6 @@ class _PlanPageState extends State<PlanPage> {
                 style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.navy),
               ),
             ],
-          ),
-          GestureDetector(
-            onTap: onViewAll,
-            child: const Text(
-              'View All',
-              style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: Colors.blue),
-            ),
           ),
         ],
       ),
@@ -581,7 +570,15 @@ class _PlanPageState extends State<PlanPage> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(group.title, style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.bold, color: AppColors.navy)),
+                        Expanded(
+                          child: Text(
+                            group.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.bold, color: AppColors.navy),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
                         Text(group.timeAgo, style: const TextStyle(fontSize: 10, color: AppColors.textGrey)),
                       ],
                     ),
@@ -669,10 +666,15 @@ class _PlanPageState extends State<PlanPage> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        group.title,
-                        style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.bold, color: AppColors.navy),
+                      Expanded(
+                        child: Text(
+                          group.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.bold, color: AppColors.navy),
+                        ),
                       ),
+                      const SizedBox(width: 8),
                       Text(group.timeAgo, style: const TextStyle(fontSize: 10, color: AppColors.textGrey)),
                     ],
                   ),

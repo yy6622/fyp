@@ -143,7 +143,7 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
                             ],
                           ),
                           const SizedBox(height: 14),
-                          _kv('Total Amount', 'RM ${e.amount.toStringAsFixed(2)}'),
+                          _kv('Total Amount', '${e.amount.toStringAsFixed(2)}'),
                           if (e.date != null) _kv('Date', _date(e.date!)),
                           _kv('Category', e.category),
                           if (e.note.isNotEmpty) _kv('Note', e.note),
@@ -264,7 +264,7 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
             UserAvatar(uid: p.uid, radius: 16),
             const SizedBox(width: 12),
             Expanded(child: Text(isMe ? '${p.name} (you)' : p.name, style: const TextStyle(fontSize: 13, color: Colors.black))),
-            Text('RM ${p.share.toStringAsFixed(2)}', style: const TextStyle(fontSize: 13, color: Colors.black)),
+            Text('${p.share.toStringAsFixed(2)}', style: const TextStyle(fontSize: 13, color: Colors.black)),
             const SizedBox(width: 8),
             Text(p.paid ? 'Paid' : 'Pending',
                 style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: p.paid ? Colors.green : Colors.orange)),
@@ -285,8 +285,8 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
     if (t.isEmpty) return 'Enter an amount';
     final v = double.tryParse(t);
     if (v == null || !RegExp(r'^\d+(\.\d{1,2})?$').hasMatch(t)) return 'Numbers only, up to 2 decimal places';
-    if (v <= 0) return 'Amount must be more than RM 0';
-    if (v > 1000000) return 'Amount can\'t be more than RM 1,000,000';
+    if (v <= 0) return 'Amount must be more than 0';
+    if (v > 1000000) return 'Amount can\'t be more than 1,000,000';
     return null;
   }
 
@@ -337,8 +337,8 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
       if (priceValue == null || !RegExp(r'^-?\d+(\.\d{1,2})?$').hasMatch(priceText)) {
         return 'Price: numbers only, up to 2 decimal places';
       }
-      if (priceValue == 0) return 'Price can\'t be RM 0';
-      if (priceValue.abs() > 1000000) return 'Price can\'t be more than RM 1,000,000';
+      if (priceValue == 0) return 'Price can\'t be 0';
+      if (priceValue.abs() > 1000000) return 'Price can\'t be more than 1,000,000';
       return null;
     }
 
@@ -368,7 +368,7 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
               confirmLabel: 'Save',
               fieldsBuilder: (dctx, dSetState) => [
                 niceDialogField(label, 'Item', icon: Icons.label_outline, autofocus: true, required: true),
-                niceDialogField(price, 'Price (RM)', icon: Icons.payments_outlined, keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true), required: true),
+                niceDialogField(price, 'Price', icon: Icons.payments_outlined, keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true), required: true),
               ],
             );
             if (result != true) return;
@@ -410,7 +410,7 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
                 children: [
                   GestureDetector(
                     onTap: () => editItem(index),
-                    child: Text('${item.label} — RM ${item.price.toStringAsFixed(2)}',
+                    child: Text('${item.label} — ${item.price.toStringAsFixed(2)}',
                         style: TextStyle(fontSize: 12.5, color: itemsEditable ? Colors.black : AppColors.textGrey)),
                   ),
                   const SizedBox(height: 6),
@@ -501,8 +501,7 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
                       label: Text.rich(TextSpan(text: 'Amount', children: const [
                         TextSpan(text: ' *', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.w700)),
                       ])),
-                      prefixText: 'RM ',
-                      errorText: amount.text.isEmpty ? null : amountProblem,
+                                            errorText: amount.text.isEmpty ? null : amountProblem,
                       helperText: amountLocked
                           ? null
                           : isItemized
@@ -686,7 +685,7 @@ class _MemberItemsPage extends StatelessWidget {
                 child: Text(isMe ? '${participant.name} (you)' : participant.name,
                     style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.black)),
               ),
-              Text('RM ${participant.share.toStringAsFixed(2)}',
+              Text('${participant.share.toStringAsFixed(2)}',
                   style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.primary)),
             ],
           ),
@@ -715,13 +714,13 @@ class _MemberItemsPage extends StatelessWidget {
                 Text(item.label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.black)),
                 if (shared) ...[
                   const SizedBox(height: 3),
-                  Text('RM ${item.price.toStringAsFixed(2)} split with ${item.assigneeUids.length} people',
+                  Text('${item.price.toStringAsFixed(2)} split with ${item.assigneeUids.length} people',
                       style: const TextStyle(fontSize: 11, color: AppColors.textGrey)),
                 ],
               ],
             ),
           ),
-          Text('RM ${yourShare.toStringAsFixed(2)}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.black)),
+          Text('${yourShare.toStringAsFixed(2)}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.black)),
         ],
       ),
     );

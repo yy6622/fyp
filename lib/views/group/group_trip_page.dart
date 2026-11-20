@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../controllers/group_trip_controller.dart';
 import '../../data/countries.dart';
+import '../../data/country_areas.dart';
 import '../../data/country_gateways.dart';
 import '../../data/airports.dart';
 import '../../models/day_plan_models.dart';
@@ -1218,70 +1219,155 @@ class _GroupTripPageState extends State<GroupTripPage> {
 
   Future<void> _editDestination(Trip trip) async {
     final searchController = TextEditingController();
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (sheetContext) => StatefulBuilder(
-        builder: (context, setSheetState) {
-          final query = searchController.text.trim().toLowerCase();
-          final results = query.isEmpty ? kDestinationCountries : kDestinationCountries.where((c) => c.name.toLowerCase().contains(query)).toList();
-          return SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Edit destination', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.navy)),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: searchController,
-                    onChanged: (_) => setSheetState(() {}),
-                    decoration: InputDecoration(
-                      hintText: 'Search destination',
-                      prefixIcon: const Icon(Icons.search, size: 20, color: AppColors.textGrey),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFFECECEC))),
-                      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFFECECEC))),
-                      contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  SizedBox(
-                    height: 360,
-                    child: results.isEmpty
-                        ? const Center(
-                            child: Padding(
-                              padding: EdgeInsets.symmetric(vertical: 24),
-                              child: Text('No matching destination.', style: TextStyle(color: AppColors.textGrey, fontSize: 12.5)),
-                            ),
-                          )
-                        : ListView.builder(
-                            padding: const EdgeInsets.only(bottom: 16),
-                            itemCount: results.length,
-                            itemBuilder: (context, i) {
-                              final c = results[i];
-                              final selected = trip.destination == c.name;
-                              return ListTile(
-                                title: Text(c.name, style: const TextStyle(fontSize: 13.5)),
-                                trailing: selected ? const Icon(Icons.check, color: AppColors.primary) : null,
-                                onTap: () async {
-                                  Navigator.of(sheetContext).pop();
-                                  await controller.setDestination(c.name);
-                                },
-                              );
-                            },
+    String? areaCountry;
+    String? choice;
+    try {
+      choice = await showModalBottomSheet<String>(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.white,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        builder: (sheetContext) => StatefulBuilder(
+          builder: (context, setSheetState) {
+            // Keep the chooser usable with the keyboard showing. No network
+            // request is required just to list the curated country areas.
+            final keyboard = MediaQuery.viewInsetsOf(context).bottom;
+            final listHeight = (MediaQuery.sizeOf(context).height - keyboard - 220)
+                .clamp(150.0, 360.0)
+                .toDouble();
+            final country = areaCountry;
+            if (country != null) {
+              final areas = kCountryAreas[country.toLowerCase()] ?? const <String>[];
+              return SafeArea(
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(16, 16, 16, keyboard + 12),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          IconButton(
+                            onPressed: () => setSheetState(() => areaCountry = null),
+                            icon: const Icon(Icons.arrow_back, color: AppColors.navy, size: 20),
                           ),
+                          Expanded(
+                            child: Text('Area in $country',
+                                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.navy)),
+                          ),
+                        ],
+                      ),
+                      const Padding(
+                        padding: EdgeInsets.only(left: 12, bottom: 6),
+                        child: Text('Choose a specific area, or use the whole country',
+                            style: TextStyle(fontSize: 11.5, color: AppColors.textGrey)),
+                      ),
+                      SizedBox(
+                        height: listHeight,
+                        child: ListView(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          children: [
+                            ListTile(
+                              title: Text('Just use $country',
+                                  style: const TextStyle(fontWeight: FontWeight.w600, color: AppColors.navy, fontSize: 13.5)),
+                              trailing: trip.destination == country
+                                  ? const Icon(Icons.check, color: AppColors.primary)
+                                  : null,
+                              onTap: () => Navigator.of(sheetContext).pop(country),
+                            ),
+                            const Divider(height: 1),
+                            for (final area in areas)
+                              ListTile(
+                                title: Text(area, style: const TextStyle(fontSize: 13.5)),
+                                trailing: trip.destination == '$area, $country'
+                                    ? const Icon(Icons.check, color: AppColors.primary)
+                                    : null,
+                                onTap: () => Navigator.of(sheetContext).pop('$area, $country'),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
-                ],
+                ),
+              );
+            }
+
+            final query = searchController.text.trim().toLowerCase();
+            final results = query.isEmpty
+                ? kDestinationCountries
+                : kDestinationCountries.where((c) => c.name.toLowerCase().contains(query)).toList();
+            return SafeArea(
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(16, 16, 16, keyboard + 12),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Edit destination',
+                        style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.navy)),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: searchController,
+                      onChanged: (_) => setSheetState(() {}),
+                      decoration: InputDecoration(
+                        hintText: 'Search destination',
+                        prefixIcon: const Icon(Icons.search, size: 20, color: AppColors.textGrey),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                        contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    SizedBox(
+                      height: listHeight,
+                      child: results.isEmpty
+                          ? const Center(child: Text('No matching destination.',
+                              style: TextStyle(color: AppColors.textGrey, fontSize: 12.5)))
+                          : ListView.builder(
+                              padding: const EdgeInsets.only(bottom: 12),
+                              itemCount: results.length,
+                              itemBuilder: (context, index) {
+                                final country = results[index].name;
+                                final areas = kCountryAreas[country.toLowerCase()] ?? const <String>[];
+                                return ListTile(
+                                  title: Text(country, style: const TextStyle(fontSize: 13.5)),
+                                  trailing: areas.isNotEmpty
+                                      ? const Icon(Icons.chevron_right, size: 20)
+                                      : (trip.destination == country
+                                          ? const Icon(Icons.check, color: AppColors.primary)
+                                          : null),
+                                  onTap: () {
+                                    if (areas.isEmpty) {
+                                      Navigator.of(sheetContext).pop(country);
+                                    } else {
+                                      setSheetState(() => areaCountry = country);
+                                    }
+                                  },
+                                );
+                              },
+                            ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-          );
-        },
-      ),
-    );
-    searchController.dispose();
+            );
+          },
+        ),
+      );
+    } finally {
+      searchController.dispose();
+    }
+    if (!mounted || choice == null || choice == trip.destination) return;
+    try {
+      await controller.setDestination(choice);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not update destination. Check your connection and try again.')),
+      );
+    }
   }
 
   Future<void> _editBudget(Trip trip) async {

@@ -48,7 +48,13 @@ class _ExpensesTabState extends State<ExpensesTab> {
             const SizedBox(height: 10),
             controller.personal ? _summaryCard(personal: true) : _summaryCard(personal: false),
             const SizedBox(height: 20),
-            if (controller.byCategory.isNotEmpty) ...[
+            if (controller.hasMixedCurrencies)
+              const Padding(
+                padding: EdgeInsets.only(bottom: 12),
+                child: Text('Expenses have different or unknown currencies. Totals are hidden; check each transaction note.',
+                    style: TextStyle(fontSize: 12, color: AppColors.textGrey)),
+              ),
+            if (!controller.hasMixedCurrencies && controller.byCategory.isNotEmpty) ...[
               const Text('Categories', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.navy)),
               const SizedBox(height: 10),
               ...controller.byCategory.entries.map((e) => _categoryRow(e.key, e.value, controller.totalExpenses)),
@@ -196,7 +202,7 @@ class _ExpensesTabState extends State<ExpensesTab> {
                   children: [
                     const Text('Total Expenses', style: TextStyle(fontSize: 12, color: AppColors.textGrey)),
                     const SizedBox(height: 4),
-                    Text('RM ${controller.totalExpenses.toStringAsFixed(2)}',
+                    Text(controller.hasMixedCurrencies ? '—' : controller.totalExpenses.toStringAsFixed(2),
                         style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.navy)),
                   ],
                 ),
@@ -208,8 +214,8 @@ class _ExpensesTabState extends State<ExpensesTab> {
           Row(
             children: personal
                 ? [
-                    _statTile('You Owe', 'RM ${controller.youOwe.toStringAsFixed(2)}'),
-                    _statTile("You're Owed", 'RM ${controller.youAreOwed.toStringAsFixed(2)}'),
+                    _statTile('You Owe', controller.hasMixedCurrencies ? '—' : controller.youOwe.toStringAsFixed(2)),
+                    _statTile("You're Owed", controller.hasMixedCurrencies ? '—' : controller.youAreOwed.toStringAsFixed(2)),
                     _statTile('Pending Bills', '${controller.unsettledCount}'),
                   ]
                 : [
@@ -293,7 +299,7 @@ class _ExpensesTabState extends State<ExpensesTab> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(label, style: const TextStyle(fontSize: 12.5, color: Colors.black)),
-                    Text('RM ${amount.toStringAsFixed(2)}', style: const TextStyle(fontSize: 12.5, color: Colors.black)),
+                    Text('${amount.toStringAsFixed(2)}', style: const TextStyle(fontSize: 12.5, color: Colors.black)),
                   ],
                 ),
                 const SizedBox(height: 4),
@@ -338,7 +344,7 @@ class _ExpensesTabState extends State<ExpensesTab> {
                   settled ? 'Settled' : 'Unsettled',
                   style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: settled ? Colors.green : Colors.red),
                 ),
-                Text('RM ${controller.displayAmount(expense).toStringAsFixed(2)}', style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: Colors.black)),
+                Text('${controller.displayAmount(expense).toStringAsFixed(2)}', style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: Colors.black)),
               ],
             ),
             const SizedBox(width: 8),

@@ -10,7 +10,7 @@ class ReceiptService {
   final ImagePicker _picker = ImagePicker();
 
   Future<File?> pick(ImageSource source) async {
-    final picked = await _picker.pickImage(source: source, maxWidth: 1600, maxHeight: 1600, imageQuality: 85);
+    final picked = await _picker.pickImage(source: source, maxWidth: 2400, maxHeight: 2400, imageQuality: 92);
     return picked == null ? null : File(picked.path);
   }
 

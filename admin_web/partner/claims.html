@@ -108,7 +108,7 @@
 import { requireRole } from "../js/auth-guard.js?v=20261115a";
 import { mountSidebarNav, setSidebarUser } from "../js/sidebar.js?v=20261114a";
 import { mountIcons } from "../js/icons.js?v=20261106c";
-import { listClaims, listRefunds, getClaim, getRefund, updateClaimStatus, updateRefundStatus } from "../js/data.js?v=20261114c";
+import { listClaims, listRefunds, getClaim, getRefund, updateClaimStatus, updateRefundStatus, setClaimAmount } from "../js/data.js?v=20261119ins1";
 import { number, moneyExact, statusBadge, escapeHtml, paginate, renderPager, statCard, trendDelta, countByStatusInMonth, fullDate, toast, confirmDialog, openModal, closeModal, wireModalDismiss } from "../js/ui.js?v=20261115a";
 
 mountSidebarNav({ role: "partner", active: "claims" });
@@ -228,7 +228,7 @@ function renderTable() {
         <td class="cell-strong">${escapeHtml(c[refField])}</td>
         <td>${escapeHtml(c.policyholderName || "—")}</td>
         <td class="muted">${escapeHtml(c.planName || "—")}</td>
-        <td class="muted">${moneyExact(c.amount)}</td>
+        <td class="muted">${type === "claim" && (c.amount == null || c.amountSetByPartner !== true) ? "Awaiting assessment" : moneyExact(c.amount)}</td>
         <td>${statusBadge(c.status)}</td>
       </tr>`).join("");
     body.querySelectorAll("[data-open]").forEach((row) => row.addEventListener("click", () => openDetail(row.dataset.open)));
@@ -256,6 +256,13 @@ async function openDetail(id) {
   openModal("detailModal");
 }
 
+function safeDocumentUrl(raw) {
+  try {
+    const url = new URL(String(raw));
+    return (url.protocol === "https:" || url.protocol === "http:") ? escapeHtml(url.href) : "#";
+  } catch (_) { return "#"; }
+}
+
 function renderDetail(id, record) {
   const noun = type === "claim" ? "Claim" : "Refund";
   const ref = record[type === "claim" ? "claimRef" : "refundRef"];
@@ -275,11 +282,20 @@ function renderDetail(id, record) {
     </div>
     <div class="card detail-card">
       <h3 class="h3">${noun} details</h3>
-      <p class="value">${moneyExact(record.amount)} · ${escapeHtml(record.category || "—")}</p>
+      <p class="value">${escapeHtml(record.category || "—")}</p>
+      <p class="small muted" style="margin-top:8px;white-space:pre-wrap;">${escapeHtml(type === "claim" ? (record.description || "No incident description") : (record.reason || "No additional refund reason"))}</p>
+      ${type === "claim" ? ((isFinal || !isApproved)
+        ? `<p class="value" style="margin-top:8px;">Assessed claim amount: ${record.amount == null || record.amountSetByPartner !== true ? "Not assessed" : moneyExact(record.amount)}</p>`
+        : `<label for="assessedClaimAmount" style="display:block;margin-top:12px;">Assessed Claim Amount (partner only)</label>
+           <div style="display:flex;gap:8px;align-items:center;margin-top:6px;">
+             <input class="input" id="assessedClaimAmount" type="number" min="0.01" step="0.01" style="width:180px;" placeholder="Enter amount" value="${record.amount == null || record.amountSetByPartner !== true ? "" : Number(record.amount)}" />
+             <button class="btn btn-outline btn-sm" id="saveClaimAmountBtn">Save amount</button>
+           </div>`)
+        : `<p class="value" style="margin-top:8px;">Requested refund: ${moneyExact(record.amount)}</p>`}
     </div>
     <div class="card detail-card">
       <h3 class="h3">Documents</h3>
-      ${docs.length ? `<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px;">${docs.map((u) => `<img src="${escapeHtml(u)}" data-view-doc="${escapeHtml(u)}" style="width:64px;height:64px;border-radius:8px;object-fit:cover;border:1px solid var(--border);cursor:pointer;" />`).join("")}</div>` : `<p class="value muted">No documents attached.</p>`}
+      ${docs.length ? `<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px;">${docs.map((u, i) => `<a href="${safeDocumentUrl(u)}" target="_blank" rel="noopener noreferrer" class="btn btn-outline btn-sm">Document ${i + 1} (view)</a>`).join("")}</div>` : `<p class="value muted">No documents attached.</p>`}
     </div>
     <div class="card detail-card">
       <h3 class="h3">Review timeline</h3>
@@ -294,7 +310,6 @@ function renderDetail(id, record) {
       <p class="muted small">This ${type} has already been ${escapeHtml(record.status)} — no further action is needed.</p>
       ` : `
       <button class="btn btn-danger-outline" id="rejectBtn"><span data-icon="x" data-icon-size="14"></span>Reject ${type}</button>
-      <button class="btn btn-outline" id="infoBtn"><span data-icon="eye" data-icon-size="14"></span>Request info</button>
       <button class="btn btn-primary" id="approveBtn"><span data-icon="check-circle" data-icon-size="14"></span>Approve</button>
       `) : `<p class="muted small">Your account is ${escapeHtml(session?.profile.status || "pending")} — review actions unlock once an admin approves your account.</p>`}
     </div>`;
@@ -304,9 +319,20 @@ function renderDetail(id, record) {
     img.addEventListener("click", () => openImg(img.dataset.viewDoc));
   });
 
+  if (isApproved && !isFinal && type === "claim") {
+    document.getElementById("saveClaimAmountBtn").addEventListener("click", async () => {
+      const value = Number(document.getElementById("assessedClaimAmount").value);
+      if (!Number.isFinite(value) || value <= 0) { toast("Enter a positive claim amount.", "error"); return; }
+      try {
+        await setClaimAmount(id, value);
+        toast("Claim amount saved.", "success");
+        renderDetail(id, await getClaim(id));
+        await load();
+      } catch (err) { toast(err.message || "Could not save claim amount.", "error"); }
+    });
+  }
   if (isApproved && !isFinal) {
     document.getElementById("rejectBtn").addEventListener("click", () => act(id, "rejected", `${noun} rejected`, true));
-    document.getElementById("infoBtn").addEventListener("click", () => act(id, "under_review", "Requested more information from the policyholder", false));
     document.getElementById("approveBtn").addEventListener("click", () => act(id, "approved", "Approved for payout", true));
   }
 }
@@ -320,7 +346,20 @@ async function act(id, status, note, needsConfirm) {
   const getFn = type === "claim" ? getClaim : getRefund;
   const updateFn = type === "claim" ? updateClaimStatus : updateRefundStatus;
   const latest = await getFn(id);
-  if (latest && (latest.status === "approved" || latest.status === "rejected")) {
+  if (!latest || latest.partnerId !== session.uid) {
+    toast("You cannot review another partner's request.", "error");
+    return;
+  }
+  let assessedAmount = null;
+  if (type === "claim" && status === "approved") {
+    const input = document.getElementById("assessedClaimAmount");
+    assessedAmount = Number(input?.value);
+    if (!input || !input.value.trim() || !Number.isFinite(assessedAmount) || assessedAmount <= 0) {
+      toast("Enter the assessed claim amount before approving.", "error");
+      return;
+    }
+  }
+  if (latest.status === "approved" || latest.status === "rejected") {
     toast(`This ${type} was already decided — refreshing.`, "error");
     renderDetail(id, latest);
     await load();
@@ -335,7 +374,8 @@ async function act(id, status, note, needsConfirm) {
     if (!ok) return;
   }
   try {
-    await updateFn(id, status, note);
+    if (type === "claim") await updateFn(id, status, note, assessedAmount);
+    else await updateFn(id, status, note);
     toast(`${type === "claim" ? "Claim" : "Refund"} updated.`, "success");
     const fresh = await getFn(id);
     renderDetail(id, fresh);

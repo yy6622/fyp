@@ -21,13 +21,14 @@ class AttractionChatMessage {
 }
 
 class AttractionChatController extends ChangeNotifier {
-  AttractionChatController._({required this.destination, required this.candidates, required this.uid, required this.tripId});
+  AttractionChatController._({required this.destination, required this.candidates, required this.planInterests, required this.uid, required this.tripId});
 
   static final Map<String, AttractionChatController> _cache = {};
 
   factory AttractionChatController.forTrip({
     required String destination,
     required List<CatalogAttraction> candidates,
+    List<String> planInterests = const [],
     required String uid,
     required String? tripId,
   }) {
@@ -35,15 +36,17 @@ class AttractionChatController extends ChangeNotifier {
     final existing = _cache[key];
     if (existing != null) {
       existing.candidates = candidates;
+      existing.planInterests = planInterests;
       return existing;
     }
-    final created = AttractionChatController._(destination: destination, candidates: candidates, uid: uid, tripId: tripId);
+    final created = AttractionChatController._(destination: destination, candidates: candidates, planInterests: planInterests, uid: uid, tripId: tripId);
     _cache[key] = created;
     return created;
   }
 
   final String destination;
   List<CatalogAttraction> candidates;
+  List<String> planInterests;
   final String uid;
   final String? tripId;
 
@@ -83,6 +86,7 @@ class AttractionChatController extends ChangeNotifier {
       final reply = await AttractionChatService.instance.sendMessage(
         destination: destination,
         candidates: candidates,
+        planInterests: planInterests,
         history: history,
         userMessage: trimmed,
         days: days,

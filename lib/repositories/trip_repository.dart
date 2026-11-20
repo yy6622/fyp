@@ -1547,7 +1547,7 @@ class TripRepository {
     await _notifyMembers(
       tripId,
       paidBy,
-      (_, __) => '$paidByName added an expense: "${title.isNotEmpty ? title : category}" (RM${amount.toStringAsFixed(2)})',
+      (_, __) => '$paidByName added an expense: "${title.isNotEmpty ? title : category}" (${amount.toStringAsFixed(2)}; see note for currency)',
       type: 'trip_expense_added',
     );
     if (sendReminder) {
@@ -1567,7 +1567,7 @@ class TripRepository {
         toUid: p.uid,
         type: 'trip_expense_payment_reminder',
         title: 'Payment reminder',
-        body: '${expense.paidByName} reminds you to pay your RM ${p.share.toStringAsFixed(2)} share for "${expenseLabel(expense)}".',
+        body: '${expense.paidByName} reminds you to pay your ${p.share.toStringAsFixed(2)} share (see expense note for currency) for "${expenseLabel(expense)}".',
         data: {'tripId': tripId, 'expenseId': expenseId},
       );
     }
@@ -1682,7 +1682,7 @@ class TripRepository {
     await _notifyMembers(
       tripId,
       actorUid,
-      (_, __) => '${expense.paidByName} deleted an expense: "${expenseLabel(expense)}" (RM${expense.amount.toStringAsFixed(2)})',
+      (_, __) => '${expense.paidByName} deleted an expense: "${expenseLabel(expense)}" (${expense.amount.toStringAsFixed(2)}; see note for currency)',
       type: 'trip_expense_deleted',
     );
   }

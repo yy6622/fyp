@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../models/insurance_models.dart';
 import '../../repositories/insurance_repository.dart';
@@ -24,72 +25,139 @@ String _formatDateOnly(DateTime d) => '${d.day} ${_historyMonthNames[d.month - 1
 
 List<String> _split(String s) => s.trim().isEmpty ? const [] : s.split(', ').where((v) => v.trim().isNotEmpty).toList();
 
-Widget _claimsRefundsSection(String transactionId) {
-  return StreamBuilder<List<ClaimOrRefundRecord>>(
-    stream: InsuranceRepository.instance.watchClaimsForTransaction(transactionId),
-    builder: (context, claimSnap) {
-      return StreamBuilder<List<ClaimOrRefundRecord>>(
-        stream: InsuranceRepository.instance.watchRefundsForTransaction(transactionId),
-        builder: (context, refundSnap) {
-          final List<ClaimOrRefundRecord> items = [...?claimSnap.data, ...?refundSnap.data];
-          if (items.isEmpty) return const SizedBox.shrink();
-          items.sort((a, b) => (b.createdAt ?? DateTime(0)).compareTo(a.createdAt ?? DateTime(0)));
-          return Padding(
-            padding: const EdgeInsets.only(top: 14, bottom: 4),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('Claims & Refunds Filed', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.navy)),
-                const SizedBox(height: 10),
-                ...items.map(_claimRefundCard),
-              ],
-            ),
-          );
-        },
-      );
-    },
+/// Shows the actual submission, not just its status; supports both claims and refunds.
+void _showInsuranceRequestDetail(BuildContext context, ClaimOrRefundRecord r) {
+  final label = r.isRefund ? 'Refund' : 'Claim';
+  final style = _claimStatusStyle(r.status);
+  showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.white,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+    ),
+    // Keep visible space above the sheet even for long requests.
+    builder: (sheetContext) => SafeArea(
+      top: false,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(sheetContext).height * 0.82,
+        ),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('$label ${r.ref}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17, color: AppColors.navy)),
+              const SizedBox(height: 10),
+              _field('Status', style.label),
+              _field('Reason / Category', r.category.isEmpty ? '—' : r.category),
+              _field('Details', r.description.isEmpty ? '—' : r.description),
+              _field('Amount', r.amount == null ? 'Pending partner assessment' :
+                  '${CurrencyService.instance.displayLabel(r.currencyCode)} ${r.amount!.toStringAsFixed(2)}'),
+              if (r.createdAt != null) _field('Submitted', _formatPurchasedAt(r.createdAt)),
+              const SizedBox(height: 16),
+              const Text('Supporting Documents', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.navy)),
+              if (r.documents.isEmpty)
+                const Padding(padding: EdgeInsets.symmetric(vertical: 8), child: Text('No documents attached.')),
+              for (var i = 0; i < r.documents.length; i++)
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.attach_file, color: AppColors.primary),
+                  title: Text('Document ${i + 1}', style: const TextStyle(color: AppColors.primary)),
+                  trailing: const Icon(Icons.open_in_new, size: 16),
+                  onTap: () async {
+                    final uri = Uri.tryParse(r.documents[i]);
+                    if (uri != null && (uri.scheme == 'https' || uri.scheme == 'http')) {
+                      await launchUrl(uri, mode: LaunchMode.externalApplication);
+                    }
+                  },
+                ),
+            ],
+          ),
+        ),
+      ),
+    ),
   );
 }
 
-Widget _claimRefundCard(ClaimOrRefundRecord r) {
-  final style = _claimStatusStyle(r.status);
-  return Container(
-    margin: const EdgeInsets.only(bottom: 10),
-    padding: const EdgeInsets.all(14),
-    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: const Color(0xFFECECEC))),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                '${r.isRefund ? "Refund" : "Claim"} · ${r.ref.isEmpty ? "—" : r.ref}',
-                style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: AppColors.navy),
-              ),
-            ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(color: style.color.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(8)),
-              child: Text(style.label, style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: style.color)),
-            ),
-          ],
-        ),
-        const SizedBox(height: 4),
-        Text(
-          '${r.category.isEmpty ? "—" : r.category} · ${CurrencyService.instance.displayLabel(r.currencyCode)} ${r.amount.toStringAsFixed(2)}',
-          style: const TextStyle(fontSize: 11.5, color: AppColors.textGrey),
-        ),
-        if (r.createdAt != null) ...[
-          const SizedBox(height: 2),
-          Text('Filed ${_formatDateOnly(r.createdAt!)}', style: const TextStyle(fontSize: 10.5, color: AppColors.textGrey)),
-        ],
-        if (r.latestNote != null) ...[
-          const SizedBox(height: 6),
-          Text(r.latestNote!, style: const TextStyle(fontSize: 11.5, color: Colors.black, fontStyle: FontStyle.italic)),
-        ],
-      ],
+void _showInsuranceReadError(BuildContext context, Object? error) {
+  final details = error?.toString() ?? 'Unknown error';
+  final denied = details.toLowerCase().contains('permission-denied') ||
+      details.toLowerCase().contains('missing or insufficient permissions');
+  showDialog<void>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: const Text('Unable to load request status'),
+      content: Text(denied
+          ? 'Firebase is not allowing this account to read its Claims / Refunds. The Firestore security rules must allow the policy buyer to read their own requests.\n\n$details'
+          : 'Could not read the submitted request. Check your connection and Firestore configuration.\n\n$details'),
+      actions: [TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('OK'))],
     ),
+  );
+}
+
+/// Status rows use a full-width bottom border, including the chevron area.
+/// The old layout put the chevron *outside* the bordered _field, leaving a gap.
+Widget _tappableRequestStatusRow({
+  required String label,
+  required String value,
+  required VoidCallback onTap,
+  bool showError = false,
+}) {
+  return InkWell(
+    onTap: onTap,
+    child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: Color(0xFFE4E4E4))),
+      ),
+      child: Row(
+        children: [
+          Text(label, style: const TextStyle(fontSize: 12.5, color: AppColors.textGrey)),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              value,
+              textAlign: TextAlign.right,
+              style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: Colors.black),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Icon(showError ? Icons.error_outline : Icons.chevron_right,
+              color: showError ? Colors.orange : AppColors.primary, size: 18),
+        ],
+      ),
+    ),
+  );
+}
+
+Widget _requestStatusField(String transactionId, {required bool isRefund}) {
+  final stream = isRefund
+      ? InsuranceRepository.instance.watchRefundsForTransaction(transactionId)
+      : InsuranceRepository.instance.watchClaimsForTransaction(transactionId);
+  final label = isRefund ? 'Refund Status' : 'Claim Status';
+  return StreamBuilder<List<ClaimOrRefundRecord>>(
+    stream: stream,
+    builder: (context, snapshot) {
+      if (snapshot.hasError) {
+        return _tappableRequestStatusRow(
+          label: label,
+          value: 'Unable to load · Tap for reason',
+          onTap: () => _showInsuranceReadError(context, snapshot.error),
+          showError: true,
+        );
+      }
+      final records = snapshot.data ?? const <ClaimOrRefundRecord>[];
+      if (records.isEmpty) return _field(label, snapshot.hasData ? 'Not requested' : 'Loading…');
+      final r = records.first;
+      return _tappableRequestStatusRow(
+        label: label,
+        value: _claimStatusStyle(r.status).label,
+        onTap: () => _showInsuranceRequestDetail(context, r),
+      );
+    },
   );
 }
 
@@ -100,9 +168,9 @@ Widget _claimRefundCard(ClaimOrRefundRecord r) {
     case 'rejected':
       return (color: Colors.redAccent, label: 'Rejected');
     case 'under_review':
-      return (color: Colors.orange, label: 'Info Needed');
+      return (color: Colors.orange, label: 'Under Review');
     default:
-      return (color: AppColors.textGrey, label: 'Submitted');
+      return (color: AppColors.textGrey, label: 'Pending Review');
   }
 }
 
@@ -517,7 +585,11 @@ class _HistoryInsuranceDetailPageState extends State<HistoryInsuranceDetailPage>
                           ? 'Not available'
                           : '${_formatDateOnly(widget.travelStart!)} - ${_formatDateOnly(widget.travelEnd!)}'),
                       _field('Purchased On', widget.purchasedAt == null ? 'Not available' : _formatPurchasedAt(widget.purchasedAt)),
-                      _field('Status', widget.status, last: true),
+                      _field('Status', widget.status),
+                      if (widget.transactionId.isNotEmpty) ...[
+                        _requestStatusField(widget.transactionId, isRefund: true),
+                        _requestStatusField(widget.transactionId, isRefund: false),
+                      ],
                     ],
                   ),
                 ),
@@ -535,37 +607,49 @@ class _HistoryInsuranceDetailPageState extends State<HistoryInsuranceDetailPage>
                   Row(
                     children: [
                       Expanded(
-                        child: OutlinedButton.icon(
-                          style: OutlinedButton.styleFrom(
-                            side: const BorderSide(color: AppColors.primary),
-                            padding: const EdgeInsets.symmetric(vertical: 13),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          ),
-                          onPressed: () => Navigator.of(context)
-                              .push(MaterialPageRoute(builder: (_) => FileClaimPage(transactionId: widget.transactionId))),
-                          icon: const Icon(Icons.assignment_outlined, size: 16, color: AppColors.primary),
-                          label: const Text('File a Claim',
-                              style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.w600, fontSize: 12.5)),
+                        child: StreamBuilder<List<ClaimOrRefundRecord>>(
+                          stream: InsuranceRepository.instance.watchClaimsForTransaction(widget.transactionId),
+                          builder: (context, snapshot) {
+                            final submitted = (snapshot.data ?? const <ClaimOrRefundRecord>[]).isNotEmpty;
+                            return OutlinedButton.icon(
+                              style: OutlinedButton.styleFrom(
+                                side: const BorderSide(color: AppColors.primary),
+                                padding: const EdgeInsets.symmetric(vertical: 13),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              ),
+                              // Fail closed if the request state cannot be verified.
+                              onPressed: (!snapshot.hasData || snapshot.hasError || submitted) ? null : () => Navigator.of(context)
+                                  .push(MaterialPageRoute(builder: (_) => FileClaimPage(transactionId: widget.transactionId))),
+                              icon: const Icon(Icons.assignment_outlined, size: 16, color: AppColors.primary),
+                              label: Text(submitted ? 'Claim Submitted' : snapshot.hasError ? 'Claim Unavailable' : 'File a Claim',
+                                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12.5)),
+                            );
+                          },
                         ),
                       ),
                       const SizedBox(width: 10),
                       Expanded(
-                        child: OutlinedButton.icon(
-                          style: OutlinedButton.styleFrom(
-                            side: const BorderSide(color: AppColors.primary),
-                            padding: const EdgeInsets.symmetric(vertical: 13),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          ),
-                          onPressed: () => Navigator.of(context)
-                              .push(MaterialPageRoute(builder: (_) => RequestRefundPage(transactionId: widget.transactionId))),
-                          icon: const Icon(Icons.payments_outlined, size: 16, color: AppColors.primary),
-                          label: const Text('Request Refund',
-                              style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.w600, fontSize: 12.5)),
+                        child: StreamBuilder<List<ClaimOrRefundRecord>>(
+                          stream: InsuranceRepository.instance.watchRefundsForTransaction(widget.transactionId),
+                          builder: (context, snapshot) {
+                            final existing = (snapshot.data ?? const <ClaimOrRefundRecord>[]).isNotEmpty;
+                            return OutlinedButton.icon(
+                              style: OutlinedButton.styleFrom(
+                                side: const BorderSide(color: AppColors.primary),
+                                padding: const EdgeInsets.symmetric(vertical: 13),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              ),
+                              onPressed: (!snapshot.hasData || existing) ? null : () => Navigator.of(context)
+                                  .push(MaterialPageRoute(builder: (_) => RequestRefundPage(transactionId: widget.transactionId))),
+                              icon: const Icon(Icons.payments_outlined, size: 16, color: AppColors.primary),
+                              label: Text(existing ? 'Refund Requested' : snapshot.hasError ? 'Refund Unavailable' : 'Request Refund',
+                                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12.5)),
+                            );
+                          },
                         ),
                       ),
                     ],
                   ),
-                if (widget.transactionId.isNotEmpty) _claimsRefundsSection(widget.transactionId),
                 if (widget.partnerId.isNotEmpty) ...[
                   const SizedBox(height: 10),
                   SizedBox(

@@ -1,4 +1,4 @@
-import { db, storage, functions } from "./firebase-config.js";
+import { db, storage, functions, auth } from "./firebase-config.js";
 import {
   collection, collectionGroup, doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc,
   setDoc, query, where, limit, serverTimestamp, deleteField, increment, arrayUnion,
@@ -176,10 +176,27 @@ const CLAIM_STATUS_NOTICE = {
   under_review: { type: "claim_info_requested", title: "More information needed for your claim" },
 };
 
-export async function updateClaimStatus(id, status, note = "") {
+// The partner may set the assessed claim amount. Travellers never submit it.
+export async function setClaimAmount(id, amount) {
   const current = await getClaim(id);
-  const timeline = [...(current?.timeline || []), { status, at: new Date().toISOString(), note }];
-  await updateDoc(doc(db, "claims", id), { status, timeline, updatedAt: serverTimestamp() });
+  if (!current || current.partnerId !== auth.currentUser?.uid) throw new Error('Not authorised to review this claim.');
+  if (current.status === 'approved' || current.status === 'rejected') throw new Error('This claim is already final.');
+  if (!Number.isFinite(amount) || amount <= 0) throw new Error('Enter a valid claim amount.');
+  await updateDoc(doc(db, 'claims', id), { amount, amountSetByPartner: true, updatedAt: serverTimestamp() });
+}
+
+export async function updateClaimStatus(id, status, note = "", assessedAmount = null) {
+  const current = await getClaim(id);
+  if (!current || current.partnerId !== auth.currentUser?.uid) throw new Error('Not authorised to review this claim.');
+  if (current.status === 'approved' || current.status === 'rejected') throw new Error('This claim is already final.');
+  const amount = assessedAmount ?? (current.amountSetByPartner === true ? current.amount : null);
+  if (status === 'approved' && (amount == null || !Number.isFinite(Number(amount)) || Number(amount) <= 0)) {
+    throw new Error('Partner must enter a valid claim amount before approval.');
+  }
+  const timeline = [...(current.timeline || []), { status, at: new Date().toISOString(), note }];
+  const patch = { status, timeline, updatedAt: serverTimestamp() };
+  if (assessedAmount !== null) { patch.amount = Number(assessedAmount); patch.amountSetByPartner = true; }
+  await updateDoc(doc(db, "claims", id), patch);
   const notice = CLAIM_STATUS_NOTICE[status];
   if (notice && current?.buyerId) {
     await notifyUser(current.buyerId, {

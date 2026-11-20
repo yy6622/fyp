@@ -2,7 +2,6 @@ import 'dart:io';
 
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 
-import 'currency_service.dart';
 import 'name_translation_service.dart';
 
 class ReceiptOcrResult {
@@ -33,14 +32,10 @@ class ReceiptOcrResult {
   /// rather than trying to pro-rate it per item.
   final double? discount;
 
-  /// Set only when a receipt was converted from a foreign currency (see
-  /// [scan]'s `localCurrency` parameter) -- the un-converted total as
-  /// printed on the receipt, paired with [originalCurrency], purely so the
-  /// traveller can see what they actually paid in local cash even though
-  /// [total] (and every item/tax/subtotal figure) is always expressed in
-  /// MYR for the rest of the app's maths to work.
-  final double? originalTotal;
-  final String? originalCurrency;
+  /// Currency label for the unconverted amounts shown on the receipt.
+  /// An explicit ISO code/symbol on the receipt wins over the trip destination.
+  final String? currencyCode;
+  final bool currencyDetectedOnReceipt;
 
   final String? error;
 
@@ -51,25 +46,37 @@ class ReceiptOcrResult {
     this.tax,
     this.total,
     this.discount,
-    this.originalTotal,
-    this.originalCurrency,
+    this.currencyCode,
+    this.currencyDetectedOnReceipt = false,
     this.error,
   });
 
   bool get isEmpty => items.isEmpty && total == null;
 
-  /// Cross-check, not a guarantee: items + tax should roughly match the
-  /// printed total (a few cents of slack for rounding adjustments that
-  /// receipts often print as their own tiny line). When this is false the
-  /// scan is still returned -- OCR can misread a digit -- but the caller
-  /// can use it to tell the traveller "please double-check this scan"
-  /// instead of silently trusting a read that doesn't add up.
+  /// Some receipts show informational/inclusive VAT or GST separately even
+  /// though the product prices already include it. Do not add that tax to
+  /// the expense a second time. Check against the printed total, not a
+  /// country assumption (tax conventions and till formats differ).
+  bool get taxAlreadyIncluded {
+    if (total == null || tax == null || tax! <= 0 || items.isEmpty) return false;
+    final itemSum = items.fold<double>(0, (s, i) => s + i.price);
+    return (itemSum - (discount ?? 0) - total!).abs() <= 0.05;
+  }
+
+  /// Tax to ADD to item prices (zero when already included in the prices).
+  double get additionalTax => taxAlreadyIncluded ? 0 : (tax ?? 0);
+
+  /// Cross-check the parsed item amounts against the printed receipt
+  /// total. Included-tax and extra-tax receipts are both supported; when
+  /// the check fails the UI must ask the user to verify the scan.
   bool get looksConsistent {
     final t = total;
-    if (t == null) return true;
+    if (t == null || items.isEmpty) return true;
     final itemSum = items.fold<double>(0, (s, i) => s + i.price);
-    final expected = itemSum + (tax ?? 0) - (discount ?? 0);
-    return (expected - t).abs() <= 0.5;
+    final netItems = itemSum - (discount ?? 0);
+    // Inclusive-tax receipts and exclusive-tax receipts are both valid.
+    return (netItems + (tax ?? 0) - t).abs() <= 0.5 ||
+        (netItems - t).abs() <= 0.5;
   }
 
   /// Best-effort category guess from what the scan found (store name +
@@ -120,10 +127,12 @@ class ReceiptOcrService {
   ReceiptOcrService._();
   static final ReceiptOcrService instance = ReceiptOcrService._();
 
-  // Price: optional currency marker, 1-3 digits, optional thousands groups,
-  // a decimal point OR comma, exactly 2 decimal digits, at the end of the line.
+  // Price at the end of a reconstructed receipt row. Accept ungrouped
+  // four-plus digit amounts (1234.56), comma/dot thousands separators
+  // (1,234.56 / 1.234,56), and common currency prefixes or suffixes.
+  // Require TWO decimal digits to avoid matching order/phone numbers.
   static final RegExp _priceAtEnd = RegExp(
-    r'(?:RM|MYR|\$)?\s*(\d{1,3}(?:[,.]\d{3})*[.,]\d{2})\s*$',
+    r'(?:RM|MYR|SGD|USD|\$|€|£)?\s*(\d+(?:[.,]\d{3})*[.,]\d{2})\s*(?:RM|MYR|SGD|USD|€|£)?\s*$',
     caseSensitive: false,
   );
 
@@ -159,9 +168,27 @@ class ReceiptOcrService {
   // fallback in _priceAtEnd's group would be, since a 4+ digit whole
   // number with no separator is completely normal for these currencies.
   static final RegExp _priceAtEndWhole = RegExp(
-    r'(?:¥|JPY|₩|KRW|₫|VND|Rp|IDR|Ft|HUF)?\s*(\d{1,3}(?:,\d{3})+|\d+)\s*(?:円|원)?\s*$',
+    r'(?:¥|JPY|₩|KRW|₫|VND|Rp|IDR|Ft|HUF)?\s*(\d{1,3}(?:[,.]\d{3})+|\d+)\s*(?:円|원)?\s*$',
     caseSensitive: false,
   );
+
+  // Whole-number parsing must not be attempted indiscriminately: a normal
+  // MYR receipt's invoice number/date could otherwise be read as an item.
+  static final RegExp _wholeCurrencyMarker = RegExp(
+    r'¥|JPY|₩|KRW|₫|VND|\bRp\b|\bIDR\b|\bHUF\b|\bFt\b|円|원',
+    caseSensitive: false,
+  );
+
+  // Once the currency's price is matched, the last separator before exactly
+  // two digits is the decimal separator, irrespective of locale. All other
+  // separators are thousands grouping and must be removed.
+  double? _decimalPrice(String raw) {
+    final decimalSeparator = raw.lastIndexOf(RegExp(r'[.,]'));
+    if (decimalSeparator < 0) return null;
+    final major = raw.substring(0, decimalSeparator).replaceAll(RegExp(r'[.,]'), '');
+    final minor = raw.substring(decimalSeparator + 1);
+    return double.tryParse('$major.$minor');
+  }
 
   static final RegExp _totalWord = RegExp(
     r'\b(grand\s*total|total|amount\s*due)\b|(合計|お会計|会計)',
@@ -261,21 +288,30 @@ class ReceiptOcrService {
   ({ReceiptOcrResult result, String? storeName}) _attemptParse(
       List<String> rows, List<String> flatLines, RegExp regex) {
     final storeName = _extractStoreName(rows, priceRegex: regex);
-    var result = _parseLines(rows, storeName: storeName, priceRegex: regex);
-    if (result.isEmpty) {
-      result = _parseLines(flatLines, storeName: storeName, priceRegex: regex);
+    final rowResult = _parseLines(rows, storeName: storeName, priceRegex: regex);
+    final flatResult = _parseLines(flatLines, storeName: storeName, priceRegex: regex);
+    // OCR sometimes splits price and description into separate TextLines.
+    // Prefer the candidate with more recoverable items/total, rather than
+    // accepting a partially parsed row reconstruction immediately.
+    int score(ReceiptOcrResult r) {
+      var result = r.items.length * 3 + (r.total != null ? 4 : 0) +
+          (r.subtotal != null ? 1 : 0);
+      if (r.items.isNotEmpty && r.total != null) {
+        // A longer list of bad OCR rows must not beat a shorter list that
+        // correctly reconciles to the receipt's printed grand total.
+        result += r.looksConsistent ? 5 : -10;
+      }
+      return result;
     }
+    final result = score(flatResult) > score(rowResult) ? flatResult : rowResult;
     return (result: result, storeName: storeName);
   }
 
   /// [localCurrency] is the trip destination's local currency (e.g. 'JPY'
   /// for a Japan trip -- see country_gateways.dart's `currencyForDestination`),
-  /// NOT read off the photo itself: a receipt doesn't always show its
-  /// currency clearly enough to OCR, but the trip the traveller is on
-  /// already tells us what they were almost certainly paying in. Pass null
-  /// (or 'MYR') for a Malaysia trip or when the destination isn't known --
-  /// parsing and the returned amounts are unchanged from before this
-  /// parameter existed.
+  /// Used only for parsing whole-number prices and as a fallback currency
+  /// label when the receipt does not explicitly show its own currency.
+  /// Neither receipt totals nor item prices are exchanged into MYR.
   Future<ReceiptOcrResult> scan(File image, {String? localCurrency}) async {
     final currency = (localCurrency == null || localCurrency.isEmpty) ? null : localCurrency.toUpperCase();
     final destinationIsWholeNumber = currency != null && _wholeNumberCurrencies.contains(currency);
@@ -302,12 +338,11 @@ class ReceiptOcrService {
       // number format is only used as a fallback when decimal finds
       // nothing at all.
       var attempt = _attemptParse(rows, flatLines, _priceAtEnd);
-      var usedWholeNumberFormat = false;
-      if (attempt.result.isEmpty) {
+      if (attempt.result.isEmpty &&
+          (destinationIsWholeNumber || _wholeCurrencyMarker.hasMatch(recognized.text))) {
         final wholeAttempt = _attemptParse(rows, flatLines, _priceAtEndWhole);
         if (!wholeAttempt.result.isEmpty) {
           attempt = wholeAttempt;
-          usedWholeNumberFormat = true;
         }
       }
 
@@ -321,30 +356,30 @@ class ReceiptOcrService {
         print('[ReceiptOcrService] no match. raw: "$rawPreview" rows: "$rowsPreview"');
         final hasSignal = _hasReceiptSignal(rows, _priceAtEnd) ||
             _hasReceiptSignal(flatLines, _priceAtEnd) ||
-            _hasReceiptSignal(rows, _priceAtEndWhole) ||
-            _hasReceiptSignal(flatLines, _priceAtEndWhole);
+            (destinationIsWholeNumber &&
+                (_hasReceiptSignal(rows, _priceAtEndWhole) ||
+                 _hasReceiptSignal(flatLines, _priceAtEndWhole)));
         if (!hasSignal) {
           return const ReceiptOcrResult(items: [], error: 'not a receipt');
         }
         return const ReceiptOcrResult(items: [], error: 'cannot scan');
       }
 
-      // Only convert when the receipt actually turned out to be in the
-      // SHAPE naturally expected for [currency] -- a decimal-currency trip
-      // (anything not in _wholeNumberCurrencies) that parsed in decimal
-      // format, or a whole-number-currency trip that genuinely needed the
-      // whole-number fallback above. A whole-number-currency trip (JPY,
-      // VND, ...) whose receipt parsed cleanly in plain decimal format
-      // anyway is far more likely to already be a normal, familiar-looking
-      // amount (paid by card, or just not actually in that destination's
-      // currency -- see this function's demo/bug case above) than one that
-      // still needs converting down from a whole-number currency's face
-      // value, so that case is deliberately left unconverted instead of
-      // compounding the mismatch.
-      final formatMatchesDestination = usedWholeNumberFormat == destinationIsWholeNumber;
-      final needsConversion = currency != null && currency != 'MYR' && formatMatchesDestination;
-      final converted = needsConversion ? await _convertToMyr(attempt.result, currency!) : attempt.result;
-      return _translateToEnglish(converted);
+      // Never convert receipt amounts. They are saved exactly as scanned.
+      // A currency token printed on the receipt is stronger evidence than
+      // the trip destination; fall back to destination when it is absent.
+      final explicitCurrency = _currencyPrintedOnReceipt(recognized.text);
+      final result = attempt.result;
+      return _translateToEnglish(ReceiptOcrResult(
+        items: result.items,
+        storeName: result.storeName,
+        subtotal: result.subtotal,
+        tax: result.tax,
+        total: result.total,
+        discount: result.discount,
+        currencyCode: explicitCurrency ?? currency,
+        currencyDetectedOnReceipt: explicitCurrency != null,
+      ));
     } catch (e) {
       // ignore: avoid_print
       print('[ReceiptOcrService] scan threw: $e');
@@ -354,62 +389,38 @@ class ReceiptOcrService {
     }
   }
 
-  /// Converts every monetary figure the scan found from [currency] into
-  /// MYR, using CurrencyService's live exchange rate (the same service
-  /// insurance pricing already uses to convert MYR plan prices into a
-  /// traveller's preferred currency -- same idea, opposite direction).
-  /// Fails loudly rather than silently: if today's rate can't be fetched
-  /// (e.g. offline), returning the raw foreign numbers as if they were
-  /// already MYR would badly misrepresent the amount (a JPY 5,000 lunch
-  /// is NOT RM 5,000), so this surfaces an error instead and leaves the
-  /// traveller to enter the (already-converted, roughly-known) amount by
-  /// hand rather than trust a wrong one.
-  Future<ReceiptOcrResult> _convertToMyr(ReceiptOcrResult result, String currency) async {
-    await CurrencyService.instance.ensureRatesLoaded();
-    double? conv(double amount) => CurrencyService.instance.convert(amount, from: currency, to: 'MYR');
-
-    final convertedItems = <({String label, double price})>[];
-    for (final item in result.items) {
-      final converted = conv(item.price);
-      if (converted == null) {
-        return const ReceiptOcrResult(items: [], error: 'cannot scan');
-      }
-      convertedItems.add((label: item.label, price: converted));
+  // Symbols such as '$' can mean several currencies; ignore those and
+  // use the destination fallback instead of guessing USD.
+  static String? _currencyPrintedOnReceipt(String text) {
+    final match = RegExp(
+      r'\b(MYR|RM|SGD|USD|EUR|GBP|JPY|KRW|CNY|TWD|HKD|THB|VND|IDR|PHP|INR|AUD|NZD|CAD|CHF|AED|SAR|TRY|ZAR|BRL|MXN)\b',
+      caseSensitive: false,
+    ).firstMatch(text);
+    if (match != null) {
+      final value = match.group(1)!.toUpperCase();
+      return value == 'RM' ? 'MYR' : value;
     }
-    final subtotal = result.subtotal == null ? null : conv(result.subtotal!);
-    final tax = result.tax == null ? null : conv(result.tax!);
-    final discount = result.discount == null ? null : conv(result.discount!);
-    final total = result.total == null ? null : conv(result.total!);
-    if ((result.subtotal != null && subtotal == null) ||
-        (result.tax != null && tax == null) ||
-        (result.discount != null && discount == null) ||
-        (result.total != null && total == null)) {
-      return const ReceiptOcrResult(items: [], error: 'cannot scan');
-    }
-
-    return ReceiptOcrResult(
-      items: convertedItems,
-      storeName: result.storeName,
-      subtotal: subtotal,
-      tax: tax,
-      discount: discount,
-      total: total,
-      originalTotal: result.total,
-      originalCurrency: currency,
-    );
+    // ¥ is ambiguous between JPY and CNY; prefer the trip destination.
+    if (text.contains('¥')) return null;
+    if (text.contains('₩')) return 'KRW';
+    if (text.contains('€')) return 'EUR';
+    if (text.contains('£')) return 'GBP';
+    if (text.contains('฿')) return 'THB';
+    if (text.contains('₫')) return 'VND';
+    if (text.contains('₹')) return 'INR';
+    return null;
   }
 
   /// Translates every item label (and the store name, if it's part of
   /// the display) that isn't already in English, so a receipt scanned in
   /// Japan/Korea/China/etc. shows readable English item names in the app
   /// instead of raw kanji/hiragana/hangul the traveller can't read. Runs
-  /// AFTER OCR + currency conversion, on the already-cropped/parsed item
+  /// AFTER OCR, on the already-cropped/parsed item
   /// list, not on the raw photo -- only the handful of labels that
   /// actually survived parsing get sent out, never the whole receipt
   /// text. Falls back to the original label per item on a translation
   /// failure (offline, quota, no confident translation) rather than
-  /// failing the whole scan -- an untranslated label is still usable,
-  /// unlike a wrong converted amount.
+  /// failing the whole scan -- an untranslated label is still usable.
   Future<ReceiptOcrResult> _translateToEnglish(ReceiptOcrResult result) async {
     final needsTranslation = result.items.any((i) => NameTranslationService.looksNonEnglish(i.label)) ||
         (result.storeName != null && NameTranslationService.looksNonEnglish(result.storeName!));
@@ -439,8 +450,8 @@ class ReceiptOcrService {
       tax: result.tax,
       total: result.total,
       discount: result.discount,
-      originalTotal: result.originalTotal,
-      originalCurrency: result.originalCurrency,
+      currencyCode: result.currencyCode,
+      currencyDetectedOnReceipt: result.currencyDetectedOnReceipt,
       error: result.error,
     );
   }
@@ -462,7 +473,7 @@ class ReceiptOcrService {
     for (final entry in centered) {
       final height = entry.line.boundingBox.height;
       final avgHeight = lastHeight == null ? height : (lastHeight + height) / 2;
-      final gapThreshold = avgHeight * 0.6;
+      final gapThreshold = avgHeight * 0.72;
       if (lastCenter == null || (entry.center - lastCenter).abs() > gapThreshold) {
         rows.add([entry.line]);
       } else {
@@ -489,10 +500,9 @@ class ReceiptOcrService {
     final match = regex.firstMatch(line);
     if (match == null) return null;
     final price = isWholeNumberFormat
-        // No decimal subunit to detect -- every comma here is a
-        // thousands separator, full stop.
-        ? double.tryParse(match.group(1)!.replaceAll(',', ''))
-        : double.tryParse(match.group(1)!.replaceFirstMapped(RegExp(r'[,.](\d{2})$'), (m) => '.${m.group(1)}').replaceAll(',', ''));
+        // Both 12,000 and 12.000 mean twelve thousand for these currencies.
+        ? double.tryParse(match.group(1)!.replaceAll(RegExp(r'[.,]'), ''))
+        : _decimalPrice(match.group(1)!);
     if (price == null || price <= 0) return null;
     // A row like "INV# 002440100073367" has no decimal point either, so in
     // whole-number mode it would otherwise read as a plausible price. No
@@ -586,7 +596,11 @@ class ReceiptOcrService {
     if (total != null && subtotal != null) {
       final itemSum = items.fold<double>(0, (s, i) => s + i.price);
       final expectedFromItems = itemSum + (tax ?? 0) - (discount ?? 0);
-      if ((expectedFromItems - total).abs() > 0.5 && (expectedFromItems - subtotal).abs() <= 0.5) {
+      final inclusiveExpected = itemSum - (discount ?? 0);
+      if ((expectedFromItems - total).abs() > 0.5 &&
+          (inclusiveExpected - total).abs() > 0.5 &&
+          ((expectedFromItems - subtotal).abs() <= 0.5 ||
+           (inclusiveExpected - subtotal).abs() <= 0.5)) {
         // The "TOTAL" row's own price doesn't add up with the items at
         // all, but the subtotal does -- almost always because the row
         // reconstruction above merged the real TOTAL line with an

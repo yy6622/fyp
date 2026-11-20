@@ -42,8 +42,8 @@ class _ExpenseDetailsFormPageState extends State<ExpenseDetailsFormPage> {
     if (t.isEmpty) return 'Enter an amount';
     final v = double.tryParse(t);
     if (v == null || !RegExp(r'^\d+(\.\d{1,2})?$').hasMatch(t)) return 'Numbers only, up to 2 decimal places';
-    if (v <= 0) return 'Amount must be more than RM 0';
-    if (v > _maxAmount) return 'Amount can\'t be more than RM 1,000,000';
+    if (v <= 0) return 'Amount must be more than 0';
+    if (v > _maxAmount) return 'Amount can\'t be more than 1,000,000';
     return null;
   }
 
@@ -67,8 +67,7 @@ class _ExpenseDetailsFormPageState extends State<ExpenseDetailsFormPage> {
               inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d{0,7}(\.\d{0,2})?'))],
               onChanged: (v) => setDialogState(() => error = v.trim().isEmpty ? null : _amountError(v)),
               decoration: InputDecoration(
-                prefixText: 'RM ',
-                hintText: '0.00',
+                                hintText: '0.00',
                 errorText: error,
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
               ),
@@ -136,12 +135,12 @@ class _ExpenseDetailsFormPageState extends State<ExpenseDetailsFormPage> {
                   const Text('Details', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.navy)),
                   const SizedBox(height: 8),
                   if (widget.controller.splitEqually != false)
-                    _editableRow('Amount', widget.controller.amountController.text.isEmpty ? 'Tap to add an amount' : 'RM ${widget.controller.amountController.text}',
+                    _editableRow('Amount', widget.controller.amountController.text.isEmpty ? 'Tap to add an amount' : '${widget.controller.amountController.text}',
                         onTap: _editAmount)
                   else
-                    _row('Amount', 'RM ${widget.controller.amount.toStringAsFixed(2)} (from ${widget.controller.items.length} item${widget.controller.items.length == 1 ? '' : 's'})'),
+                    _row('Amount', '${widget.controller.amount.toStringAsFixed(2)} (from ${widget.controller.items.length} item${widget.controller.items.length == 1 ? '' : 's'})'),
                   _editableRow('Category', widget.controller.category, onTap: _chooseCategory),
-                  _editableRow('Note', widget.controller.noteController.text.isEmpty ? 'Tap to add a note (e.g. dinner at Mei Seafood)' : widget.controller.noteController.text,
+                  _editableRow('Note', widget.controller.noteController.text.isEmpty ? 'Tap to add a note (include Currency: USD / JPY / MYR)' : widget.controller.noteController.text,
                       onTap: () => _editField('Note', widget.controller.noteController.text, widget.controller.setNote)),
                   if (widget.controller.trip.memberIds.length > 1) ...[
                     _editableRow(

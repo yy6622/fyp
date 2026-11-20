@@ -100,7 +100,8 @@ class AttractionChatService {
 
   bool get isConfigured => openAiApiKey.isNotEmpty && openAiApiKey != 'YOUR_OPENAI_API_KEY_HERE';
 
-  String _systemPrompt(String destination, List<CatalogAttraction> candidates, List<DayPlan> days) {
+  String _systemPrompt(String destination, List<CatalogAttraction> candidates, List<DayPlan> days,
+      List<String> planInterests) {
     final listing = candidates
         .map((a) => {
               'id': a.id,
@@ -131,6 +132,15 @@ class AttractionChatService {
         '"Sorry, I couldn\'t find \'<what they asked for>\' in Voya\'s listings '
         'for $destination yet." instead of making something up.\n\n'
         'CANDIDATES (JSON):\n${jsonEncode(listing)}\n\n');
+
+    if (planInterests.isNotEmpty) {
+      buffer.write('The currently selected plan has these interests: '
+          '${planInterests.join(', ')}. When the user asks for general '
+          'recommendations, favor candidates whose categories match these '
+          'interests. The candidates are already ranked for this plan. '
+          'If the user explicitly requests something else, follow that request '
+          'instead. Never invent attractions.\n\n');
+    }
 
     if (days.isNotEmpty) {
       final itinerary = days
@@ -222,6 +232,7 @@ class AttractionChatService {
   Future<AttractionChatReply> sendMessage({
     required String destination,
     required List<CatalogAttraction> candidates,
+    List<String> planInterests = const [],
     required List<ChatTurn> history,
     required String userMessage,
     List<DayPlan> days = const [],
@@ -231,7 +242,7 @@ class AttractionChatService {
       throw const AttractionChatException(_genericBusyMessage);
     }
     final messages = [
-      {'role': 'system', 'content': _systemPrompt(destination, candidates, days)},
+      {'role': 'system', 'content': _systemPrompt(destination, candidates, days, planInterests)},
       ...history.map((t) => {'role': t.role, 'content': t.text}),
       {'role': 'user', 'content': userMessage},
     ];

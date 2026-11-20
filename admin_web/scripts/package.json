@@ -5,6 +5,7 @@
   "type": "module",
   "description": "One-off Firestore seed scripts for the Voya admin/partner console — not part of the web console itself, run manually from a terminal.",
   "dependencies": {
-    "firebase": "^10.14.1"
+    "firebase": "^10.14.1",
+    "firebase-admin": "^14.5.1"
   }
 }

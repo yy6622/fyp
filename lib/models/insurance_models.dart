@@ -263,9 +263,11 @@ class ClaimOrRefundRecord {
   final bool isRefund;
   final String ref;
   final String status;
-  final double amount;
+  final double? amount; // Set by the partner for claims; null until assessed.
   final String currencyCode;
   final String category;
+  final String description;
+  final List<String> documents;
   final DateTime? createdAt;
   final List<ClaimTimelineEntry> timeline;
 
@@ -277,6 +279,8 @@ class ClaimOrRefundRecord {
     required this.amount,
     required this.currencyCode,
     required this.category,
+    required this.description,
+    required this.documents,
     required this.createdAt,
     required this.timeline,
   });
@@ -288,9 +292,15 @@ class ClaimOrRefundRecord {
       isRefund: isRefund,
       ref: (m[isRefund ? 'refundRef' : 'claimRef'] as String?) ?? '',
       status: (m['status'] as String?) ?? 'new',
-      amount: (m['amount'] as num?)?.toDouble() ?? 0,
+      // Older traveller-entered claim amounts are unverified until a partner
+      // explicitly saves an assessed value. Refunds retain the premium amount.
+      amount: (isRefund || m['amountSetByPartner'] == true)
+          ? (m['amount'] as num?)?.toDouble()
+          : null,
       currencyCode: (m['currencyCode'] as String?) ?? 'MYR',
-      category: (m[isRefund ? 'reason' : 'category'] as String?) ?? '',
+      category: (m['category'] as String?) ?? '',
+      description: (m[isRefund ? 'reason' : 'description'] as String?) ?? '',
+      documents: ((m['documents'] as List?) ?? const []).whereType<String>().toList(),
       createdAt: (m['createdAt'] as Timestamp?)?.toDate(),
       timeline: ((m['timeline'] as List?) ?? const [])
           .whereType<Map<String, dynamic>>()

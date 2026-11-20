@@ -180,10 +180,6 @@ class _CreatePostPageState extends State<CreatePostPage> {
                   ),
                   const SizedBox(height: 8),
                   _mediaGrid(),
-                  const SizedBox(height: 20),
-                  const Text('More Options', style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold, color: Colors.black)),
-                  const SizedBox(height: 4),
-                  _switchRow('Allow comments', controller.allowComments, controller.setAllowComments),
                 ],
               ),
             ),
@@ -355,16 +351,4 @@ class _CreatePostPageState extends State<CreatePostPage> {
     );
   }
 
-  Widget _switchRow(String label, bool value, ValueChanged<bool> onChanged) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 10),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(label, style: const TextStyle(fontSize: 13.5, color: Colors.black)),
-          Switch(value: value, activeColor: AppColors.primary, onChanged: onChanged),
-        ],
-      ),
-    );
-  }
 }
